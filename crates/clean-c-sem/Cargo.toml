@@ -1,0 +1,26 @@
+[package]
+name = "clean-c-sem"
+version = "0.1.0"
+edition = "2021"
+description = "C semantics formalization for Clean verification"
+license = "Apache-2.0"
+repository.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel = { path = "../clean-kernel" }
+clean-auto = { path = "../clean-auto" }
+clean-features.workspace = true
+clap.workspace = true
+serde = { workspace = true }
+thiserror.workspace = true
+tree-sitter = "0.26"
+tree-sitter-c = "0.24"
+tracing.workspace = true
+
+[dev-dependencies]
+clean-rust-sem = { workspace = true }
+proptest = { workspace = true }

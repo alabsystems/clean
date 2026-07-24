@@ -1,0 +1,32 @@
+{
+  "id": "lex_induction/ackermann_base",
+  "module": "AckermannTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "ack", "arity": 2}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "ack_0n",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "eq": [{"op": ["ack", 0, "n"]}, {"add": ["n", 1]}]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "gt": [{"op": ["ack", 0, "n"]}, 0]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "ackermann", "positivity"]
+}

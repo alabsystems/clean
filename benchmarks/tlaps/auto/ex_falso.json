@@ -1,0 +1,26 @@
+{
+  "id": "auto/ex_falso",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_false",
+      "formula": false
+    }
+  ],
+  "goal": "P",
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "explosion"
+  ]
+}

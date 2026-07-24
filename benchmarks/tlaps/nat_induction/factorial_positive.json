@@ -1,0 +1,39 @@
+{
+  "id": "nat_induction/factorial_positive",
+  "module": "FactorialTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "fact", "arity": 1}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "fact_def_0",
+      "formula": {"eq": [{"op": ["fact", 0]}, 1]}
+    },
+    {
+      "name": "fact_def_succ",
+      "formula": {
+        "forall_in": ["k", "Nat", {
+          "eq": [
+            {"op": ["fact", {"add": ["k", 1]}]},
+            {"mul": [{"add": ["k", 1]}, {"op": ["fact", "k"]}]}
+          ]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "expr": {"gt": [{"op": ["fact", "n"]}, 0]}
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "positivity"]
+}

@@ -1,0 +1,48 @@
+{
+  "note": "Third-party-dependency trust-boundary state (paragon axis 1: 'every dependency verified, continuously gated'). Records the cargo-deny gate outcome over the workspace dependency graph. ENFORCEMENT: `cargo deny check` is wired into scripts/local_gate.sh (FULL mode only — it resolves the whole dep graph against the RustSec advisory DB, too slow for the <30s --fast pre-push path). Config: deny.toml (advisories/licenses/bans/sources; registry locked to crates.io, git locked to carcara). Regenerate this record with `cargo deny check 2>&1` and update on any dep-graph change that shifts a section verdict.",
+  "tool": "cargo-deny",
+  "tool_version": "0.19.9",
+  "checked_on": "2026-06-30",
+  "overall_verdict": "GREEN",
+  "overall_summary": "advisories ok, bans ok, licenses ok, sources ok (exit 0)",
+  "lock_drift_note": "cargo-deny reads Cargo.lock directly and resolved it cleanly; the benign `../ay` path-dep lock drift did NOT block the check. Cargo.lock stayed clean across the run.",
+  "sections": {
+    "advisories": {
+      "verdict": "ok",
+      "exit": 0,
+      "errors": 0,
+      "warnings": 1,
+      "detail": "Zero RustSec vulnerabilities in the resolved graph. The single warning is `advisory-not-detected` for RUSTSEC-2026-0002 (lru IterMut unsoundness): lru is now resolved at 0.18.0 (well past the 0.13 fix), so that ignore entry in deny.toml is now STALE/dead and can be removed on a future deny.toml cleanup. The other two ignores (RUSTSEC-2025-0141 bincode-unmaintained, RUSTSEC-2024-0436 paste-unmaintained) remain matched-and-suppressed with documented rationale; mirrored in .cargo/audit.toml."
+    },
+    "licenses": {
+      "verdict": "ok",
+      "exit": 0,
+      "errors": 0,
+      "warnings": 5,
+      "detail": "Every resolved crate's license is in the allow-list (Apache-2.0/MIT/BSD/ISC/Zlib/MPL-2.0/Unicode/CDLA/CC0) or covered by a documented per-crate exception (gmp-mpfr-sys, rug LGPL-3.0; ring ISC AND MIT AND OpenSSL clarify). The 5 warnings are pure hygiene over-provisioning: 3 `license-not-encountered` (BSD-3-Clause, CDLA-Permissive-2.0, Unicode-DFS-2016 allowed but no current crate uses them) + 2 `license-exception-not-encountered` (gmp-mpfr-sys, rug exceptions not currently in the macOS-resolved graph — they ride via the ../ay LRA stack which is feature-gated). No license violations."
+    },
+    "bans": {
+      "verdict": "ok",
+      "exit": 0,
+      "errors": 0,
+      "warnings": 19,
+      "detail": "No banned crate (openssl-sys, openssl, native-tls — the rustls-only policy) is present in the graph. The 19 warnings are all `duplicate` (multiple-versions = 'warn' by deny.toml policy, not 'deny'): bitflags, block-buffer, constant_time_eq, cpufeatures, crypto-common, dashmap, digest, foldhash, getrandom (x3), hashbrown (x3), rand, rand_chacha, rand_core, sha2, shlex, toml, toml_datetime, unicode-width, winnow. These are benign semver-major coexistence across transitive deps; no skip entries needed under the warn policy."
+    },
+    "sources": {
+      "verdict": "ok",
+      "exit": 0,
+      "errors": 0,
+      "warnings": 1,
+      "detail": "unknown-registry = 'deny', unknown-git = 'deny'. Every crate source is either crates.io (allow-registry) or the allow-listed carcara git rev. The single `unmatched-source` warning is for the carcara git allow not being encountered: the carcara dep sits behind the off-by-default `carcara-verify` feature in clean-auto, so it is absent from the default-feature graph. Zero unknown/unvetted sources — the boundary is fully locked."
+    }
+  },
+  "duplicate_crates_warn": [
+    "bitflags", "block-buffer", "constant_time_eq", "cpufeatures", "crypto-common",
+    "dashmap", "digest", "foldhash", "getrandom", "hashbrown", "rand", "rand_chacha",
+    "rand_core", "sha2", "shlex", "toml", "toml_datetime", "unicode-width", "winnow"
+  ],
+  "follow_ups": [
+    "deny.toml advisories: RUSTSEC-2026-0002 ignore is now stale (lru >= 0.18 resolved) — safe to delete on next dep-boundary cleanup.",
+    "deny.toml licenses: BSD-3-Clause / CDLA-Permissive-2.0 / Unicode-DFS-2016 allowances and gmp-mpfr-sys/rug exceptions are currently unmatched on the macOS default-feature graph — keep (they match under other targets/features) but revisit if pruning the allow-list."
+  ]
+}

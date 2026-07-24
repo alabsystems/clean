@@ -1,0 +1,30 @@
+{
+  "schema_version": "clean-frontend-lean4-vs-clean-run-artifact-v1",
+  "kind": "frontend_lean4_vs_clean_run",
+  "engine": "lean4_vs_clean",
+  "filename": "1571.lean",
+  "source_sha256": "sha256:404f915a1b15f6672bafe0de7a55fb7d19b57ab0470a09b1cc70203a56305b3b",
+  "command": [
+    "python3",
+    "scripts/lean4_compat/generate_frontend_run_artifacts.py",
+    "--files",
+    "1112.lean",
+    "1367.lean",
+    "1571.lean"
+  ],
+  "lean4_artifact_path": "tests/lean4_compat/frontend_run_artifacts/lean4/exit_status/1571.lean.json",
+  "clean_artifact_path": "tests/lean4_compat/frontend_run_artifacts/clean/exit_status/1571.lean.json",
+  "lean4_diagnostic_artifact_path": "tests/lean4_compat/frontend_run_artifacts/lean4/diagnostic/1571.lean.json",
+  "clean_diagnostic_artifact_path": "tests/lean4_compat/frontend_run_artifacts/clean/diagnostic/1571.lean.json",
+  "comparison_basis": "exit_status_and_first_error_signature",
+  "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+  "lean4_status": "success",
+  "clean_status": "failure",
+  "lean4_diagnostic_category": null,
+  "clean_diagnostic_category": "clean_frontend_error",
+  "lean4_first_error_signature": null,
+  "clean_first_error_signature": "too_many_arguments",
+  "cross_check_status": "frontend_exit_status_diverges",
+  "replacement_ready": false,
+  "artifact_note": "Generated bounded Lean4-vs-clean frontend run evidence. This records differential evidence only and does not claim replacement readiness."
+}

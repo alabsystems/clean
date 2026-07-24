@@ -1,0 +1,28 @@
+{
+  "id": "rectangle_diagonals",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "parallel", "line1": {"through": ["A", "B"]}, "line2": {"through": ["D", "C"]}},
+    {"type": "parallel", "line1": {"through": ["A", "D"]}, "line2": {"through": ["B", "C"]}},
+    {"type": "perpendicular", "line1": {"through": ["A", "B"]}, "line2": {"through": ["A", "D"]}},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "A", "b": "D"}
+  ],
+  "goal": {
+    "type": "congruent_segments",
+    "seg1": ["A", "C"],
+    "seg2": ["B", "D"]
+  },
+  "metadata": {
+    "source": "Rectangle properties",
+    "difficulty": 3,
+    "tags": ["rectangle", "diagonal", "congruent"],
+    "known_solvable": true,
+    "statement": "The diagonals of a rectangle are congruent."
+  }
+}

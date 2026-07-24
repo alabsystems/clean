@@ -1,0 +1,37 @@
+# EditorConfig — https://editorconfig.org/
+# Editor-agnostic file format conventions for the Clean workspace.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+[*.rs]
+# rustfmt is the authority — these match its defaults.
+indent_size = 4
+max_line_length = 100
+
+[*.{yml,yaml,toml,json}]
+indent_size = 2
+max_line_length = 120
+
+[*.md]
+# Markdown line breaks matter; don't strip trailing whitespace.
+trim_trailing_whitespace = false
+max_line_length = 0
+
+[Makefile]
+indent_style = tab
+
+[*.lean]
+indent_size = 2
+
+[Cargo.lock]
+# Generated; don't fight it.
+trim_trailing_whitespace = false

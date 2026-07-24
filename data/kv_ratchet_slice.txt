@@ -1,0 +1,18 @@
+# Pinned, reproducible KernelVerified regression slice.
+#
+# One module path per line, RELATIVE to the closure-root's `Mathlib/` directory
+# (i.e. `data/raw/mathlib4/.lake/build/lib/lean/Mathlib/<here>`). Blank lines and
+# `#` comments are ignored.
+#
+# scripts/kv_ratchet_gate.sh re-stamps EXACTLY these modules every full local-gate
+# run and fails if the kernel_verified count drops below the baseline in
+# data/mathlib_kv_ratchet.json, or if any proof is admitted by a non-kernel
+# (heuristic) path. The set is deliberately SMALL + FIXED so the stamp completes
+# in well under a minute and cannot OOM (the crash risk is the full-corpus *union*
+# closure, never a two-module slice) and is DETERMINISTIC, so the baseline is an
+# exact target rather than an estimate.
+#
+# Expand this slice as the memory levers make larger fixed slices feasible; the
+# full-corpus baseline is tracked separately (see data/mathlib_kv_ratchet.json).
+Logic/Basic.olean
+Logic/Function/Basic.olean

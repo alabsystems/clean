@@ -1,0 +1,8 @@
+# SAS Congruence derivation
+# Given: AB=DE, AC=DF, angle BAC = angle EDF
+# Goal: triangle ABC congruent to triangle DEF
+
+GIVEN congruent_segments(A, B, D, E)
+GIVEN congruent_segments(A, C, D, F)
+GIVEN congruent_angles(B, A, C, E, D, F)
+DERIVE congruent_triangles(A, B, C, D, E, F) FROM sas_congruence(A, B, C, D, E, F)

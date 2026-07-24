@@ -1,0 +1,43 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "proof-complexity-pilot",
+  "domain_profile": "proof-complexity",
+  "producer": {
+    "system": "proof-complexity",
+    "commit": "fixture-resolution-width"
+  },
+  "goal": {
+    "expr": "ProofComplexity.resolution_width_lower_bound family degree size",
+    "pretty": "resolution width lower bound for a bounded-degree family"
+  },
+  "local_context": [
+    {
+      "name": "family",
+      "type_pp": "LowerBoundFamily",
+      "type_expr": "LowerBoundFamily"
+    },
+    {
+      "name": "degree",
+      "type_pp": "Nat",
+      "type_expr": "Nat"
+    },
+    {
+      "name": "size",
+      "type_pp": "Nat",
+      "type_expr": "Nat"
+    }
+  ],
+  "side_conditions": [
+    "family encodes a Tseitin lower-bound family",
+    "degree bound is nonzero",
+    "size parameter is positive"
+  ],
+  "metadata": {
+    "family": "tseitin",
+    "benchmark_family": "tseitin",
+    "degree": "3",
+    "size": "32",
+    "missing_combinatorial_lemma": "expansion-width"
+  },
+  "trust_policy": "constructive-only"
+}

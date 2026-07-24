@@ -1,0 +1,31 @@
+{
+  "id": "excircle_tangent",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "Ia": {"type": "point"},
+    "Ta": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]},
+    {"type": "custom", "predicate": "excenter", "args": ["Ia", "A", "B", "C"]},
+    {"type": "on_line", "point": "Ta", "line": {"through": ["B", "C"]}},
+    {"type": "custom", "predicate": "tangent_point", "args": ["Ta", "Ia", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "excircle_tangent_length",
+    "args": ["B", "Ta", "A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Excircle tangent lengths",
+    "difficulty": 5,
+    "tags": ["excircle", "tangent", "semiperimeter"],
+    "known_solvable": true,
+    "statement": "The tangent length from B to the A-excircle equals s - c (where s is semiperimeter)."
+  }
+}

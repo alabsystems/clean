@@ -1,0 +1,45 @@
+{
+  "id": "leads_to/counter_to_max",
+  "module": "CounterTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "MAX", "arity": 0},
+    {"type": "variable", "name": "x"}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "h_nat",
+      "formula": {"mem": ["x", "Nat"]}
+    },
+    {
+      "name": "h_max_nat",
+      "formula": {"mem": [{"const": "MAX"}, "Nat"]}
+    },
+    {
+      "name": "h_increment",
+      "formula": {
+        "always": {
+          "implies": [
+            {"expr": {"lt": ["x", {"const": "MAX"}]}},
+            {"eventually": {"eq": ["x", {"add": ["x", 1]}]}}
+          ]
+        }
+      }
+    }
+  ],
+
+  "goal": {
+    "leads_to": [
+      {"expr": {"lt": ["x", {"const": "MAX"}]}},
+      {"eq": ["x", {"const": "MAX"}]}
+    ]
+  },
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "medium",
+  "source": "synthetic",
+  "tags": ["temporal", "leads_to", "progress_measure", "counter"]
+}

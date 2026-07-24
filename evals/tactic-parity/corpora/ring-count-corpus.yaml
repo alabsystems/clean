@@ -1,0 +1,20 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+# Deterministic, hand-maintained source corpus for the ring generated-count
+# manifest. `generated: false` keeps launch readiness fail-closed until a
+# real Lean4-vs-clean runner artifact replaces these fixture rows.
+schema_version: clean-tactic-generated-count-source-corpus-v1
+tactic_lane: ring
+generated: false
+cases:
+  - id: ring_nat_add_comm
+    lean4_tactic: ring
+    clean_tactic: ring_nf
+    expected_bucket: ring-nat-normalization-fixture
+  - id: ring_nat_add_zero_right
+    lean4_tactic: ring
+    clean_tactic: ring_nf
+    expected_bucket: ring-nat-normalization-fixture
+  - id: ring_nat_mul_zero_right
+    lean4_tactic: ring
+    clean_tactic: ring_nf
+    expected_bucket: ring-nat-normalization-fixture

@@ -1,0 +1,32 @@
+{
+  "id": "tangent_secant",
+  "objects": {
+    "P": {"type": "point"},
+    "T": {"type": "point"},
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "mathverse": {"type": "circle"}
+  },
+  "constraints": [
+    {"type": "tangent", "line": {"through": ["P", "T"]}, "circle": "mathverse"},
+    {"type": "on_circle", "point": "T", "circle": "mathverse"},
+    {"type": "on_circle", "point": "A", "circle": "mathverse"},
+    {"type": "on_circle", "point": "B", "circle": "mathverse"},
+    {"type": "collinear", "points": ["P", "A", "B"]},
+    {"type": "between", "point": "A", "endpoints": ["P", "B"]},
+    {"type": "not_equal", "a": "P", "b": "T"},
+    {"type": "not_equal", "a": "A", "b": "B"}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "product_equal",
+    "args": ["P", "T", "P", "T", "P", "A", "P", "B"]
+  },
+  "metadata": {
+    "source": "Power of a point",
+    "difficulty": 5,
+    "tags": ["tangent", "secant", "power_of_point", "circle"],
+    "known_solvable": true,
+    "statement": "The square of the tangent length equals the product of the secant segments: PT^2 = PA * PB."
+  }
+}

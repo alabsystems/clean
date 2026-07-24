@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "348.lean",
+  "source_sha256": "sha256:913e1b9ce28dd60ab6e7cd7b9cc8df788b356c67f0240f3ea8c9c2193c022591",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/348.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.096,
+  "observed_stdout": "Read 131 bytes from \"tests/lean4_compat/lean4_tests/348.lean\"\nParsed 1 declarations in 1.044125ms\nChecked 1 declarations in 76.872959ms\n  0 passed, 1 failed\n\nErrors:\n  \u2717 elaboration error: ParseError(\"parser recovery produced raw declaration: error-recovery   db\")\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

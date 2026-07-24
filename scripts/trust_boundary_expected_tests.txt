@@ -1,0 +1,50 @@
+# Expected boundary-only test patterns for Gate 2 TrustBoundary audit (#2875).
+#
+# Each non-comment line is a substring match against the test_name field in
+# audit records. Tests matching these patterns are classified as "expected
+# boundary-only" — they exercise intentionally hard LRA/arithmetic cases
+# that are not representative of common or medium tactic goals.
+#
+# The classification policy lives here (not in Python code) so reviewers
+# can diff it independently.
+
+# lra_boundary.rs — explicit boundary-case tests
+lra_boundary
+
+# Tests with "trust_boundary" in the name — named boundary cases
+trust_boundary
+
+# Tests with "unsupported_arithmetic" — known unsupported arithmetic forms
+unsupported_arithmetic
+
+# lra_chain — symbolic-endpoint transitivity chains (boundary arithmetic)
+lra_chain
+
+# lra_real_chain_expr — Real-sort chain expression tests
+lra_real_chain_expr
+
+# LIA theory lemma tests — currently all hit trust boundary
+lia
+
+# theory_lemma_lra_farkas_in_resolution — boundary test exercising
+# TrustBoundary as a resolution premise
+lra_farkas_in_resolution
+
+# theory_lemma_lra_farkas_le_trans — symbolic transitivity chains
+lra_farkas_le_trans
+
+# theory_lemma_lra_farkas_reverse_chain — reverse-order chain
+lra_farkas_reverse_chain
+
+# theory_lemma_lra_farkas_three_le_bounds_shuffled — shuffled chain
+lra_farkas_three_le_bounds_shuffled
+
+# theory_lemma_lra_farkas_simple — non-chaining symbolic Farkas
+lra_farkas_simple
+
+# lra_real — real-sort variants (symbolic endpoints)
+lra_real
+
+# lra_typecheck — type-checking tests that exercise symbolic-endpoint
+# resolution chains; these are boundary validation tests, not tactic goals
+lra_typecheck

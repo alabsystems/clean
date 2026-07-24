@@ -1,0 +1,234 @@
+# parser parse-parity ground truth
+# generated from parser_specs 2026-07-08, toolchain leanprover/lean4 v4.30.0-rc2 (commit 3dc1a088)
+# regeneration: tests/fixtures/parser_parity/gen_ground_truth.lean (see README.md)
+# columns: family<TAB>input<TAB>expected_kind<TAB>lean_tree<TAB>lean_value
+# expected_kind TREE = Lean parses (skeleton in lean_tree, authored in the parse_parity S-expr grammar);
+#               ERROR = Lean rejects at PARSE time (lean_tree carries the error note).
+bigop	∑ i, i	ERROR	ERROR: expected token (∑ is Mathlib-only, absent from plain toolchain)	
+bigop	fun (f : Nat → Nat) => ∑ i, f i	ERROR	ERROR: expected token (∑ Mathlib-only)	
+bigop	∏ i, (i : Nat)	ERROR	ERROR: expected token (∏ Mathlib-only)	
+bigop	⨆ i, (i : Nat)	ERROR	ERROR: expected token (⨆ Mathlib-only)	
+bigop	⨅ i, (i : Nat)	ERROR	ERROR: expected token (⨅ Mathlib-only)	
+bigop	∑' i, (i : Nat)	ERROR	ERROR: expected token (∑' Mathlib-only)	
+bigop	∏' i, (i : Nat)	ERROR	ERROR: expected token (∏' Mathlib-only)	
+bigop	∑ i ∈ [1,2,3], i	ERROR	ERROR: expected token (∑ ∈ Mathlib-only)	
+bigop	⋃ i, ({i} : List Nat)	ERROR	ERROR: expected token (⋃ Mathlib-only)	
+bigop	⋂ i, ({i} : List Nat)	ERROR	ERROR: expected token (⋂ Mathlib-only)	
+bigop	∑	ERROR	ERROR: expected token (∑ is not an identifier char)	
+bigop	Σ i : Nat, Fin i	TREE	(Sigma (fun (Fin i)))	
+bigop	Σ' i : Nat, Fin i	TREE	(PSigma (fun (Fin i)))	
+bigop	Σ i : Nat, Fin i × Fin (i+1)	TREE	(Sigma (fun (Prod (Fin i) (Fin (HAdd.hAdd i 1)))))	
+bigop	(i : Nat) × Fin i	TREE	(Sigma (fun (Fin i)))	
+bigop	(Sigma.mk 2 (1 : Fin 2)).fst	TREE	(. (Sigma.mk 2 (: 1 (Fin 2))) fst)	2
+bigop	∑ i, f i + g i	ERROR	ERROR: expected token (∑ Mathlib-only)	
+bigop	∑ i, f i * 2	ERROR	ERROR: expected token (∑ Mathlib-only)	
+bigop	∑ i j, i * j	ERROR	ERROR: expected token (∑ Mathlib-only)	
+bigop	∑ i, i + 1	ERROR	ERROR: expected token (∑ Mathlib-only)	4
+bigop	∑ i, i * 2	ERROR	ERROR: expected token (∑ Mathlib-only)	6
+getelem	xs[1]	TREE	(getElem xs 1 _)	20
+getelem	xs[1]!	TREE	(getElem! xs 1)	20
+getelem	xs[1]?	TREE	(getElem? xs 1)	some 20
+getelem	xs[5]?	TREE	(getElem? xs 5)	none
+getelem	arr[2]	TREE	(getElem arr 2 _)	300
+getelem	m[1][0]	TREE	(getElem (getElem m 1 _) 0 _)	3
+getelem	m[1]![0]!	TREE	(getElem! (getElem! m 1) 0)	3
+getelem	xs[0] + xs[1]	TREE	(HAdd.hAdd (getElem xs 0 _) (getElem xs 1 _))	30
+getelem	Nat.succ xs[1]	TREE	(Nat.succ (getElem xs 1 _))	21
+getelem	xs[1 + 1]	TREE	(getElem xs (HAdd.hAdd 1 1) _)	30
+getelem	xs[ 1 ]	TREE	(getElem xs 1 _)	20
+getelem	xs[1]'(by decide)	TREE	(getElem xs 1 #by)	20
+getelem	fun (l : List Nat) (h : 1 < l.length) => l[1]'h	TREE	(fun (getElem l 1 h))	
+getelem	xs[1]?.getD 0	TREE	((. (getElem? xs 1) getD) 0)	20
+getelem	xs[1]!.succ	TREE	(. (getElem! xs 1) succ)	21
+getelem	Option.getD xs[1]? 5	TREE	(Option.getD (getElem? xs 1) 5)	20
+getelem	xs [1]	TREE	(xs (List.cons 1 List.nil))	
+getelem	xs[1] !	ERROR	ERROR: unexpected end of input (`!` after ws is prefix Not)	
+getelem	xs[1] ?	ERROR	ERROR: unexpected end of input (`?` after ws is hole prefix)	
+getelem	fun (l : List Nat) (h : 1 < l.length) => Nat.succ l[1]'h	ERROR	ERROR: unexpected token ]' (xs[i]'h is lead-prec, illegal as bare arg)	
+getelem	fun (l : List Nat) (h : 1 < l.length) => Nat.succ (l[1]'h)	TREE	(fun (Nat.succ (getElem l 1 h)))	
+getelem	[10, 20, 30][1]	TREE	(getElem (List.cons 10 (List.cons 20 (List.cons 30 List.nil))) 1 _)	20
+getelem	xs.reverse[0]	TREE	(getElem xs.reverse 0 _)	30
+getelem	xs[1]' (by decide)	TREE	(getElem xs 1 #by)	20
+getelem	xs[1] 'h'	TREE	(getElem xs 1 _ #char)	
+getelem	fun (h' : 1 < xs.length) => xs[1]'h'	TREE	(fun (getElem xs 1 h'))	
+getelem	fun (l : List Nat) (h : (1 < l.length) ∧ True) => l[1]'h.1	TREE	(fun (getElem l 1 (. h 1)))	
+getelem	arr[0:2]	TREE	(Array.toSubarray arr 0 2)	Subarray Nat
+monadic	f <$> a <*> b <*> c	TREE	(Seq.seq (Seq.seq (Functor.map f a) (fun b)) (fun c))	
+monadic	(fun x y z => x + y + z) <$> some 1 <*> some 2 <*> some 3	TREE	(Seq.seq (Seq.seq (Functor.map (fun (HAdd.hAdd (HAdd.hAdd x y) z)) (some 1)) (fun (some 2))) (fun (some 3)))	some 6
+monadic	f <$> g <$> a	TREE	(Functor.map f (Functor.map g a))	
+monadic	(· + 1) <$> (· * 2) <$> some 3	TREE	(Functor.map (fun (HAdd.hAdd · 1)) (Functor.map (fun (HMul.hMul · 2)) (some 3)))	some 7
+monadic	(· + 1) <$> some 3	TREE	(Functor.map (fun (HAdd.hAdd · 1)) (some 3))	some 4
+monadic	(· * 2) <$> [1, 2, 3]	TREE	(Functor.map (fun (HMul.hMul · 2)) (List.cons 1 (List.cons 2 (List.cons 3 List.nil))))	[2, 4, 6]
+monadic	some (· + 1) <*> some 10	TREE	(Seq.seq (some (fun (HAdd.hAdd · 1))) (fun (some 10)))	some 11
+monadic	pure (· + ·) <*> some 3 <*> some 4	TREE	(Seq.seq (Seq.seq (pure (fun (HAdd.hAdd · ·))) (fun (some 3))) (fun (some 4)))	some 7
+monadic	(none : Option (Nat → Nat)) <*> some 10	TREE	(Seq.seq (: none (Option (-> Nat Nat))) (fun (some 10)))	none
+monadic	[(· + 1), (· * 2)] <*> [10, 20]	TREE	(Seq.seq (List.cons (fun (HAdd.hAdd · 1)) (List.cons (fun (HMul.hMul · 2)) List.nil)) (fun (List.cons 10 (List.cons 20 List.nil))))	
+monadic	some 3 <&> (· + 1)	TREE	(Functor.mapRev (some 3) (fun (HAdd.hAdd · 1)))	some 4
+monadic	some 3 <&> (· + 1) <&> (· * 2)	TREE	(Functor.mapRev (some 3) (Functor.mapRev (fun (HAdd.hAdd · 1)) (fun (HMul.hMul · 2))))	
+monadic	a <&> f <&> g	TREE	(Functor.mapRev a (Functor.mapRev f g))	
+monadic	f <$> a <&> g	TREE	(Functor.map f (Functor.mapRev a g))	
+monadic	f =<< g =<< a	TREE	(Bind.bindLeft f (Bind.bindLeft g a))	
+monadic	(fun x => some (x + 1)) =<< (fun x => some (x * 2)) =<< some 3	TREE	(Bind.bindLeft (fun (some (HAdd.hAdd x 1))) (Bind.bindLeft (fun (some (HMul.hMul x 2))) (some 3)))	some 7
+monadic	f >=> g >=> h	TREE	(Bind.kleisliRight f (Bind.kleisliRight g h))	
+monadic	((fun x => some (x + 1)) >=> (fun y => some (y * 2)) >=> fun z => some (z + 10)) 3	TREE	((Bind.kleisliRight (fun (some (HAdd.hAdd x 1))) (Bind.kleisliRight (fun (some (HMul.hMul y 2))) (fun (some (HAdd.hAdd z 10))))) 3)	some 18
+monadic	f <=< g <=< h	TREE	(Bind.kleisliLeft f (Bind.kleisliLeft g h))	
+monadic	g =<< f <$> a	TREE	(Bind.bindLeft g (Functor.map f a))	some 7
+monadic	(· + 1) <$> some 3 >>= fun x => some (x * 2)	TREE	(Bind.bind (Functor.map (fun (HAdd.hAdd · 1)) (some 3)) (fun (some (HMul.hMul x 2))))	some 8
+monadic	f =<< a >>= g	TREE	(Bind.bindLeft f (Bind.bind a g))	
+monadic	a >>= f =<< b	ERROR	ERROR: expected end of input (infixr:55 =<< cannot extend infixl:55 >>=)	
+monadic	a >>= f >=> g	ERROR	ERROR: expected end of input (>=> cannot extend >>=)	
+monadic	f =<< g >=> h	TREE	(Bind.bindLeft f (Bind.kleisliRight g h))	
+monadic	a <*> b <* c *> d	TREE	(SeqRight.seqRight (SeqLeft.seqLeft (Seq.seq a (fun b)) (fun c)) (fun d))	
+monadic	some 1 <* some 2 *> some 3	TREE	(SeqRight.seqRight (SeqLeft.seqLeft (some 1) (fun (some 2))) (fun (some 3)))	some 3
+monadic	a >> b *> c	TREE	(HAndThen.hAndThen a (fun (SeqRight.seqRight b (fun c))))	
+monadic	a *> b >> c	ERROR	ERROR: expected end of input (*> level 60 cannot be lhs of >>)	
+monadic	f <$> a + b	TREE	(HAdd.hAdd (Functor.map f a) b)	
+monadic	f <$> a ^ b	TREE	(HPow.hPow (Functor.map f a) b)	
+monadic	f ∘ g <$> x	TREE	(Function.comp f (Functor.map g x))	
+monadic	(fun x y => x + y) <$> a <*> b	TREE	(Seq.seq (Functor.map (fun (HAdd.hAdd x y)) a) (fun b))	
+monadic	f<$>a	TREE	(Functor.map f a)	(·+1)<$>some 3 = some 4; some 3<&>(·+1) 
+brace	{ x // x > 3 }	TREE	(Subtype (fun (GT.gt x 3)))	
+brace	{ x : Nat // x > 3 }	TREE	(Subtype (fun (GT.gt x 3)))	
+brace	{ x : Nat // x > 3 }	TREE	(Subtype (fun (GT.gt x 3)))	
+brace	{n : Nat // n % 2 = 0}	TREE	(Subtype (fun (Eq (HMod.hMod n 2) 0)))	
+brace	{ x : { y : Nat // y > 0 } // x.val < 5 }	TREE	(Subtype (fun (LT.lt x.val 5)))	
+brace	fun (s : { n : Nat // n > 0 }) => s.val + 1	TREE	(fun (HAdd.hAdd s.val 1))	
+brace	(⟨5, by decide⟩ : { x : Nat // x > 3 })	TREE	(: (anonymousCtor 5 #by) (Subtype (fun (GT.gt x 3))))	5
+brace	({5} : List Nat)	TREE	(: (singleton 5) (List Nat))	
+brace	({5} : Std.HashSet Nat)	TREE	(: (singleton 5) (Std.HashSet Nat))	#eval ({5} : Std.HashSet Nat).toList = [
+brace	({1, 2, 3} : Std.HashSet Nat)	TREE	(: (insert 1 (insert 2 (singleton 3))) (Std.HashSet Nat))	#eval sorted toList = [1, 2, 3]
+brace	({1, 2, 2, 3} : Std.HashSet Nat).toList.mergeSort (· ≤ ·)	TREE	((. (. (: (insert 1 (insert 2 (insert 2 (singleton 3)))) (Std.HashSet Nat)) toList) mergeSort) (fun (LE.le · ·)))	[1, 2, 3]
+brace	{1, 2, 3}	TREE	(insert 1 (insert 2 (singleton 3)))	
+brace	({1, 2,} : Std.HashSet Nat).toList	TREE	parse-ok in Lean; elab err (trailing comma → structInst abbrev)	
+brace	({} : List Nat)	TREE	(: (structInst) (List Nat))	[]
+brace	({} : P2)	TREE	(: (structInst) P2)	
+brace	{ x | x > 3 }	ERROR	ERROR: unexpected token '}'; expected '=>' (set-builder is Mathlib-only)	
+brace	{ x ∈ s | x > 1 }	ERROR	ERROR: unexpected token '|'; expected '}' (sep set-builder Mathlib-only)	
+brace	({ a := 1, b := 2 } : P)	TREE	(: (structInst a:=1 b:=2) P)	{ a := 1, b := 2 } (both forms)
+brace	{ p0 with a := 5 }	TREE	(structInst with=p0 a:=5)	{ a := 5, b := 2 }
+brace	fun (r : R) => { r with n := 9 }	TREE	(fun (structInst with=r n:=9))	
+brace	({a} : Q)	TREE	(: (structInst a:=a) Q)	{ a := 7 }
+brace	({ a, b := 9 } : P)	TREE	(: (structInst a:=a b:=9) P)	{ a := 7, b := 9 }
+brace	({ a := 1, b := 2, .. } : P)	TREE	(: (structInst a:=1 b:=2) P)	
+brace	(⟨1, 2⟩ : P)	TREE	(: (anonymousCtor 1 2) P)	{ a := 1, b := 2 }
+brace	(⟨1, 2, 3⟩ : Nat × (Nat × Nat))	TREE	(: (anonymousCtor 1 2 3) (Prod Nat (Prod Nat Nat)))	(1, 2, 3)
+brace	(⟨1, 2,⟩ : Nat × Nat)	TREE	(: (anonymousCtor 1 2) (Prod Nat Nat))	
+brace	(⟨⟩ : Unit)	TREE	(: (anonymousCtor) Unit)	
+brace	({ p := { a := 1, b := 2 }, n := 3 } : R)	TREE	(: (structInst p:=(structInst a:=1 b:=2) n:=3) R)	{ p := { a := 1, b := 2 }, n := 3 }
+binder	fun ⦃x : Nat⦄ => x	TREE	(fun x)	
+binder	fun {{x : Nat}} => x	TREE	(fun x)	
+binder	fun { {x : Nat} } => x	TREE	(fun x)	
+binder	fun ⦃x⦄ => x	TREE	(fun x)	
+binder	fun ⦃x y : Nat⦄ => x	TREE	(fun x)	
+binder	fun ⦃x : Nat⦄ {y : Nat} (z : Nat) => x + y + z	TREE	(fun (HAdd.hAdd (HAdd.hAdd x y) z))	
+binder	⦃x : Nat⦄ → Fin x → Nat	TREE	(pi (-> (Fin x) Nat))	
+binder	∀ ⦃x : Nat⦄, x = x	TREE	(pi (Eq x x))	
+binder	(fun ⦃x : Nat⦄ (h : x = x) => x) (rfl : (3 : Nat) = 3)	TREE	((fun x) (: rfl (Eq (: 3 Nat) 3)))	3
+binder	fun [inst : Add Nat] => (1 + 2 : Nat)	TREE	(fun (: (HAdd.hAdd 1 2) Nat))	
+binder	fun [Add Nat] => (1 + 2 : Nat)	TREE	(fun (: (HAdd.hAdd 1 2) Nat))	
+binder	fun {α : Type} [inst : Add α] (a : α) => a + a	TREE	(fun (HAdd.hAdd a a))	
+binder	(fun [inst : Add Nat] (a : Nat) => a + a) 5	TREE	((fun (HAdd.hAdd a a)) 5)	10
+binder	[inst : Add Nat] → Nat	TREE	(pi Nat)	
+binder	Σ n : Nat, Fin n	TREE	(Sigma (fun (Fin n)))	
+binder	Σ n, Fin n	TREE	(Sigma (fun (Fin n)))	
+binder	Σ' n : Nat, n > 0	TREE	(PSigma (fun (GT.gt n 0)))	
+binder	Σ (a : Nat) (b : Nat), Fin (a + b)	TREE	(Sigma (fun (Sigma (fun (Fin (HAdd.hAdd a b))))))	
+binder	Σ a b : Nat, Fin (a + b)	TREE	(Sigma (fun (Sigma (fun (Fin (HAdd.hAdd a b))))))	
+binder	Σ (a b : Nat), Fin (a + b)	TREE	(Sigma (fun (Sigma (fun (Fin (HAdd.hAdd a b))))))	
+binder	Σ n : Nat, Fin n × Fin n	TREE	(Sigma (fun (Prod (Fin n) (Fin n))))	
+binder	Σ n : Nat, Fin n → Nat	TREE	(Sigma (fun (-> (Fin n) Nat)))	
+binder	Nat → Σ n : Nat, Fin n	TREE	(-> Nat (Sigma (fun (Fin n))))	
+binder	Nat × Σ n : Nat, Fin n	TREE	(Prod Nat (Sigma (fun (Fin n))))	
+binder	(Σ n : Nat, Fin n) → Nat	TREE	(-> (Sigma (fun (Fin n))) Nat)	
+binder	(n : Nat) × Fin n	TREE	(Sigma (fun (Fin n)))	
+binder	(a : Nat) × (b : Nat) × Fin (a + b)	TREE	(Sigma (fun (Sigma (fun (Fin (HAdd.hAdd a b))))))	
+binder	(n : Nat) ×' n > 0	TREE	(PSigma (fun (GT.gt n 0)))	
+binder	(⟨3, 2⟩ : Σ n : Nat, Fin n)	TREE	(: (anonymousCtor 3 2) (Sigma (fun (Fin n))))	⟨3, 2⟩
+binder	(⟨3, 2⟩ : Σ n : Nat, Fin n).1	TREE	(. (: (anonymousCtor 3 2) (Sigma (fun (Fin n)))) 1)	3
+binder	(⟨3, 2⟩ : Σ n : Nat, Fin n).2	TREE	(. (: (anonymousCtor 3 2) (Sigma (fun (Fin n)))) 2)	2
+binder	∃! x : Nat, x = 1	ERROR	ERROR: unexpected token '!' (∃! is Mathlib-only)	
+binder	∃ x : Nat, x = 1	TREE	(Exists (fun (Eq x 1)))	
+binder	(fun (a, b) => a + b : Nat × Nat → Nat)	TREE	(: (pfun (match _x 1)) (-> (Prod Nat Nat) Nat))	
+binder	fun (a, b) => a + b	TREE	(pfun (match _x 1))	
+binder	(fun (a, b) => a + b : Nat × Nat → Nat) (2, 3)	TREE	((: (pfun (match _x 1)) (-> (Prod Nat Nat) Nat)) (Prod.mk 2 3))	5
+binder	(fun ⟨a, b⟩ => a + b : Nat × Nat → Nat) (2, 3)	TREE	((: (pfun (match _x 1)) (-> (Prod Nat Nat) Nat)) (Prod.mk 2 3))	5
+binder	(fun (a, b) c => a + b + c : Nat × Nat → Nat → Nat) (1, 2) 3	TREE	((: (pfun (match _x 1)) (-> (Prod Nat Nat) (-> Nat Nat))) (Prod.mk 1 2) 3)	6
+binder	(fun (x y) => x + y : Nat → Nat → Nat)	TREE	(: (fun (HAdd.hAdd x y)) (-> Nat (-> Nat Nat)))	
+binder	(fun (some x) => x : Option Nat → Nat) (some 5)	TREE	((: (pfun (match _x 1)) (-> (Option Nat) Nat)) (some 5))	
+lowprec	f $ g $ x	TREE	(f (g x))	
+lowprec	fun (f g : Nat → Nat) (x : Nat) => f $ g $ x	TREE	(fun (f (g x)))	
+lowprec	(fun x => x + 1) $ 2 * 3	TREE	((fun (HAdd.hAdd x 1)) (HMul.hMul 2 3))	7
+lowprec	f $x	TREE	parse-ok in Lean as `f $x` (antiquot); elab err	
+lowprec	a |> f |> g	TREE	(g (f a))	
+lowprec	fun (x : Nat) (f g : Nat → Nat) => x |> f |> g	TREE	(fun (g (f x)))	
+lowprec	[1, 2, 3] |> List.map (fun a => a + 1) |> List.length	TREE	(List.length (List.map (fun (HAdd.hAdd a 1)) (List.cons 1 (List.cons 2 (List.cons 3 List.nil)))))	3
+lowprec	f <| g <| x	TREE	(f (g x))	
+lowprec	List.length <| List.map (fun a => a + 1) <| [1, 2, 3]	TREE	(List.length (List.map (fun (HAdd.hAdd a 1)) (List.cons 1 (List.cons 2 (List.cons 3 List.nil)))))	3
+lowprec	x |> f $ y	TREE	(f x y)	#eval 10 |> Nat.sub $ 4  ==> 6  (= Nat.s
+lowprec	f $ x |> g	TREE	(f (g x))	#eval (fun x => x * 2) $ 3 |> (fun x => 
+lowprec	x |> f <| y	TREE	(f x y)	#eval 10 |> Nat.sub <| 4  ==> 6
+lowprec	m >> n >> o	TREE	(HAndThen.hAndThen m (fun (HAndThen.hAndThen n (fun o))))	
+lowprec	m >>= k >> n	TREE	(Bind.bind m (HAndThen.hAndThen k (fun n)))	
+lowprec	m >> n >>= k	TREE	(Bind.bind (HAndThen.hAndThen m (fun n)) k)	
+lowprec	a <|> b >> c	TREE	(HOrElse.hOrElse a (fun (HAndThen.hAndThen b (fun c))))	
+lowprec	a <| b <|> c	TREE	(a (HOrElse.hOrElse b (fun c)))	
+lowprec	(some 1 >> some 2 >> some 3 : Option Nat)	TREE	(: (HAndThen.hAndThen (some 1) (fun (HAndThen.hAndThen (some 2) (fun (some 3))))) (Option Nat))	
+lowprec	(IO.println "a" >> IO.println "b" : IO Unit)	TREE	(: (HAndThen.hAndThen (IO.println #str) (fun (IO.println #str))) (IO Unit))	
+lowprec	fun (a b : P) => a >> b	TREE	(fun (HAndThen.hAndThen a (fun b)))	#eval (⟨1⟩ >> ⟨2⟩ >> ⟨3⟩ : P).v  ==> 6
+lowprec	fun (a b c : P) => a >> b >> c	TREE	(fun (HAndThen.hAndThen a (fun (HAndThen.hAndThen b (fun c)))))	
+lowprec	x |>.foo y	TREE	(x.foo y)	#eval [1, 2, 3] |>.map (fun a => a + 1) 
+lowprec	x |> .succ	TREE	x.succ	
+lowprec	x |>. succ	ERROR	ERROR: expected end of input (|>. checkNoWsBefore forbids ws before field)	
+lowprec	1 |>.succ.succ	TREE	1.succ.succ	
+lowprec	skip <;> trivial <;> rfl	ERROR	ERROR: tactic seq `<;>` is not a term operator	
+lowprec	(skip; skip <;> trivial)	ERROR	ERROR: tactic-paren `( ; )` is not a term	
+lowprec	constructor <;> [skip; rfl]	ERROR	ERROR: tactic seq `<;>` is not a term operator	
+lowprec	by constructor <;> trivial	TREE	#by	success
+rewrite	h ▸ rfl	TREE	(Eq.rec h rfl)	
+rewrite	a ▸ b ▸ c	TREE	(Eq.rec a (Eq.rec b c))	
+rewrite	fun (a b : Nat) (p : Nat → Prop) (h : a = b) (hp : p a) => h ▸ hp	TREE	(fun (Eq.rec h hp))	
+rewrite	a ▸ b + c	TREE	(HAdd.hAdd (Eq.rec a b) c)	
+rewrite	a + b ▸ c	TREE	(HAdd.hAdd a (Eq.rec b c))	
+rewrite	h₁ ▸ h₂ ▸ rfl	TREE	(Eq.rec h₁ (Eq.rec h₂ rfl))	
+rewrite	a ∣ b + c	TREE	(Dvd.dvd a (HAdd.hAdd b c))	
+rewrite	a ∣ b ∣ c	ERROR	ERROR: expected end of input (infix:50 ∣ does not chain)	
+rewrite	fun (a b c : Nat) => a ∣ b ∣ c	TREE	parse-ok in Lean (silent (fun..)∣c reassoc); elab err	
+rewrite	decide ((2 : Nat) ∣ 4)	TREE	(decide (Dvd.dvd (: 2 Nat) 4))	true / false
+rewrite	a • b • c	TREE	(HSMul.hSMul a (HSMul.hSMul b c))	
+rewrite	((⟨1⟩:W) • (⟨2⟩:W) • (⟨3⟩:W)).val	TREE	(. (HSMul.hSMul (: (anonymousCtor 1) W) (HSMul.hSMul (: (anonymousCtor 2) W) (: (anonymousCtor 3) W))) val)	9
+rewrite	a + b • c	TREE	(HAdd.hAdd a (HSMul.hSMul b c))	
+rewrite	(2:Nat) • 3	TREE	(HSMul.hSMul (: 2 Nat) 3)	6 / 8 / 18
+rewrite	a • b ▸ c	TREE	(HSMul.hSMul a (Eq.rec b c))	
+rewrite	aˢ	ERROR	ERROR: expected token (ˢ U+02E2 is not an identifier char in Lean)	
+rewrite	(1, 2) ×ˢ 3	ERROR	ERROR: expected token (×ˢ is Mathlib-only; ˢ not a token)	
+rewrite	(a, b) ×ˢ s	ERROR	ERROR: expected token (×ˢ is Mathlib-only)	
+rewrite	a ×ˢ b ×ˢ c	ERROR	ERROR: expected token (×ˢ is Mathlib-only)	[((1, 2), 3)]
+rewrite	[1, 2] ×ˢ [10, 20]	ERROR	ERROR: expected token (×ˢ is Mathlib-only)	[(1, 10), (1, 20), (2, 10), (2, 20)] / [
+rewrite	a ×ˢ b ^ c	ERROR	ERROR: expected token (×ˢ is Mathlib-only)	
+freqsweep	do let x ← pure 1; pure (x + (← pure 2))	TREE	#do	3
+freqsweep	fun xs n h => xs[n]'h	TREE	(fun (getElem xs n h))	20 / none / 1
+freqsweep	helper + 1	TREE	(HAdd.hAdd helper 1)	42
+freqsweep	Nat.succ <| Nat.succ <| 3	TREE	(Nat.succ (Nat.succ 3))	5
+freqsweep	by constructor <;> trivial	TREE	#by	
+freqsweep	[1, 2, 3] |> List.reverse |>.head!	TREE	(. (List.reverse (List.cons 1 (List.cons 2 (List.cons 3 List.nil)))) head!)	3
+freqsweep	fun {α} {P : α → Prop} (a b c : α) (h1 : a = b) (h2 : b = c) (p : P a) => (h2 ▸ h1 ▸ p : P c)	TREE	(fun (: (Eq.rec h2 (Eq.rec h1 p)) (P c)))	
+freqsweep	(3 ∣ 9)	TREE	(Dvd.dvd 3 9)	true
+freqsweep	fun (f : Nat → Nat → Nat) (a b : Option Nat) => f <$> a <*> b	TREE	(fun (Seq.seq (Functor.map f a) (fun b)))	
+freqsweep	[1, 2, 3] |> List.reverse |>.head!	TREE	(. (List.reverse (List.cons 1 (List.cons 2 (List.cons 3 List.nil)))) head!)	3
+freqsweep	fun (a b c : List Nat) => a >> b >> c	TREE	(fun (HAndThen.hAndThen a (fun (HAndThen.hAndThen b (fun c)))))	[1, 2, 3]
+freqsweep	(none <|> some 4 <|> some 5 : Option Nat)	TREE	(: (HOrElse.hOrElse none (fun (HOrElse.hOrElse (some 4) (fun (some 5))))) (Option Nat))	some 4
+freqsweep	{n : Nat // n > 0}	TREE	(Subtype (fun (GT.gt n 0)))	
+freqsweep	show 1 = 1 from rfl	TREE	(: rfl (Eq 1 1))	
+freqsweep	Nat.succ $ Nat.succ $ 3	TREE	(Nat.succ (Nat.succ 3))	5
+freqsweep	fun (a : Option Nat) (f g : Nat → Option Nat) => a >>= f >>= g	TREE	(fun (Bind.bind (Bind.bind a f) g))	
+freqsweep	match h : n with | 0 => 0 | m + 1 => m	TREE	(match n 2)	mh 5 = 4
+freqsweep	fun {α β γ : Type} [HSMul α β γ] (a : α) (b : β) => a • b	TREE	(fun (HSMul.hSMul a b))	
+freqsweep	(pure 1 *> pure 2 : Option Nat)	TREE	(: (SeqRight.seqRight (pure 1) (fun (pure 2))) (Option Nat))	some 2 (for *>)
+freqsweep	@sifun	TREE	(@ sifun)	
+freqsweep	(calc 2 ≤ 3 := Nat.le_succ 2; _ ≤ 4 := Nat.le_succ 3 : 2 ≤ 4)	TREE	(: #calc (LE.le 2 4))	
+freqsweep	fun (f : Nat → Option Nat) (x : Option Nat) => f =<< x	TREE	(fun (Bind.bindLeft f x))	
+freqsweep	f >=> g	TREE	(Bind.kleisliRight f g)	some 8
+freqsweep	match n with | m if m > 2 => 1 | _ => 0	ERROR	ERROR: unexpected token 'if'; expected '=>' (match guards are not Lean 4)	
+freqsweep	{n : Nat | n > 0}	ERROR	ERROR: unexpected token '}'; expected '=>' (set-builder Mathlib-only)	
+freqsweep	∑ i ∈ Finset.range 3, i	ERROR	ERROR: expected token (∑ Mathlib-only)	
+freqsweep	Σ n : Nat, Fin n	TREE	(Sigma (fun (Fin n)))	

@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "1079.lean",
+  "source_sha256": "sha256:93a6df1469b104aef1d2075f429749ac34faf514f1ea13d9d1585d78ec36b8ed",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1079.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.165,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/1079.lean:3:2: error: Alternative `isFalse` has not been provided\n[Meta.Tactic.simp.rewrite] h:1000:\n      m\n    ==>\n      n\n[Meta.Tactic.simp.rewrite] eq_self:1000:\n      n = n\n    ==>\n      True\n[Meta.Tactic.simp.rewrite] imp_self:10000:\n      False \u2192 False\n    ==>\n      True\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

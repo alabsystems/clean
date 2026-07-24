@@ -1,0 +1,188 @@
+{
+  "schema": "trust_verdict_emitters/v1",
+  "purpose": "Pillar-1 discipline registry. Every trust-verdict emitter (a code path that stamps a soundness-bearing label: KernelVerified / Proved / valid / verified / safe) in the trusted crates is classified here by BASIS. scripts/check_trust_verdict_emitters.py enforces: (1) no new UNCLASSIFIED verdict construction appears in an enforced crate, (2) kernel-rechecked entries actually call a kernel recheck primitive, (3) asserts-own-authority entries carry a // SOUNDNESS: comment, (4) the asserts-own-authority count only ratchets DOWN. Seeded from docs/PILLAR_1_TRUST_MAP.md (127-emitter audit; the 15 canonical entry points enumerated in map section 1, plus the equivalence-class summary). ENFORCEMENT SCOPE: only crates present in THIS repo (clean-kernel) are hard-scanned for new emitters; entries with repo:trust live in the separate ~/trust fork and are documented here for the honest full picture but enforced by that repo's own gate.",
+  "basis_legend": {
+    "kernel-rechecked": "every accept passes through the trusted kernel checker (infer_sort/check_type/is_def_eq/replay_and_verify/check_proof_strict); a false verdict is caught by the TCB.",
+    "fail-closed": "emitter only ever WEAKENS an accept to Unknown/Err; unconfirmed input cannot become green.",
+    "deferred": "soundness delegated to a named external sound prover + its strict certificate checker (not the clean-kernel).",
+    "honest-label": "provenance/quality label that mints no soundness verdict.",
+    "asserts-own-authority": "accepts on its own say-so with no kernel recheck at the boundary; sound only by a downstream backstop or caller discipline. REQUIRES a // SOUNDNESS: comment + a ratchet entry. Count ratchets DOWN only."
+  },
+  "kernel_recheck_primitives": [
+    "infer_sort",
+    "check_type",
+    "is_def_eq",
+    "replay_and_verify",
+    "check_proof_strict",
+    "infer_type_with_cert",
+    "cross_validate_with_micro",
+    "CertVerifier",
+    "MicroChecker",
+    "add_decl"
+  ],
+  "asserts_own_authority_ratchet": {
+    "clean_kernel_count": 5,
+    "note": "The five clean-kernel bypass primitives (map emitters 3,4,5,7,8). Post-G2 the value-less axiom-shaped smuggle (emitter 4) is caught by C1's symmetric infer_sort; post-G4 the trust-bearing overlay lane (emitter 7) is off extend_constants_unchecked onto the kernel-checked extend_constants_checked. The PRIMITIVES still exist (they remain callable, ratchet-gated to ~0 production proof-minting callers), so they stay classified asserts-own-authority here; the count ratchets DOWN as primitives are removed or hard-gated. Do not raise this number without a soundness review."
+  },
+  "emitters": [
+    {
+      "id": "add_decl",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/decl_add.rs :: Environment::add_decl",
+      "verdict": "KernelVerified (accept Decl into trusted env)",
+      "basis": "kernel-rechecked",
+      "justification": "infer_sort(type_) (hard SortDepthExceeded, no Sort(0) fallback) -> theorem-in-Prop -> check_type(value,type_) = full infer_type + is_def_eq. A false value => TypeMismatch.",
+      "recheck_calls": ["infer_sort", "check_type"]
+    },
+    {
+      "id": "check_decl_readonly",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/decl_add.rs :: Environment::check_decl_readonly",
+      "verdict": "valid (mirrors add_decl accept, no mutation)",
+      "basis": "kernel-rechecked",
+      "justification": "Identical Phase-1 gauntlet: infer_sort, in-Prop, check_type -> infer_type. Parity asserted by test_check_decl_readonly_matches_add_decl_verdict.",
+      "recheck_calls": ["infer_sort", "check_type"]
+    },
+    {
+      "id": "add_decl_mm_axiom_only",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/decl_add.rs :: Environment::add_decl (mm_axiom_only branch)",
+      "verdict": "accepts Theorem TYPE as Axiom, drops proof check",
+      "basis": "asserts-own-authority",
+      "justification": "G1 FIXED (2026-07-01): now fail-closed. The proof-drop fast path additionally requires the two-pass sentinel (mm_two_pass_active(), established by MmAxiomOnlyGuard). Absent it, returns Err(AxiomOnlyMisuse) instead of dropping the value. Sound path (Metamath two-pass, where PASS-2 re-verifies every proof) unaffected.",
+      "soundness_comment": true
+    },
+    {
+      "id": "add_decl_unchecked",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/decl_add.rs :: Environment::add_decl_unchecked",
+      "verdict": "accepts (pure insert)",
+      "basis": "asserts-own-authority",
+      "justification": "Pure constants.insert, zero gates. Value-bearing bypass caught by C1 re-typecheck; AXIOM-shaped type bypass now caught by C1's symmetric infer_sort (G2 FIXED). Ratchet-gated: 0 production proof-minting callers (data/unchecked_decl_ratchet.json).",
+      "soundness_comment": true
+    },
+    {
+      "id": "add_decl_structural",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/decl_add.rs :: Environment::add_decl_structural",
+      "verdict": "accepts after O(1) structural checks only",
+      "basis": "asserts-own-authority",
+      "justification": "Structural gates then insert, no infer_sort/check_type (intentionally admits recursor-motive terms check_type would falsely reject). Value-bearing case caught downstream by C1. Sole production caller proof_commands.rs:522 is a read-only audit env (G3: now counted in data/unchecked_decl_ratchet.json add_decl_structural_production_sites, sound-by-isolation).",
+      "soundness_comment": true
+    },
+    {
+      "id": "add_inductive",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/inductive_builder.rs :: Environment::add_inductive",
+      "verdict": "accepts inductive family + recursors/iota",
+      "basis": "kernel-rechecked",
+      "justification": "infer_sort(ind_type.type_ / ctor.type_), validate_inductive, check_positivity/nested. Recursors are kernel-CONSTRUCTED (no user authority). Residual: recursor well-formedness trusted from the generator (documented in the trust map residual TCB).",
+      "recheck_calls": ["infer_sort"]
+    },
+    {
+      "id": "extend_constants_unchecked",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/registration.rs :: Environment::extend_constants_unchecked",
+      "verdict": "bulk-accept ConstantInfos (HashMap::extend)",
+      "basis": "asserts-own-authority",
+      "justification": "Pure extend. G4 FIXED (2026-07-01): the one trust-bearing production site (generated_overlay.rs overlay lane) is off this lane onto extend_constants_checked (infer_sort every type + check_type every value-bearing record). Remaining callers are sound-by-isolation scratch envs (merge_check.rs, closure_source.rs), tracked in data/unchecked_decl_ratchet.json.",
+      "soundness_comment": true
+    },
+    {
+      "id": "extend_constants_checked",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/registration.rs :: Environment::extend_constants_checked",
+      "verdict": "bulk-accept ConstantInfos WITH per-record kernel re-check",
+      "basis": "kernel-rechecked",
+      "justification": "G4 hardened lane: validate_constant_info_structural (fvar/mvar/level-scope) unconditionally + infer_sort(type_) + check_type(value,type_) per record, UnknownConst-tolerant for legitimate forward/external refs. Any genuine typing failure is fatal (fail-closed).",
+      "recheck_calls": ["infer_sort", "check_type"]
+    },
+    {
+      "id": "extend_constants_structural",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/registration.rs :: Environment::extend_constants_structural",
+      "verdict": "bulk-accept after O(1) structural validation",
+      "basis": "asserts-own-authority",
+      "justification": "validate_constant_info_structural (no dup-level-param/mvar/fvar/level-scope) but NO infer_sort/check_type. .olean/mathverse import boundary; stored Unverified; opt-in typecheck_constants_full; graduation re-checked via add_decl. Tracked in data/unchecked_decl_ratchet.json.",
+      "soundness_comment": true
+    },
+    {
+      "id": "certify_c1_is_sound",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/soundness_certificate.rs :: SoundnessCertificate::is_sound (certify_c1_reverification)",
+      "verdict": "safe/KernelVerified (whole env C1-C5)",
+      "basis": "kernel-rechecked",
+      "justification": "C1: fresh per-decl TypeChecker -> check_type(value,type_) re-verifies EVERY Theorem/Definition body from scratch, AND (G2 FIXED) infer_sort(type_) re-checks EVERY Axiom-kind type for well-formedness (symmetric across kinds). C2 pins axiom base vs golden; C3 trust-marker reachability; C4/C4' refutation; C5 exploits. is_sound ANDs all six.",
+      "recheck_calls": ["check_type", "infer_sort"]
+    },
+    {
+      "id": "assert_proof_nontrivial",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/env/proof_quality.rs :: assert_proof_nontrivial",
+      "verdict": "trust-labeled (non-trivial / not MASQUERADE)",
+      "basis": "honest-label",
+      "justification": "Quality heuristic gated CLEAN_STRICT_PROOF_QUALITY, not a soundness gate. On failure only ROLLS BACK an already-type-checked insert; never accepts a term check_type rejected. Emits no unsound verdict."
+    },
+    {
+      "id": "verify_metamath_theorem",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/metamath_reflect.rs :: verify_metamath_theorem (+ _guarded/_schematic/_dv)",
+      "verdict": "verified (MM $p -> kernel Theorem)",
+      "basis": "kernel-rechecked",
+      "justification": "add_decl(Theorem{..}) — the derivation term from the MM proof tree is routed through add_decl, which infer_sort+check_type's it; MM subst primitives are reducible kernel Definitions, fact discharged by Eq.refl the kernel EVALUATES. Tampered statement reduces to a different value => add_decl's type-check fails.",
+      "recheck_calls": ["add_decl"]
+    },
+    {
+      "id": "verify_expr",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/verify_api.rs :: verify_expr (+ verify_batch)",
+      "verdict": "verified (well-typed, replay + micro cross-validated)",
+      "basis": "kernel-rechecked",
+      "justification": "infer_type_with_cert (kernel) -> CertVerifier::replay_and_verify independently re-derives -> assert inferred==replayed else ReplayTypeMismatch -> cross_validate_with_micro. Every Ok gated on kernel infer.",
+      "recheck_calls": ["infer_type_with_cert", "replay_and_verify", "cross_validate_with_micro"]
+    },
+    {
+      "id": "cross_validate_with_micro",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/micro/translate.rs :: cross_validate_with_micro",
+      "verdict": "micro-confirmed (independent minimal checker agrees)",
+      "basis": "fail-closed",
+      "justification": "MicroChecker::verify re-derives; structural type-eq vs kernel; disagreement => Err(Disagreement); unsupported => Ok(false) (SKIP, not pass). Never Ok(true) without an independent match."
+    },
+    {
+      "id": "replay_and_verify",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/cert/replay.rs :: replay_and_verify (+ verifier/mod.rs)",
+      "verdict": "verified (cert reconstructs expr + re-derives type)",
+      "basis": "kernel-rechecked",
+      "justification": "replay_cert reconstructs expr; verify(cert,&expr) re-runs the typing derivation step-by-step vs env. Second independent leg of verify_expr; mismatch => CertError.",
+      "recheck_calls": ["replay_and_verify"]
+    },
+    {
+      "id": "cert_bundle_build_and_verify",
+      "repo": "clean",
+      "entry_point": "crates/clean-kernel/src/cert/bundle.rs :: CertBundle::build / verify_all / verify_single",
+      "verdict": "TrustLevel::KernelVerified (per-theorem bundle manifest label)",
+      "basis": "kernel-rechecked",
+      "justification": "build() labels an entry KernelVerified only when it carries a CrossProjectCert; that label is ENFORCED at verification time by verify_single, which (a) guards that any KernelVerified manifest entry MUST carry a cross-project cert (else VerificationFailed) and (b) replays the cert through CertVerifier::verify (the replay_and_verify path) against the proof term — an independent kernel re-derivation. The build-time label alone mints no trust that verify_single does not re-check.",
+      "recheck_calls": ["CertVerifier"],
+      "verdict_construction_sites": ["crates/clean-kernel/src/cert/bundle.rs:322"]
+    },
+    {
+      "id": "in_process_ay_backend_unsat_to_result",
+      "repo": "trust",
+      "entry_point": "crates/trust-router/src/in_process_ay_backend.rs :: unsat_to_result (default SMT lane)",
+      "verdict": "Proved{smt_unsat_strict_checked=SmtBacked}",
+      "basis": "deferred",
+      "justification": "Fail-closed by construction: Proved only if strict_verdict==Verified && accept_for_consumer(Strict).is_ok(); every other arm => Unknown. UNSAT not trusted directly — ay's check_proof_strict (Alethe/LRAT) + optional Carcara crosscheck. Soundness reduces to ay's strict checker + formula translation, NOT clean-kernel (map gap G6). Enforced by the ~/trust repo gate."
+    },
+    {
+      "id": "raw_result_to_outcome",
+      "repo": "trust",
+      "entry_point": "crates/trust-router/src/report.rs :: raw_result_to_outcome (MIN_REPORTED_ASSURANCE=SmtBacked)",
+      "verdict": "Proved (user-facing ObligationOutcome::Proved)",
+      "basis": "fail-closed",
+      "justification": "Single user-facing chokepoint: require_assurance(SmtBacked) only WEAKENS Proved->Unknown. FLOOR-COLLISION gap G7: SmtBacked (order 2) == AssuranceLevel::Sound (order 2), so a self-authority Sound backend passes on its own analysis authority. G7 is the highest-leverage follow-up (see docs/PILLAR_1_TRUST_MAP.md). Enforced by the ~/trust repo gate."
+    }
+  ]
+}

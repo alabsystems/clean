@@ -1,0 +1,7 @@
+# Perpendicular bisector theorem derivation
+# Given: M midpoint of AB, PM perpendicular to AB
+# Goal: PA = PB
+
+CONSTRUCT midpoint(M, A, B)
+GIVEN perpendicular(P, M, A, B)
+DERIVE congruent_segments(P, A, P, B) FROM perpendicular_bisector_theorem(A, B, M, P)

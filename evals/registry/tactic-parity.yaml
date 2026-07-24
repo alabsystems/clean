@@ -1,0 +1,356 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+#
+# Tactic-parity launch-blocker matrix for the Lean4 replacement tactics.
+#
+# This eval is the metadata side of the Rust-owned tactic parity scorecard
+# (`clean replacement tactic-parity --json`). It is intentionally fail-closed:
+# every "lean4_corpus_evidence" bucket is a *bounded hand-maintained fixture*,
+# NOT a generated Lean4-vs-clean parity count. Launch readiness stays blocked
+# (`readiness_gate.status: blocked-pending-generated-counts`) until a real
+# Lean4 runner emits generated-count artifacts that satisfy the runner artifact
+# contract below. The Rust guard
+# `crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs` and the Python
+# `scripts/tactic_parity/generated_count_runner.py` both validate this file, so
+# the matrix can never silently overclaim parity it has not earned.
+#
+# Issues: #3701 (replacement tactic surface), #3711 (Lean4 tactic parity matrix
+# and corpus gates), #3712 (strict solver-fragment reconstruction dashboard).
+id: tactic-parity
+version: 1
+description: >-
+  Lean4 tactic parity and strict reconstruction scorecard metadata. Classifies
+  each replacement tactic lane by proof-carrying / strict-zero-trust /
+  fallback-classified behavior and keeps launch readiness blocked until
+  generated Lean4-vs-clean parity counts exist.
+owner: Andrew Yates <andrewyates.name@gmail.com>
+entrypoint: clean replacement tactic-parity --json
+inputs:
+  generated_count_runner_artifact_contract:
+    version: clean-tactic-generated-count-runner-artifact-v1
+    artifact_format: json
+    expected_schema_version: clean-tactic-generated-count-runner-artifact-v1
+    required_fields:
+      - schema_version
+      - tactic_lane
+      - run_id
+      - cases_total
+      - lean4_successes
+      - clean_successes
+      - matched_successes
+      - source_corpus_path
+      - source_corpus_sha256
+    matching_rules:
+      - schema_version must equal expected_schema_version
+      - tactic_lane must equal the generated-count manifest tactic_lane
+      - source_corpus_path must equal the generated-count manifest source_corpus_path
+      - source_corpus_sha256 must equal the sha256 digest of source_corpus_path contents
+      - cases_total must equal the number of cases in source_corpus_path
+    missing_or_mismatched_artifact_status: fail-closed-missing-lean4-runner-artifact
+  generated_count_manifest_schema:
+    version: clean-tactic-generated-count-manifest-v1
+    required_fields:
+      - tactic_lane
+      - bucket
+      - generated
+      - source_corpus_path
+      - runner_path
+      - runner_command
+      - runner_artifact_contract
+      - expected_lean4_runner_artifact_path
+      - missing_runner_status
+      - parity_status
+  generated_count_manifests:
+    - tactic_lane: simp
+      bucket: simp-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/simp-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane simp --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/simp-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+    - tactic_lane: rw
+      bucket: rw-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/rw-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane rw --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/rw-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+    - tactic_lane: ring
+      bucket: ring-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/ring-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane ring --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/ring-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+    - tactic_lane: norm_num
+      bucket: norm-num-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/norm-num-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane norm_num --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/norm-num-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+    - tactic_lane: mathverse
+      bucket: mathverse-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/mathverse-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane mathverse --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/mathverse-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+    - tactic_lane: linarith
+      bucket: linarith-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/linarith-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane linarith --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/linarith-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+    - tactic_lane: nlinarith
+      bucket: nlinarith-generated-lean4-vs-clean-counts
+      generated: false
+      source_corpus_path: evals/tactic-parity/corpora/nlinarith-count-corpus.yaml
+      runner_path: scripts/tactic_parity/generated_count_runner.py
+      runner_command: python3 scripts/tactic_parity/generated_count_runner.py --lane nlinarith --dry-run
+      runner_artifact_contract: clean-tactic-generated-count-runner-artifact-v1
+      expected_lean4_runner_artifact_path: metrics/benchmarks/tactic-parity/{run_id}/lean4/nlinarith-counts.json
+      missing_runner_status: fail-closed-missing-lean4-runner-artifact
+      parity_status: generated-counts-missing
+      readiness_effect: blocks-launch-readiness
+  issue_refs:
+    - "#3701"
+    - "#3711"
+    - "#3712"
+  readiness_gate:
+    status: blocked-pending-generated-counts
+    generated_lean4_vs_clean_counts_required: true
+    generated_lean4_vs_clean_count_buckets: 0
+    generated_count_manifests_checked: 7
+    missing_runner_status: fail-closed-missing-lean4-runner-artifact
+    required_next_artifact: generated Lean4-vs-clean parity counts
+  tactic_matrix:
+    - tactic: simp
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: false
+      blocker: simp has 1 bounded clean fail-closed fixture row, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/simp_proof_carry.rs
+        - crates/clean-elab/src/tactic/tests/sorry_absence/simp.rs
+        - crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
+      executable_checks:
+        - id: simp-proof-carry
+          source: crates/clean-elab/src/tactic/tests/simp_proof_carry.rs
+          command: cargo test -p clean-elab tactic::tests::simp_proof_carry::test_simp_transitivity_chain_no_trusted_arith --lib -- --exact
+          proves: simp closes a transitivity chain with a kernel-checked proof and no trusted arithmetic fallback.
+        - id: simp-all-opaque-fail-closed
+          source: crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
+          command: cargo test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_simp_lane_executable_fixture_fails_closed_without_fallback --lib -- --exact
+          proves: simp_all fails closed on an opaque target instead of fabricating a proof or sorry fallback.
+      lean4_corpus_evidence:
+        bucket: simp-all-opaque-fail-closed-fixture
+        generated: false
+        fixture_rows: 1
+        lean4_successes: 0
+        clean_successes: 0
+        clean_fail_closed_rows: 1
+        matched_successes: 0
+        parity_status: fixture-only-blocking
+        required_next_artifact: generated Lean4-vs-clean parity counts
+        rows:
+          - id: simp_all_opaque_target_no_progress
+    - tactic: rw
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: false
+      blocker: Rewrite has 2 bounded clean checked-rewrite fixture rows, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/conv_proof_carry.rs
+        - crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
+      executable_checks:
+        - id: rw-checked-rewrite
+          source: crates/clean-elab/src/tactic/tests/conv_proof_carry.rs
+          command: cargo test -p clean-elab tactic::tests::conv_proof_carry::test_conv_rw_direct_path_uses_checked_rewrite --lib -- --exact
+          proves: rw uses a kernel-checked rewrite on the direct path rather than a trusted equality.
+        - id: rw-parity-fixture
+          source: crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
+          command: cargo test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_rw_lane_executable_fixture_closes_without_fallback --lib -- --exact
+          proves: the rw fixture rows close with a kernel-valid proof and no trusted-arith / sorry fallback.
+      lean4_corpus_evidence:
+        bucket: rw-local-equality-fixture
+        generated: false
+        fixture_rows: 2
+        lean4_successes: 0
+        clean_successes: 2
+        matched_successes: 0
+        parity_status: fixture-only-blocking
+        required_next_artifact: generated Lean4-vs-clean parity counts
+        rows:
+          - id: rw_local_forward_refl
+          - id: rw_local_reverse_refl
+    - tactic: ring
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: false
+      blocker: Ring/ring_nf has 3 bounded clean fixture rows, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/ring_proof_carry.rs
+        - crates/clean-elab/src/tactic/tests/ring_kernel_proof.rs
+      executable_checks:
+        - id: ring-parity-fixture
+          source: crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
+          command: cargo test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_ring_lane_executable_fixture_closes_without_fallback --lib -- --exact
+          proves: ring_nf closes a commutativity goal with a kernel-valid proof and no trusted-arith / sorry fallback.
+      lean4_corpus_evidence:
+        bucket: ring-nat-normalization-fixture
+        generated: false
+        fixture_rows: 3
+        lean4_successes: 0
+        clean_successes: 3
+        matched_successes: 0
+        parity_status: fixture-only-blocking
+        required_next_artifact: generated Lean4-vs-clean parity counts
+        rows:
+          - id: ring_nat_add_comm
+          - id: ring_nat_add_zero_right
+          - id: ring_nat_mul_zero_right
+    - tactic: norm_num
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: false
+      blocker: norm_num has 1 bounded clean fail-closed fixture row, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/advanced/algebraic_reasoning_ext.rs
+      executable_checks:
+        - id: norm-num-fail-closed
+          source: crates/clean-elab/src/tactic/tests/advanced/algebraic_reasoning_ext.rs
+          command: cargo test -p clean-elab tactic::tests::advanced::algebraic_reasoning_ext::test_norm_num_at_fails_closed_on_non_defeq_rewrite --lib -- --exact
+          proves: norm_num at fails closed on a non-defeq rewrite instead of fabricating a rewrite.
+      lean4_corpus_evidence:
+        bucket: norm-num-at-fail-closed-fixture
+        generated: false
+        fixture_rows: 1
+        lean4_successes: 0
+        clean_successes: 0
+        clean_fail_closed_rows: 1
+        matched_successes: 0
+        parity_status: fixture-only-blocking
+        required_next_artifact: generated Lean4-vs-clean parity counts
+        rows:
+          - id: norm_num_at_non_defeq_rewrite
+    - tactic: mathverse
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: false
+      blocker: mathverse has 1 bounded clean fail-closed certified-replay fixture row, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/mathverse_proof_carry.rs
+        - crates/clean-elab/src/tactic/tests/sorry_absence/mathverse.rs
+        - crates/clean-elab/src/tactic/tests/certified_arithmetic_fail_closed.rs
+      executable_checks:
+        - id: mathverse-proof-carry
+          source: crates/clean-elab/src/tactic/tests/mathverse_proof_carry.rs
+          command: cargo test -p clean-elab tactic::tests::mathverse_proof_carry::test_mathverse_avoids_trusted_arith_on_contradictory_nat_le --lib -- --exact
+          proves: mathverse avoids trusted arithmetic when discharging a contradictory Nat.le goal.
+        - id: mathverse-certified-arithmetic-fail-closed
+          source: crates/clean-elab/src/tactic/tests/certified_arithmetic_fail_closed.rs
+          command: cargo test -p clean-elab tactic::tests::certified_arithmetic_fail_closed::test_mathverse_certified_arithmetic_fail_closed_without_trusted_axioms --lib -- --exact
+          proves: mathverse certified arithmetic fails closed without trusted axioms when the replay is rejected.
+      lean4_corpus_evidence:
+        bucket: mathverse-certified-arithmetic-fail-closed-fixture
+        generated: false
+        fixture_rows: 1
+        lean4_successes: 0
+        clean_successes: 0
+        clean_fail_closed_rows: 1
+        matched_successes: 0
+        parity_status: fixture-only-blocking
+        required_next_artifact: generated Lean4-vs-clean parity counts
+        rows:
+          - id: mathverse_certified_arithmetic_replay_rejected
+    - tactic: linarith
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: true
+      blocker: linarith stays a strict fully_verified gate, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/linarith_proof_type/term_soundness.rs
+        - crates/clean-elab/src/tactic/tests/linarith_real_proof_carry.rs
+      executable_checks:
+        - id: linarith-proof-carry
+          source: crates/clean-elab/src/tactic/tests/linarith_proof_type/term_soundness.rs
+          command: cargo test -p clean-elab tactic::tests::linarith_proof_type::term_soundness::test_linarith_end_to_end_no_trusted_arith_fallback --lib -- --exact
+          proves: linarith builds an end-to-end kernel proof with no trusted-arith fallback.
+    - tactic: nlinarith
+      proof_behavior: proof-carrying
+      fallback_behavior: fail-closed
+      fully_verified_gate: false
+      blocker: nlinarith has 1 bounded clean fail-closed certified-replay fixture row, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/nlinarith_proof_carry.rs
+        - crates/clean-elab/src/tactic/arith_nlinarith/certified.rs
+      executable_checks:
+        - id: nlinarith-certified-unsat-fail-closed
+          source: crates/clean-elab/src/tactic/tests/nlinarith_proof_carry.rs
+          command: cargo test -p clean-elab tactic::tests::nlinarith_proof_carry::test_certified_nlinarith_outcome_distinguishes_fail_closed_unsat --lib -- --exact
+          proves: certified nlinarith distinguishes a fail-closed unsat outcome instead of trusting the SMT result.
+      lean4_corpus_evidence:
+        bucket: nlinarith-certified-unsat-fail-closed-fixture
+        generated: false
+        fixture_rows: 1
+        lean4_successes: 0
+        clean_successes: 0
+        clean_fail_closed_rows: 1
+        matched_successes: 0
+        parity_status: fixture-only-blocking
+        required_next_artifact: generated Lean4-vs-clean parity counts
+        rows:
+          - id: nlinarith_forced_certified_unsat_no_kernel_proof
+    - tactic: ay-strict-qf-uf
+      proof_behavior: strict-zero-trust
+      fallback_behavior: reject-trusted-direct-proof
+      fully_verified_gate: true
+      blocker: ay-strict-qf-uf stays a strict zero-trust gate, but launch readiness stays blocked until generated Lean4-vs-clean parity counts exist.
+      evidence:
+        - crates/clean-elab/src/tactic/smt/ay_tactics_tests.rs
+        - crates/clean-elab/src/tactic/tests/ay_smt/trusted_counter.rs
+    - tactic: trusted-fallback-sites
+      proof_behavior: fallback-classified
+      fallback_behavior: counted-and-blocking
+      fully_verified_gate: false
+      blocker: trusted fallback sites are counted and blocking; their trusted-axiom usage keeps launch readiness blocked until reconstructed.
+      evidence:
+        - crates/clean-elab/src/tactic/tests/trusted_axiom_fallback_sites.rs
+        - crates/clean-elab/src/tactic/tests/trusted_axiom_state.rs
+metrics:
+  - tactic_rows
+  - proof_carrying_rows
+  - strict_zero_trust_rows
+  - fallback_classified_rows
+  - fully_verified_gate_rows
+  - executable_check_rows
+  - lean4_corpus_fixture_rows
+  - generated_lean4_vs_clean_count_buckets
+outputs:
+  results: evals/results/tactic-parity/{run_id}/results.json
+  logs: evals/logs/tactic-parity/{run_id}/run.log

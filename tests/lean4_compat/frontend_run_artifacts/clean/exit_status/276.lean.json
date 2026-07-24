@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "276.lean",
+  "source_sha256": "sha256:f631385dffbd91e1864f615252d69a51a02ac423a48864e569d4894654d75b83",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/276.lean"
+  ],
+  "exit_code": 0,
+  "status": "success",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.118,
+  "observed_stdout": "Read 265 bytes from \"tests/lean4_compat/lean4_tests/276.lean\"\nParsed 3 declarations in 265\u00b5s\n  \u2713 PEmpty.elim'\nChecked 3 declarations in 73.437208ms\n  1 passed, 0 failed\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

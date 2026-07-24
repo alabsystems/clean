@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "255.lean",
+  "source_sha256": "sha256:a13e25c699f30629daf086a5ae516542e4e26b5075d35acc992a9c7d48d80f93",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/255.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.188,
+  "observed_stdout": "A : \u03b1\nid x\u271d : \u03b1\ntests/lean4_compat/lean4_tests/255.lean:16:7: error(lean.unknownIdentifier): Unknown constant `x\u271d`\nid sorry : ?m.1\ntests/lean4_compat/lean4_tests/255.lean:20:9: error(lean.unknownIdentifier): Unknown constant `x\u271d`\nid sorry : ?m.1\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

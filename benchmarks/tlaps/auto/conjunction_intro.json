@@ -1,0 +1,39 @@
+{
+  "id": "auto/conjunction_intro",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_p",
+      "formula": "P"
+    },
+    {
+      "name": "h_q",
+      "formula": "Q"
+    }
+  ],
+  "goal": {
+    "and": [
+      "P",
+      "Q"
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "conjunction"
+  ]
+}

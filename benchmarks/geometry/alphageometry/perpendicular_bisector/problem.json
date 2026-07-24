@@ -1,0 +1,26 @@
+{
+  "id": "perpendicular_bisector",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "M": {"type": "point", "definition": {"midpoint_of": ["A", "B"]}},
+    "P": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "perpendicular", "line1": {"through": ["P", "M"]}, "line2": {"through": ["A", "B"]}},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "P", "b": "M"}
+  ],
+  "goal": {
+    "type": "congruent_segments",
+    "seg1": ["P", "A"],
+    "seg2": ["P", "B"]
+  },
+  "metadata": {
+    "source": "Perpendicular bisector theorem",
+    "difficulty": 3,
+    "tags": ["perpendicular", "bisector", "equidistant"],
+    "known_solvable": true,
+    "statement": "Any point on the perpendicular bisector of a segment is equidistant from the segment's endpoints."
+  }
+}

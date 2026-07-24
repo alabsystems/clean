@@ -1,0 +1,29 @@
+{
+  "id": "medial_triangle",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "Ma": {"type": "point", "definition": {"midpoint_of": ["B", "C"]}},
+    "Mb": {"type": "point", "definition": {"midpoint_of": ["C", "A"]}},
+    "Mc": {"type": "point", "definition": {"midpoint_of": ["A", "B"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "similar_triangles",
+    "tri1": ["Ma", "Mb", "Mc"],
+    "tri2": ["A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Medial triangle theorem",
+    "difficulty": 4,
+    "tags": ["medial", "midpoint", "similar", "parallel"],
+    "known_solvable": true,
+    "statement": "The medial triangle (formed by midpoints) is similar to the original triangle with ratio 1:2."
+  }
+}

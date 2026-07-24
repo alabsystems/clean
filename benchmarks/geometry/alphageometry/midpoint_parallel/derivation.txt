@@ -1,0 +1,7 @@
+# Midpoint theorem derivation
+# Given: M midpoint of AB, N midpoint of AC
+# Goal: MN || BC
+
+CONSTRUCT midpoint(M, A, B)
+CONSTRUCT midpoint(N, A, C)
+DERIVE parallel(M, N, B, C) FROM midpoint_theorem(A, B, C, M, N)

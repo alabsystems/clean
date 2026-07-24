@@ -1,0 +1,11 @@
+# Nine-point circle theorem derivation
+# Given: Ma, Mb, Mc midpoints, Ha, Hb, Hc altitude feet
+# Goal: All six points are concyclic
+
+CONSTRUCT midpoint(Ma, B, C)
+CONSTRUCT midpoint(Mb, A, C)
+CONSTRUCT midpoint(Mc, A, B)
+CONSTRUCT foot_of_altitude(Ha, A, B, C)
+CONSTRUCT foot_of_altitude(Hb, B, A, C)
+CONSTRUCT foot_of_altitude(Hc, C, A, B)
+DERIVE cyclic(Ma, Mb, Mc, Ha, Hb, Hc) FROM nine_point_circle_theorem(A, B, C, Ma, Mb, Mc, Ha, Hb, Hc)

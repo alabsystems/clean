@@ -1,0 +1,27 @@
+{
+  "id": "angle_bisector_ratio",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point", "definition": {"angle_bisector": {"vertex": "A", "ray1": "B", "ray2": "C"}}}
+  },
+  "constraints": [
+    {"type": "on_segment", "point": "D", "segment": ["B", "C"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "ratio_equal",
+    "args": ["B", "D", "D", "C", "A", "B", "A", "C"]
+  },
+  "metadata": {
+    "source": "Angle bisector theorem",
+    "difficulty": 4,
+    "tags": ["angle_bisector", "ratio", "similar_triangles"],
+    "known_solvable": true,
+    "statement": "The angle bisector from A divides the opposite side BC in the ratio AB:AC."
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "clean-frontend-kernel-artifact-schema-v1",
+  "artifact_schema_version": "clean-frontend-kernel-artifact-v1",
+  "kind": "frontend_kernel_artifact_schema",
+  "artifact_kind": "frontend_kernel",
+  "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/kernel/{filename}.json",
+  "description": "Schema for deterministic per-file Lean4/clean frontend kernel artifacts consumed by generate_frontend_classification.py. The generator treats absent artifacts as missing evidence and present artifacts that violate this schema as stale_or_invalid evidence. Valid artifacts remain pending cross-check until compared against the bounded kernel dimension.",
+  "required_fields": [
+    "schema_version",
+    "kind",
+    "engine",
+    "filename",
+    "source_sha256",
+    "command",
+    "kernel_status",
+    "declarations_checked",
+    "declarations_failed"
+  ],
+  "optional_evidence_fields": [
+    "engine_version",
+    "observed_process_status",
+    "observed_exit_code",
+    "observed_timeout_seconds",
+    "observed_elapsed_seconds",
+    "observed_stdout",
+    "observed_stderr",
+    "failure_mode",
+    "artifact_note"
+  ],
+  "field_constraints": {
+    "schema_version": "must equal clean-frontend-kernel-artifact-v1",
+    "kind": "must equal frontend_kernel",
+    "engine": "must equal lean4 or clean and match the path engine segment",
+    "filename": "must equal the corpus filename, including .lean",
+    "source_sha256": "must equal the current sha256: digest from tests/lean4_compat/MANIFEST.json",
+    "command": "must be a non-empty array of non-empty strings",
+    "kernel_status": "must be success when declarations_failed is 0 and failure otherwise; success artifacts cannot record a nonzero observed_exit_code or timeout evidence",
+    "declarations_checked": "must be a non-negative integer",
+    "declarations_failed": "must be a non-negative integer less than or equal to declarations_checked",
+    "observed_process_status": "when present, must equal exited or timeout",
+    "observed_timeout_seconds": "when timeout evidence is recorded, must be a positive number and failure_mode must name the timeout",
+    "observed_elapsed_seconds": "when present, must be a non-negative number"
+  },
+  "replacement_readiness": false
+}

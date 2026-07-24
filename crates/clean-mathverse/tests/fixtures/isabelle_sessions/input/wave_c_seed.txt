@@ -1,0 +1,6 @@
+# fixture Wave C seed — math entries whose base session is another AFP entry
+Leaf_Dep
+Spine_User
+Unres_User
+Ghost_Entry
+EntryMulti # in-dir session syntax

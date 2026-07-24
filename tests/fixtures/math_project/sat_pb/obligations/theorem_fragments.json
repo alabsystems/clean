@@ -1,0 +1,43 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "sat-pb-pilot",
+  "domain_profile": "sat-pb",
+  "producer": {
+    "system": "fixture",
+    "commit": "sat-pb-theorem-fragments"
+  },
+  "goal": {
+    "expr": "SatPb.satisfiesCnf sigma left right -> SatPb.satisfiesClause sigma left",
+    "pretty": "basic CNF assignment semantics theorem-fragment fixture"
+  },
+  "local_context": [
+    {
+      "name": "sigma",
+      "type_pp": "SatPb.Assignment",
+      "type_expr": "SatPb.Assignment"
+    },
+    {
+      "name": "left",
+      "type_pp": "SatPb.Clause",
+      "type_expr": "SatPb.Clause"
+    },
+    {
+      "name": "right",
+      "type_pp": "SatPb.Clause",
+      "type_expr": "SatPb.Clause"
+    }
+  ],
+  "side_conditions": [
+    "SatPb.satisfiesCnf sigma left right"
+  ],
+  "metadata": {
+    "fixture": "sat-pb-theorem-fragments",
+    "issue_plan": "non-filing",
+    "fixture_role": "theorem-index-smoke",
+    "status": "indexed-theorem-fragment-fixture",
+    "fragments": "And, Or, Iff, Exists, CNF, and assignment theorem-pack declarations are expected to index without diagnostics; this obligation records the nontrivial CNF/assignment goal without claiming a kernel proof.",
+    "theorem_pack": "theorem_packs/SatPbPilot.lean",
+    "indexed_theorems": "SatPb.PropLogic.and_fragment_seen, SatPb.PropLogic.or_fragment_seen, SatPb.PropLogic.iff_fragment_seen, SatPb.PropLogic.exists_fragment_seen, SatPb.Semantics.cnf_and_fragment_seen, SatPb.Semantics.clause_or_fragment_seen"
+  },
+  "trust_policy": "constructive-only"
+}

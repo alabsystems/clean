@@ -1,0 +1,33 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "proof-complexity-pilot",
+  "domain_profile": "proof-complexity",
+  "producer": {
+    "system": "proof-complexity",
+    "commit": "fixture-proof-complexity-generic-true-serialized-kernel-smoke"
+  },
+  "goal": {
+    "expr": {
+      "Const": [
+        {
+          "Str": [
+            "Anon",
+            "True"
+          ]
+        },
+        []
+      ]
+    },
+    "pretty": "True"
+  },
+  "local_context": [],
+  "side_conditions": [],
+  "metadata": {
+    "fixture": "proof-complexity-generic-true-serialized-kernel-smoke",
+    "scope": "serialized kernel proof-state smoke closure without producer-provided local assumptions; proof-complexity semantic replay is intentionally out of scope for this fixture",
+    "closure_tactic": "exact True.intro",
+    "issue_plan": "non-filing",
+    "fixture_role": "proof-state-smoke"
+  },
+  "trust_policy": "constructive-only"
+}

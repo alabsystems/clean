@@ -1,0 +1,50 @@
+# Fuzz testing targets for clean theorem prover
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+
+[package]
+name = "clean-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+# clean crates
+[dependencies.clean-parser]
+path = "../crates/clean-parser"
+
+[dependencies.clean-olean]
+path = "../crates/clean-olean"
+
+[dependencies.clean-auto]
+path = "../crates/clean-auto"
+features = ["fuzz"]
+
+# Lean 4 syntax parser fuzz target
+[[bin]]
+name = "clean_parser"
+path = "fuzz_targets/clean_parser.rs"
+test = false
+doc = false
+bench = false
+
+# .olean binary format deserializer fuzz target
+[[bin]]
+name = "clean_olean"
+path = "fuzz_targets/clean_olean.rs"
+test = false
+doc = false
+bench = false
+
+# CDCL SAT solver fuzz target (soundness + crash testing)
+[[bin]]
+name = "clean_cdcl"
+path = "fuzz_targets/clean_cdcl.rs"
+test = false
+doc = false
+bench = false

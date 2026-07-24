@@ -1,0 +1,97 @@
+[package]
+name = "clean-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean command-line interface"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+carcara-verify = ["clean-elab/carcara-verify"]
+# Enables `clean kernel verify-gamma-crown` (#3446). The conjecture builders
+# live behind the `math-overlays` feature on `clean-kernel`. Without this
+# feature the handler exits non-zero with an informative message.
+math-overlays = ["clean-kernel/math-overlays"]
+# Enables `clean verify proof` (#3511). The heavy SAT/SMT dependency graph
+# (DRAT/LRAT/Alethe/VeriPB parsers, Ay integration, certificate emission) is
+# feature-gated so it does not link by default.
+sat-verify = ["clean-verify/sat-verify"]
+# Track B1: forward the mimalloc global-allocator / per-module purge feature down
+# to clean-mathverse (where the PARAGON worker loop lives). The `clean` binary
+# enables this; the allocator itself is installed in that binary's entrypoint.
+mimalloc = ["clean-mathverse/mimalloc"]
+
+[lib]
+name = "clean_cli"
+path = "src/lib.rs"
+
+# Deprecation shim: forwards to the canonical `clean` binary (owned by the
+# `clean` package). Kept for backward compatibility; see #3438, Epic #3436.
+[[bin]]
+name = "clean-cli"
+path = "src/bin/clean_cli_compat.rs"
+doc = false
+
+# Docs generator — regenerates docs/cli/ from the descriptor registry.
+# Paired with tests/docs_drift.rs; see Epic #3436 Phase 5 (#3482).
+[[bin]]
+name = "gen_cli_docs"
+path = "src/bin/gen_cli_docs.rs"
+doc = false
+
+[dependencies]
+clean-kernel = { workspace = true, features = ["geometry-tools", "cli", "test-utils"] }
+clean-discovery.workspace = true
+clean-olean = { workspace = true, features = ["cli", "math-overlays"] }
+clean-parser.workspace = true
+clean-elab = { workspace = true, features = ["cli"] }
+clean-server.workspace = true
+clean-c-sem.workspace = true
+clean-rust-sem = { workspace = true, features = ["cli"] }
+clean-auto = { workspace = true, features = ["cli"] }
+clean-tla = { workspace = true, features = ["cli"] }
+clean-compiler = { workspace = true, features = ["cli"] }
+clean-runtime.workspace = true
+clean-lake.workspace = true
+clean-cake.workspace = true
+clean-lsp = { workspace = true, features = ["cli"] }
+clean-math-project.workspace = true
+clean-verify = { path = "../clean-verify" }
+clean-fold.workspace = true
+clean-features = { workspace = true, features = ["serde", "clap-interop"] }
+clean-mathverse.workspace = true
+termimad = "0.34"
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap = { workspace = true }
+rayon.workspace = true
+walkdir.workspace = true
+rustyline = "18"
+serde = { workspace = true }
+serde_json = { workspace = true }
+blake3.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+ark-std = { workspace = true }
+
+[dev-dependencies]
+# Real-corpus search->use e2e test (front #4): needs the mathverse_use tactic
+# behind clean-elab's `mathverse-library` feature, plus the clean-mathverse
+# loader/search/release APIs. clean-cli is the only crate that can depend on
+# BOTH clean-mathverse and clean-elab without a dependency cycle (clean-mathverse
+# cannot depend on clean-elab). The gated test in
+# tests/mathverse_real_corpus_e2e.rs is #[ignore] + MATHVERSE_E2E_CORPUS=1 opt-in,
+# so default test runs never need the network/corpus.
+clean-elab = { workspace = true, features = ["mathverse-library"] }
+clean-mathverse.workspace = true
+clean-kernel = { workspace = true, features = ["test-utils"] }
+# `clean vendor` config-validity unit test parses the embedded source-replacement TOML.
+toml.workspace = true

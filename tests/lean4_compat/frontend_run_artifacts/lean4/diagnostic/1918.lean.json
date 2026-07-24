@@ -1,0 +1,24 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "1918.lean",
+  "source_sha256": "sha256:4f9283bcaf9d719d55a95dbc7391fe6eeffcd2d32d4928b177713cdafd43be05",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1918.lean"
+  ],
+  "diagnostic_category": null,
+  "first_error_signature": null,
+  "diagnostics": [],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_elapsed_seconds": 0.166,
+  "observed_stdout": "",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

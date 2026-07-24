@@ -1,0 +1,13 @@
+-- Phase 5 native build-and-run demo (Epic #3436).
+--
+-- A nullary `Nat`-returning entry: the simplest end-to-end shape that proves
+-- the file -> elaborate -> compile -> emit -> LINK -> RUN pipeline. Build and
+-- run it with:
+--
+--     clean run demos/public/native_run_nat.lean --decl answer
+--
+-- which emits the C closure (calling the runtime extern `l_Nat_add`),
+-- synthesizes a C `main()` that unboxes the small-`Nat` result, `cc`-compiles
+-- and links it against the embedded Clean C runtime, runs the native binary,
+-- and prints `2`.
+def answer : Nat := Nat.succ (Nat.succ 0)

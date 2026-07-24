@@ -1,0 +1,21 @@
+{
+  "version": "proof-artifact-v1",
+  "producer": {
+    "repo": "tests/fixtures/external_certificates",
+    "commit": "fixture-sat-pb-drat-malformed"
+  },
+  "source_system": "sat-pb",
+  "problem_hash": "blake3:fixture-sat-pb-drat-malformed-problem",
+  "model_hash": "blake3:fixture-sat-pb-drat-malformed-model",
+  "proof_hash": "blake3:fixture-sat-pb-drat-malformed-proof",
+  "certification": {
+    "evidence_kind": "replay_only"
+  },
+  "artifact_kind": "drat",
+  "verifier_constants": [],
+  "certificate": {
+    "format": "drat",
+    "encoding": "text",
+    "payload": "1 nope 0\n"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "cyclic_opposite_angles",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "circle": {"type": "circle"}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "A", "circle": "circle"},
+    {"type": "on_circle", "point": "B", "circle": "circle"},
+    {"type": "on_circle", "point": "C", "circle": "circle"},
+    {"type": "on_circle", "point": "D", "circle": "circle"},
+    {"type": "cyclic", "points": ["A", "B", "C", "D"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "C", "b": "D"},
+    {"type": "not_equal", "a": "D", "b": "A"}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "supplementary_angles",
+    "args": ["A", "B", "C", "C", "D", "A"]
+  },
+  "metadata": {
+    "source": "Circle geometry",
+    "difficulty": 4,
+    "tags": ["cyclic", "quadrilateral", "supplementary_angles"],
+    "known_solvable": true,
+    "statement": "In a cyclic quadrilateral ABCD, opposite angles are supplementary (sum to 180 degrees)."
+  }
+}

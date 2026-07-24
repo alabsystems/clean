@@ -1,0 +1,56 @@
+{
+  "schema_version": "clean-math-project-v1",
+  "project": "sat-pb-pilot",
+  "domain_profile": "sat-pb",
+  "owner": "clean-math-factory",
+  "theorem_packs": [
+    "theorem_packs/SatPbPilot.lean"
+  ],
+  "obligation_sources": [
+    "obligations/subsumption.json",
+    "obligations/theorem_fragments.json",
+    "obligations/ay_serialized_kernel_pilot.json",
+    "obligations/generic_true_serialized_kernel_smoke.json"
+  ],
+  "artifact_formats": [
+    "lrat",
+    "drat",
+    "veripb",
+    "ay-theorem-export",
+    "proof-artifact-v1"
+  ],
+  "trust_policy": {
+    "name": "constructive-only",
+    "allowed_axioms": [],
+    "forbidden_trust_markers": [
+      "sorry",
+      "sorryAx",
+      "trustedArith",
+      "synthetic_sorry"
+    ],
+    "require_artifact_replay": true,
+    "allow_synthetic_sorry": false
+  },
+  "normalizers": [
+    "cert_simp",
+    "cert_mathverse",
+    "sat_pb_nf"
+  ],
+  "evidence": [
+    "evidence/ay_alethe_replay.json"
+  ],
+  "issue_routing": {
+    "labels": [
+      "math-project",
+      "sat-pb",
+      "proof-factory"
+    ],
+    "owners": [],
+    "blocking_categories": [
+      "manifest",
+      "obligation",
+      "artifact",
+      "trust"
+    ]
+  }
+}

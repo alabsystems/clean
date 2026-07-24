@@ -1,0 +1,30 @@
+[package]
+name = "clean-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean parser for Lean 4 syntax"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# The surface AST stores arbitrary-precision `Nat` literals (>= 2^64) as the
+# kernel's `BigNat`, so the parser depends on the kernel value type. This is an
+# acyclic edge (clean-kernel only dev-depends on clean-parser). `math-overlays`
+# matches every other regular dependent of clean-kernel in the workspace
+# (clean-elab, clean-auto, clean-discovery) — the kernel's default-feature build
+# is only exercised with it enabled.
+clean-kernel = { workspace = true, features = ["math-overlays"] }
+serde.workspace = true
+stacker.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+clean-kernel = { workspace = true, features = ["math-overlays", "test-utils"] }
+proptest.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+walkdir.workspace = true

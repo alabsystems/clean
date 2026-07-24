@@ -1,0 +1,29 @@
+{
+  "id": "exterior_angle",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]},
+    {"type": "collinear", "points": ["A", "C", "D"]},
+    {"type": "between", "point": "C", "endpoints": ["A", "D"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "angle_sum_equal",
+    "args": ["B", "C", "D", "C", "A", "B", "A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Basic geometry",
+    "difficulty": 3,
+    "tags": ["exterior_angle", "triangle", "angle_sum"],
+    "known_solvable": true,
+    "statement": "An exterior angle of a triangle equals the sum of the two remote interior angles."
+  }
+}

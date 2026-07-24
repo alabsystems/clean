@@ -1,0 +1,43 @@
+{
+  "id": "nat_induction/fib_nonneg",
+  "module": "FibNonnegTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "fib", "arity": 1}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "fib_0",
+      "formula": {"eq": [{"op": ["fib", 0]}, 0]}
+    },
+    {
+      "name": "fib_1",
+      "formula": {"eq": [{"op": ["fib", 1]}, 1]}
+    },
+    {
+      "name": "fib_step",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "eq": [
+            {"op": ["fib", {"add": ["n", 2]}]},
+            {"add": [{"op": ["fib", {"add": ["n", 1]}]}, {"op": ["fib", "n"]}]}
+          ]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "ge": [{"op": ["fib", "n"]}, 0]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "fibonacci", "positivity"]
+}

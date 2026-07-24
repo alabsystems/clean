@@ -1,0 +1,15 @@
+{
+  "axioms": 412401,
+  "definitions": 837545,
+  "kernel_verified": 98758,
+  "metamath_rpn_verified": 70042,
+  "opentheory_success_rate": 0.996,
+  "mathverse_shards": 107,
+  "other": 0,
+  "systems": 158,
+  "systems_definition": "v0.9.0 pipeline rollup — sub-package count (each Lean 4 `.olean` sub-package counts). Superseded by `source_systems: 69` in data/mathverse_summary_v1.0.0.json, which matches `importer_source_systems` in data/MATHVERSE_PROVENANCE.json. The manifest's `mathverse_shards: 107` corresponds to `shards_produced: 107` in data/MATHVERSE_PROVENANCE.json. See data/MATHVERSE_LIBRARIES.md Canonical Count Vocabulary and #3623.",
+  "theorems": 2004517,
+  "total_declarations": 3254463,
+  "total_time_secs": 425.0,
+  "version": "0.9.0"
+}

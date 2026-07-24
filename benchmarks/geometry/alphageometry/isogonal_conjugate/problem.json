@@ -1,0 +1,28 @@
+{
+  "id": "isogonal_conjugate",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "I": {"type": "point", "definition": {"incenter": ["A", "B", "C"]}},
+    "O": {"type": "point", "definition": {"circumcenter": ["A", "B", "C"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "isogonal_conjugate",
+    "args": ["I", "O", "A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Advanced geometry",
+    "difficulty": 7,
+    "tags": ["isogonal", "incenter", "circumcenter", "conjugate"],
+    "known_solvable": true,
+    "statement": "The incenter and circumcenter of a triangle are isogonal conjugates with respect to the triangle."
+  }
+}

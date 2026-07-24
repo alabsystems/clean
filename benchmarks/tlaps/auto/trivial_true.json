@@ -1,0 +1,17 @@
+{
+  "id": "auto/trivial_true",
+  "module": "PropositionalTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": true,
+
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["propositional", "trivial"]
+}

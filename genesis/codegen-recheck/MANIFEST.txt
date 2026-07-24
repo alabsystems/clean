@@ -1,0 +1,29 @@
+# UNIFIED codegen-recheck seed — durable checksum-pinned: seed -> kernel re-checks a real trust-cg lowering to trust_count==0
+#
+# Reproduce:  genesis/codegen-recheck/reproduce.sh
+#   -> verifies these checksums, then builds + runs the kernel re-check of the
+#      REAL trust_cg_opt::gvn commutative-canonicalization lowering identity, asserting
+#      kernel trust_count == 0 (non-vacuous; a tampered lowering FAILS). Exit 0 == reproduced.
+#
+clean_commit    = f1713e722e6f286ff62ba43cfc60fa52487c3589
+trustcg_commit  = 5e2b6565d10384af33a3c7aadd1ae1a256521f2e
+rustc           = rustc 1.95.0 (59807616e 2026-04-14)
+host            = aarch64-apple-darwin
+test            = clean-auto :: criterion2_gvn_{commute(ADD),xor,and,or}_commute_lowering_*_trust_count_zero
+kernel          = clean-kernel (codegen-recheck bitvector gate-fidelity layer)
+scope           = FOUR real trust_cg_opt::gvn commutative-canonicalization lowering KINDS, each non-vacuous
+                  (tamper-FAILS + forge->Bool.false): ADD (ripple-carry xor3/maj gate-fidelity, re-checked
+                  through width-16) + XOR/AND/OR (the three bitwise per-bit Bool.xor/and/or gate-fidelities,
+                  no carry). All -> kernel bvEq -> trust_count == 0.
+honest_floor    = the codegen re-check uses clean-kernel's bitvec layer; the minimal-ck0 codegen port is the
+                  remaining unification (ck0 already re-checks math/software/AI — genesis/ck0/). rustc/LLVM are
+                  NOT trusted for the re-checked lowering. ISA model + the statement: the irreducible named floor.
+# --- checksums (sha256) ---
+7e608e74c7b5225927d5a665d36e0c5cb281d2a58608a46db2f21093f64ef18f  crates/clean-kernel/src/bitvec_compute.rs
+245ff2ba4ca1a6fd51a086d12dc812c09c05cb9e7cdaaadc492956dc53eae8c5  crates/clean-kernel/src/resolution_check.rs
+0a320761873612b60eff1a9a85c6039ee756049547c67513f1d220fa3fe54300  crates/clean-kernel/src/resolution_soundness.rs
+ab824d85dd4da7adde853b9a643861980efc97aa703b4988327b04d0afd4753b  crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/bv_lowering_bridge.rs
+b4e40e5a7a47cc68681276430231a5e50fc5fa2765d87d0ce236d101be59e1ca  crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/bv_blast_reflection.rs
+64203f5e5a16a4921fef4f517266d65db6356f12c5bf9aef4634dea81a8a82fd  crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/tests_criterion2_gvn_lowering.rs
+fa6532b5bcdb88676e6d1a5b90945cd98e086a671a50df373ee8a9b08eaa5312  crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/theory_lemma_bv_compute_blast.rs
+512910ee6ddda89175a8fadbdb26bc5d28a8caad550b74feec4b0fbd39293499  Cargo.lock

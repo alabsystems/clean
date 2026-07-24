@@ -1,0 +1,6 @@
+# Triangle median derivation
+# Given: M is midpoint of BC
+# Goal: A, M form the median
+
+GIVEN midpoint(M, B, C)
+DERIVE collinear(A, M) FROM median_definition(A, M, B, C)

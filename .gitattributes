@@ -1,0 +1,6 @@
+*.pdf binary
+
+# .mathverse shard files are released as GitHub Release assets, not tracked in
+# git. The small test fixtures under crates/clean-mathverse/tests/fixtures/ are
+# kept as plain binary blobs (no LFS smudge).
+crates/clean-mathverse/tests/fixtures/**/*.mathverse binary

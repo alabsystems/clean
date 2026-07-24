@@ -1,0 +1,44 @@
+{
+  "id": "auto/contrapositive",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [],
+  "goal": {
+    "iff": [
+      {
+        "implies": [
+          "P",
+          "Q"
+        ]
+      },
+      {
+        "implies": [
+          {
+            "not": "Q"
+          },
+          {
+            "not": "P"
+          }
+        ]
+      }
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "contrapositive"
+  ]
+}

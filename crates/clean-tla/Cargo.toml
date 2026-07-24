@@ -1,0 +1,51 @@
+[package]
+name = "clean-tla"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TLA+ encoding and tactics for Clean - TLAPS backend"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel.workspace = true
+clean-elab.workspace = true
+clean-auto.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Shared TLA+ AST from Ty. The workspace keeps an exact Git authority and
+# redirects it to the sibling checkout for internal development.
+tla-core.workspace = true
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 4,
+# #3452). Gated behind the `cli` feature so non-CLI consumers keep a minimal
+# dep graph — `clap` + `clean-features` are only pulled in when callers opt in.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+# Directory scanning for the absorbed TLAPS bench runner (`bench` module,
+# ex clean-tlaps-bench — rearch stage 9).
+glob.workspace = true
+
+[features]
+default = []
+# CLI surface for Epic #3436 Phase 4 (#3452): exposes `clean_tla::cli`
+# with clap-derived argument structs and a `FeatureDescriptor` array for the
+# top-level `clean verify tla` verb. Non-CLI consumers (the tla runtime,
+# the bench runner core, tests) do not pay for clap + clean-features unless
+# they opt in. Also gates `bench::cli` (the `clean tlaps …` clap tree
+# absorbed from the former clean-tlaps-bench crate — rearch stage 9).
+cli = ["dep:clap", "dep:clean-features"]
+
+# Compatibility shim for the legacy `tlaps-bench` binary: prints a
+# deprecation notice and forwards to `clean tlaps <verb>` (#3448). Moved
+# here from the deleted clean-tlaps-bench crate (rearch stage 9).
+[[bin]]
+name = "tlaps-bench"
+path = "src/bin/tlaps_bench.rs"
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = { workspace = true }

@@ -1,0 +1,21 @@
+{
+  "schema_version": "clean-artifact-replay-report-v1",
+  "artifact_path": "tests/fixtures/external_certificates/proof_artifact_v1/gamma_crown_farkas_valid.json",
+  "project": "nn-verify-pilot",
+  "source_system": "gamma-crown",
+  "artifact_kind": "gamma_crown_farkas",
+  "problem_hash": "blake3:fixture-gamma-crown-farkas-problem",
+  "proof_hash": "blake3:fixture-gamma-crown-farkas-proof",
+  "certificate_format": "gamma-crown-farkas-v1",
+  "evidence_kind": "replay_only",
+  "kernel_certified": false,
+  "replay_status": "pass",
+  "replay_adapter": "gamma-crown-farkas-v1",
+  "linked_obligations": [
+    "sha256:fa0d4ddaa9153c9e3907538f667340390ea32db116c7a8be25a02067433094ad"
+  ],
+  "trusted_assumptions": [],
+  "details": [
+    "verified Farkas contradiction constant -1"
+  ]
+}

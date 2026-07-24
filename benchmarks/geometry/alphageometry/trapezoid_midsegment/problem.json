@@ -1,0 +1,28 @@
+{
+  "id": "trapezoid_midsegment",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "M": {"type": "point", "definition": {"midpoint_of": ["A", "D"]}},
+    "N": {"type": "point", "definition": {"midpoint_of": ["B", "C"]}}
+  },
+  "constraints": [
+    {"type": "parallel", "line1": {"through": ["A", "B"]}, "line2": {"through": ["D", "C"]}},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "D", "b": "C"}
+  ],
+  "goal": {
+    "type": "parallel",
+    "line1": {"through": ["M", "N"]},
+    "line2": {"through": ["A", "B"]}
+  },
+  "metadata": {
+    "source": "Trapezoid midsegment theorem",
+    "difficulty": 4,
+    "tags": ["trapezoid", "midsegment", "parallel", "midpoint"],
+    "known_solvable": true,
+    "statement": "The midsegment of a trapezoid is parallel to the bases."
+  }
+}

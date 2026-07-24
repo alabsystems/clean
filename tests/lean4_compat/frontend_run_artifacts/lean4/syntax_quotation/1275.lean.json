@@ -1,0 +1,50 @@
+{
+  "schema_version": "clean-frontend-syntax-quotation-artifact-v1",
+  "kind": "frontend_syntax_quotation",
+  "engine": "lean4",
+  "filename": "1275.lean",
+  "source_sha256": "sha256:1d717ef80d4dea44a08a58cbdfc92b54ec08a647981e86f706ca218bf43c195c",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1275.lean"
+  ],
+  "syntax_quotation_status": "success",
+  "quotations_checked": 6,
+  "antiquotations_checked": 4,
+  "hygiene_contexts_checked": 4,
+  "quotation_failures": 0,
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_stderr": "",
+  "checked_quotations": [
+    "#check fun x => syntax quote with antiquoted custom emoji term",
+    "#eval Unhygienic.run syntax quote for wildcard custom emoji term",
+    "#eval Unhygienic.run syntax quote for identifier custom emoji term",
+    "#check fun x => token-alternative syntax quote",
+    "#eval Unhygienic.run token-alternative boing syntax quote",
+    "#eval Unhygienic.run token-alternative baz syntax quote"
+  ],
+  "checked_antiquotations": [
+    "$x construction for custom emoji syntax",
+    "$_:ident pattern for wildcard custom emoji syntax",
+    "$_:ident pattern for identifier custom emoji syntax",
+    "$x construction for bar token-alternative syntax"
+  ],
+  "checked_hygiene_contexts": [
+    "Unhygienic.run target for wildcard custom emoji syntax evaluated true",
+    "Unhygienic.run target for identifier custom emoji syntax evaluated true",
+    "Unhygienic.run target for `(bar boing) evaluated true",
+    "Unhygienic.run target for `(bar baz) evaluated true"
+  ],
+  "observed_eval_results": [
+    "true",
+    "true",
+    "true",
+    "true"
+  ],
+  "artifact_note": "Lean4 elaborated the custom syntax quotation and antiquotation examples and evaluated all four Unhygienic.run checks to true. This is Lean4 evidence only; no clean parity is claimed."
+}

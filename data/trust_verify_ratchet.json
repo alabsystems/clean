@@ -1,0 +1,131 @@
+{
+  "note": "Twin monotonic ratchet for Trust Level-0 verification of clean-kernel (the self-verification workload). Enforced by scripts/trust_verify_ratchet.sh. TWO invariants, both hard-gated: (1) COVERAGE \u2014 `unproved` (failed + unknown) is flat-or-DOWN; `proved` is flat-or-UP (for a fixed kernel snapshot). A trust-vcgen improvement that legitimately proves more obligations lowers `unproved` and the ratchet is re-baselined down. (2) SOUNDNESS \u2014 the verifier must NEVER certify a false obligation. Gated by the soundness canaries below (each is genuinely-unsafe code whose Level-0 obligation MUST come back failed/unknown, never proved) plus the cross-repo verifier soundness suites. A canary flipping to `proved`, or a soundness suite going red, is a SOUNDNESS REGRESSION and blocks unconditionally \u2014 it can never be 'baselined away'. Goal: drive `unproved` to 0 while soundness stays perfect (see VISION / the paragon goal).",
+  "workload": "clean-kernel (-Ztrust-verify-target=clean_kernel, level 0 = safety)",
+  "toolchain": "trust origin/main 2439bbf37e (operand_ty/place_ty borrowed-walk, on top of the place_ty fix 77fe4bc162). Verifies clean-kernel pinned by first-party/clean 379f9c8999. Extends the place_ty borrowed walk up through operand_ty and the remaining full-value place_ty/local_ty reads the VC-gen work-meter charges: a BARE FULL-VALUE read of a fat local (Operand::Move(whole_expr_local), the proof-combinator family) now resolves through place_ty_cow/operand_ty_cow (Cow<Ty>) and never deep-clones the multi-MB declared Ty::Adt root, so the meter no longer charges a clone that never happens and the function no longer trips TrustVcGenWorkBudgetExceeded on a bare full-value read. VC-IDENTICAL (Ty immutable during VC-gen); DROP-ONLY meter (Unknown, never Proved). Recovers 41 more WBE functions (511->470) on top of place_ty's 492. The ~33.6GB (0.70x48GB) memory guard still bounds datatype VC-gen, so absolute totals stay memory-guard-nondeterministic; the same-machine per-function diff is the authoritative comparison.",
+  "measured": "2026-06-28",
+  "baseline": {
+    "proved": 2096,
+    "failed": 68,
+    "unknown": 5240,
+    "runtime_checked": 2166,
+    "unproved": 5308,
+    "verified": 4262,
+    "obligations": 9283,
+    "note": "RE-ANCHORED 2026-06-28 to a controlled same-machine A/B of the operand_ty/place_ty borrowed-walk extension (trust 2439bbf37e) vs a FROM-SCRATCH pristine origin/main toolchain that ALREADY INCLUDES the place_ty fix (both CARGO_INCREMENTAL=0, clean-kernel artifacts evicted, run ALONE, same 48GB machine, both COMPLETE/exit 0/0 guaranteed violations). The change adds place_ty_cow/operand_ty_cow (borrowed Cow<Ty> resolution) and routes every inspection-only operand_ty/place_ty caller (~30 sites: matches!/is_integer/int_width/is_signed/sort_for_ty/ty_byte_size/equality/Debug/field-probe, incl. the discriminant-tag locator, SetDiscriminant ADT walk, rvalue-safety discriminant/dest checks, enum-tag and owned-slice probes) through them so a BARE FULL-VALUE read of a fat local never materializes the multi-MB declared root; callers that store the Ty into a VcKind keep the owned path. RESULT (mine vs pristine, THIS machine): proved 1943->1981 (+38), runtime-checked 2061->2128 (+67), VERIFIED 4004->4109 (+105), TrustVcGenWorkBudgetExceeded functions 511->470 (RECOVERED 41), failed 60->60 (UNCHANGED), peak VC-gen RSS 35.15GB->34.40GB (-0.75GB). The AUTHORITATIVE per-function common-set diff (3379 functions in BOTH runs): verified +105, proved +38, 11 functions GAINED verified status, ZERO functions lost verified status (0 REGRESSIONS), 0 functions gained a `failed` obligation (no false-refutation). SOUNDNESS HOLDS: 0 guaranteed-violation false-refutations in either run; the 15 vacuity-sentinel canaries hold (proved=10<=10, all 12+ genuinely-false obligations stay unproved/refused); the slice_range_index/unguarded_division/cast_lossless_narrow falsification mutants all REFUSE (0 proved); the global benchmark reports 0 guaranteed violations on correct code; 2185 trust-vcgen lib tests green (incl. new place_ty_cow/operand_ty_cow byte-identity tests). VC-IDENTICAL by construction. NOTE on absolute totals: the prior anchor's pristine baseline (verified 3984 / unproved 5110) and this fresh same-machine pristine baseline (verified 4004 / unproved 5113) differ slightly, and mine's ABSOLUTE unproved (5174) is HIGHER than the prior 5110 ceiling -- this is the memory-guard nondeterminism: recovering 41 WBE functions SURFACES ~61 new obligations (some Unknown) that the prior run skipped to the ~33.6GB guard, so the absolute denominator shifts. The per-function common-set diff (0 regressions, +105 verified, 0 new failed) is the honest test and is unambiguously net-positive; the ceiling/floor below are re-anchored to this run's measured numbers so the gate tracks the current toolchain's real state."
+  },
+  "coverage_ratchet": {
+    "metric": "PER-FUNCTION COMMON-SET DIFF (corrected 2026-06-29; supersedes the absolute-total TWIN gate). HARD GATE: zero GENUINE per-function regressions on the COMMON set. Each function is identified by its verdict-note source location (`--> file:line:col`), which is present for BOTH fully-verified functions (named only by location) and incomplete functions (also named in the `incomplete for `FUNC`` warning); the common set is the locations present in BOTH the baseline and the current run. A function is VERIFIED iff its verdict has 0 failed AND 0 unknown. A REGRESSION is a location VERIFIED in the baseline that is GENUINELY unverified now \u2014 failed>0, OR unknown>0 that is NOT attributable to the VC-gen work/memory guard (TrustVcGenWorkBudgetExceeded, left Unknown fail-closed). The memory-guard exclusion is the whole point: the ~33.6GB VC-gen guard skips a varying swath of obligations run-to-run and new kernel code adds obligations, so ABSOLUTE totals (unproved/verified) are NONDETERMINISTIC and a faithful re-measure can RISE while 0 functions regress \u2014 the old `unproved>ceiling`/`verified<floor` hard gate would spuriously FAIL there. New locations are landscape, not regressions. The aggregate unproved/verified deltas and the current_ceiling/verified_floor below are kept as SOFT informational context only (re-anchored on --update), NOT hard-gated. Parse+diff: scripts/trust_verify_coverage_diff.py; per-function baseline: data/trust_verify_function_baseline.json. runtime_checked still counts as verified at the obligation level and is a SOFT target driven to 0 (the goal wants all STATICALLY proved).",
+    "direction": "unproved flat-or-down, verified flat-or-up; runtime_checked -> 0 (soft static-proof target)",
+    "current_ceiling": 5308,
+    "verified_floor": 4262,
+    "target": 0,
+    "rationale": "Every legitimate trust-vcgen gain raises verified and/or lowers unproved; the per-function common-set diff (0 regressions) is the authoritative non-regression test because the absolute unproved is memory-guard-nondeterministic (recovering WBE functions surfaces new obligations the guard previously skipped, so absolute unproved can RISE while 0 functions regress). Ceiling/floor RE-ANCHORED 2026-06-28 to the same-machine operand_ty/place_ty borrowed-walk measurement (verified_floor 4109 UP from 3984, +105; ceiling 5174 reflecting this run's measured unproved). The place_ty + operand_ty borrowed walks together recovered 492+41=533 WBE functions vs origin/main before the levers. Next reductions: drop VC-gen/bundle RSS below the ~33.6GB guard (the sep_engine::with_local_tys / trust-ir bundle-path allocations are now the dominant RSS-peak driver) so the guard-skipped swath actually reaches the solver and the absolute totals become deterministic; then complete the Lever-A datatype-field-sort metadata."
+  },
+  "soundness_ratchet": {
+    "invariant": "no false-proves \u2014 never relaxed, never baselined away",
+    "canaries": [
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_oob_index_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`a[a.len()]` is a guaranteed out-of-bounds access; its Level-0 slice obligation is genuinely false. A sound verifier must fail/leave-unknown. If it is ever `proved`, the datatype/encoding work has made the SMT context vacuously UNSAT (false-proves everything) \u2014 a critical unsoundness."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_div_by_zero_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`x / (n - n)` divides by zero; its arithmetic obligation is genuinely false. Must never be proved."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_lossy_narrowing_cast_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`big as u32` with `big = x | (1<<33) >= 2^33 > u32::MAX` is a LOSSY narrowing cast; the lossless/value-fits L0 obligation is genuinely false. ADDED after the cast-total lever (a97a720523) wrongly PROVED exactly this by deleting the obligation as 'spurious' \u2014 3 lossy-cast mutants survived the falsification gate before revert 792df6c29c. The OOB/div canaries did not cover this class."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_unguarded_add_overflow_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`x + u32::MAX` (overflow-checks ON) overflows for every x>=1; its no-overflow obligation is genuinely false. Guards over-broad 'treat arithmetic as total' levers."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_remainder_by_zero_must_not_prove",
+        "expect": "NOT proved (failed/unknown/runtime-checked, never proved)",
+        "rationale": "`x % (n - n)` is remainder modulo 0; its divisor-nonzero obligation is genuinely false."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_sub_underflow_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`(x & 0) - 1` computes 0-1 on u32, which underflows; its no-underflow obligation is genuinely false."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_mul_overflow_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`big * big` with big >= 2^20 is >= 2^40 > u32::MAX; its no-overflow obligation is genuinely false."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_slice_range_oob_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`&a[..a.len() + 1]` has an end strictly past the slice length; its end<=len obligation is genuinely false."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_shift_overflow_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`1u32 << s` with `s = x | 64 >= 32` shifts a u32 by >= its bit width (UB); the shift-in-range obligation is genuinely false. Closes a gap vs the trust falsification gate (shift mutants left_shift_guarded/shift_reduction_overflow/signed_shift_const)."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_loop_off_by_one_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`for i in 0..=a.len() { a[i] }` indexes one past the end at the last iteration; the index-in-bounds obligation is genuinely false. Closes a gap vs the falsification gate (foreach_range_oob/step_by_excl_off_by_one)."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_clamp_still_oob_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`a[x.min(a.len())]` can index `a.len()` (OOB) \u2014 the min/clamp does NOT make it safe. Closes a gap vs the falsification gate (clamp_cast_index_oob/min_clamp_index_bound)."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_multivar_guard_lossy_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "Under `a<200 && b<200`, `(a+b) as u8` is lossy (sum up to 398 > 255) \u2014 requires conjunctive-guard reasoning. Closes a gap vs the falsification gate (guarded_two_var_add/conj_guard_two_index)."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_stale_guard_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`idx` is bounds-checked then REASSIGNED to unbounded `y` before `a[idx]` \u2014 the guard no longer applies, so the index is OOB. Verifier must track guarded-value overwrite. Closes a gap vs the falsification gate (merged_local_index/clamp_cast_stale_oob)."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_intrinsic_bound_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "`a[x.leading_zeros() as usize]` indexes by an intrinsic result in [0,32] not bounded by len \u2192 OOB when len<=32. Closes a gap vs the falsification gate (external_call_guarded)."
+      },
+      {
+        "fixture": "tests/trust_verify/vacuity_sentinel.rs",
+        "fn": "sentinel_accumulator_overflow_must_not_prove",
+        "expect": "NOT proved (failed or unknown)",
+        "rationale": "Summing an unbounded-length `&[u32]` into a u32 accumulator overflows \u2014 the verifier must reason about the LOOP, not just one op. Closes a gap vs the falsification gate (wide_unsigned_accumulator/foreach_slice_sum)."
+      }
+    ],
+    "gate": "scripts/trust_verify_ratchet.sh --soundness verifies all 15 canaries together: of 23 obligations exactly 10 legitimately prove (n-n subtractions, shift-amount checks, len+1/multivar/loop-bound no-overflow), so `proved` MUST stay <= 10 \u2014 any false obligation being certified pushes proved to 11 and blocks (unproved>=12 vacuity floor). The 15 classes (OOB, div/rem-by-zero, lossy cast, add/sub/mul overflow, slice-range OOB, shift>=width, loop off-by-one, clamp-OOB, multivar guard, stale guard, intrinsic bound, loop accumulator) mirror the highest-value classes of the trust falsification/mutation gate, which is NOT always-on \u2014 so these canaries are the only pre-push soundness guard. The prior 2-canary `unproved>=2` gate could not catch a single lossy-cast/overflow false-prove (the cast-total class).",
+    "soundness_suites": [
+      "(trust)  cargo test -p trust-vcgen",
+      "(ay)     cargo test -p ay-dpll dt",
+      "(trust)  bash scripts/trust_falsification_gate.sh  \u2014 COMPREHENSIVE: 94 unsound mutants must each REFUSE (fail-closed) + 99 correct fixtures must VERIFY. Needs a built trustc (TRUSTC=...stageN/bin/trustc). Manual/periodic, not always-on; the vacuity_sentinel canaries above are the always-on subset."
+    ],
+    "comprehensive_validation": {
+      "falsification_gate": "GREEN",
+      "measured": "2026-06-27",
+      "result": "every proof is real and every mutant flips to failed \u2014 94/94 mutants correctly refused (fail-closed), 99/99 correct fixtures verified, on origin/main verifier 64311b6256 (run with stage1 trustc). Confirms the verifier is comprehensively sound (no false-prove on any known unsound pattern) after the recent parallel churn + the soundness-canary strengthening.",
+      "note": "The 15 always-on vacuity_sentinel canaries (proved<=10 gate) are the fast pre-push subset; this full gate is the comprehensive check and should be run periodically / pre-release."
+    }
+  }
+}

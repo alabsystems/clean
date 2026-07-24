@@ -1,0 +1,35 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "sat-pb-pilot",
+  "domain_profile": "sat-pb",
+  "producer": {
+    "system": "ay",
+    "commit": "fixture-ay-sat-pb"
+  },
+  "goal": {
+    "expr": "SatPb.subsumption_sound c d",
+    "pretty": "subsumption deletion preserves satisfiability"
+  },
+  "local_context": [
+    {
+      "name": "h_sub",
+      "type_pp": "SatPb.subsumes c d = true",
+      "type_expr": "SatPb.subsumes c d = true"
+    }
+  ],
+  "side_conditions": [
+    "SatPb.subsumes c d"
+  ],
+  "artifact_refs": [
+    {
+      "kind": "proof-artifact-v1",
+      "path": "../../external_certificates/proof_artifact_v1/ay_alethe_envelope.json",
+      "hash": "blake3:fixture-ay-alethe-proof"
+    }
+  ],
+  "metadata": {
+    "transformation": "subsumption_deletion",
+    "benchmark_family": "satcomp-sequential-main"
+  },
+  "trust_policy": "constructive-only"
+}

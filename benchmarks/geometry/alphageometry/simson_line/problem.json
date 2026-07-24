@@ -1,0 +1,33 @@
+{
+  "id": "simson_line",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "P": {"type": "point"},
+    "D": {"type": "point", "definition": {"foot_of_altitude": {"from": "P", "to_segment": ["B", "C"]}}},
+    "E": {"type": "point", "definition": {"foot_of_altitude": {"from": "P", "to_segment": ["A", "C"]}}},
+    "F": {"type": "point", "definition": {"foot_of_altitude": {"from": "P", "to_segment": ["A", "B"]}}},
+    "circle": {"type": "circle", "definition": {"circumcenter": ["A", "B", "C"]}}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "P", "circle": "circle"},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "not_equal", "a": "P", "b": "A"},
+    {"type": "not_equal", "a": "P", "b": "B"},
+    {"type": "not_equal", "a": "P", "b": "C"}
+  ],
+  "goal": {
+    "type": "collinear",
+    "points": ["D", "E", "F"]
+  },
+  "metadata": {
+    "source": "Simson line theorem",
+    "difficulty": 6,
+    "tags": ["simson", "circle", "collinear", "perpendicular"],
+    "known_solvable": true,
+    "statement": "The feet of the perpendiculars from a point P on the circumcircle to the sides of a triangle are collinear (the Simson line)."
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "cyclic_inscribed_180",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "mathverse": {"type": "circle"}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "A", "circle": "mathverse"},
+    {"type": "on_circle", "point": "B", "circle": "mathverse"},
+    {"type": "on_circle", "point": "C", "circle": "mathverse"},
+    {"type": "on_circle", "point": "D", "circle": "mathverse"},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "C", "b": "D"},
+    {"type": "not_equal", "a": "D", "b": "A"}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "supplementary_angles",
+    "args": ["D", "A", "B", "B", "C", "D"]
+  },
+  "metadata": {
+    "source": "Cyclic quadrilateral",
+    "difficulty": 4,
+    "tags": ["cyclic", "supplementary", "quadrilateral"],
+    "known_solvable": true,
+    "statement": "Opposite angles in a cyclic quadrilateral are supplementary (sum to 180 degrees)."
+  }
+}

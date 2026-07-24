@@ -1,0 +1,16 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+# Deterministic, hand-maintained source corpus for the rw generated-count
+# manifest. `generated: false` keeps launch readiness fail-closed until a
+# real Lean4-vs-clean runner artifact replaces these fixture rows.
+schema_version: clean-tactic-generated-count-source-corpus-v1
+tactic_lane: rw
+generated: false
+cases:
+  - id: rw_local_forward_refl
+    lean4_tactic: rw [h]
+    clean_tactic: rw [h]
+    expected_bucket: rw-local-equality-fixture
+  - id: rw_local_reverse_refl
+    lean4_tactic: rw [← h]
+    clean_tactic: rw [<- h]
+    expected_bucket: rw-local-equality-fixture

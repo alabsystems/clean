@@ -1,0 +1,13 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+# Deterministic, hand-maintained source corpus for the simp generated-count
+# manifest. This file is NEVER itself a parity claim: it only enumerates the
+# bounded fixture cases whose Lean4-vs-clean counts a future runner must
+# generate. `generated: false` keeps launch readiness fail-closed.
+schema_version: clean-tactic-generated-count-source-corpus-v1
+tactic_lane: simp
+generated: false
+cases:
+  - id: simp_all_opaque_target_no_progress
+    lean4_tactic: simp_all
+    clean_tactic: simp_all
+    expected_bucket: simp-all-opaque-fail-closed-fixture

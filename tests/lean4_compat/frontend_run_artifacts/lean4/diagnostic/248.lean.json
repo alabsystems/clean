@@ -1,0 +1,31 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "248.lean",
+  "source_sha256": "sha256:f0f484c959077276179f17875f0370233c3aae314f0db5259959571b0e0bd7d5",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/248.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "invalid_implemented_by_argument_foo_definition_cannot_be_implemented_by_itself",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "Invalid `implemented_by` argument `foo`: Definition cannot be implemented by itself",
+      "line": 1,
+      "column": 2
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 1.158,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/248.lean:1:2: error: Invalid `implemented_by` argument `foo`: Definition cannot be implemented by itself\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

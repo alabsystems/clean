@@ -1,0 +1,26 @@
+{
+  "id": "isoceles_base_angles",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "congruent_segments", "seg1": ["A", "B"], "seg2": ["A", "C"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"}
+  ],
+  "goal": {
+    "type": "congruent_angles",
+    "angle1": {"points": ["A", "B", "C"]},
+    "angle2": {"points": ["A", "C", "B"]}
+  },
+  "metadata": {
+    "source": "Euclidean geometry (Euclid I.5)",
+    "difficulty": 2,
+    "tags": ["isoceles", "congruent_angles", "base_angles"],
+    "known_solvable": true,
+    "statement": "In an isoceles triangle ABC with AB = AC, the base angles ABC and ACB are congruent."
+  }
+}

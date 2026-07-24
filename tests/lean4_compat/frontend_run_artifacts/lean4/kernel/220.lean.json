@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-kernel-artifact-v1",
+  "kind": "frontend_kernel",
+  "engine": "lean4",
+  "filename": "220.lean",
+  "source_sha256": "sha256:dcdcee8609578813c86b4256ad23bf6d4fe72b48b1356eec0c3e25f02bc10f25",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/220.lean"
+  ],
+  "kernel_status": "success",
+  "declarations_checked": 1,
+  "declarations_failed": 0,
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/220.lean:2:4: warning: unused variable `a`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\ntests/lean4_compat/lean4_tests/220.lean:2:11: warning: unused variable `b`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\ntests/lean4_compat/lean4_tests/220.lean:2:14: warning: unused variable `bs`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\ndef f : List Nat \u2192 List Nat :=\nfun x =>\n  match x with\n  | a :: xs@h:(b :: bs) => xs\n  | x => []\n",
+  "observed_stderr": "",
+  "artifact_note": "Lean4 elaborated and checked the bounded-slice declaration f; linter warnings and #print output were observed but no kernel declaration failed."
+}

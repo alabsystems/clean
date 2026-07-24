@@ -1,0 +1,132 @@
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cloud Run (Knative) Service manifest for the solver-results-cache distribution
+# + ingest front-end (`solver_serve`, Phase 2).
+#
+# Apply with:
+#   gcloud run services replace deploy/solver-cache/service.yaml --region REGION
+# (deploy.sh wraps the build/push and uses `gcloud run deploy` flags instead;
+#  this YAML is the declarative equivalent for GitOps / review.)
+#
+# TRUST POSTURE (designs/2026-06-24-solver-results-cache-service.md §10.3): this
+# service is a DISTRIBUTION FRONT-END, NOT a trust authority. A cached result is
+# PROVENANCE — a proof-bearing hit ships a re-checkable proof term the consumer
+# re-runs through the kernel; a raw unsat/timeout verdict is telemetry. Every
+# response carries the trust_note + soundness_model block; ingest mints nothing.
+#
+# PLACEHOLDERS to fill before applying (all UPPERCASE):
+#   PROJECT_ID   your GCP project id
+#   REGION       Cloud Run region (e.g. us-central1)
+#   IMAGE        full Artifact Registry image+tag, e.g.
+#                REGION-docker.pkg.dev/PROJECT_ID/solver-cache/solver-serve:TAG
+#   CORE_BUCKET  GCS bucket holding the solver-cache Core, e.g.
+#                solver-cache-core-PROJECT_ID
+#                (the Core lives under gs://CORE_BUCKET/core — see gcs_sync.sh)
+#
+# ---------------------------------------------------------------------------
+# Core delivery: gcsfuse CSI volume (the simpler path; chosen here)
+# ---------------------------------------------------------------------------
+# The bucket is mounted at /core via the built-in gcsfuse CSI driver, so the
+# $CLEAN_SOLVER_* dirs (telemetry/cache/index) just work with NO startup-sync
+# code in the image. The mount is READ-ONLY here — the default deployment is a
+# read-only distribution front-end (ingest OFF). To enable POST /ingest you need
+# a WRITABLE Core (drop readOnly + set CLEAN_SOLVER_INGEST=1); see the README.
+#
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: solver-serve
+  labels:
+    app: solver-serve
+    phase: phase-2-distribution
+  annotations:
+    # Gen2 is required for gcsfuse volume mounts.
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        # --- scaling -----------------------------------------------------
+        # min-instances 0 = scale to zero (cheapest; cold starts on first hit).
+        # Set to 1 if you want a warm instance for demos.
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "4"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      # Per-instance request concurrency. The front-end is single-threaded by
+      # design (current-thread tokio runtime); a small value keeps latency
+      # predictable and triggers scale-out by instance count.
+      containerConcurrency: 8
+      timeoutSeconds: 300
+      # Runtime service account needs roles/storage.objectViewer on CORE_BUCKET.
+      serviceAccountName: solver-serve@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - name: solver-serve
+          image: IMAGE
+          ports:
+            # Cloud Run injects $PORT; the container listens on it. 8080 default.
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: CLEAN_SOLVER_TELEMETRY_DIR
+              value: /core/telemetry
+            - name: CLEAN_SOLVER_CACHE_DIR
+              value: /core/cache
+            # Optional pre-built VCIDX01 for µs /lookup. Remove if you serve the
+            # live-aggregate path only (no pre-built index in the Core).
+            - name: CLEAN_SOLVER_INDEX
+              value: /core/solver.vcidx
+            # PAR-2 timeout budget (ms) the /stats + /weak + /vbs-gap reports
+            # assume. Match it to the producer's solver budget.
+            - name: CLEAN_SOLVER_BUDGET_MS
+              value: "5000"
+            # INGEST IS OFF by default (read-only distribution). To enable
+            # POST /ingest, set this non-empty AND make the mount writable
+            # (drop readOnly below). Ingest still mints nothing — it appends
+            # provenance + an optional re-checkable proof blob.
+            # - name: CLEAN_SOLVER_INGEST
+            #   value: "1"
+            - name: RUST_MIN_STACK
+              value: "67108864"
+          resources:
+            limits:
+              # The loaded VCIDX01 header + the in-memory aggregation arenas are
+              # small; 1Gi is a safe Phase-2 ceiling. Raise if /stats reports OOM
+              # restarts on a much larger telemetry corpus.
+              memory: 1Gi
+              cpu: "1"
+          # gcsfuse mount of the Core bucket at /core (read-only by default).
+          volumeMounts:
+            - name: core-bucket
+              mountPath: /core
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 24
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: core-bucket
+          csi:
+            driver: gcsfuse.run.googleapis.com
+            readOnly: true
+            volumeAttributes:
+              bucketName: CORE_BUCKET
+              # Mount only the core/ prefix (where gcs_sync.sh uploads the Core).
+              mountOptions: "only-dir=core,implicit-dirs"
+  traffic:
+    - percent: 100
+      latestRevision: true

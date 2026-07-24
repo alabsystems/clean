@@ -1,0 +1,46 @@
+{
+  "schema_version": "clean-frontend-syntax-quotation-artifact-v1",
+  "kind": "frontend_syntax_quotation",
+  "engine": "clean",
+  "filename": "1275.lean",
+  "source_sha256": "sha256:1d717ef80d4dea44a08a58cbdfc92b54ec08a647981e86f706ca218bf43c195c",
+  "command": [
+    "timeout",
+    "10",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1275.lean"
+  ],
+  "syntax_quotation_status": "failure",
+  "quotations_checked": 6,
+  "antiquotations_checked": 4,
+  "hygiene_contexts_checked": 4,
+  "quotation_failures": 14,
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_stdout": "Read 590 bytes from \"tests/lean4_compat/lean4_tests/1275.lean\"\nParsed 10 declarations in 301.667\u00b5s\nChecked 10 declarations in 77.960916ms\n  0 passed, 7 failed\nTrust summary:\n  sorry axioms: 4\n\nErrors:\n  \u2717 elaboration error: Unsupported { feature: \"import Lean: Lean metaprogramming modules are not yet supported by the frontend import path; blocked before .olean loading to keep import processing bounded\" }\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"\ud83d\udc49\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n  \u2717 elaboration error: TooManyArguments { func_type: \"FVar(FVarId(9223372036854775808))\", remaining_args: 1 }\n  \u2717 elaboration error: TooManyArguments { func_type: \"FVar(FVarId(9223372036854775808))\", remaining_args: 1 }\n  \u2717 elaboration error: TooManyArguments { func_type: \"Sort(Param(Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"u_0\\\"), cached_hash: 10536891783547105659 }))\", remaining_args: 1 }\n  \u2717 elaboration error: TooManyArguments { func_type: \"FVar(FVarId(9223372036854775808))\", remaining_args: 1 }\n  \u2717 elaboration error: TooManyArguments { func_type: \"FVar(FVarId(9223372036854775808))\", remaining_args: 1 }\n",
+  "observed_stderr": "Error: check failed\n",
+  "checked_quotations": [
+    "#check fun x => syntax quote with antiquoted custom emoji term was attempted",
+    "#eval Unhygienic.run syntax quote for wildcard custom emoji term was attempted",
+    "#eval Unhygienic.run syntax quote for identifier custom emoji term was attempted",
+    "#check fun x => token-alternative syntax quote was attempted",
+    "#eval Unhygienic.run token-alternative boing syntax quote was attempted",
+    "#eval Unhygienic.run token-alternative baz syntax quote was attempted"
+  ],
+  "checked_antiquotations": [
+    "$x construction for custom emoji syntax was attempted",
+    "$_:ident pattern for wildcard custom emoji syntax was attempted",
+    "$_:ident pattern for identifier custom emoji syntax was attempted",
+    "$x construction for bar token-alternative syntax was attempted"
+  ],
+  "checked_hygiene_contexts": [
+    "Unhygienic.run target for wildcard custom emoji syntax did not elaborate successfully",
+    "Unhygienic.run target for identifier custom emoji syntax did not elaborate successfully",
+    "Unhygienic.run target for `(bar boing) did not elaborate successfully",
+    "Unhygienic.run target for `(bar baz) did not elaborate successfully"
+  ],
+  "artifact_note": "clean parsed this syntax quotation corpus row but the bounded check failed: import Lean is blocked before .olean loading and the custom syntax quotation terms did not elaborate. This is clean failure evidence only; no syntax quotation parity is claimed."
+}

@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F7_unsound_layer_norm_sampling_accepted : Mathbot.unsoundLayerNormSamplingAccepted

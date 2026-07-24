@@ -1,0 +1,161 @@
+{
+  "1079.lean": [
+    {
+      "decl": 0,
+      "name": "bad",
+      "outcome": "fail",
+      "contains": "Alternative `isFalse` has not been provided",
+      "reason": "upstream elab_fail fixture: missing `isFalse` alternative in cases"
+    },
+    {
+      "decl": 1,
+      "name": "bad'",
+      "outcome": "pass"
+    }
+  ],
+  "1011.lean": [
+    {
+      "decl": 0,
+      "name": "f",
+      "outcome": "pass"
+    },
+    {
+      "decl": 1,
+      "name": "set_option relaxedAutoImplicit false",
+      "outcome": "pass"
+    },
+    {
+      "decl": 2,
+      "name": "g",
+      "outcome": "pass"
+    },
+    {
+      "decl": 3,
+      "name": "h",
+      "outcome": "fail",
+      "contains": "Unknown identifier",
+      "reason": "relaxedAutoImplicit=false rejects multi-character auto-implicit names"
+    },
+    {
+      "decl": 4,
+      "name": "i",
+      "outcome": "fail",
+      "contains": "Unknown identifier",
+      "reason": "relaxedAutoImplicit=false rejects suffixed auto-implicit names"
+    },
+    {
+      "decl": 5,
+      "name": "j",
+      "outcome": "fail",
+      "contains": "Unknown identifier",
+      "reason": "relaxedAutoImplicit=false rejects suffixed auto-implicit names"
+    },
+    {
+      "decl": 6,
+      "name": "k",
+      "outcome": "fail",
+      "contains": "Unknown identifier",
+      "reason": "relaxedAutoImplicit=false rejects suffixed auto-implicit names"
+    }
+  ],
+  "255.lean": [
+    {
+      "decl": 0,
+      "name": "x",
+      "outcome": "pass"
+    },
+    {
+      "decl": 1,
+      "name": "section scoped notation",
+      "outcome": "pass"
+    },
+    {
+      "decl": 2,
+      "name": "#check A",
+      "outcome": "fail",
+      "contains": "Unknown",
+      "reason": "upstream fixture checks that notation cannot retain an escaped section variable"
+    },
+    {
+      "decl": 3,
+      "name": "section with escaped notation",
+      "outcome": "fail",
+      "contains": "Unknown",
+      "reason": "upstream fixture checks that reopened section variables do not repair escaped notation"
+    }
+  ],
+  "1057.lean": [
+    {
+      "decl": 0,
+      "name": "T",
+      "outcome": "pass"
+    },
+    {
+      "decl": 1,
+      "name": "T.eval",
+      "outcome": "pass"
+    },
+    {
+      "decl": 2,
+      "name": "T.default",
+      "outcome": "pass",
+      "reason": "inaccessible pattern syntax is preserved and the dependent match elaborates"
+    }
+  ],
+  "248.lean": [
+    {
+      "decl": 0,
+      "name": "foo",
+      "outcome": "fail",
+      "contains": "definition cannot be implemented by itself",
+      "reason": "upstream fixture: `@[implemented_by foo] opaque foo` names itself as its own implementation; clean rejects the self-referential implemented_by target"
+    }
+  ],
+  "309.lean": [
+    {
+      "decl": 0,
+      "name": "example",
+      "outcome": "fail",
+      "contains": "Cannot infer type",
+      "reason": "upstream fixture: `example : False := _` uses an unsolved placeholder/metavariable as a proof of False; clean rejects the uninferable hole rather than admitting it"
+    },
+    {
+      "decl": 1,
+      "name": "example",
+      "outcome": "pass"
+    },
+    {
+      "decl": 2,
+      "name": "example",
+      "outcome": "pass"
+    }
+  ],
+  "1358.lean": [
+    {
+      "decl": 0,
+      "name": "import Lean.Elab.Tactic",
+      "outcome": "pass"
+    },
+    {
+      "decl": 1,
+      "name": "print!",
+      "outcome": "pass"
+    },
+    {
+      "decl": 2,
+      "name": "example",
+      "outcome": "fail",
+      "contains": "error",
+      "reason": "upstream fixture intentionally defines a custom tactic that throws `error`"
+    }
+  ],
+  "1673.lean": [
+    {
+      "decl": 0,
+      "name": "foo.a",
+      "outcome": "fail",
+      "contains": "UnknownFVar(FVarId(2))",
+      "reason": "current frontend reconstruction blocker reached quickly before termination classification"
+    }
+  ]
+}

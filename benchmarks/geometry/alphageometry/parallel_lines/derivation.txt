@@ -1,0 +1,7 @@
+# Parallel lines alternate angles derivation
+# Given: AB || CD, transversal AEC
+# Goal: angle BAE = angle DCE
+
+GIVEN parallel(A, B, C, D)
+GIVEN collinear(A, E, C)
+DERIVE congruent_angles(B, A, E, D, C, E) FROM alternate_interior_angles(A, B, C, D, E)

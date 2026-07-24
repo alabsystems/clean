@@ -1,0 +1,68 @@
+{
+  "version": "proof-artifact-v1",
+  "producer": {
+    "repo": "tests/fixtures/external_certificates",
+    "commit": "fixture-gamma-crown-farkas-semantically-invalid"
+  },
+  "source_system": "gamma-crown",
+  "problem_hash": "blake3:fixture-gamma-crown-farkas-invalid-problem",
+  "model_hash": "blake3:fixture-gamma-crown-farkas-invalid-model",
+  "proof_hash": "blake3:fixture-gamma-crown-farkas-invalid-proof",
+  "certification": {
+    "evidence_kind": "replay_only"
+  },
+  "artifact_kind": "gamma_crown_farkas",
+  "verifier_constants": [
+    {
+      "name": "constraint_0_constant",
+      "role": "constraint_rhs",
+      "value": "5"
+    },
+    {
+      "name": "constraint_1_constant",
+      "role": "constraint_rhs",
+      "value": "-4"
+    },
+    {
+      "name": "multiplier_0",
+      "role": "farkas_weight",
+      "value": "1"
+    },
+    {
+      "name": "multiplier_1",
+      "role": "farkas_weight",
+      "value": "1"
+    }
+  ],
+  "certificate": {
+    "format": "gamma-crown-farkas-v1",
+    "encoding": "json",
+    "payload": {
+      "type": "farkas_certificate",
+      "version": "1.0",
+      "constraints": [
+        {
+          "type": "linear_constraint",
+          "kind": "le",
+          "coefficients": {
+            "x": "1"
+          },
+          "constant": "5"
+        },
+        {
+          "type": "linear_constraint",
+          "kind": "le",
+          "coefficients": {
+            "x": "-1"
+          },
+          "constant": "-4"
+        }
+      ],
+      "multipliers": [
+        "1",
+        "1"
+      ],
+      "conclusion": "contradiction"
+    }
+  }
+}

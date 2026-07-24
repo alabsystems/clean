@@ -1,0 +1,47 @@
+{
+  "schema_version": "clean-frontend-module-import-artifact-schema-v1",
+  "artifact_schema_version": "clean-frontend-module-import-artifact-v1",
+  "kind": "module_import_artifact_schema",
+  "artifact_kind": "frontend_module_import",
+  "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/module_import/{filename}.json",
+  "description": "Schema for deterministic per-file Lean4/clean frontend module/import resolution artifacts consumed by generate_frontend_classification.py. The generator treats absent artifacts as missing evidence and present artifacts that violate this schema as stale_or_invalid evidence. Valid successful artifacts remain pending resolved-import cross-check until compared against parse, elaboration, and module_import_resolution classifications; valid timeout artifacts remain explicit blocker evidence and do not count as successful parity.",
+  "required_fields": [
+    "schema_version",
+    "kind",
+    "engine",
+    "filename",
+    "source_sha256",
+    "command",
+    "module_import_status",
+    "imports_requested",
+    "imports_resolved",
+    "imports_failed"
+  ],
+  "optional_evidence_fields": [
+    "engine_version",
+    "observed_process_status",
+    "observed_exit_code",
+    "observed_timeout_seconds",
+    "observed_elapsed_seconds",
+    "observed_stdout",
+    "observed_stderr",
+    "failure_mode",
+    "stack_sample_summary",
+    "artifact_note"
+  ],
+  "field_constraints": {
+    "schema_version": "must equal clean-frontend-module-import-artifact-v1",
+    "kind": "must equal frontend_module_import",
+    "engine": "must equal lean4 or clean and match the path engine segment",
+    "filename": "must equal the corpus filename, including .lean",
+    "source_sha256": "must equal the current sha256: digest from tests/lean4_compat/MANIFEST.json",
+    "command": "must be a non-empty array of non-empty strings",
+    "module_import_status": "must be success when imports_failed is 0 and imports_resolved equals imports_requested; otherwise it must be failure",
+    "imports_requested": "must be a non-negative integer",
+    "imports_resolved": "must be a non-negative integer less than or equal to imports_requested",
+    "imports_failed": "must be a non-negative integer less than or equal to imports_requested",
+    "imports_resolved + imports_failed": "must be less than or equal to imports_requested",
+    "timeout evidence": "when observed_process_status, observed_timeout_seconds, or failure_mode records a timeout, observed_process_status must be timeout, observed_timeout_seconds must be positive, failure_mode must name the timeout, module_import_status must be failure, and imports_failed must be greater than 0"
+  },
+  "replacement_readiness": false
+}

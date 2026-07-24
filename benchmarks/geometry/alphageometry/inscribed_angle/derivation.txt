@@ -1,0 +1,9 @@
+# Inscribed angle theorem derivation
+# Given: A, B, C, D on circle, C and D on same side of AB
+# Goal: angle ACB = angle ADB
+
+GIVEN on_circle(A, circle)
+GIVEN on_circle(B, circle)
+GIVEN on_circle(C, circle)
+GIVEN on_circle(D, circle)
+DERIVE congruent_angles(A, C, B, A, D, B) FROM inscribed_angle_theorem(A, B, C, D)

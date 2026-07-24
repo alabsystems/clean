@@ -1,0 +1,12 @@
+# Simson line theorem derivation
+# Given: P on circumcircle of ABC, D, E, F are feet of perpendiculars
+# Goal: D, E, F are collinear
+
+CONSTRUCT circumcircle(circle, A, B, C)
+GIVEN on_circle(P, circle)
+CONSTRUCT foot_of_altitude(D, P, B, C)
+CONSTRUCT foot_of_altitude(E, P, A, C)
+CONSTRUCT foot_of_altitude(F, P, A, B)
+DERIVE cyclic(P, D, B, F) FROM perpendicular_feet_cyclic(P, D, B, F)
+DERIVE cyclic(P, D, C, E) FROM perpendicular_feet_cyclic(P, D, C, E)
+DERIVE collinear(D, E, F) FROM simson_line_theorem(A, B, C, P, D, E, F)

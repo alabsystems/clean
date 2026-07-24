@@ -1,0 +1,21 @@
+{
+  "id": "auto/arbitrary_p_unprovable",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    }
+  ],
+  "hypotheses": [],
+  "goal": "P",
+  "tactic_hint": "auto",
+  "expected_result": false,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "negative_test"
+  ]
+}

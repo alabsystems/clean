@@ -1,0 +1,3 @@
+session "Mid_Dep" = "Shared_Base" +
+  theories
+    MD_One

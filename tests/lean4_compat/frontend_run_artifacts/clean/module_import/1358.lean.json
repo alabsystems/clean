@@ -1,0 +1,24 @@
+{
+  "schema_version": "clean-frontend-module-import-artifact-v1",
+  "kind": "frontend_module_import",
+  "engine": "clean",
+  "filename": "1358.lean",
+  "source_sha256": "sha256:7d2df8fe8d215fa9b036150441c9160b5bfc2838ff6f96ccec51d64f9f302812",
+  "command": [
+    "clean",
+    "check",
+    "tests/lean4_compat/lean4_tests/1358.lean"
+  ],
+  "module_import_status": "failure",
+  "imports_requested": 1,
+  "imports_resolved": 0,
+  "imports_failed": 1,
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.129,
+  "observed_stdout": "Read 155 bytes from \"tests/lean4_compat/lean4_tests/1358.lean\"\nParsed 3 declarations in 260.792µs\nChecked 3 declarations in 84.679542ms\n  0 passed, 2 failed\n\nErrors:\n  ✗ elaboration error: Unsupported { feature: \"import Lean.Elab.Tactic: Lean metaprogramming modules are not yet supported by the frontend import path; blocked before .olean loading to keep import processing bounded\" }\n  ✗ elaboration error: TacticFailed(UnknownTactic(\"print!\"))\n",
+  "observed_stderr": "Error: check failed\n",
+  "failure_mode": "clean_frontend_unsupported_import_and_unknown_tactic",
+  "artifact_note": "The bounded clean probe exited instead of timing out. It failed fast on unsupported import Lean.Elab.Tactic before .olean loading, then also reported UnknownTactic(\"print!\"); this is failure evidence, not parity-success evidence."
+}

@@ -1,0 +1,55 @@
+{
+  "name": "clean",
+  "displayName": "clean",
+  "description": "Language support for clean theorem prover",
+  "version": "0.9.0",
+  "publisher": "clean",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:clean",
+    "onLanguage:lean"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "clean",
+        "aliases": [
+          "clean",
+          "clean"
+        ],
+        "extensions": [
+          ".lean"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "clean",
+      "properties": {
+        "clean.serverPath": {
+          "type": "string",
+          "default": "clean-lsp",
+          "description": "Path to the clean-lsp executable"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "last_updated": "2026-06-24",
+  "kernel_verified_baseline": 702,
+  "stored_kernel_verified_baseline": 702,
+  "notes": "Exact KernelVerified baseline for the PINNED, REPRODUCIBLE slice in data/kv_ratchet_slice.txt (Mathlib/Logic/Basic + Logic/Function/Basic, --closure-elide opaque-and-theorem) -- NOT the full corpus. scripts/kv_ratchet_gate.sh RE-STAMPS that exact slice every full local-gate run and fails if kernel_verified drops below this baseline or heuristic_kernel_verified != 0 (soundness floor). NON-VACUOUS: a verdict regression on the slice drops the count below 702 and reds the gate; the slice is small + fixed so it cannot OOM and is deterministic, making this an exact target. Full-corpus arming is deferred until the memory levers (#8/#10/#9/#11) make a full single-pass stamp feasible without OOM; raise these via `clean mathverse ratchet update` after a full governed corpus stamp."
+}

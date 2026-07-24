@@ -1,0 +1,27 @@
+{
+  "id": "triangle_area_half_base",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "H": {"type": "point", "definition": {"foot_of_altitude": {"from": "A", "to_segment": ["B", "C"]}}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "area_half_base_height",
+    "args": ["A", "B", "C", "H"]
+  },
+  "metadata": {
+    "source": "Triangle area formula",
+    "difficulty": 2,
+    "tags": ["area", "base", "height", "triangle"],
+    "known_solvable": true,
+    "statement": "Area of triangle ABC = (1/2) * BC * AH, where AH is the height from A."
+  }
+}

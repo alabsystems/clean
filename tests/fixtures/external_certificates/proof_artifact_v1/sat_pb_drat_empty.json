@@ -1,0 +1,21 @@
+{
+  "version": "proof-artifact-v1",
+  "producer": {
+    "repo": "tests/fixtures/external_certificates",
+    "commit": "fixture-sat-pb-drat-empty"
+  },
+  "source_system": "sat-pb",
+  "problem_hash": "blake3:fixture-sat-pb-drat-empty-problem",
+  "model_hash": "blake3:fixture-sat-pb-drat-empty-model",
+  "proof_hash": "blake3:fixture-sat-pb-drat-empty-proof",
+  "certification": {
+    "evidence_kind": "replay_only"
+  },
+  "artifact_kind": "drat",
+  "verifier_constants": [],
+  "certificate": {
+    "format": "drat",
+    "encoding": "text",
+    "payload": ""
+  }
+}

@@ -1,0 +1,8 @@
+order	entry	in_math_seed	base_session	provider_entry	parent_heap
+1	EntryMulti	1	HOL-Analysis	-	ZP-Analysis
+2	Ghost_Entry	1	None	-	UNRESOLVED:None
+3	Prov_Root	0	HOL	-	ZP-Lib3e
+4	Spine_User	1	HOL-Probability	-	ZP-Probability
+5	Unres_User	1	HOL-Datatype_Examples	-	UNRESOLVED:HOL-Datatype_Examples
+6	Mid_Dep	0	Shared_Base	Prov_Root	ZP-AFP-Prov_Root
+7	Leaf_Dep	1	Mid_Dep	Mid_Dep	ZP-AFP-Mid_Dep

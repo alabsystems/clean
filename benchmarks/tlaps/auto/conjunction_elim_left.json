@@ -1,0 +1,35 @@
+{
+  "id": "auto/conjunction_elim_left",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_pq",
+      "formula": {
+        "and": [
+          "P",
+          "Q"
+        ]
+      }
+    }
+  ],
+  "goal": "P",
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "conjunction"
+  ]
+}

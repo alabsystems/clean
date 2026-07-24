@@ -1,0 +1,27 @@
+{
+  "id": "midpoint_parallel",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "M": {"type": "point", "definition": {"midpoint_of": ["A", "B"]}},
+    "N": {"type": "point", "definition": {"midpoint_of": ["A", "C"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"}
+  ],
+  "goal": {
+    "type": "parallel",
+    "line1": {"through": ["M", "N"]},
+    "line2": {"through": ["B", "C"]}
+  },
+  "metadata": {
+    "source": "Midpoint theorem",
+    "difficulty": 3,
+    "tags": ["midpoint", "parallel", "triangle"],
+    "known_solvable": true,
+    "statement": "The line segment joining the midpoints of two sides of a triangle is parallel to the third side."
+  }
+}

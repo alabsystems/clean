@@ -1,0 +1,10 @@
+session	spine	parent	n_theories	capture_prefix
+ZP-Computational_Algebra-1	HOL-Computational_Algebra	ZP-Lib3e	3	HOL-Computational_Algebra.
+ZP-Computational_Algebra-2	HOL-Computational_Algebra	ZP-Computational_Algebra-1	1	HOL-Computational_Algebra.
+ZP-Number_Theory	HOL-Number_Theory	ZP-Computational_Algebra-2	2	HOL-Number_Theory.
+ZP-Algebra	HOL-Algebra	ZP-Computational_Algebra-2	2	HOL-Algebra.
+ZP-Analysis-1	HOL-Analysis	ZP-Lib3e	3	HOL-Analysis.
+ZP-Analysis-2	HOL-Analysis	ZP-Analysis-1	3	HOL-Analysis.
+ZP-Analysis-3	HOL-Analysis	ZP-Analysis-2	1	HOL-Analysis.
+ZP-Complex_Analysis	HOL-Complex_Analysis	ZP-Analysis-3	1	HOL-Complex_Analysis.
+ZP-Probability	HOL-Probability	ZP-Analysis-3	2	HOL-Probability.

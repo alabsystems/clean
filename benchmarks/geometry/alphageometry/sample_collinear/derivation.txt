@@ -1,0 +1,8 @@
+# Sample collinearity proof via midpoint
+# M = midpoint(A, B) => A, M, B are collinear
+
+GIVEN not_equal(A, B)
+GIVEN not_equal(B, C)
+GIVEN not_equal(A, C)
+CONSTRUCT midpoint M FROM A B
+DERIVE collinear(A, M, B) FROM midpoint_on_segment USING midpoint(M, A, B)

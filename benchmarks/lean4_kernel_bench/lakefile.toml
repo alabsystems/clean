@@ -1,0 +1,7 @@
+name = "lean4_kernel_bench"
+version = "0.9.0"
+defaultTargets = ["lean4_kernel_bench"]
+
+[[lean_exe]]
+name = "lean4_kernel_bench"
+root = "Main"

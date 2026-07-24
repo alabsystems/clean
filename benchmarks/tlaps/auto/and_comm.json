@@ -1,0 +1,41 @@
+{
+  "id": "auto/and_comm",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_pq",
+      "formula": {
+        "and": [
+          "P",
+          "Q"
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "Q",
+      "P"
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "conjunction",
+    "commutativity"
+  ]
+}

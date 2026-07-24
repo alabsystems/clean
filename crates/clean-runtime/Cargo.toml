@@ -1,0 +1,21 @@
+[package]
+name = "clean-runtime"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Yates <andrewyates.name@gmail.com>"]
+license = "Apache-2.0"
+description = "Clean runtime library - C runtime headers and build integration"
+repository.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[build-dependencies]
+cc = "1.0"

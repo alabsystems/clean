@@ -1,0 +1,21 @@
+--- a/serlib_8_20/ser_names.ml
++++ b/serlib_8_20/ser_names.ml
+@@ -240,12 +240,16 @@
+   module Repr = struct
+     module PierceSpec = struct
+       type t = Names.Projection.Repr.t
++      (* projfix: match real Coq 8.20 Names.Projection.Repr.t layout
++         (4 fields, proj_name : Constant.t, no proj_relevant). The upstream
++         5-field mirror is a stale pre-8.18 layout; Pierce Obj.magic reads
++         field 4 out of bounds of the real 4-field block and dereferences
++         garbage as a string -> SIGSEGV. *)
+       type _t =
+         { proj_ind : inductive
+-        ; proj_relevant : bool
+         ; proj_npars : int
+         ; proj_arg : int
+-        ; proj_name : Label.t
++        ; proj_name : Constant.t
+         } [@@deriving sexp,yojson,hash,compare]
+     end
+     include SerType.Pierce(PierceSpec)

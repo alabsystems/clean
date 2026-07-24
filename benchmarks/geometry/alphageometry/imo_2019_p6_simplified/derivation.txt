@@ -1,0 +1,11 @@
+# IMO 2019 P6 simplified derivation
+# Given: Incircle of ABC tangent to sides at D, E, F
+# Goal: AF = AE (tangent lengths from vertex A)
+
+GIVEN tangent(A, B, incircle)
+GIVEN tangent(A, C, incircle)
+GIVEN on_circle(F, incircle)
+GIVEN on_circle(E, incircle)
+GIVEN on_line(F, A, B)
+GIVEN on_line(E, A, C)
+DERIVE congruent_segments(A, F, A, E) FROM tangent_lengths_equal(A, incircle, F, E)

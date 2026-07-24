@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "1367.lean",
+  "source_sha256": "sha256:8505ceb8a74d59cc7b10c1b857f5d65ec1e42043d93931d223c6ee46096ba867",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1367.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.089,
+  "observed_stdout": "Read 160 bytes from \"tests/lean4_compat/lean4_tests/1367.lean\"\nParsed 6 declarations in 266.417\u00b5s\n  \u2713 two\n  \u2713 three\nChecked 6 declarations in 76.235458ms\n  2 passed, 2 failed\n\nErrors:\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"\ud835\udfda\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"\ud835\udfdb\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

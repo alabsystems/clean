@@ -1,0 +1,35 @@
+{
+  "id": "auto/disjunction_left",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_p",
+      "formula": "P"
+    }
+  ],
+  "goal": {
+    "or": [
+      "P",
+      "Q"
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "disjunction"
+  ]
+}

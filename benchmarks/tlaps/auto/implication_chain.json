@@ -1,0 +1,54 @@
+{
+  "id": "auto/implication_chain",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    },
+    {
+      "type": "prop",
+      "name": "R"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_pq",
+      "formula": {
+        "implies": [
+          "P",
+          "Q"
+        ]
+      }
+    },
+    {
+      "name": "h_qr",
+      "formula": {
+        "implies": [
+          "Q",
+          "R"
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "implies": [
+      "P",
+      "R"
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "implication",
+    "transitivity"
+  ]
+}

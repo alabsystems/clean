@@ -1,0 +1,35 @@
+{
+  "id": "ceva",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "E": {"type": "point"},
+    "F": {"type": "point"},
+    "P": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]},
+    {"type": "on_line", "point": "D", "line": {"through": ["B", "C"]}},
+    {"type": "on_line", "point": "E", "line": {"through": ["C", "A"]}},
+    {"type": "on_line", "point": "F", "line": {"through": ["A", "B"]}},
+    {"type": "concurrent", "lines": [{"through": ["A", "D"]}, {"through": ["B", "E"]}, {"through": ["C", "F"]}]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "ceva_product",
+    "args": ["A", "F", "F", "B", "B", "D", "D", "C", "C", "E", "E", "A"]
+  },
+  "metadata": {
+    "source": "Ceva's Theorem",
+    "origin": "Giovanni Ceva, 1678",
+    "difficulty": 6,
+    "tags": ["ceva", "concurrent", "ratio", "cevian"],
+    "known_solvable": true,
+    "statement": "If cevians AD, BE, CF are concurrent, then (AF/FB)(BD/DC)(CE/EA) = 1."
+  }
+}

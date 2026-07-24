@@ -1,0 +1,34 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "223.lean",
+  "source_sha256": "sha256:b27a5f6cf14b24265fff279674c24d88a98a44834526315a1cdd066880142c5a",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/223.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "ex_declaration_uses_synthetic_sorry",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "message": "declaration 'ex' uses synthetic sorry"
+    },
+    {
+      "severity": "error",
+      "message": "ex: declaration uses synthetic sorry"
+    }
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.142,
+  "observed_stdout": "Read 334 bytes from \"tests/lean4_compat/lean4_tests/223.lean\"\nParsed 7 declarations in 1.292459ms\n  \u2713 Imf\n  \u2713 h\nwarning: declaration 'ex' uses synthetic sorry\n  \u2717 ex (synthetic sorry)\nChecked 7 declarations in 121.482875ms\n  2 passed, 1 failed\nTrust summary:\n  sorry axioms: 1\n\nErrors:\n  \u2717 ex: declaration uses synthetic sorry\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean diagnostic evidence; this is not replacement-readiness evidence."
+}

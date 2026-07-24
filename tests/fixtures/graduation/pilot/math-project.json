@@ -1,0 +1,7 @@
+{
+  "schema": "clean-math-project-v1",
+  "project": "grad-pilot",
+  "domain_profile": "pure-math",
+  "theorem": "GradPilot.imp_trans",
+  "notes": "Graduation pilot fixture — exercised by `clean mathverse graduate` descriptor examples and crates/clean-mathverse/src/graduate/tests.rs."
+}

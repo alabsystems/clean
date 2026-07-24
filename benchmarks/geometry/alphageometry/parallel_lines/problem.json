@@ -1,0 +1,30 @@
+{
+  "id": "parallel_lines",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "E": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "parallel", "line1": {"through": ["A", "B"]}, "line2": {"through": ["C", "D"]}},
+    {"type": "collinear", "points": ["A", "E", "C"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "C", "b": "D"},
+    {"type": "not_equal", "a": "A", "b": "E"},
+    {"type": "not_equal", "a": "E", "b": "C"}
+  ],
+  "goal": {
+    "type": "congruent_angles",
+    "angle1": {"points": ["B", "A", "E"]},
+    "angle2": {"points": ["D", "C", "E"]}
+  },
+  "metadata": {
+    "source": "Euclidean geometry",
+    "difficulty": 3,
+    "tags": ["parallel", "alternate_angles", "transversal"],
+    "known_solvable": true,
+    "statement": "If AB || CD and line AEC is a transversal, then alternate interior angles BAE and DCE are congruent."
+  }
+}

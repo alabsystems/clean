@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "243.lean",
+  "source_sha256": "sha256:d935458e42925193912a2a7951d28f863c1813bee1850f68662975898f93a1c4",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/243.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.233,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/243.lean:2:10: error: Application type mismatch: The argument\n  true\nhas type\n  _root_.Bool\nbut is expected to have type\n  Bool\nin the application\n  \u27e8Bool, true\u27e9\ntests/lean4_compat/lean4_tests/243.lean:13:7: error: Application type mismatch: The argument\n  a\nhas type\n  Foo.A\nbut is expected to have type\n  A\nin the application\n  \u27e8A, a\u27e9\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

@@ -1,0 +1,1238 @@
+{
+  "version": "0.9.0",
+  "generated": "2026-03-30",
+  "last_updated": "2026-04-20",
+  "schema_version": "2",
+  "vocabulary": {
+    "census_target_repos": "Number of census target repositories scanned by the wide census (MATHVERSE_LIBRARIES.md). Canonical census target count.",
+    "importer_source_systems": "Number of SourceSystem enum variants in crates/clean-mathverse/src/types.rs. Canonical importer count.",
+    "provenance_records": "Number of provenance records in .sources below. Canonical provenance record count; distinct repo clones with reproducibility metadata.",
+    "shards_produced": "Number of .mathverse shard files published in release mathverse-v0.9.0. Canonical shard count.",
+    "total_declarations_census": "Sum of declarations across the 238 census target repos (keyword scan pipeline). See MATHVERSE_LIBRARIES.md.",
+    "total_declarations_in_records": "Sum of declarations over the provenance records that have a populated declarations field."
+  },
+  "census_target_repos": 238,
+  "importer_source_systems": 69,
+  "provenance_records": 131,
+  "shards_produced": 107,
+  "total_declarations_census": 30049434,
+  "total_declarations_in_records": 22138518,
+  "total_systems": 238,
+  "total_declarations": 30049434,
+  "import_tiers": {
+    "tier1_kernel_import": {
+      "description": "Produces clean kernel Declaration objects",
+      "systems": [
+        "opentheory"
+      ]
+    },
+    "tier2_binary_import": {
+      "description": "Parses .olean binary -> FlatExpr in .mathverse shards",
+      "systems": [
+        "lean4-olean"
+      ]
+    },
+    "tier3_translated_import": {
+      "description": "Translates CIC/SerAPI terms -> FlatExpr",
+      "systems": [
+        "coq-serapi",
+        "coq-print-parser"
+      ]
+    },
+    "tier4_structured_parse": {
+      "description": "Extracts names + string type signatures",
+      "systems": [
+        "lean4-source",
+        "coq-source",
+        "agda",
+        "idris2",
+        "metamath"
+      ]
+    },
+    "tier5_keyword_scan": {
+      "description": "Counts declarations by line-prefix matching",
+      "systems": "all remaining 229 systems"
+    }
+  },
+  "sources": [
+    {
+      "name": "metamath-set.mm",
+      "source_url": "https://github.com/metamath/set.mm",
+      "category": "Metamath",
+      "commit_hash": "5a55b96b559b",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 47224
+    },
+    {
+      "name": "mathlib4",
+      "source_url": "https://github.com/leanprover-community/mathlib4",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "b301d257a1c1",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 164962
+    },
+    {
+      "name": "isabelle-afp",
+      "source_url": "https://github.com/isabelle-prover/mirror-afp-2024",
+      "category": "Isabelle/HOL",
+      "commit_hash": "1549ea5b788b",
+      "download_date": "2025-03-04",
+      "clean_format": "keyword_scan",
+      "declarations": 264583
+    },
+    {
+      "name": "hol-light",
+      "source_url": "https://github.com/jrh13/hol-light",
+      "category": "HOL Family",
+      "commit_hash": "1c7690ec1231",
+      "download_date": "2026-03-23",
+      "clean_format": "keyword_scan",
+      "declarations": 2912
+    },
+    {
+      "name": "hol4",
+      "source_url": "https://github.com/HOL-Theorem-Prover/HOL",
+      "category": "HOL Family",
+      "commit_hash": "b32dc44fb920",
+      "download_date": "2026-03-31",
+      "clean_format": "keyword_scan",
+      "declarations": 5978
+    },
+    {
+      "name": "mizar-server",
+      "source_url": "https://github.com/mimosa-project/mizar-server",
+      "category": "Mizar",
+      "commit_hash": "61f3169a6edc",
+      "download_date": "2024-04-04",
+      "clean_format": "keyword_scan",
+      "declarations": 74918
+    },
+    {
+      "name": "unimath",
+      "source_url": "https://github.com/UniMath/UniMath",
+      "category": "Coq/Rocq",
+      "commit_hash": "ca8bc1dfdef5",
+      "download_date": "2026-03-19",
+      "clean_format": "keyword_scan",
+      "declarations": 14382
+    },
+    {
+      "name": "opentheory",
+      "source_url": "https://github.com/gilith/opentheory",
+      "category": "HOL Family",
+      "commit_hash": "4e7d25943446",
+      "download_date": "2023-03-21",
+      "clean_format": "kernel_import",
+      "declarations": 15
+    },
+    {
+      "name": "agda-stdlib",
+      "source_url": "https://github.com/agda/agda-stdlib",
+      "category": "Agda",
+      "commit_hash": "82b007fadb06",
+      "download_date": "2026-03-17",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "idris2",
+      "source_url": "https://github.com/idris-lang/Idris2",
+      "category": "Idris 2",
+      "commit_hash": "37d29157a3d5",
+      "download_date": "2026-03-21",
+      "clean_format": "format_parse",
+      "declarations": 21413
+    },
+    {
+      "name": "fstar",
+      "source_url": "https://github.com/FStarLang/FStar",
+      "category": "F*/Everest",
+      "commit_hash": "70671ffb81fa",
+      "download_date": "2026-03-24",
+      "clean_format": "keyword_scan",
+      "declarations": 127145
+    },
+    {
+      "name": "dafny",
+      "source_url": "https://github.com/dafny-lang/dafny",
+      "category": "Program Verification",
+      "commit_hash": "9c1b58e01477",
+      "download_date": "2026-03-18",
+      "clean_format": "keyword_scan",
+      "declarations": 14161
+    },
+    {
+      "name": "why3",
+      "source_url": "https://github.com/AdaCore/why3",
+      "category": "Program Verification",
+      "commit_hash": "44f650b03792",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 26514
+    },
+    {
+      "name": "acl2",
+      "source_url": "https://github.com/acl2/acl2",
+      "category": "Program Verification",
+      "commit_hash": "630a362ac6f0",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 293947
+    },
+    {
+      "name": "lean4-src",
+      "source_url": "https://github.com/leanprover/lean4",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "f395593ffce1",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 561705
+    },
+    {
+      "name": "lean4-std",
+      "source_url": "https://github.com/leanprover/std4",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "36752f7c96ae",
+      "download_date": "2026-03-31",
+      "clean_format": "keyword_scan",
+      "declarations": 19770
+    },
+    {
+      "name": "mathlib3",
+      "source_url": "https://github.com/leanprover-community/mathlib",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "65a1391a0106",
+      "download_date": "2023-10-30",
+      "clean_format": "keyword_scan",
+      "declarations": 1017000
+    },
+    {
+      "name": "aesop",
+      "source_url": "https://github.com/leanprover-community/aesop",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "7152850e7b21",
+      "download_date": "2026-03-28",
+      "clean_format": "keyword_scan",
+      "declarations": 215
+    },
+    {
+      "name": "sphere-eversion",
+      "source_url": "https://github.com/leanprover-community/sphere-eversion",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "5b63797f9452",
+      "download_date": "2026-02-18",
+      "clean_format": "keyword_scan",
+      "declarations": 13155
+    },
+    {
+      "name": "flt",
+      "source_url": "https://github.com/ImperialCollegeLondon/FLT",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "3343d9db843b",
+      "download_date": "2026-03-25",
+      "clean_format": "keyword_scan",
+      "declarations": 1059
+    },
+    {
+      "name": "lean-liquid",
+      "source_url": "https://github.com/leanprover-community/lean-liquid",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "087fffad55dc",
+      "download_date": "2024-01-22",
+      "clean_format": "keyword_scan",
+      "declarations": 46725
+    },
+    {
+      "name": "pfr",
+      "source_url": "https://github.com/teorth/pfr",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "80daaf135131",
+      "download_date": "2026-03-20",
+      "clean_format": "keyword_scan",
+      "declarations": 863
+    },
+    {
+      "name": "flt-regular",
+      "source_url": "https://github.com/leanprover-community/flt-regular",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "045237372750",
+      "download_date": "2026-03-23",
+      "clean_format": "keyword_scan",
+      "declarations": 4095
+    },
+    {
+      "name": "agda-cubical",
+      "source_url": "https://github.com/agda/cubical",
+      "category": "Agda",
+      "commit_hash": "5c1bccf5d486",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "1lab",
+      "source_url": "https://github.com/the1lab/1lab",
+      "category": "Agda",
+      "commit_hash": "087d4fdd93fe",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": 11640
+    },
+    {
+      "name": "coq-stdlib",
+      "source_url": "https://github.com/coq/coq",
+      "category": "Coq/Rocq",
+      "commit_hash": "93c35c91ed42",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 2281
+    },
+    {
+      "name": "mathcomp",
+      "source_url": "https://github.com/math-comp/math-comp",
+      "category": "Coq/Rocq",
+      "commit_hash": "6b80436d0c15",
+      "download_date": "2026-03-26",
+      "clean_format": "keyword_scan",
+      "declarations": 15738
+    },
+    {
+      "name": "compcert",
+      "source_url": "https://github.com/AbsInt/CompCert",
+      "category": "Coq/Rocq",
+      "commit_hash": "1b71fecf694b",
+      "download_date": "2026-03-18",
+      "clean_format": "keyword_scan",
+      "declarations": 7666
+    },
+    {
+      "name": "iris",
+      "source_url": "https://gitlab.mpi-sws.org/iris/iris.git",
+      "category": "Coq/Rocq",
+      "commit_hash": "d94013ac1622",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 4634
+    },
+    {
+      "name": "sel4",
+      "source_url": "https://github.com/seL4/l4v",
+      "category": "Isabelle/HOL",
+      "commit_hash": "c097c61cb42d",
+      "download_date": "2026-03-31",
+      "clean_format": "keyword_scan",
+      "declarations": 956010
+    },
+    {
+      "name": "cakeml",
+      "source_url": "https://github.com/CakeML/cakeml",
+      "category": "HOL Family",
+      "commit_hash": "4e312c0f7e18",
+      "download_date": "2026-03-25",
+      "clean_format": "keyword_scan",
+      "declarations": 8580
+    },
+    {
+      "name": "isabelle-stdlib",
+      "source_url": "https://github.com/isabelle-prover/mirror-isabelle",
+      "category": "Isabelle/HOL",
+      "commit_hash": "620ab5e9d513",
+      "download_date": "2026-03-27",
+      "clean_format": "keyword_scan",
+      "declarations": 1082850
+    },
+    {
+      "name": "hacl-star",
+      "source_url": "https://github.com/project-everest/hacl-star",
+      "category": "F*/Everest",
+      "commit_hash": "8a2366d891cd",
+      "download_date": "2026-03-24",
+      "clean_format": "keyword_scan",
+      "declarations": 644610
+    },
+    {
+      "name": "karamel",
+      "source_url": "https://github.com/FStarLang/karamel",
+      "category": "F*/Everest",
+      "commit_hash": "d8595565be5d",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 32370
+    },
+    {
+      "name": "verus",
+      "source_url": "https://github.com/verus-lang/verus",
+      "category": "Rust Verification",
+      "commit_hash": "fc4528f50628",
+      "download_date": "2026-03-29",
+      "clean_format": "keyword_scan",
+      "declarations": 18975
+    },
+    {
+      "name": "creusot",
+      "source_url": "https://github.com/creusot-rs/creusot",
+      "category": "Rust Verification",
+      "commit_hash": "1faf8fd0e981",
+      "download_date": "2026-03-27",
+      "clean_format": "keyword_scan",
+      "declarations": 3304
+    },
+    {
+      "name": "kani",
+      "source_url": "https://github.com/model-checking/kani",
+      "category": "Rust Verification",
+      "commit_hash": "39988dcf1852",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "prusti",
+      "source_url": "https://github.com/viperproject/prusti-dev",
+      "category": "Rust Verification",
+      "commit_hash": "0d4a8d497ac1",
+      "download_date": "2024-03-26",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "twelf",
+      "source_url": "https://github.com/standardml/twelf",
+      "category": "Type Theory",
+      "commit_hash": "b72cc28cd61c",
+      "download_date": "2026-03-07",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "ats2",
+      "source_url": "https://github.com/githwxi/ATS-Postiats",
+      "category": "Type Theory",
+      "commit_hash": "d12abf1da447",
+      "download_date": "2025-06-10",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "cedille",
+      "source_url": "https://github.com/cedille/cedille",
+      "category": "Type Theory",
+      "commit_hash": "78ca684859bb",
+      "download_date": "2021-10-20",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "k-framework",
+      "source_url": "https://github.com/runtimeverification/k",
+      "category": "Semantic Frameworks",
+      "commit_hash": "c9205d683b9c",
+      "download_date": "2026-02-03",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "boogie",
+      "source_url": "https://github.com/boogie-org/boogie",
+      "category": "Program Verification",
+      "commit_hash": "59d0d60edcbe",
+      "download_date": "2026-03-26",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "viper",
+      "source_url": "https://github.com/viperproject/silver",
+      "category": "Program Verification",
+      "commit_hash": "28c06ee3e3d9",
+      "download_date": "2026-03-01",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "lisa",
+      "source_url": "https://github.com/epfl-lara/lisa",
+      "category": "Program Verification",
+      "commit_hash": "e8e6bd9a4a55",
+      "download_date": "2026-03-11",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "software-foundations",
+      "source_url": "https://github.com/DeepSpec/sf",
+      "category": "Coq Textbooks",
+      "commit_hash": "253024419a06",
+      "download_date": "2026-03-09",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "frap",
+      "source_url": "https://github.com/achlipala/frap",
+      "category": "Coq Textbooks",
+      "commit_hash": "03f6bc680ceb",
+      "download_date": "2026-03-23",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "coqgym",
+      "source_url": "https://github.com/princeton-vl/CoqGym",
+      "category": "AI Datasets",
+      "commit_hash": "a739d99cdf5b",
+      "download_date": "2023-06-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "lean4-batteries",
+      "source_url": "https://github.com/leanprover-community/batteries",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "36752f7c96ae",
+      "download_date": "2026-03-31",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "lean-auto",
+      "source_url": "https://github.com/leanprover-community/lean-auto",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "07942478e560",
+      "download_date": "2026-02-12",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "duper",
+      "source_url": "https://github.com/leanprover-community/duper",
+      "category": "Lean 4 Ecosystem",
+      "commit_hash": "301f202cfe47",
+      "download_date": "2026-03-28",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "plfa",
+      "source_url": "https://github.com/plfa/plfa.github.io",
+      "category": "Agda",
+      "commit_hash": "81190a3fc0e9",
+      "download_date": "2026-03-26",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "hott-agda",
+      "source_url": "https://github.com/HoTT/HoTT-Agda",
+      "category": "Agda",
+      "commit_hash": "1037d82edcf2",
+      "download_date": "2019-02-19",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "agda-categories",
+      "source_url": "https://github.com/agda/agda-categories",
+      "category": "Agda",
+      "commit_hash": "9d50d25cd55d",
+      "download_date": "2026-03-14",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "type-topology",
+      "source_url": "https://github.com/martinescardo/TypeTopology",
+      "category": "Agda",
+      "commit_hash": "afa27fba35a4",
+      "download_date": "2026-03-27",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "move-prover",
+      "source_url": "https://github.com/move-language/move",
+      "category": "Rust Verification",
+      "commit_hash": "c453c90994cb",
+      "download_date": "2024-05-04",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "coq-of-rust",
+      "source_url": "https://github.com/formal-land/coq-of-rust",
+      "category": "Coq/Rocq",
+      "commit_hash": "877dd65142b3",
+      "download_date": "2026-02-16",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "refinedc",
+      "source_url": "https://gitlab.mpi-sws.org/iris/refinedc.git",
+      "category": "Coq/Rocq",
+      "commit_hash": "e4041a521dc3",
+      "download_date": "2026-03-15",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "coquelicot",
+      "source_url": "https://gitlab.inria.fr/coquelicot/coquelicot.git",
+      "category": "Coq/Rocq",
+      "commit_hash": "9ef035ee86a1",
+      "download_date": "2026-03-13",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "stdpp",
+      "source_url": "https://gitlab.mpi-sws.org/iris/stdpp.git",
+      "category": "Coq/Rocq",
+      "commit_hash": "c8534a4452ed",
+      "download_date": "2026-03-31",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "tptp_ncl",
+      "source_url": "https://github.com/TPTPWorld/NonClassicalLogic",
+      "category": "TPTP",
+      "commit_hash": "bd7ed2b152aa",
+      "download_date": "2025-05-14",
+      "clean_format": "format_parse",
+      "declarations": 11278965
+    },
+    {
+      "name": "smtlib-bench",
+      "source_url": "https://github.com/SMT-LIB/benchmark-submission",
+      "category": "SMT/SAT",
+      "commit_hash": "37c6cd5d98ed",
+      "download_date": "2025-05-20",
+      "clean_format": "smt2_parse",
+      "declarations": 4574195
+    },
+    {
+      "name": "cvc5-benchmarks",
+      "source_url": "https://github.com/cvc5/cvc5",
+      "category": "SMT/SAT",
+      "commit_hash": "5c6b53b365c1",
+      "download_date": "2026-03-29",
+      "clean_format": "smt2_parse",
+      "declarations": 154536
+    },
+    {
+      "name": "yices2",
+      "source_url": "https://github.com/SRI-CSL/yices2",
+      "category": "SMT/SAT",
+      "commit_hash": "016a6243de76",
+      "download_date": "2026-03-09",
+      "clean_format": "smt2_parse",
+      "declarations": 45628
+    },
+    {
+      "name": "quickchick",
+      "source_url": "https://github.com/QuickChick/QuickChick",
+      "category": "Coq",
+      "commit_hash": "fb56842e2713",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "smtcoq",
+      "source_url": "https://github.com/smtcoq/smtcoq",
+      "category": "Coq",
+      "commit_hash": "5a7bb7fcd948",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "coq-elpi",
+      "source_url": "https://github.com/LPCIC/coq-elpi",
+      "category": "Coq",
+      "commit_hash": "3160b0a3b2de",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "hierarchy-builder",
+      "source_url": "https://github.com/math-comp/hierarchy-builder",
+      "category": "Coq",
+      "commit_hash": "e4e487dde779",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "tlc-coq",
+      "source_url": "https://github.com/chargueraud/tlc",
+      "category": "Coq",
+      "commit_hash": "b35ec775e855",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "dblib",
+      "source_url": "https://github.com/coq-community/dblib",
+      "category": "Coq",
+      "commit_hash": "25469872c0ba",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "finmap",
+      "source_url": "https://github.com/math-comp/finmap",
+      "category": "Coq",
+      "commit_hash": "df2a7f9e01ee",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "bignums",
+      "source_url": "https://github.com/coq-community/bignums",
+      "category": "Coq",
+      "commit_hash": "71f901990468",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "dsss17",
+      "source_url": "https://github.com/DeepSpec/dsss17",
+      "category": "Coq",
+      "commit_hash": "826ec5edd67b",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "kami-coq",
+      "source_url": "https://github.com/mit-plv/kami",
+      "category": "Coq",
+      "commit_hash": "db5a214e3e01",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "lemma-overloading",
+      "source_url": "https://github.com/coq-community/lemma-overloading",
+      "category": "Coq",
+      "commit_hash": "754d95989541",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "huffman",
+      "source_url": "https://github.com/coq-community/huffman",
+      "category": "Coq",
+      "commit_hash": "cc7d4cc41ef6",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "buchberger",
+      "source_url": "https://github.com/coq-community/buchberger",
+      "category": "Coq",
+      "commit_hash": "92f377ac39c0",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "stalmarck",
+      "source_url": "https://github.com/coq-community/stalmarck",
+      "category": "Coq",
+      "commit_hash": "d32acd3c477c",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "qarith",
+      "source_url": "https://github.com/coq-community/qarith-stern-brocot",
+      "category": "Coq",
+      "commit_hash": "9400dafdc7e3",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "paramcoq",
+      "source_url": "https://github.com/coq-community/paramcoq",
+      "category": "Coq",
+      "commit_hash": "a9f0edcbd2bd",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "atbr",
+      "source_url": "https://github.com/coq-community/atbr",
+      "category": "Coq",
+      "commit_hash": "47ac8fb6bf24",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "chapar",
+      "source_url": "https://github.com/coq-community/chapar",
+      "category": "Coq",
+      "commit_hash": "0553daf8bd6f",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "dpdgraph",
+      "source_url": "https://github.com/coq-community/coq-dpdgraph",
+      "category": "Coq",
+      "commit_hash": "8643388923",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "zorns-lemma",
+      "source_url": "https://github.com/coq-community/zorns-lemma",
+      "category": "Coq",
+      "commit_hash": "aaf46b0c5f78",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "almost-full",
+      "source_url": "https://github.com/coq-community/almost-full",
+      "category": "Coq",
+      "commit_hash": "69e02c142f64",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "coq-art",
+      "source_url": "https://github.com/coq-community/coq-art",
+      "category": "Coq",
+      "commit_hash": "02f7d1f03296",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "hoare-tut",
+      "source_url": "https://github.com/coq-community/hoare-tut",
+      "category": "Coq",
+      "commit_hash": "66dfb255c9e8",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "bertrand",
+      "source_url": "https://github.com/coq-community/bertrand",
+      "category": "Coq",
+      "commit_hash": "033b1a8f1a9c",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "exact-real",
+      "source_url": "https://github.com/coq-community/exact-real-arithmetic",
+      "category": "Coq",
+      "commit_hash": "d6bc1fee859c",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "hs-to-coq",
+      "source_url": "https://github.com/nomeata/hs-to-coq",
+      "category": "Coq",
+      "commit_hash": "0435b74f2e6e",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "coq-zfc",
+      "source_url": "https://github.com/coq-contribs/zfc",
+      "category": "Coq",
+      "commit_hash": "ede712656084",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "cats-in-zfc",
+      "source_url": "https://github.com/coq-contribs/cats-in-zfc",
+      "category": "Coq",
+      "commit_hash": "aa7067a8d0a2",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "cvxlean",
+      "source_url": "https://github.com/verified-optimization/CvxLean",
+      "category": "Lean 4",
+      "commit_hash": "c62c2f292c64",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "lean-smt",
+      "source_url": "https://github.com/ufmg-smite/lean-smt",
+      "category": "Lean 4",
+      "commit_hash": "e556db814854",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "import-graph",
+      "source_url": "https://github.com/leanprover-community/import-graph",
+      "category": "Lean 4",
+      "commit_hash": "48d5698bc464",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "plausible",
+      "source_url": "https://github.com/leanprover-community/plausible",
+      "category": "Lean 4",
+      "commit_hash": "83e90935a17c",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "lean4-metabook",
+      "source_url": "https://github.com/leanprover-community/lean4-metaprogramming-book",
+      "category": "Lean 4",
+      "commit_hash": "731400dccbec",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "doc-gen4",
+      "source_url": "https://github.com/leanprover/doc-gen4",
+      "category": "Lean 4",
+      "commit_hash": "fbfa185b60c1",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "lake",
+      "source_url": "https://github.com/leanprover/lake",
+      "category": "Lean 4",
+      "commit_hash": "7af86a2d4b4c",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "agda-source",
+      "source_url": "https://github.com/agda/agda",
+      "category": "Agda",
+      "commit_hash": "387314ac9ec1",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "aeneas",
+      "source_url": "https://github.com/AeneasVerif/aeneas",
+      "category": "Rust Verification",
+      "commit_hash": "1180be60c7a0",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "hax",
+      "source_url": "https://github.com/hacspec/hax",
+      "category": "Rust Verification",
+      "commit_hash": "1f0259212fa9",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "creusat",
+      "source_url": "https://github.com/sarsko/CreuSAT",
+      "category": "Rust Verification",
+      "commit_hash": "0758fe729d52",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "kind2",
+      "source_url": "https://github.com/kindelia/kind",
+      "category": "Type Theory",
+      "commit_hash": "5cfff210b3ae",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "rzk",
+      "source_url": "https://github.com/rzk-lang/rzk",
+      "category": "Type Theory",
+      "commit_hash": "09c5b156a50d",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "latte",
+      "source_url": "https://github.com/LATTe-central/LaTTe",
+      "category": "Type Theory",
+      "commit_hash": "9b55536c8a15",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "krajono",
+      "source_url": "https://github.com/Deducteam/Krajono",
+      "category": "Dedukti",
+      "commit_hash": "19902c1f59d5",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "dedukti-libs",
+      "source_url": "https://github.com/Deducteam/Libraries",
+      "category": "Dedukti",
+      "commit_hash": "678d2cc14904",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": 573795
+    },
+    {
+      "name": "mitls",
+      "source_url": "https://github.com/project-everest/mitls-fstar",
+      "category": "F*",
+      "commit_hash": "7b7e79d075a6",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "pulse-fstar",
+      "source_url": "https://github.com/FStarLang/pulse",
+      "category": "F*",
+      "commit_hash": "a0dc43ba2a82",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "dafny-libs",
+      "source_url": "https://github.com/dafny-lang/libraries",
+      "category": "Dafny",
+      "commit_hash": "b486ff7faadb",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "apalache",
+      "source_url": "https://github.com/informalsystems/apalache",
+      "category": "TLA+",
+      "commit_hash": "a41a4dc42f0e",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "p-lang",
+      "source_url": "https://github.com/p-org/P",
+      "category": "Program Verification",
+      "commit_hash": "f929e518aed3",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "goedel-coq",
+      "source_url": "https://github.com/coq-community/goedel",
+      "category": "Coq",
+      "commit_hash": "8e02b2035e64",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "sudoku-coq",
+      "source_url": "https://github.com/coq-community/sudoku",
+      "category": "Coq",
+      "commit_hash": "fce3ced21fe5",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "comp-dec-modal",
+      "source_url": "https://github.com/coq-community/comp-dec-modal",
+      "category": "Coq",
+      "commit_hash": "fcb968dbcca2",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "bits-coq",
+      "source_url": "https://github.com/coq-community/bits",
+      "category": "Coq",
+      "commit_hash": "f463bacdaf8b",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "dedekind-reals",
+      "source_url": "https://github.com/coq-community/dedekind-reals",
+      "category": "Coq",
+      "commit_hash": "da4a7452e1d2",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "lean4-samples",
+      "source_url": "https://github.com/leanprover-community/lean4-samples",
+      "category": "Lean 4",
+      "commit_hash": "c3690b7a5166",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "lean-dojo",
+      "source_url": "https://github.com/lean-dojo/LeanDojo",
+      "category": "Lean 4",
+      "commit_hash": "7a9f600b250a",
+      "download_date": "2026-03-30",
+      "clean_format": "format_parse",
+      "declarations": null
+    },
+    {
+      "name": "tlapm",
+      "source_url": "https://github.com/tlaplus/tlapm",
+      "category": "TLA+",
+      "commit_hash": "128e44cbc3e3",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "tlaplus-src",
+      "source_url": "https://github.com/tlaplus/tlaplus",
+      "category": "TLA+",
+      "commit_hash": "110851e63808",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "z3-src",
+      "source_url": "https://github.com/Z3Prover/z3",
+      "category": "SMT/SAT",
+      "commit_hash": "1ec07ac5e99d",
+      "download_date": "2026-03-30",
+      "clean_format": "smt2_parse",
+      "declarations": null
+    },
+    {
+      "name": "cvc5-src",
+      "source_url": "https://github.com/cvc5/cvc5",
+      "category": "SMT/SAT",
+      "commit_hash": "5c6b53b365c1",
+      "download_date": "2026-03-30",
+      "clean_format": "smt2_parse",
+      "declarations": null
+    },
+    {
+      "name": "sisyphus",
+      "source_url": "https://github.com/verse-lab/sisyphus",
+      "category": "Coq",
+      "commit_hash": "a08addae06bb",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "velus",
+      "source_url": "https://github.com/INRIA/velus",
+      "category": "Coq",
+      "commit_hash": "7e7157dc7554",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "cdf-mech-sem",
+      "source_url": "https://github.com/xavierleroy/cdf-mech-sem",
+      "category": "Coq",
+      "commit_hash": "0d539cdcd481",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "cdf-program-logics",
+      "source_url": "https://github.com/xavierleroy/cdf-program-logics",
+      "category": "Coq",
+      "commit_hash": "5c16d588e702",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "sail-ref",
+      "source_url": "https://github.com/rems-project/sail",
+      "category": "ISA Specification",
+      "commit_hash": "538c6b4112f0",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "kevm-ref",
+      "source_url": "https://github.com/runtimeverification/evm-semantics",
+      "category": "K Framework",
+      "commit_hash": "33cacc816da8",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    },
+    {
+      "name": "eth-act",
+      "source_url": "https://github.com/ethereum/act",
+      "category": "Smart Contract Verification",
+      "commit_hash": "589aeb20b117",
+      "download_date": "2026-03-30",
+      "clean_format": "keyword_scan",
+      "declarations": null
+    }
+  ]
+}

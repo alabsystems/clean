@@ -1,0 +1,166 @@
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Mathverse Library upstream source manifest.
+# Tracks configured formal-math library sources for automated refresh.
+#
+# Fields:
+#   name            — human-readable name
+#   git_url         — upstream git clone URL
+#   file_type       — primary file extension (.mm, .olean, .lean, .vo, etc.)
+#   import_tier     — kernel compatibility tier (1-5, per MATHVERSE_KERNEL_COMPATIBILITY.md)
+#   clone_path      — local clone directory (used by download_all_libraries.sh)
+#   last_fetched_sha  — HEAD sha at last successful fetch (empty until first run)
+#   last_fetched_date — ISO 8601 date of last successful fetch (empty until first run)
+
+[[source]]
+name = "Metamath (set.mm)"
+git_url = "https://github.com/metamath/set.mm"
+file_type = ".mm"
+import_tier = 4
+clone_path = "/tmp/metamath-set.mm"
+last_fetched_sha = "f4acf9bb38c8856f31680952ad52cce6439ad6f3"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Mathlib4"
+git_url = "https://github.com/leanprover-community/mathlib4"
+file_type = ".lean"
+import_tier = 2
+clone_path = "/tmp/mathlib4"
+last_fetched_sha = "7deebdfd2836f734c3917ddf5e023665978511dd"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Isabelle AFP"
+git_url = "https://github.com/isabelle-prover/mirror-afp-2024"
+file_type = ".thy"
+import_tier = 4
+clone_path = "/tmp/isabelle-afp"
+last_fetched_sha = "1549ea5b788b34986e3aef5613a0dce379aaee86"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "HOL Light"
+git_url = "https://github.com/jrh13/hol-light"
+file_type = ".ml"
+import_tier = 1
+clone_path = "/tmp/hol-light"
+last_fetched_sha = "e8944de23c0882b83bbbcd828ed1cf56d3a62b90"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "HOL4"
+git_url = "https://github.com/HOL-Theorem-Prover/HOL"
+file_type = ".sml"
+import_tier = 5
+clone_path = "/tmp/hol4"
+last_fetched_sha = "7ea54e7afe7fb3e5f03a2cb13bc80e5c1c32ed67"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Mizar MML"
+git_url = "https://github.com/digama0/mizar-rs"
+file_type = ".miz"
+import_tier = 5
+clone_path = "/tmp/mizar-rs"
+last_fetched_sha = ""
+last_fetched_date = ""
+
+[[source]]
+name = "UniMath (Coq)"
+git_url = "https://github.com/UniMath/UniMath"
+file_type = ".v"
+import_tier = 3
+clone_path = "/tmp/unimath"
+last_fetched_sha = "38a0644a00502d431998077841cf640a4557b785"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "OpenTheory"
+git_url = "https://github.com/gilith/opentheory"
+file_type = ".art"
+import_tier = 1
+clone_path = "/tmp/opentheory"
+last_fetched_sha = "4e7d25943446ff209fb627167b93567bd8c38118"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Agda stdlib"
+git_url = "https://github.com/agda/agda-stdlib"
+file_type = ".agda"
+import_tier = 4
+clone_path = "/tmp/agda-stdlib"
+last_fetched_sha = "0af0768abee0c5b4fbd2ed9b8dbf316cd1a3935b"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Idris2"
+git_url = "https://github.com/idris-lang/Idris2"
+file_type = ".idr"
+import_tier = 4
+clone_path = "/tmp/idris2"
+last_fetched_sha = "214eb45472e15187e6f932c6820a0f0d5542a18e"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "F*"
+git_url = "https://github.com/FStarLang/FStar"
+file_type = ".fst"
+import_tier = 5
+clone_path = "/tmp/fstar"
+last_fetched_sha = "fa101d6d6b99cbe27e036b3d6ed8cdeaec5805d2"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Dafny"
+git_url = "https://github.com/dafny-lang/dafny"
+file_type = ".dfy"
+import_tier = 5
+clone_path = "/tmp/dafny"
+last_fetched_sha = "13bdccd7cab58c0dd087e82dde654db04fab6572"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Why3"
+git_url = "https://github.com/AdaCore/why3"
+file_type = ".mlw"
+import_tier = 5
+clone_path = "/tmp/why3"
+last_fetched_sha = "95d6eb87f771399dc8c704aecdd1175b90e343af"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "ACL2"
+git_url = "https://github.com/acl2/acl2"
+file_type = ".lisp"
+import_tier = 5
+clone_path = "/tmp/acl2"
+last_fetched_sha = "42e11f6a0e3d5dc2bf101fe15be68bbfe91f1a40"
+last_fetched_date = "2026-04-16"
+
+[[source]]
+name = "Lean 3 (mathlib3)"
+git_url = "https://github.com/leanprover-community/mathlib"
+file_type = ".lean"
+import_tier = 4
+clone_path = "/tmp/mathlib3"
+last_fetched_sha = ""
+last_fetched_date = ""
+
+# Coq 8.20.0 stdlib, PINNED. Acquisition is NOT a git clone of this URL: the
+# corpus is dumped from the isolated opam switch `mathverse-serapi`
+# (coq.8.20.0 + coq-serapi, ~/.opam/mathverse-serapi/bin/sertop) via
+# scripts/build_coq_serapi_dumps.sh into data/corpora/coq-sexp/stdlib/
+# (`.sexp` importer-form dumps consumed by `mathverse_shard coq-import`).
+# git_url records upstream provenance only; last_fetched_sha is pinned to the
+# V8.20.0 release tag commit (the exact stdlib the opam switch builds).
+[[source]]
+name = "Coq stdlib (8.20.0, opam + SerAPI dumps)"
+git_url = "https://github.com/coq/coq"
+file_type = ".sexp"
+import_tier = 3
+clone_path = "/tmp/coq"
+last_fetched_sha = "de4bd51d571b805a1f6d4325e5f5e3835e39b7e2"
+last_fetched_date = "2026-07-04"

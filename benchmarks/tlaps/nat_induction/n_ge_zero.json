@@ -1,0 +1,21 @@
+{
+  "id": "nat_induction/n_ge_zero",
+  "module": "NGeZeroTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "ge": ["n", 0]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "basic"]
+}

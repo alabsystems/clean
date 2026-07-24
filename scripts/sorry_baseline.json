@@ -1,0 +1,7 @@
+{
+    "sorry_count_baseline": 0,
+    "trusted_arith_baseline": 0,
+    "trusted_ay_baseline": 0,
+    "date": "2026-03-16",
+    "note": "Ratchet: new tests must not increase sorry/trustedArith/trustedAy counts. trustedAy 1→0 after #2442 Phase 3. sorry 5→0 after #2770 fixture-key exemption: provenance test fixtures now use with_sorry_location_key to record stable fixture:sorry:* keys instead of raw file:line locations, so test-only sorry traffic is properly classified as exempt and does not inflate the tracked metric. trustedArith 10→0: post-#2736 helper-key exemption work eliminated all remaining trustedArith runtime sites. Calibrated from RUST_TEST_THREADS=1 cargo test -p clean-elab --lib -- --nocapture single-threaded rerun on 2026-03-16 (Prover P1-1375/P1-1376: Baseline 5, Current 0)."
+}

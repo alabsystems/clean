@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use clean, cite this software and review ACKNOWLEDGMENTS.md for upstream credits."
+title: "clean"
+type: software
+authors:
+  - family-names: "Yates"
+    given-names: "Andrew"
+    email: "andrewyates.name@gmail.com"
+repository-code: "https://github.com/alabsystems/clean"
+url: "https://github.com/alabsystems/clean"
+license: "Apache-2.0"
+version: 1.2.0
+abstract: "Rust implementation of a Lean 4-compatible proof kernel, with verification, automation, TLA+ support, and the Mathverse Library."
+keywords:
+  - theorem prover
+  - Lean
+  - formal verification
+  - dependent type theory
+  - TLA+
+  - Mathverse Library

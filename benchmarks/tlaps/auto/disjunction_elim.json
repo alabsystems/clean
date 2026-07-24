@@ -1,0 +1,58 @@
+{
+  "id": "auto/disjunction_elim",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    },
+    {
+      "type": "prop",
+      "name": "R"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_pq",
+      "formula": {
+        "or": [
+          "P",
+          "Q"
+        ]
+      }
+    },
+    {
+      "name": "h_pr",
+      "formula": {
+        "implies": [
+          "P",
+          "R"
+        ]
+      }
+    },
+    {
+      "name": "h_qr",
+      "formula": {
+        "implies": [
+          "Q",
+          "R"
+        ]
+      }
+    }
+  ],
+  "goal": "R",
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "disjunction",
+    "case_analysis"
+  ]
+}

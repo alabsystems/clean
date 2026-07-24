@@ -1,0 +1,27 @@
+{
+  "id": "law_of_cosines",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "cosine_rule",
+    "args": ["A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Law of cosines",
+    "origin": "Generalization of Pythagorean theorem",
+    "difficulty": 4,
+    "tags": ["cosine", "law", "distance", "angle"],
+    "known_solvable": true,
+    "statement": "c^2 = a^2 + b^2 - 2ab cos(C), where c = AB, a = BC, b = CA."
+  }
+}

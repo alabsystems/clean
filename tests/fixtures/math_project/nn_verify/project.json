@@ -1,0 +1,54 @@
+{
+  "schema_version": "clean-math-project-v1",
+  "project": "nn-verify-pilot",
+  "domain_profile": "nn-verify",
+  "owner": "clean-math-factory",
+  "theorem_packs": [
+    "theorem_packs/NNVerifyPilot.lean"
+  ],
+  "obligation_sources": [
+    "obligations/farkas.json",
+    "obligations/gamma_crown_serialized_kernel_pilot.json",
+    "obligations/generic_true_serialized_kernel_smoke.json"
+  ],
+  "artifact_formats": [
+    "gamma-crown-farkas-v1",
+    "gamma-crown-linear-entailment-v1",
+    "proof-artifact-v1"
+  ],
+  "trust_policy": {
+    "name": "constructive-only",
+    "allowed_axioms": [],
+    "forbidden_trust_markers": [
+      "sorry",
+      "sorryAx",
+      "trustedArith",
+      "synthetic_sorry"
+    ],
+    "require_artifact_replay": true,
+    "allow_synthetic_sorry": false
+  },
+  "normalizers": [
+    "cert_simp",
+    "cert_mathverse",
+    "nn_interval_nf"
+  ],
+  "evidence": [
+    "evidence/farkas-replay.json"
+  ],
+  "issue_routing": {
+    "labels": [
+      "math-project",
+      "nn-verify",
+      "gamma-crown",
+      "proof-factory"
+    ],
+    "owners": [],
+    "blocking_categories": [
+      "manifest",
+      "obligation",
+      "artifact",
+      "trust"
+    ]
+  }
+}

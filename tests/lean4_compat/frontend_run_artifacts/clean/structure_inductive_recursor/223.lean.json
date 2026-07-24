@@ -1,0 +1,35 @@
+{
+  "schema_version": "clean-frontend-structure-inductive-recursor-artifact-v1",
+  "kind": "frontend_structure_inductive_recursor",
+  "engine": "clean",
+  "filename": "223.lean",
+  "source_sha256": "sha256:b27a5f6cf14b24265fff279674c24d88a98a44834526315a1cdd066880142c5a",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/223.lean"
+  ],
+  "structure_inductive_recursor_status": "failure",
+  "structure_fields_checked": 0,
+  "inductives_checked": 1,
+  "recursors_checked": 1,
+  "match_compilations_checked": 2,
+  "construction_failures": 1,
+  "checked_structures": [],
+  "checked_inductives": [
+    "Imf"
+  ],
+  "checked_recursors": [
+    "Imf.rec"
+  ],
+  "checked_match_compilations": [
+    "h",
+    "ex"
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_exit_code": 1,
+  "artifact_note": "clean accepted the Imf inductive and h match-compiled definition, then rejected ex because it introduced a synthetic sorry. This is bounded failure evidence only and does not claim structure/inductive/recursor parity."
+}

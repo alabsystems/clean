@@ -1,0 +1,2 @@
+Ghost_Entry	None
+Unres_User	HOL-Datatype_Examples

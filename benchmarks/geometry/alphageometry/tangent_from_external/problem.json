@@ -1,0 +1,29 @@
+{
+  "id": "tangent_from_external",
+  "objects": {
+    "P": {"type": "point"},
+    "T1": {"type": "point"},
+    "T2": {"type": "point"},
+    "O": {"type": "point"},
+    "mathverse": {"type": "circle", "definition": {"circle_center_radius": {"center": "O", "radius_point": "T1"}}}
+  },
+  "constraints": [
+    {"type": "tangent", "line": {"through": ["P", "T1"]}, "circle": "mathverse"},
+    {"type": "tangent", "line": {"through": ["P", "T2"]}, "circle": "mathverse"},
+    {"type": "on_circle", "point": "T1", "circle": "mathverse"},
+    {"type": "on_circle", "point": "T2", "circle": "mathverse"},
+    {"type": "not_equal", "a": "T1", "b": "T2"}
+  ],
+  "goal": {
+    "type": "congruent_segments",
+    "seg1": ["P", "T1"],
+    "seg2": ["P", "T2"]
+  },
+  "metadata": {
+    "source": "Tangent segments from external point",
+    "difficulty": 3,
+    "tags": ["tangent", "circle", "external_point", "congruent"],
+    "known_solvable": true,
+    "statement": "Two tangent segments from an external point to a circle are congruent."
+  }
+}

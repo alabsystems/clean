@@ -1,0 +1,27 @@
+[package]
+name = "isa_harness"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "isa_harness"
+path = "src/main.rs"
+
+[[bin]]
+name = "fp_harness"
+path = "src/fp_main.rs"
+
+[[bin]]
+name = "fp_arith_harness"
+path = "src/fp_arith_main.rs"
+
+[[bin]]
+name = "fp_cvt_harness"
+path = "src/fp_cvt_main.rs"
+
+[[bin]]
+name = "fp16_harness"
+path = "src/fp16_main.rs"
+
+[profile.release]
+opt-level = 3

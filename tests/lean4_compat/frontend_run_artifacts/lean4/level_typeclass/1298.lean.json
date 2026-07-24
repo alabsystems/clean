@@ -1,0 +1,34 @@
+{
+  "schema_version": "clean-frontend-level-typeclass-artifact-v1",
+  "kind": "frontend_level_typeclass",
+  "engine": "lean4",
+  "filename": "1298.lean",
+  "source_sha256": "sha256:225fbf7dc6f803766c23060f7daf485990e0e1aeb1f5e0ee70fcf143da13763a",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1298.lean"
+  ],
+  "level_typeclass_status": "success",
+  "level_constraints_checked": 2,
+  "typeclass_goals_checked": 4,
+  "resolution_failures": 0,
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_stdout": "8 + 2 ^ 2 * 3 = 20 : Prop\n",
+  "observed_stderr": "",
+  "level_constraints": [
+    "class Semiring (R : Type u) keeps the semiring carrier universe-polymorphic",
+    "instances for OfNat, HPow, and CoeTail are checked under variable (R) [Semiring R]"
+  ],
+  "typeclass_goals": [
+    "OfNat R n synthesized from [Semiring R]",
+    "HPow R Nat R synthesized through the default_instance high instance",
+    "CoeTail Nat R synthesized from [Semiring R]",
+    "#check resolves numeral, power, multiplication, addition, and coercion instances for (8 + 2 ^ 2 * 3 : R) = 20"
+  ],
+  "artifact_note": "Lean4 elaborated the universe-polymorphic Semiring class and synthesized the default OfNat/HPow/CoeTail instances used by the #check expression. This is Lean4 evidence only; no clean parity is claimed."
+}

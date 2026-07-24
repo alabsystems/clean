@@ -1,0 +1,30 @@
+{
+  "id": "nine_point_circle",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "Ma": {"type": "point", "definition": {"midpoint_of": ["B", "C"]}},
+    "Mb": {"type": "point", "definition": {"midpoint_of": ["A", "C"]}},
+    "Mc": {"type": "point", "definition": {"midpoint_of": ["A", "B"]}},
+    "Ha": {"type": "point", "definition": {"foot_of_altitude": {"from": "A", "to_segment": ["B", "C"]}}},
+    "Hb": {"type": "point", "definition": {"foot_of_altitude": {"from": "B", "to_segment": ["A", "C"]}}},
+    "Hc": {"type": "point", "definition": {"foot_of_altitude": {"from": "C", "to_segment": ["A", "B"]}}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"}
+  ],
+  "goal": {
+    "type": "cyclic",
+    "points": ["Ma", "Mb", "Mc", "Ha", "Hb", "Hc"]
+  },
+  "metadata": {
+    "source": "Nine-point circle theorem",
+    "difficulty": 7,
+    "tags": ["nine_point", "circle", "midpoint", "altitude"],
+    "known_solvable": true,
+    "statement": "The midpoints of the sides and the feet of the altitudes of a triangle lie on a common circle (the nine-point circle)."
+  }
+}

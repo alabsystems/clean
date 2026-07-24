@@ -1,0 +1,56 @@
+{
+  "block_shapes": [
+    {
+      "block_id": "block_0",
+      "input_dim": 160,
+      "method": "IBP",
+      "num_lower_witnesses": 768,
+      "num_upper_witnesses": 768,
+      "output_dim": 768,
+      "witness_length": 320
+    },
+    {
+      "block_id": "block_1",
+      "input_dim": 768,
+      "method": "IBP",
+      "num_lower_witnesses": 768,
+      "num_upper_witnesses": 768,
+      "output_dim": 768,
+      "witness_length": 1536
+    },
+    {
+      "block_id": "block_2",
+      "input_dim": 768,
+      "method": "IBP",
+      "num_lower_witnesses": 384,
+      "num_upper_witnesses": 384,
+      "output_dim": 384,
+      "witness_length": 1536
+    },
+    {
+      "block_id": "block_3",
+      "input_dim": 384,
+      "method": "IBP",
+      "num_lower_witnesses": 384,
+      "num_upper_witnesses": 384,
+      "output_dim": 384,
+      "witness_length": 768
+    }
+  ],
+  "composed_json_bytes": null,
+  "composed_json_note": "composed.json is NOT committed (uniform-1.0 witnesses make it tens of MB to multi-GB even for short sequences). Regenerate locally with GAMMA_WHISPER_FARKAS_EMIT_COMPOSED=1.",
+  "epsilon": 9.999999747378752e-6,
+  "first_failing_layer_type": null,
+  "input_shape": [
+    80,
+    2
+  ],
+  "layers_used_in_prefix": 4,
+  "model": "whisper_tiny_encoder.onnx",
+  "network_total_layers": 131,
+  "num_blocks": 4,
+  "prefix_note": "Whisper-tiny's full sequential PropNetwork is not end-to-end IBP-tractable (positional-encoding AddConstant expects a fixed sequence length; attention softmax blows up at any epsilon). The fixture uses the longest finite-bounds prefix, partitioned into NUM_BLOCKS Farkas blocks. This is sufficient for Phase 2's 'valid composition pipeline demo'; future phases should verify the remaining attention-heavy layers via graph-mode CROWN.",
+  "regenerated_by": "cargo test -p gamma-cli --features proof-certificates --test whisper_farkas_cert",
+  "soundness_note": "Uniform 1.0 Farkas multipliers are pipeline-validation-only and carry NO information about the network. See gamma-propagate proof_certificate/constructive/clean_flat_export.rs soundness caveat.",
+  "witness_kind": "uniform_1.0"
+}

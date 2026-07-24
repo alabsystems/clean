@@ -1,0 +1,61 @@
+{
+  "version": "proof-artifact-v1",
+  "producer": {
+    "repo": "tests/fixtures/external_certificates",
+    "commit": "fixture-gamma-crown-entailment-valid"
+  },
+  "source_system": "gamma-crown",
+  "problem_hash": "blake3:fixture-gamma-crown-entailment-problem",
+  "model_hash": "blake3:fixture-gamma-crown-entailment-model",
+  "proof_hash": "blake3:fixture-gamma-crown-entailment-proof",
+  "certification": {
+    "evidence_kind": "replay_only"
+  },
+  "artifact_kind": "gamma_crown_entailment",
+  "verifier_constants": [
+    {
+      "name": "premise_0_constant",
+      "role": "constraint_rhs",
+      "value": "5"
+    },
+    {
+      "name": "multiplier_0",
+      "role": "farkas_weight",
+      "value": "1"
+    },
+    {
+      "name": "conclusion_constant",
+      "role": "constraint_rhs",
+      "value": "6"
+    }
+  ],
+  "certificate": {
+    "format": "gamma-crown-linear-entailment-v1",
+    "encoding": "json",
+    "payload": {
+      "type": "entailment_certificate",
+      "version": "1.0",
+      "premises": [
+        {
+          "type": "linear_constraint",
+          "kind": "le",
+          "coefficients": {
+            "x": "1"
+          },
+          "constant": "5"
+        }
+      ],
+      "multipliers": [
+        "1"
+      ],
+      "conclusion": {
+        "type": "linear_constraint",
+        "kind": "le",
+        "coefficients": {
+          "x": "1"
+        },
+        "constant": "6"
+      }
+    }
+  }
+}

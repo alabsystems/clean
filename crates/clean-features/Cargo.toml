@@ -1,0 +1,34 @@
+[package]
+name = "clean-features"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Feature descriptor types for the unified Clean CLI index"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+serde = ["dep:serde"]
+clap-interop = ["dep:clap", "dep:shlex"]
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
+
+[dependencies.clap]
+version = "4.0"
+features = ["derive"]
+optional = true
+
+[dependencies.shlex]
+version = "1.3"
+optional = true
+
+[dev-dependencies]
+serde_json.workspace = true
+# For the clap-interop test; keep a minimal parser inline.

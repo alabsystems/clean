@@ -1,0 +1,25 @@
+{
+  "type": "entailment_certificate",
+  "version": "1.0",
+  "premises": [
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x": "1"
+      },
+      "constant": "5"
+    }
+  ],
+  "multipliers": [
+    "1"
+  ],
+  "conclusion": {
+    "type": "linear_constraint",
+    "kind": "le",
+    "coefficients": {
+      "x": "1"
+    },
+    "constant": "6"
+  }
+}

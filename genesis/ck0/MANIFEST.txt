@@ -1,0 +1,67 @@
+# ck0 GENESIS MANIFEST — durable checksum-pinned seed of the trust root
+#
+# Verify (reproduce):  genesis/ck0/verify.sh
+#   -> recomputes every checksum below, then rebuilds + runs the kernel
+#      suite with the pinned build command. Exit 0 == reproduced.
+# Trust floor (the irreducible, honestly-named base): genesis/ck0/TRUST_FLOOR.md
+#
+kernel        = clean-ck0
+scope         = M0-M3 (terms, def_eq, inductives, mutual+nested recursors, positivity/elim gates)
+git_commit    = 26c71214490f8ead895b2e0c16759408f9d94e7b
+git_branch    = feat/ck2-kernel
+rustc         = rustc 1.95.0 (59807616e 2026-04-14)
+cargo         = cargo 1.95.0 (f2d3ce0bd 2026-03-21)
+host          = aarch64-apple-darwin
+build_cmd     = cargo test --locked -p clean-ck0
+deps          = num-bigint, num-traits, thiserror (see TRUST_FLOOR.md)
+source_files  = 48
+kernel_src_loc= 9026
+# --- checksums (sha256) ---
+119aa0b53e5f4ba45fcf45fe94be3e3c3c943917955958f3e283d5b7e015e9b8  Cargo.lock
+2493fb29066a197fd05dd03fe2eb28d6ba360b85147f2e7d8b1465793d8e62e0  Cargo.toml
+67365ffb321634310ee2f322736d4bb16fe2e9d66a230f945b4d3ec42fb1f5f2  crates/clean-ck0/Cargo.toml
+6b7be03335a94d8a00e1d9ac259f28f6074ae4275b87ee3943c5de97cc42bd1e  crates/clean-ck0/src/bignat.rs
+65b5db229e10344ee000b8671d4a5e90d11130ccac0e2546ffe855c671bbb36f  crates/clean-ck0/src/budget.rs
+ff556f7fee8c8dbaf6b81b8b735f4426b3d97c71c1cd430bc430d9fe0b46b35b  crates/clean-ck0/src/def_eq.rs
+ae84b30110aad38e132992b7e0076d8a34e7168ff912d15b2c4fd33a3ec8066f  crates/clean-ck0/src/elim_analysis.rs
+91065f7ebedddd1d2944b63999872a37c353eb845d7d1edd658c46ab9e4f9fd9  crates/clean-ck0/src/inductive.rs
+1140b60e15f5c7225af7f8f89304fa147157a04b0664aa94a475a35f0a32e24a  crates/clean-ck0/src/inductive_params.rs
+25eed7a499eb776e61b6e30465a92be9cc0a5f6188c2342a13356d29295322fe  crates/clean-ck0/src/infer.rs
+f6fd9f345a01f8ffae18d897cb3c5016cab2fa905d3b802021410bdfc0655688  crates/clean-ck0/src/level.rs
+56356402c03c0f209ed70c0c67a033ef7aeb8e4e6ba4a2d7d12ef704efc4bce7  crates/clean-ck0/src/lib.rs
+20fae5f3557c28937ef553516efddb3b9e6492cbfe1cb0ce9e95d1c5c94108fb  crates/clean-ck0/src/minimal_env.rs
+e7f2ab3d9e5b83631da441c878f931f25de12342e936da834d9eb8053e4fd0e5  crates/clean-ck0/src/mutual.rs
+48f6188ce059b545a957f974aa9c7b581b5c2a82c069cf73b2970f6fe3feaa4a  crates/clean-ck0/src/name.rs
+8f9b7416eb3c59ff8689a205ccddd80e97975d5e7514d18cbb5e7023651249ad  crates/clean-ck0/src/nested.rs
+a45eae2a46860e32d84a0bcee763becb13151a8670b5dbb74271242e8ff07fcd  crates/clean-ck0/src/nested_replace.rs
+ac75ff4f0006917d43b4bfaa806572466842d4ab2400e876a421c5f763d1b5b6  crates/clean-ck0/src/policy.rs
+1232236c9c21128e29560473dd062d9f6529b92b8a03b7accb602aa2e319142d  crates/clean-ck0/src/positivity.rs
+011e1aeeaf867c9b050488d4d881e31537eefdb6a91fadec44392659c1f3b40a  crates/clean-ck0/src/rawexpr.rs
+fe0f1e9003e4b38ec7387c79df3bf0bc0f6780d9990c177281098f190d48ab54  crates/clean-ck0/src/recursor.rs
+540c37a9c08f5c814973651dc917151b3b650f06f85499251fc6f25f2999926d  crates/clean-ck0/src/recursor_build.rs
+066625bf0ab66ea269c2005831ac471b001cb115dbdfbc5ef4d14a7c2897e1a3  crates/clean-ck0/src/recursor_mutual.rs
+40790e615ff5c3a3db7208d1e64f0b7d57535046e66d5d7deb9e820e3db74c9a  crates/clean-ck0/src/recursor_mutual_minor.rs
+f54a36300afc5efc73e658c24ecff28d1a4963cf0fdd4f0779e3d77580168bf4  crates/clean-ck0/src/recursor_mutual_rhs.rs
+f28eba78ea6cfba92c4abea946d265213d8ac7ea4e0c22b91a1788b676e0469a  crates/clean-ck0/src/recursor_rules.rs
+1fa6b53b6a4f85d068264c910718d804a46da1117944c3ed122849d107492219  crates/clean-ck0/src/staging_env.rs
+1bbb2da3246769b0b4689f2ef2129a6810c18ed7cc7dbc239dcef27e5cc7b589  crates/clean-ck0/src/term.rs
+58e6f5fe6590e76e366926ce2eaade3af80de4935bf3876dbe15e62f1ae8acc0  crates/clean-ck0/src/term_ops.rs
+886f378fd38a3a3348932d3e86e9f8e9918524fda7918c4473624f7c546e88e0  crates/clean-ck0/src/validate.rs
+2bb33c5a5c56a222a6e3bf53dbf0faa3cd45571da13d1f8e3800713008d4e7c6  crates/clean-ck0/src/verdict.rs
+18d46640adfc3c97dfe054aa76208543053bfda31811e98df2806ad36024bd53  crates/clean-ck0/src/whnf.rs
+d29d76bf216f9b6b2db854b56a4091445e2590995b5b0313cbde1b93b64fde3c  crates/clean-ck0/tests/bignat_refinement.rs
+3fdb25bf6b304fe2d7fe3788ff5a9f3379703812efa6ce6cfa265e8a745ae7c3  crates/clean-ck0/tests/debruijn_roundtrip.rs
+ebdf098455693fa9817cd7a1ec440764ea7bfc2ad604657ed2c698225ca397a8  crates/clean-ck0/tests/level_canonicalization.rs
+bb28127463a5308f8ddf1dd76ad41438437b150c74048e5edd1c3eb3495d97fd  crates/clean-ck0/tests/m1_core.rs
+b9a764db0fdc3e1c4946fd7779f63a23901561a1f23a053d4da4edf5ed847c22  crates/clean-ck0/tests/m1_def_eq_proptest.rs
+8290dc1a3741aee7f4d858b8cc9b619b39e9d84a3215b9447c06b5753b48fe53  crates/clean-ck0/tests/m2_inductive.rs
+f724316bb0044c53dba0ef732e2b6c2ff755d5ce1f48c03bd528ccf27f2c5eae  crates/clean-ck0/tests/m2_under_binder.rs
+e41ada86d2ab27252ee703588d4f32783f1fb365f4471a1a501dda908527642c  crates/clean-ck0/tests/m3_hard_corpus.rs
+999db1778c7c7c7aa8728b186b6136800be9cbbd5d8b0fe7e18ce4b77854f652  crates/clean-ck0/tests/m3_mutual_nested.rs
+0822fa80f79288fd096e9e285ca1fe308c28a882e0da6203a554c8917d6689c0  crates/clean-ck0/tests/m3_param_nested.rs
+b86d02fb96b3aab9bc30f737c4c36107d9df9f22e5a1a7ee36ad905444e13fc8  crates/clean-ck0/tests/m3_stdlib_smoke.rs
+4045c47129518445d97f0cfdf4171ca1c5595f5e29c697ac3c5506c629ccdc07  crates/clean-ck0/tests/m5_farkas_cert.rs
+4c8262fb6dd4c831f2de7a462ac3317deb8f8add5d58e7dfb3853cbccf0bcb8b  crates/clean-ck0/tests/m5_reflection_cert.rs
+6847b396af8ebf10415eb92080a4237074eea26dde3124aa1358e3e68d0a2f4f  crates/clean-ck0/tests/no_float_no_unaudited_cast.rs
+aa5a9f70e3eeab93786d4e3f61ea9c7baea323d4f1790eaad70dde573981c062  crates/clean-ck0/tests/ref_arity.rs
+b668cded5bc3aadc585eb297daf9b50362d215b316795ed9e6bca0121047aa0d  crates/clean-ck0/tests/validate_rejects.rs

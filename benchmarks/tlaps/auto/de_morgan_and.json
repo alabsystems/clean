@@ -1,0 +1,47 @@
+{
+  "id": "auto/de_morgan_and",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_not_and",
+      "formula": {
+        "not": {
+          "and": [
+            "P",
+            "Q"
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "or": [
+      {
+        "not": "P"
+      },
+      {
+        "not": "Q"
+      }
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "medium",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "de_morgan",
+    "classical"
+  ]
+}

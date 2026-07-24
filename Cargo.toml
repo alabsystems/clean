@@ -1,0 +1,326 @@
+[workspace]
+resolver = "2"
+exclude = ["fuzz", "scripts/isa_harness"]
+members = [
+    "crates/clean",
+    "crates/clean-auto",
+    "crates/clean-c-sem",
+    "crates/clean-cake",
+    "crates/clean-ck0",
+    "crates/clean-cli",
+    "crates/clean-compiler",
+    "crates/clean-discovery",
+    "crates/clean-elab",
+    "crates/clean-features",
+    "crates/clean-fold",
+    "crates/clean-kernel",
+    "crates/clean-lake",
+    "crates/clean-lsp",
+    "crates/clean-macro",
+    "crates/clean-math-project",
+    "crates/clean-olean",
+    "crates/clean-mathverse",
+    "crates/clean-parser",
+    "crates/clean-runtime",
+    "crates/clean-rust-sem",
+    "crates/clean-server",
+    "crates/clean-sys",
+    "crates/clean-tla",
+    "crates/clean-verify",
+]
+# Keep default `cargo check/build/test` focused on the publish smoke surface.
+# Core subsystem crates such as clean-kernel, clean-elab, clean-olean,
+# clean-rust-sem, and clean-verify are still compiled through downstream
+# crates here; run their internal suites explicitly with
+# `cargo test --locked -p <crate>` when working on those subsystems.
+default-members = [
+    "crates/clean",
+    "crates/clean-auto",
+    "crates/clean-compiler",
+    "crates/clean-macro",
+    "crates/clean-parser",
+    "crates/clean-runtime",
+    "crates/clean-sys",
+    # clean-tla consumes tla-core through an exact Git authority (redirected
+    # to the sibling Ty checkout below during internal development), so it
+    # remains part of the publish smoke surface. The tlaps-bench runner was
+    # absorbed as its `bench` module in rearch stage 9.
+    "crates/clean-tla",
+]
+
+[workspace.package]
+version = "1.2.0"
+edition = "2021"
+# Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
+# the `[lints]` workspace inheritance (1.74), and various clippy lints
+# promoted in 1.85+. We pin to a recent-stable floor to keep the bar
+# clear without artificially blocking older toolchains.
+rust-version = "1.90"
+authors = ["Andrew Yates <andrewyates.name@gmail.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/alabsystems/clean"
+
+readme = "README.md"
+[workspace.lints.rust]
+# Keep normal checks high-signal. The workspace contains a large amount of
+# experimental/prototype code where dead code and unused imports are expected
+# while subsystems are being connected; warning on every such site makes CLI
+# and factory verification output unusable. Keep correctness/security-oriented
+# lints active, and stage mechanical cleanup separately.
+# Cargo does not allow member manifests to inherit workspace lints and keep
+# package-local lint tables, so the custom cfg whitelist lives here.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(trust_verify)', 'cfg(feature, values("carcara-verify", "debug-infer", "debug-whnf", "geometry-tools", "math-overlays", "mimalloc", "round-trip-compile", "test-utils", "ay-smt"))'] }
+dead_code = "allow"
+unused_imports = "allow"
+unused_variables = "allow"
+unused_mut = "allow"
+unused_must_use = "warn"
+unreachable_code = "allow"
+unreachable_patterns = "allow"
+unsafe_op_in_unsafe_fn = "warn"
+unused_qualifications = "allow"
+unused_lifetimes = "allow"
+unused_import_braces = "allow"
+unused_macro_rules = "allow"
+private_interfaces = "allow"
+noop_method_call = "allow"
+non_ascii_idents = "forbid"
+keyword_idents_2024 = "forbid"
+
+[workspace.lints.clippy]
+# Hard gate: the workspace is clippy-clean as of Waves 41–56; deny so
+# regressions break the build immediately. Per-lint allows below cover
+# the small set of categories where the convention is intentional.
+#
+# Every `= "allow"` entry below (and every entry in [workspace.lints.rust]
+# above) is justified in docs/JUSTIFIED_EXCEPTIONS.md. If you add a new
+# allow here, add a matching row there in the same commit.
+all = { level = "deny", priority = -1 }
+pedantic = { level = "allow", priority = -2 }
+nursery = { level = "allow", priority = -3 }
+unwrap_used = "allow"
+panic = "allow"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+too_many_lines = "allow"
+similar_names = "allow"
+too_many_arguments = "allow"
+struct_excessive_bools = "allow"
+fn_params_excessive_bools = "allow"
+doc_markdown = "allow"
+# Doc-list rendering style: the codebase uses multi-paragraph list items and
+# recursor/eliminator explanations whose continuation lines clippy can't
+# disambiguate (suggestions are MaybeIncorrect, so `--fix` skips them). These
+# are rendering-style lints, not correctness; allow like `doc_markdown`.
+doc_lazy_continuation = "allow"
+doc_overindented_list_items = "allow"
+# Proof systems carry diagnostic context (file/span/kind) on error variants,
+# making `Result<T, E>` legitimately large; boxing every error site obscures
+# the type without a performance benefit at our error rates.
+result_large_err = "allow"
+# AST / Expr enums have inherently variable-sized variants (BVar(u32) vs
+# Lam(BinderInfo, Expr, Expr)); boxing every large variant pessimises the
+# common-case access pattern.
+large_enum_variant = "allow"
+# Proof / kernel APIs legitimately carry many type parameters (`Result<X,
+# fn(Y, Z) -> W>`); flattening into newtypes hurts readability.
+type_complexity = "allow"
+
+[workspace.dependencies]
+# Core
+thiserror = "2.0"
+anyhow = "1.0"
+libc = "0.2"
+
+# Data structures
+ahash = "0.8"
+hashbrown = { version = "0.17.1", features = ["serde"] }
+indexmap = "2.0"
+smallvec = { version = "1.15.1", features = ["serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1"
+# bincode 3.0.0 is a deliberate `compile_error!` placeholder (xkcd/2347); 2.x is the real latest.
+bincode = { version = "2", features = ["serde"] }
+base64 = "0.22"
+syn = "2.0"
+proc-macro2 = "1.0"
+
+# Compression
+lz4_flex = "0.13"
+zstd = { version = "0.13", features = ["zdict_builder"] }
+flate2 = "1"
+tar = "0.4"
+
+# HTTP
+ureq = "3"
+# Minimal HTTP/1.1 request parsing for the Mathverse Cloud Run distribution
+# front-end (`mathverse_serve`). We deliberately avoid a high-level framework
+# (axum/hyper are not vendored offline here); the service speaks raw HTTP/1.1
+# over `tokio::net`, the same posture as `clean-server`'s WebSocket listener.
+httparse = "1.10"
+percent-encoding = "2.3"
+
+# Async
+tokio = { version = "1.0", features = ["full"] }
+tokio-tungstenite = "0.29"
+futures-util = "0.3"
+
+# Testing
+proptest = "1.4"
+criterion = "0.8.2"
+tempfile = "3.14"
+walkdir = "2.5"
+serial_test = "3.2"
+ntest = "0.9"
+# Directory scanning for clean-tla's absorbed TLAPS bench runner.
+glob = "0.3"
+
+# Parallelism
+rayon = "1.10"
+
+# Big integers / rationals
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"
+
+# Allocators (optional, for performance testing + full-corpus memory bounding).
+# Installing `mimalloc` as the global allocator links the mimalloc static lib,
+# which exports `mi_collect` (the per-module arena purge PARAGON calls to turn
+# freed high-water-mark pages back into returned RSS). We declare that one
+# `extern "C"` symbol ourselves rather than enabling the crate's `extended`
+# feature, which would pull in the (un-vendored) `cty` dependency.
+mimalloc = { version = "0.1", default-features = false }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# CLI argument parsing (Epic #3436: per-crate cli modules)
+clap = { version = "4.0", features = ["derive"] }
+clap_complete = "4.0"
+
+# Internal crates (alphabetically ordered)
+clean = { path = "crates/clean" }
+clean-auto = { path = "crates/clean-auto" }
+clean-c-sem = { path = "crates/clean-c-sem" }
+clean-ck0 = { path = "crates/clean-ck0" }
+clean-cli = { path = "crates/clean-cli" }
+clean-compiler = { path = "crates/clean-compiler" }
+clean-discovery = { path = "crates/clean-discovery" }
+clean-elab = { path = "crates/clean-elab", features = ["ay-smt"] }
+clean-features = { path = "crates/clean-features" }
+clean-fold = { path = "crates/clean-fold" }
+clean-kernel = { path = "crates/clean-kernel" }
+clean-mathverse = { path = "crates/clean-mathverse" }
+clean-lake = { path = "crates/clean-lake" }
+clean-cake = { path = "crates/clean-cake" }
+clean-lsp = { path = "crates/clean-lsp" }
+clean-macro = { path = "crates/clean-macro" }
+clean-math-project = { path = "crates/clean-math-project" }
+clean-olean = { path = "crates/clean-olean" }
+clean-parser = { path = "crates/clean-parser" }
+clean-runtime = { path = "crates/clean-runtime" }
+clean-rust-sem = { path = "crates/clean-rust-sem" }
+clean-server = { path = "crates/clean-server" }
+clean-sys = { path = "crates/clean-sys" }
+clean-tla = { path = "crates/clean-tla" }
+clean-verify = { path = "crates/clean-verify" }
+
+# Arkworks cryptography (for polynomial commitments and folding)
+ark-ff = "0.5"
+ark-ec = "0.5"
+ark-poly = "0.5"
+ark-poly-commit = "0.5"
+ark-bls12-381 = "0.5"
+ark-serialize = "0.5"
+ark-std = "0.5"
+ark-relations = "0.5"
+rand = "0.9.2"
+
+# Hashing
+sha2 = "0.11"
+blake3 = "1.5"
+# Asymmetric signing for the Mathverse Phase-2 trust layer (provenance
+# attestation of kernel-re-verified verdicts). `ring 0.17` is already resolved
+# in Cargo.lock transitively (via rustls), so promoting it to a direct
+# workspace dependency does not change the resolved graph — it stays
+# `--offline --locked`-clean. Exposes real Ed25519 sign/verify; no fake crypto.
+ring = "0.17"
+# constant_time_eq 0.5 requires rustc >=1.95; local toolchain is now 1.95.0, so the
+# previous `=0.4.2` MSRV pin (for 1.94.1) is lifted. blake3 may still resolve its own
+# 0.4.x transitively (it declares `^0.4.2`); clean-olean uses 0.5. See issue #3535.
+constant_time_eq = "0.5"
+
+# Memory mapping
+memmap2 = "0.9"
+
+# Stack management
+stacker = "0.1"
+
+# TLA+ shared AST. Keep the publishable dependency on an immutable internal Ty
+# authority; the root patch below redirects it to the sibling checkout for
+# rapid internal development. This deliberately pins the already-published Ty
+# authority immediately before this Clean change. Clean(new) -> Ty(old), then
+# Ty(new) may advance to Clean(new), keeping the authority history acyclic.
+tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "8b854db78157d814d5bd7b718885225beb72f948" }
+
+# Keep every AY crate on one immutable Git revision so Clean remains consumable
+# as a plain Cargo Git dependency: a `../ay` path escapes Cargo's Git checkout
+# and makes downstream resolution fail before features can be selected. Monorepo
+# integrations may redirect this exact URL with a root-level `[patch]` table.
+# Trust: default-features = false drops ay's GMP-backed LRA path (`rug` +
+# `gmp-mpfr-sys`). clean-auto links ay in-process via the `ay-smt` feature; the
+# pure-Rust num_rational overflow fallback is functionally identical and adds no
+# native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
+# through trust-certify) has no undefined `___gmpq_*` symbols.
+ay = { package = "ay", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+ay-core = { package = "ay-core", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+ay-proof = { package = "ay-proof", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+ay-frontend = { package = "ay-frontend", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+ay-translate = { package = "ay-translate", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+
+[profile.dev]
+# Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).
+# Default debug=2 produces 30-47MB test binaries; debug=1 cuts ~40%.
+# split-debuginfo=unpacked avoids embedding DWARF in the binary.
+debug = 1
+split-debuginfo = "unpacked"
+
+# lto disabled in release + bench profiles. `lto = true` was costing
+# ~10 min per rebuild during the test-fix iteration on a development
+# machine and pushed workspace `cargo test --release` runs over normal
+# automation time budgets. Flip back to `true` for production release builds.
+[profile.release]
+lto = false
+# Parallel codegen for fast builds. clean already disabled LTO here to keep
+# rebuilds within automation budgets; codegen-units=1 (single-threaded codegen)
+# was the remaining cost — e.g. clean-kernel took ~18 min on one core during the
+# Trust bootstrap. cu=16 parallelizes it with negligible runtime impact (no LTO to
+# lose). Production/max-perf builds set lto=true + cu=1 explicitly.
+codegen-units = 16
+panic = "abort"
+overflow-checks = true
+
+[profile.bench]
+lto = false
+codegen-units = 1
+
+[workspace.metadata.atpkg]
+# The user-facing commands for `clean`. The mathverse_*, mm_*, verify_*, *_gate, solver_serve,
+# doc-gen and conformance bins are internal tooling.
+expose = ["clean", "clean-lsp"]
+# clean-lsp is not a default-member, so build it (and clean) explicitly.
+build-args = ["-p", "clean", "-p", "clean-lsp"]

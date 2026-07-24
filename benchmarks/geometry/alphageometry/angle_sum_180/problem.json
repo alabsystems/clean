@@ -1,0 +1,27 @@
+{
+  "id": "angle_sum_180",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "angle_sum",
+    "args": ["C", "A", "B", "A", "B", "C", "B", "C", "A", "180"]
+  },
+  "metadata": {
+    "source": "Triangle angle sum",
+    "origin": "Euclid's Elements, Proposition I.32",
+    "difficulty": 3,
+    "tags": ["angle", "sum", "triangle", "180"],
+    "known_solvable": true,
+    "statement": "The sum of the interior angles of a triangle is 180 degrees."
+  }
+}

@@ -1,0 +1,35 @@
+[package]
+name = "clean-compiler"
+description = "Clean Compiler IR - L5CNF and L5IR intermediate representations"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true, optional = true }
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 4,
+# #3453). Gated behind the `cli` feature so non-CLI consumers keep a minimal
+# dep graph — `clap` + `clean-features` + `tracing` are only pulled in when
+# callers opt in.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+[features]
+round-trip-compile = []
+# CLI surface for Epic #3436 Phase 4 (#3453): exposes `clean_compiler::cli`
+# with clap-derived argument structs and a `FeatureDescriptor` array for the
+# top-level `clean compile` verb. Non-CLI consumers (the kernel, tests,
+# downstream crates) do not pay for clap + clean-features unless they opt in.
+cli = ["dep:clap", "dep:clean-features", "dep:tracing"]
+[dev-dependencies]
+clean-runtime = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }

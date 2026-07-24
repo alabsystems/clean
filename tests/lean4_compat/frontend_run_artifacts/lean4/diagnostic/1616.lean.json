@@ -1,0 +1,85 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "1616.lean",
+  "source_sha256": "sha256:5c37d5b0178376352afff3b49157ea84452523467184ae17af3481f60bb4fb63",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1616.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "don_t_know_how_to_synthesize_implicit_argument_z",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument `z`",
+      "line": 10,
+      "column": 24
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument `y`",
+      "line": 10,
+      "column": 24
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument",
+      "line": 10,
+      "column": 24
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument `\u03b1`",
+      "line": 10,
+      "column": 32
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument",
+      "line": 10,
+      "column": 12
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument `z`",
+      "line": 9,
+      "column": 23
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument `x`",
+      "line": 9,
+      "column": 23
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument",
+      "line": 9,
+      "column": 23
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument `\u03b1`",
+      "line": 9,
+      "column": 31
+    },
+    {
+      "severity": "error",
+      "message": "don't know how to synthesize implicit argument",
+      "line": 9,
+      "column": 11
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 1.41,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/1616.lean:10:24: error: don't know how to synthesize implicit argument `z`\n  @Linear ?m.34 ?m.35 (?m.46 :: ?m.36) (?m.46 :: ?m.37) c.right\ncontext:\nc : Cover ?m.35 ?m.36 ?m.37\n\u22a2 List ?m.34\ntests/lean4_compat/lean4_tests/1616.lean:10:24: error: don't know how to synthesize implicit argument `y`\n  @Linear ?m.34 ?m.35 (?m.46 :: ?m.36) (?m.46 :: ?m.37) c.right\ncontext:\nc : Cover ?m.35 ?m.36 ?m.37\n\u22a2 List ?m.34\ntests/lean4_compat/lean4_tests/1616.lean:10:24: error: don't know how to synthesize implicit argument\n  @Linear ?m.34 ?m.35 (?m.46 :: ?m.36) (?m.46 :: ?m.37) c.right\ncontext:\nc : Cover ?m.35 ?m.36 ?m.37\n\u22a2 Type u_1\ntests/lean4_compat/lean4_tests/1616.lean:10:32: error: don't know how to synthesize implicit argument `\u03b1`\n  @Cover.right ?m.34 ?m.35 ?m.36 ?m.37 ?m.46 c\ncontext:\nc : Cover ?m.35 ?m.36 ?m.37\n\u22a2 Type u_1\ntests/lean4_compat/lean4_tests/1616.lean:10:12: error: don't know how to synthesize implicit argument\n  @Linear ?m.34 ?m.35 ?m.36 ?m.37 c\ncontext:\nc : Cover ?m.35 ?m.36 ?m.37\n\u22a2 Type u_1\ntests/lean4_compat/lean4_tests/1616.lean:9:23: error: don't know how to synthesize implicit argument `z`\n  @Linear ?m.16 (?m.28 :: ?m.17) ?m.18 (?m.28 :: ?m.19) c.left\ncontext:\nc : Cover ?m.17 ?m.18 ?m.19\n\u22a2 List ?m.16\ntests/lean4_compat/lean4_tests/1616.lean:9:23: error: don't know how to synthesize implicit argument `x`\n  @Linear ?m.16 (?m.28 :: ?m.17) ?m.18 (?m.28 :: ?m.19) c.left\ncontext:\nc : Cover ?m.17 ?m.18 ?m.19\n\u22a2 List ?m.16\ntests/lean4_compat/lean4_tests/1616.lean:9:23: error: don't know how to synthesize implicit argument\n  @Linear ?m.16 (?m.28 :: ?m.17) ?m.18 (?m.28 :: ?m.19) c.left\ncontext:\nc : Cover ?m.17 ?m.18 ?m.19\n\u22a2 Type u_1\ntests/lean4_compat/lean4_tests/1616.lean:9:31: error: don't know how to synthesize implicit argument `\u03b1`\n  @Cover.left ?m.16 ?m.17 ?m.18 ?m.19 ?m.28 c\ncontext:\nc : Cover ?m.17 ?m.18 ?m.19\n\u22a2 Type u_1\ntests/lean4_compat/lean4_tests/1616.lean:9:11: error: don't know how to synthesize implicit argument\n  @Linear ?m.16 ?m.17 ?m.18 ?m.19 c\ncontext:\nc : Cover ?m.17 ?m.18 ?m.19\n\u22a2 Type u_1\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

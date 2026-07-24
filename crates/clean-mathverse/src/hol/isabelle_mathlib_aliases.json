@@ -1,0 +1,2977 @@
+{
+  "schema": "isabelle-mathlib-aliases-v1",
+  "description": "Curated high-confidence Isabelle/HOL <-> Lean4/Mathlib decl name correspondences for cross-system equivalence bridging. Heuristic candidates, not machine-checked proofs.",
+  "count": 347,
+  "aliases": [
+    {
+      "concept": "commutativity of addition",
+      "isabelle": "add.commute",
+      "mathlib": "add_comm",
+      "kind": "theorem",
+      "confidence": 0.97,
+      "note": "Isabelle name is the dotted locale (abel_semigroup) form 'add.commute'; underlying class fact in Groups theory."
+    },
+    {
+      "concept": "associativity of addition",
+      "isabelle": "add.assoc",
+      "mathlib": "add_assoc",
+      "kind": "theorem",
+      "confidence": 0.97,
+      "note": "Isabelle 'add.assoc' is the dotted semigroup-locale form; Lean groups parenthesization left as (a+b)+c = a+(b+c)."
+    },
+    {
+      "concept": "left additive identity",
+      "isabelle": "add_0",
+      "mathlib": "zero_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'add_0' : 0 + a = a (monoid_add). Lean 'zero_add' matches; Isabelle 'add_0_right' is the right form."
+    },
+    {
+      "concept": "right additive identity",
+      "isabelle": "add_0_right",
+      "mathlib": "add_zero",
+      "kind": "theorem",
+      "confidence": 0.94,
+      "note": "Isabelle 'add_0_right' : a + 0 = a matches Lean 'add_zero'."
+    },
+    {
+      "concept": "left inverse of addition",
+      "isabelle": "add.left_inverse",
+      "mathlib": "neg_add_cancel",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle group_add left-inverse; common Isabelle form is 'left_minus' (-a + a = 0). Lean modern name is neg_add_cancel (older: add_left_neg). Name uncertainty on both sides."
+    },
+    {
+      "concept": "right inverse of addition",
+      "isabelle": "right_minus",
+      "mathlib": "add_neg_cancel",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'right_minus' : a + - a = 0 (group_add). Lean modern name add_neg_cancel (older: add_right_neg)."
+    },
+    {
+      "concept": "double negation (additive)",
+      "isabelle": "minus_minus",
+      "mathlib": "neg_neg",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'minus_minus' : - (- a) = a (group_add)."
+    },
+    {
+      "concept": "subtraction as addition of negation",
+      "isabelle": "diff_conv_add_uminus",
+      "mathlib": "sub_eq_add_neg",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'diff_conv_add_uminus' : a - b = a + - b. Lean 'sub_eq_add_neg'."
+    },
+    {
+      "concept": "subtraction of self is zero",
+      "isabelle": "diff_self",
+      "mathlib": "sub_self",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'diff_self' : a - a = 0."
+    },
+    {
+      "concept": "negation of zero",
+      "isabelle": "minus_zero",
+      "mathlib": "neg_zero",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'minus_zero' : - 0 = 0."
+    },
+    {
+      "concept": "commutativity of multiplication",
+      "isabelle": "mult.commute",
+      "mathlib": "mul_comm",
+      "kind": "theorem",
+      "confidence": 0.97,
+      "note": "Isabelle 'mult.commute' is the dotted commutative-monoid/semigroup locale form."
+    },
+    {
+      "concept": "associativity of multiplication",
+      "isabelle": "mult.assoc",
+      "mathlib": "mul_assoc",
+      "kind": "theorem",
+      "confidence": 0.97,
+      "note": "Isabelle 'mult.assoc' is the dotted semigroup-locale form."
+    },
+    {
+      "concept": "left multiplicative identity",
+      "isabelle": "mult_1",
+      "mathlib": "one_mul",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'mult_1' : 1 * a = a (monoid_mult); 'mult_1_left' is also used. Lean 'one_mul'."
+    },
+    {
+      "concept": "right multiplicative identity",
+      "isabelle": "mult_1_right",
+      "mathlib": "mul_one",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'mult_1_right' : a * 1 = a. Lean 'mul_one'."
+    },
+    {
+      "concept": "multiplication by zero on left",
+      "isabelle": "mult_zero_left",
+      "mathlib": "zero_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'mult_zero_left' : 0 * a = 0 (mult_zero class)."
+    },
+    {
+      "concept": "multiplication by zero on right",
+      "isabelle": "mult_zero_right",
+      "mathlib": "mul_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'mult_zero_right' : a * 0 = 0."
+    },
+    {
+      "concept": "left distributivity",
+      "isabelle": "distrib_left",
+      "mathlib": "mul_add",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'distrib_left' : a * (b + c) = a * b + a * c. Lean 'mul_add' (a*(b+c)=a*b+a*c). 'left_distrib' is an alias in Lean."
+    },
+    {
+      "concept": "right distributivity",
+      "isabelle": "distrib_right",
+      "mathlib": "add_mul",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'distrib_right' : (a + b) * c = a * c + b * c. Lean 'add_mul'. 'right_distrib' is an alias in Lean."
+    },
+    {
+      "concept": "negation times value",
+      "isabelle": "minus_mult_left",
+      "mathlib": "neg_mul",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'minus_mult_left' : - (a * b) = - a * b (ring). Lean 'neg_mul' : -a * b = -(a*b). Orientation differs; moderate confidence on exact Isabelle name."
+    },
+    {
+      "concept": "reflexivity of <=",
+      "isabelle": "order_refl",
+      "mathlib": "le_refl",
+      "kind": "theorem",
+      "confidence": 0.93,
+      "note": "Isabelle 'order_refl' : x <= x (preorder). Lean 'le_refl'; 'le_rfl' is the no-arg form."
+    },
+    {
+      "concept": "transitivity of <=",
+      "isabelle": "order_trans",
+      "mathlib": "le_trans",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'order_trans' : x <= y ==> y <= z ==> x <= z. Also 'order.trans' dotted form exists."
+    },
+    {
+      "concept": "antisymmetry of <=",
+      "isabelle": "order_antisym",
+      "mathlib": "le_antisymm",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'order_antisym' : x <= y ==> y <= x ==> x = y (order class). Lean 'le_antisymm'."
+    },
+    {
+      "concept": "irreflexivity of <",
+      "isabelle": "less_irrefl",
+      "mathlib": "lt_irrefl",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'less_irrefl' : ~ x < x. Lean 'lt_irrefl'."
+    },
+    {
+      "concept": "transitivity of <",
+      "isabelle": "less_trans",
+      "mathlib": "lt_trans",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'less_trans' : x < y ==> y < z ==> x < z."
+    },
+    {
+      "concept": "< implies <=",
+      "isabelle": "less_imp_le",
+      "mathlib": "le_of_lt",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'less_imp_le' : x < y ==> x <= y. Lean 'le_of_lt'."
+    },
+    {
+      "concept": "asymmetry of <",
+      "isabelle": "less_not_sym",
+      "mathlib": "lt_asymm",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'less_not_sym' : x < y ==> ~ y < x. Lean 'lt_asymm' / 'not_lt_of_gt'. Moderate confidence on exact pairing."
+    },
+    {
+      "concept": "strict order from le and ne",
+      "isabelle": "le_neq_trans",
+      "mathlib": "lt_of_le_of_ne",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'le_neq_trans' : a <= b ==> a ~= b ==> a < b. Lean 'lt_of_le_of_ne'. Lower confidence on exact Isabelle name."
+    },
+    {
+      "concept": "linearity / totality of <=",
+      "isabelle": "linear",
+      "mathlib": "le_total",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle linorder 'linear' : x <= y | y <= x (also 'linorder_linear'). Lean 'le_total'."
+    },
+    {
+      "concept": "commutativity of conjunction",
+      "isabelle": "conj_commute",
+      "mathlib": "and_comm",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'conj_commute' : (P & Q) = (Q & P). Lean 'and_comm'."
+    },
+    {
+      "concept": "commutativity of disjunction",
+      "isabelle": "disj_commute",
+      "mathlib": "or_comm",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'disj_commute' : (P | Q) = (Q | P). Lean 'or_comm'."
+    },
+    {
+      "concept": "associativity of conjunction",
+      "isabelle": "conj_assoc",
+      "mathlib": "and_assoc",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'conj_assoc' : ((P & Q) & R) = (P & (Q & R)). Lean 'and_assoc'."
+    },
+    {
+      "concept": "associativity of disjunction",
+      "isabelle": "disj_assoc",
+      "mathlib": "or_assoc",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'disj_assoc'. Lean 'or_assoc'."
+    },
+    {
+      "concept": "double negation elimination",
+      "isabelle": "not_not",
+      "mathlib": "not_not",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'not_not' : (~ ~ P) = P (classical). Lean 'not_not' : Â¬Â¬a â a. Both names coincide; classical in both."
+    },
+    {
+      "concept": "De Morgan: not of conjunction",
+      "isabelle": "de_Morgan_conj",
+      "mathlib": "not_and_or",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'de_Morgan_conj' : (~ (P & Q)) = (~ P | ~ Q). Lean 'not_and_or' : Â¬(aâ§b) â Â¬a â¨ Â¬b. Classical."
+    },
+    {
+      "concept": "De Morgan: not of disjunction",
+      "isabelle": "de_Morgan_disj",
+      "mathlib": "not_or",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'de_Morgan_disj' : (~ (P | Q)) = (~ P & ~ Q). Lean 'not_or' : Â¬(aâ¨b) â Â¬a â§ Â¬b."
+    },
+    {
+      "concept": "excluded middle",
+      "isabelle": "excluded_middle",
+      "mathlib": "em",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'excluded_middle' : ~ P | P. Lean 'em' (Classical) / 'Decidable.em'. Both classical."
+    },
+    {
+      "concept": "implication as disjunction",
+      "isabelle": "imp_disjL",
+      "mathlib": "imp_iff_not_or",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Both express PâQ â Â¬P â¨ Q in classical logic but exact lemma names differ across versions; low confidence, verify before use."
+    },
+    {
+      "concept": "contrapositive",
+      "isabelle": "contrapos_pp",
+      "mathlib": "not_imp_not",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle has several contrapos_* rules; Lean 'not_imp_not' : (Â¬a â Â¬b) â (b â a). Pairing approximate; verify."
+    },
+    {
+      "concept": "list length",
+      "isabelle": "List.length",
+      "mathlib": "List.length",
+      "kind": "definition",
+      "confidence": 0.9,
+      "note": "Both define list length; same last segment 'length' but namespaced List in both."
+    },
+    {
+      "concept": "list append",
+      "isabelle": "List.append",
+      "mathlib": "List.append",
+      "kind": "definition",
+      "confidence": 0.85,
+      "note": "Isabelle uses '@' notation, const 'List.append' (also 'append'). Lean 'List.append' (++). Definitions correspond."
+    },
+    {
+      "concept": "associativity of list append",
+      "isabelle": "append_assoc",
+      "mathlib": "List.append_assoc",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'append_assoc' : (xs @ ys) @ zs = xs @ (ys @ zs). Lean 'List.append_assoc'."
+    },
+    {
+      "concept": "append with nil on right",
+      "isabelle": "append_Nil2",
+      "mathlib": "List.append_nil",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'append_Nil2' : xs @ [] = xs. Lean 'List.append_nil'."
+    },
+    {
+      "concept": "append with nil on left",
+      "isabelle": "append_Nil",
+      "mathlib": "List.nil_append",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'append_Nil' : [] @ xs = xs (often definitional/simp). Lean 'List.nil_append'."
+    },
+    {
+      "concept": "length of append",
+      "isabelle": "length_append",
+      "mathlib": "List.length_append",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'length_append' : length (xs @ ys) = length xs + length ys. Lean 'List.length_append'."
+    },
+    {
+      "concept": "list reverse",
+      "isabelle": "List.rev",
+      "mathlib": "List.reverse",
+      "kind": "definition",
+      "confidence": 0.9,
+      "note": "Isabelle calls it 'rev'; Lean calls it 'reverse'. Pure last-segment normalization misses this (rev vs reverse)."
+    },
+    {
+      "concept": "reverse of reverse is identity",
+      "isabelle": "rev_rev_ident",
+      "mathlib": "List.reverse_reverse",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'rev_rev_ident' : rev (rev xs) = xs. Lean 'List.reverse_reverse'."
+    },
+    {
+      "concept": "reverse of append",
+      "isabelle": "rev_append",
+      "mathlib": "List.reverse_append",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'rev_append' : rev (xs @ ys) = rev ys @ rev xs. Lean 'List.reverse_append'. Note Isabelle also has a function named 'rev_append'; the lemma is 'rev_append' too."
+    },
+    {
+      "concept": "length of reverse",
+      "isabelle": "length_rev",
+      "mathlib": "List.length_reverse",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "note": "Isabelle 'length_rev' : length (rev xs) = length xs. Lean 'List.length_reverse'."
+    },
+    {
+      "concept": "list map",
+      "isabelle": "List.map",
+      "mathlib": "List.map",
+      "kind": "definition",
+      "confidence": 0.92,
+      "note": "Same name in both; included for completeness as anchor."
+    },
+    {
+      "concept": "map over append",
+      "isabelle": "map_append",
+      "mathlib": "List.map_append",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'map_append' : map f (xs @ ys) = map f xs @ map f ys. Lean 'List.map_append'."
+    },
+    {
+      "concept": "length of map",
+      "isabelle": "length_map",
+      "mathlib": "List.length_map",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "note": "Isabelle 'length_map' : length (map f xs) = length xs. Lean 'List.length_map'."
+    },
+    {
+      "concept": "map of map (composition)",
+      "isabelle": "map_map",
+      "mathlib": "List.map_map",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'map_map' : map f (map g xs) = map (f o g) xs. Lean 'List.map_map' : map f (map g l) = map (f â g) l."
+    },
+    {
+      "concept": "map of reverse",
+      "isabelle": "rev_map",
+      "mathlib": "List.map_reverse",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'rev_map' : rev (map f xs) = map f (rev xs). Lean 'List.map_reverse' : map f l.reverse = (map f l).reverse. Orientation/name correspondence approximate."
+    },
+    {
+      "concept": "membership in append",
+      "isabelle": "set_append",
+      "mathlib": "List.mem_append",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'set_append' : set (xs @ ys) = set xs Un set ys (about set, not direct membership). Lean 'List.mem_append' is membership iff. Concepts related but not exact; verify before use."
+    },
+    {
+      "concept": "list induction principle",
+      "isabelle": "List.list.induct",
+      "mathlib": "List.rec",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle auto-generated 'list.induct'. Lean recursor 'List.rec' (and 'List.recAux'). Principle corresponds but they are mechanism-specific; moderate confidence."
+    },
+    {
+      "concept": "natural number addition commutativity",
+      "isabelle": "add.commute",
+      "mathlib": "Nat.add_comm",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "On Nat, Isabelle reuses the generic 'add.commute' (comm_monoid_add); Lean has both type-specific 'Nat.add_comm' and generic 'add_comm'. Pairing is the Nat-specialized Lean lemma to the generic Isabelle one."
+    },
+    {
+      "concept": "natural number addition associativity",
+      "isabelle": "add.assoc",
+      "mathlib": "Nat.add_assoc",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle uses generic 'add.assoc' on nat; Lean 'Nat.add_assoc' (also generic 'add_assoc')."
+    },
+    {
+      "concept": "natural number multiplication commutativity",
+      "isabelle": "mult.commute",
+      "mathlib": "Nat.mul_comm",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle generic 'mult.commute' on nat; Lean 'Nat.mul_comm'."
+    },
+    {
+      "concept": "natural number induction",
+      "isabelle": "nat.induct",
+      "mathlib": "Nat.rec",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle datatype-generated 'nat.induct' (also 'nat_induct'). Lean recursor 'Nat.rec'. Mechanism-specific; also compare Lean 'Nat.recAux'."
+    },
+    {
+      "concept": "addition is monotone in <=",
+      "isabelle": "add_le_mono",
+      "mathlib": "add_le_add",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'add_le_mono' : a <= b ==> c <= d ==> a + c <= b + d. Lean 'add_le_add'."
+    },
+    {
+      "concept": "zero is <= for naturals",
+      "isabelle": "le0",
+      "mathlib": "Nat.zero_le",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'le0' : 0 <= n on nat (also 'zero_le'). Lean 'Nat.zero_le'."
+    },
+    {
+      "concept": "successor not zero",
+      "isabelle": "Suc_not_Zero",
+      "mathlib": "Nat.succ_ne_zero",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'Suc_not_Zero' : Suc m ~= 0. Lean 'Nat.succ_ne_zero'."
+    },
+    {
+      "concept": "successor injective",
+      "isabelle": "Suc_inject",
+      "mathlib": "Nat.succ.injEq",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'Suc_inject' : Suc m = Suc n ==> m = n (also 'nat.inject'). Lean 'Nat.succ.injEq' / 'Nat.succ_injective'. Moderate confidence on exact Lean name."
+    },
+    {
+      "concept": "set union commutativity",
+      "isabelle": "Un_commute",
+      "mathlib": "Set.union_comm",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'Un_commute' : A Un B = B Un A. Lean 'Set.union_comm'."
+    },
+    {
+      "concept": "set union associativity",
+      "isabelle": "Un_assoc",
+      "mathlib": "Set.union_assoc",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'Un_assoc' : (A Un B) Un C = A Un (B Un C). Lean 'Set.union_assoc'."
+    },
+    {
+      "concept": "set intersection commutativity",
+      "isabelle": "Int_commute",
+      "mathlib": "Set.inter_comm",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'Int_commute' : A Int B = B Int A. Lean 'Set.inter_comm'."
+    },
+    {
+      "concept": "set intersection associativity",
+      "isabelle": "Int_assoc",
+      "mathlib": "Set.inter_assoc",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'Int_assoc'. Lean 'Set.inter_assoc'."
+    },
+    {
+      "concept": "subset reflexivity",
+      "isabelle": "subset_refl",
+      "mathlib": "Set.Subset.refl",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'subset_refl' : A <= A. Lean 'Set.Subset.refl' (also generic 'le_refl' via order). Name structure differs."
+    },
+    {
+      "concept": "subset transitivity",
+      "isabelle": "subset_trans",
+      "mathlib": "Set.Subset.trans",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'subset_trans'. Lean 'Set.Subset.trans'. Lean also has 'subset_trans'/'le_trans'."
+    },
+    {
+      "concept": "union is upper bound (subset of union, left)",
+      "isabelle": "Un_upper1",
+      "mathlib": "Set.subset_union_left",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'Un_upper1' : A <= A Un B. Lean 'Set.subset_union_left'."
+    },
+    {
+      "concept": "intersection is lower bound (inter subset, left)",
+      "isabelle": "Int_lower1",
+      "mathlib": "Set.inter_subset_left",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'Int_lower1' : A Int B <= A. Lean 'Set.inter_subset_left'."
+    },
+    {
+      "concept": "empty set is subset of any set",
+      "isabelle": "empty_subsetI",
+      "mathlib": "Set.empty_subset",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'empty_subsetI' : {} <= A. Lean 'Set.empty_subset'."
+    },
+    {
+      "concept": "union with empty set",
+      "isabelle": "Un_empty_right",
+      "mathlib": "Set.union_empty",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'Un_empty_right' : A Un {} = A. Lean 'Set.union_empty'."
+    },
+    {
+      "concept": "intersection with empty set",
+      "isabelle": "Int_empty_right",
+      "mathlib": "Set.inter_empty",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'Int_empty_right' : A Int {} = {}. Lean 'Set.inter_empty'."
+    },
+    {
+      "concept": "function composition associativity",
+      "isabelle": "o_assoc",
+      "mathlib": "Function.comp.assoc",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'o_assoc' : f o (g o h) = f o g o h. Lean 'Function.comp.assoc' / 'Function.comp_assoc'. Orientation and exact Lean name vary; verify."
+    },
+    {
+      "concept": "composition with identity (right)",
+      "isabelle": "o_id",
+      "mathlib": "Function.comp_id",
+      "kind": "theorem",
+      "confidence": 0.75,
+      "note": "Isabelle 'o_id' : f o id = f. Lean 'Function.comp_id'."
+    },
+    {
+      "concept": "composition with identity (left)",
+      "isabelle": "id_o",
+      "mathlib": "Function.id_comp",
+      "kind": "theorem",
+      "confidence": 0.75,
+      "note": "Isabelle 'id_o' : id o f = f. Lean 'Function.id_comp'."
+    },
+    {
+      "concept": "identity function application",
+      "isabelle": "id_apply",
+      "mathlib": "id_eq",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'id_apply' : id x = x. Lean 'id_eq' / 'Function.id_def'. Moderate confidence on best Lean pairing."
+    },
+    {
+      "concept": "injectivity predicate",
+      "isabelle": "inj",
+      "mathlib": "Function.Injective",
+      "kind": "definition",
+      "confidence": 0.82,
+      "note": "Isabelle 'inj' (abbrev for inj_on _ UNIV); const 'inj_on'. Lean 'Function.Injective'. Definitions correspond (f x = f y â x = y)."
+    },
+    {
+      "concept": "surjectivity predicate",
+      "isabelle": "surj",
+      "mathlib": "Function.Surjective",
+      "kind": "definition",
+      "confidence": 0.82,
+      "note": "Isabelle 'surj' (range f = UNIV). Lean 'Function.Surjective'."
+    },
+    {
+      "concept": "bijectivity predicate",
+      "isabelle": "bij",
+      "mathlib": "Function.Bijective",
+      "kind": "definition",
+      "confidence": 0.82,
+      "note": "Isabelle 'bij' = inj & surj. Lean 'Function.Bijective' = Injective â§ Surjective."
+    },
+    {
+      "concept": "injective composition",
+      "isabelle": "inj_compose",
+      "mathlib": "Function.Injective.comp",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'inj_compose' / 'comp_inj_on'. Lean 'Function.Injective.comp'. Exact statement orientation differs; verify."
+    },
+    {
+      "concept": "power: add exponents",
+      "isabelle": "power_add",
+      "mathlib": "pow_add",
+      "kind": "theorem",
+      "confidence": 0.88,
+      "note": "Isabelle 'power_add' : a ^ (m + n) = a ^ m * a ^ n (monoid_mult). Lean 'pow_add'."
+    },
+    {
+      "concept": "power: multiply exponents",
+      "isabelle": "power_mult",
+      "mathlib": "pow_mul",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'power_mult' : a ^ (m * n) = (a ^ m) ^ n. Lean 'pow_mul' : a ^ (m * n) = (a ^ m) ^ n."
+    },
+    {
+      "concept": "power of zero exponent",
+      "isabelle": "power_0",
+      "mathlib": "pow_zero",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'power_0' : a ^ 0 = 1. Lean 'pow_zero'."
+    },
+    {
+      "concept": "power of one exponent",
+      "isabelle": "power_one",
+      "mathlib": "pow_one",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'power_one' : a ^ 1 = a. Lean 'pow_one'."
+    },
+    {
+      "concept": "power of a product",
+      "isabelle": "power_mult_distrib",
+      "mathlib": "mul_pow",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'power_mult_distrib' : (a * b) ^ n = a ^ n * b ^ n (comm_monoid_mult). Lean 'mul_pow'."
+    },
+    {
+      "concept": "one to any power",
+      "isabelle": "power_one_right",
+      "mathlib": "one_pow",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'one_power' / '1 ^ n = 1' lemma; common name 'power_one_right' is actually a^1; the '1^n' lemma is 'one_power'. Lean 'one_pow'. Verify Isabelle name (likely 'one_power')."
+    },
+    {
+      "concept": "gcd commutativity",
+      "isabelle": "gcd.commute",
+      "mathlib": "Nat.gcd_comm",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'gcd.commute' (dotted, abel_semigroup on gcd) : gcd a b = gcd b a; also 'gcd_commute_nat'. Lean 'Nat.gcd_comm'."
+    },
+    {
+      "concept": "gcd associativity",
+      "isabelle": "gcd.assoc",
+      "mathlib": "Nat.gcd_assoc",
+      "kind": "theorem",
+      "confidence": 0.75,
+      "note": "Isabelle 'gcd.assoc' dotted locale form. Lean 'Nat.gcd_assoc'."
+    },
+    {
+      "concept": "gcd divides left argument",
+      "isabelle": "gcd_dvd1",
+      "mathlib": "Nat.gcd_dvd_left",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'gcd_dvd1' : gcd a b dvd a. Lean 'Nat.gcd_dvd_left'."
+    },
+    {
+      "concept": "gcd divides right argument",
+      "isabelle": "gcd_dvd2",
+      "mathlib": "Nat.gcd_dvd_right",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'gcd_dvd2' : gcd a b dvd b. Lean 'Nat.gcd_dvd_right'."
+    },
+    {
+      "concept": "lcm commutativity",
+      "isabelle": "lcm.commute",
+      "mathlib": "Nat.lcm_comm",
+      "kind": "theorem",
+      "confidence": 0.75,
+      "note": "Isabelle 'lcm.commute' dotted locale form. Lean 'Nat.lcm_comm'."
+    },
+    {
+      "concept": "divides reflexivity",
+      "isabelle": "dvd_refl",
+      "mathlib": "dvd_refl",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'dvd_refl' : a dvd a. Lean 'dvd_refl'. Same name."
+    },
+    {
+      "concept": "divides transitivity",
+      "isabelle": "dvd_trans",
+      "mathlib": "dvd_trans",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'dvd_trans' : a dvd b ==> b dvd c ==> a dvd c. Lean 'dvd_trans' (also 'Dvd.Dvd.trans')."
+    },
+    {
+      "concept": "transitivity of equality",
+      "isabelle": "trans",
+      "mathlib": "Eq.trans",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'trans' : a = b ==> b = c ==> a = c (HOL builtin). Lean 'Eq.trans' / 'trans'."
+    },
+    {
+      "concept": "symmetry of equality",
+      "isabelle": "sym",
+      "mathlib": "Eq.symm",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'sym' : s = t ==> t = s. Lean 'Eq.symm'."
+    },
+    {
+      "concept": "reflexivity of equality",
+      "isabelle": "refl",
+      "mathlib": "Eq.refl",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'refl' : t = t. Lean 'Eq.refl' / 'rfl'."
+    },
+    {
+      "concept": "congruence of function application",
+      "isabelle": "arg_cong",
+      "mathlib": "congrArg",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'arg_cong' : x = y ==> f x = f y. Lean 'congrArg'."
+    },
+    {
+      "concept": "finite sum over append (list)",
+      "isabelle": "sum_list_append",
+      "mathlib": "List.sum_append",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'sum_list_append' : sum_list (xs @ ys) = sum_list xs + sum_list ys. Lean 'List.sum_append'. Verify exact Isabelle name (sum_list vs listsum across versions)."
+    },
+    {
+      "concept": "absolute value of product",
+      "isabelle": "abs_mult",
+      "mathlib": "abs_mul",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'abs_mult' : |a * b| = |a| * |b| (linordered ring). Lean 'abs_mul'."
+    },
+    {
+      "concept": "triangle inequality for absolute value",
+      "isabelle": "abs_triangle_ineq",
+      "mathlib": "abs_add",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'abs_triangle_ineq' : |a + b| <= |a| + |b|. Lean 'abs_add'."
+    },
+    {
+      "concept": "absolute value nonnegative",
+      "isabelle": "abs_ge_zero",
+      "mathlib": "abs_nonneg",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'abs_ge_zero' : 0 <= |a|. Lean 'abs_nonneg'."
+    },
+    {
+      "concept": "minimum commutativity",
+      "isabelle": "min.commute",
+      "mathlib": "min_comm",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'min.commute' dotted locale form : min a b = min b a. Lean 'min_comm'."
+    },
+    {
+      "concept": "maximum commutativity",
+      "isabelle": "max.commute",
+      "mathlib": "max_comm",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'max.commute' dotted locale form. Lean 'max_comm'."
+    },
+    {
+      "concept": "minimum associativity",
+      "isabelle": "min.assoc",
+      "mathlib": "min_assoc",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'min.assoc' dotted locale form. Lean 'min_assoc'."
+    },
+    {
+      "concept": "maximum associativity",
+      "isabelle": "max.assoc",
+      "mathlib": "max_assoc",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'max.assoc' dotted locale form. Lean 'max_assoc'."
+    },
+    {
+      "concept": "if-then-else on true",
+      "isabelle": "if_True",
+      "mathlib": "if_pos",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'if_True' : (if True then x else y) = x. Lean 'if_pos' (for decidable prop) / 'if_true'. Pairing approximate due to decidability framing."
+    },
+    {
+      "concept": "if-then-else on false",
+      "isabelle": "if_False",
+      "mathlib": "if_neg",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'if_False' : (if False then x else y) = y. Lean 'if_neg' / 'if_false'. Approximate."
+    },
+    {
+      "concept": "membership in insert/cons set",
+      "isabelle": "insertI1",
+      "mathlib": "Set.mem_insert_iff",
+      "kind": "theorem",
+      "confidence": 0.65,
+      "note": "Isabelle 'insertI1' : a : insert a B. Lean closest is 'Set.mem_insert' / 'Set.mem_insert_iff'. Concept overlaps but statements differ; low confidence."
+    },
+    {
+      "concept": "head of cons (list)",
+      "isabelle": "list.sel(1)",
+      "mathlib": "List.head_cons",
+      "kind": "theorem",
+      "confidence": 0.6,
+      "note": "Isabelle selector 'hd (x # xs) = x' is auto-generated ('list.sel'). Lean 'List.head_cons' / definitional. Mechanism-specific; low confidence on exact Isabelle fact name."
+    },
+    {
+      "concept": "filter over append",
+      "isabelle": "filter_append",
+      "mathlib": "List.filter_append",
+      "kind": "theorem",
+      "confidence": 0.82,
+      "note": "Isabelle 'filter_append' : filter P (xs @ ys) = filter P xs @ filter P ys. Lean 'List.filter_append'."
+    },
+    {
+      "concept": "concat / flatten of map",
+      "isabelle": "concat_map",
+      "mathlib": "List.flatMap",
+      "kind": "definition",
+      "confidence": 0.6,
+      "note": "Isabelle 'concat (map f xs)' corresponds to Lean's List.flatMap/bind. Definitional correspondence only; verify lemma-level names separately."
+    },
+    {
+      "concept": "take and drop reconstruct list",
+      "isabelle": "append_take_drop_id",
+      "mathlib": "List.take_append_drop",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'append_take_drop_id' : take n xs @ drop n xs = xs. Lean 'List.take_append_drop'."
+    },
+    {
+      "concept": "length of take",
+      "isabelle": "length_take",
+      "mathlib": "List.length_take",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'length_take' : length (take n xs) = min n (length xs). Lean 'List.length_take'. RHS form (min) matches in recent Mathlib; verify."
+    },
+    {
+      "concept": "distributivity of multiplication over subtraction (left)",
+      "isabelle": "right_diff_distrib",
+      "mathlib": "mul_sub",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'right_diff_distrib' : a * (b - c) = a * b - a * c (ring). Lean 'mul_sub'. Naming of left/right differs between systems; verify orientation."
+    },
+    {
+      "concept": "distributivity of multiplication over subtraction (right)",
+      "isabelle": "left_diff_distrib",
+      "mathlib": "sub_mul",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'left_diff_distrib' : (a - b) * c = a * c - b * c. Lean 'sub_mul'. Left/right naming convention is mirrored between systems."
+    },
+    {
+      "concept": "negation distributes over addition",
+      "isabelle": "minus_add_distrib",
+      "mathlib": "neg_add",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'minus_add_distrib' : - (a + b) = - a + - b (ab_group_add). Lean 'neg_add' : -(a + b) = -a + -b."
+    },
+    {
+      "concept": "cancellation of addition on left",
+      "isabelle": "add_left_cancel",
+      "mathlib": "add_right_cancel",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'add_left_cancel' : (a + b = a + c) = (b = c) cancels the LEFT operand a. Lean 'add_left_cancel' has same meaning; but watch convention. Pairing them as same-meaning; verify which operand each cancels."
+    },
+    {
+      "concept": "square of a value",
+      "isabelle": "power2_eq_square",
+      "mathlib": "sq",
+      "kind": "theorem",
+      "confidence": 0.65,
+      "note": "Isabelle 'power2_eq_square' : a^2 = a * a. Lean 'sq' is the definition; lemma 'sq' / 'pow_two'. Best Lean lemma is 'pow_two' : a^2 = a*a. Consider mathlib 'pow_two'. Low confidence on exact pairing."
+    },
+    {
+      "concept": "nat less-than as successor le",
+      "isabelle": "Suc_le_eq",
+      "mathlib": "Nat.succ_le_iff",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'Suc_le_eq' : (Suc m <= n) = (m < n). Lean 'Nat.succ_le_iff' / 'Nat.lt_iff_add_one_le'. Verify exact Lean name."
+    },
+    {
+      "concept": "well-founded / strong induction on nat",
+      "isabelle": "nat_less_induct",
+      "mathlib": "Nat.strong_induction_on",
+      "kind": "theorem",
+      "confidence": 0.65,
+      "note": "Isabelle 'nat_less_induct' / 'less_induct'. Lean 'Nat.strong_induction_on' / 'Nat.strongRecOn'. Names and exact form vary; low confidence."
+    },
+    {
+      "concept": "image of union",
+      "isabelle": "image_Un",
+      "mathlib": "Set.image_union",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'image_Un' : f ` (A Un B) = f ` A Un f ` B. Lean 'Set.image_union'."
+    },
+    {
+      "concept": "membership in image",
+      "isabelle": "image_eqI",
+      "mathlib": "Set.mem_image",
+      "kind": "theorem",
+      "confidence": 0.68,
+      "note": "Isabelle intro rule 'image_eqI' : b = f x ==> x : A ==> b : f ` A. Lean 'Set.mem_image' is iff form. Concept matches; statement shape differs."
+    },
+    {
+      "concept": "boolean and commutativity (bool, not Prop)",
+      "isabelle": "conj_commute",
+      "mathlib": "Bool.and_comm",
+      "kind": "theorem",
+      "confidence": 0.6,
+      "note": "Isabelle HOL conflates Prop and bool more than Lean; 'conj_commute' is Prop-level. Lean separates 'Bool.and_comm' (bool) from 'and_comm' (Prop). Pairing is approximate â prefer the Prop-level and_comm entry."
+    },
+    {
+      "concept": "less-equal is reflexive-transitive (preorder dotted form)",
+      "isabelle": "order.trans",
+      "mathlib": "le_trans",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle dotted 'order.trans' is the locale form alternative to plain 'order_trans'. Included to surface the dotted variant."
+    },
+    {
+      "concept": "addition strictly monotone left",
+      "isabelle": "add_strict_left_mono",
+      "mathlib": "add_lt_add_left",
+      "kind": "theorem",
+      "confidence": 0.75,
+      "note": "Isabelle 'add_strict_left_mono' : a < b ==> c + a < c + b. Lean 'add_lt_add_left'."
+    },
+    {
+      "concept": "multiplication preserves <= for nonneg",
+      "isabelle": "mult_le_mono",
+      "mathlib": "Nat.mul_le_mul",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'mult_le_mono' (nat) : a <= b ==> c <= d ==> a*c <= b*d. Lean 'Nat.mul_le_mul'. General ordered-semiring versions also exist; verify domain."
+    },
+    {
+      "concept": "list element membership append iff",
+      "isabelle": "in_set_conv_decomp",
+      "mathlib": "List.mem_append",
+      "kind": "theorem",
+      "confidence": 0.5,
+      "note": "Weak correspondence; Isabelle membership-in-append is best via 'set_append' rewriting, not a single iff lemma named like Lean's 'List.mem_append'. Low confidence â prefer omitting in strict mode."
+    },
+    {
+      "concept": "two times equals add self",
+      "isabelle": "mult_2",
+      "mathlib": "two_mul",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'mult_2' : 2 * z = z + z. Lean 'two_mul' : 2 * a = a + a."
+    },
+    {
+      "concept": "distributivity name (combined, semiring)",
+      "isabelle": "distrib",
+      "mathlib": "left_distrib",
+      "kind": "theorem",
+      "confidence": 0.6,
+      "note": "Isabelle ring_distribs bundle ('distrib' / 'ring_distribs'). Lean 'left_distrib'/'right_distrib' aliases of mul_add/add_mul. Loose bundle-level correspondence; prefer the specific mul_add/add_mul entries."
+    },
+    {
+      "concept": "successor addition (nat recursion)",
+      "isabelle": "add_Suc",
+      "mathlib": "Nat.add_succ",
+      "kind": "theorem",
+      "confidence": 0.85,
+      "note": "Isabelle 'add_Suc' : m + Suc n = Suc (m + n). Lean 'Nat.add_succ'."
+    },
+    {
+      "concept": "successor addition on left (nat)",
+      "isabelle": "add_Suc_shift",
+      "mathlib": "Nat.succ_add",
+      "kind": "theorem",
+      "confidence": 0.72,
+      "note": "Isabelle 'Suc m + n = Suc (m + n)' is 'add_Suc_shift' or definitional. Lean 'Nat.succ_add'. Verify exact Isabelle fact name."
+    },
+    {
+      "concept": "multiplication by successor (nat)",
+      "isabelle": "mult_Suc",
+      "mathlib": "Nat.mul_succ",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'mult_Suc' : m * Suc n = m * n + m. Lean 'Nat.mul_succ' : n * succ m = n * m + n."
+    },
+    {
+      "concept": "nat subtraction zero (truncated)",
+      "isabelle": "diff_zero",
+      "mathlib": "Nat.sub_zero",
+      "kind": "theorem",
+      "confidence": 0.8,
+      "note": "Isabelle 'diff_zero' : m - 0 = m (nat, truncated subtraction). Lean 'Nat.sub_zero'."
+    },
+    {
+      "concept": "nat self subtraction (truncated)",
+      "isabelle": "diff_self_eq_0",
+      "mathlib": "Nat.sub_self",
+      "kind": "theorem",
+      "confidence": 0.75,
+      "note": "Isabelle 'diff_self_eq_0' : m - m = 0 (nat). Lean 'Nat.sub_self'."
+    },
+    {
+      "concept": "if both branches equal",
+      "isabelle": "if_cancel",
+      "mathlib": "ite_self",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'if_cancel' : (if c then x else x) = x. Lean 'ite_self' : (if c then a else a) = a."
+    },
+    {
+      "concept": "iff reflexivity / P = P",
+      "isabelle": "iff_refl",
+      "mathlib": "iff_self",
+      "kind": "theorem",
+      "confidence": 0.65,
+      "note": "Isabelle 'iff_refl' : (P = P) = True style. Lean 'iff_self' : (a â a) â True. Loose correspondence; verify."
+    },
+    {
+      "concept": "conjunction with True",
+      "isabelle": "simp_thms (conj_True)",
+      "mathlib": "and_true",
+      "kind": "theorem",
+      "confidence": 0.6,
+      "note": "Isabelle 'P & True = P' lives in the 'simp_thms' bundle (no single canonical named fact in all versions). Lean 'and_true'. Bundle-level; low confidence on exact Isabelle name."
+    },
+    {
+      "concept": "disjunction with False",
+      "isabelle": "simp_thms (disj_False)",
+      "mathlib": "or_false",
+      "kind": "theorem",
+      "confidence": 0.6,
+      "note": "Isabelle 'P | False = P' in 'simp_thms' bundle. Lean 'or_false'. Low confidence on exact Isabelle fact name."
+    },
+    {
+      "concept": "even/odd: successor parity",
+      "isabelle": "even_Suc",
+      "mathlib": "Nat.even_add_one",
+      "kind": "theorem",
+      "confidence": 0.7,
+      "note": "Isabelle 'even_Suc' : even (Suc n) = (~ even n). Lean 'Nat.even_add_one' : Even (n+1) â Â¬Even n."
+    },
+    {
+      "concept": "sum of first n naturals (Gauss)",
+      "isabelle": "Sum_Ico_nat / gauss_sum",
+      "mathlib": "Gauss_sum",
+      "kind": "theorem",
+      "confidence": 0.5,
+      "note": "Isabelle 'gauss_sum' (Gauss_Sum) : 2 * (sum of 1..n) = n*(n+1). Lean 'Finset.sum_range_id_mul_two' / 'Gauss_sum'. Names diverge significantly; low confidence â verify both before relying."
+    },
+    {
+      "concept": "monotone predicate definition",
+      "isabelle": "mono",
+      "mathlib": "Monotone",
+      "kind": "definition",
+      "confidence": 0.78,
+      "note": "Isabelle 'mono' : x <= y ==> f x <= f y. Lean 'Monotone'. Definitions correspond."
+    },
+    {
+      "concept": "strict-mono predicate definition",
+      "isabelle": "strict_mono",
+      "mathlib": "StrictMono",
+      "kind": "definition",
+      "confidence": 0.78,
+      "note": "Isabelle 'strict_mono' : x < y ==> f x < f y. Lean 'StrictMono'."
+    },
+    {
+      "concept": "least element / bot is below",
+      "isabelle": "bot_least",
+      "mathlib": "bot_le",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'bot_least' : bot <= a (order_bot). Lean 'bot_le'."
+    },
+    {
+      "concept": "greatest element / le top",
+      "isabelle": "top_greatest",
+      "mathlib": "le_top",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'top_greatest' : a <= top (order_top). Lean 'le_top'."
+    },
+    {
+      "concept": "sup is upper bound (left)",
+      "isabelle": "sup_ge1",
+      "mathlib": "le_sup_left",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'sup_ge1' : a <= sup a b (lattice). Lean 'le_sup_left'."
+    },
+    {
+      "concept": "inf is lower bound (left)",
+      "isabelle": "inf_le1",
+      "mathlib": "inf_le_left",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'inf_le1' : inf a b <= a. Lean 'inf_le_left'."
+    },
+    {
+      "concept": "sup commutativity",
+      "isabelle": "sup.commute",
+      "mathlib": "sup_comm",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'sup.commute' dotted locale form : sup a b = sup b a. Lean 'sup_comm'."
+    },
+    {
+      "concept": "inf commutativity",
+      "isabelle": "inf.commute",
+      "mathlib": "inf_comm",
+      "kind": "theorem",
+      "confidence": 0.78,
+      "note": "Isabelle 'inf.commute' dotted locale form. Lean 'inf_comm'."
+    },
+    {
+      "concept": "the empty list append identity (definitional)",
+      "isabelle": "self_append_conv2",
+      "mathlib": "List.nil_append",
+      "kind": "theorem",
+      "confidence": 0.5,
+      "note": "Weaker pairing; 'append_Nil' is the cleaner Isabelle match for [] @ xs = xs. Included only as alternative; prefer the append_Nil entry. Low confidence."
+    },
+    {
+      "concept": "cardinality of union (disjoint)",
+      "isabelle": "card_Un_disjoint",
+      "mathlib": "Finset.card_union_of_disjoint",
+      "kind": "theorem",
+      "confidence": 0.68,
+      "note": "Isabelle 'card_Un_disjoint' : finite A ==> finite B ==> A Int B = {} ==> card (A Un B) = card A + card B. Lean 'Finset.card_union_of_disjoint' (recent) / 'Finset.card_disjoint_union' (older). Verify Lean name by version."
+    },
+    {
+      "concept": "injective implies cancellable",
+      "isabelle": "injD",
+      "mathlib": "Function.Injective",
+      "kind": "theorem",
+      "confidence": 0.6,
+      "note": "Isabelle 'injD' : inj f ==> f x = f y ==> x = y is the destruction rule. Lean uses 'Function.Injective' applied directly. Mechanism differs; low confidence as a fact-to-fact alias."
+    },
+    {
+      "concept": "max with bottom (right)",
+      "isabelle": "Orderings.order_bot.max_bot2",
+      "mathlib": "max_bot_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "max x bot = x. zproof path-B (u01): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Isabelle order_bot -> Mathlib [LinearOrder][OrderBot] (min/max need LinearOrder); Mathlib 'max_bot_right' is the exact same-statement lemma."
+    },
+    {
+      "concept": "min with bottom (right)",
+      "isabelle": "Orderings.order_bot.min_bot2",
+      "mathlib": "min_bot_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "min x bot = bot. zproof path-B (u02): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Exact same-statement Mathlib lemma 'min_bot_right'."
+    },
+    {
+      "concept": "max with top (right)",
+      "isabelle": "Orderings.order_top.max_top2",
+      "mathlib": "max_top_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "max x top = top. zproof path-B (u03): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Mathlib 'max_top_right' (to_dual of min_bot_right) is the exact same-statement lemma."
+    },
+    {
+      "concept": "min with top (right)",
+      "isabelle": "Orderings.order_top.min_top2",
+      "mathlib": "min_top_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "min x top = x. zproof path-B (u04): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Discharged directly by Mathlib 'min_top_right' (to_dual of max_bot_right)."
+    },
+    {
+      "concept": "min distributes over max (right)",
+      "isabelle": "Lattices.linorder.min_max_distribs_1",
+      "mathlib": "min_max_distrib_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "min (max b c) a = max (min b a) (min c a). zproof path-B (u05): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Exact Mathlib lemma 'min_max_distrib_right'."
+    },
+    {
+      "concept": "min distributes over max (left)",
+      "isabelle": "Lattices.linorder.min_max_distribs_2",
+      "mathlib": "min_max_distrib_left",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "min a (max b c) = max (min a b) (min a c). zproof path-B (u06): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Exact Mathlib lemma 'min_max_distrib_left'."
+    },
+    {
+      "concept": "left fold over empty list",
+      "isabelle": "List.foldl.foldl_Nil",
+      "mathlib": "List.foldl_nil",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "List.foldl f a [] = a. zproof path-B (u07): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Exact Mathlib lemma 'List.foldl_nil' (proof by simp)."
+    },
+    {
+      "concept": "left fold over cons",
+      "isabelle": "List.foldl.foldl_Cons",
+      "mathlib": "List.foldl_cons",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch2",
+      "note": "List.foldl f a (x::xs) = List.foldl f (f a x) xs. zproof path-B (u08): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext}. Exact Mathlib lemma 'List.foldl_cons'."
+    },
+    {
+      "concept": "pointwise supremum application",
+      "isabelle": "Complete_Lattices.SUP_apply",
+      "mathlib": "iSup_apply",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch2",
+      "note": "(SUP y in A, f y) x = SUP y in A, f y x. zproof path-B (u15): Aristotle-proven + Lean-kernel-verified; #print axioms = {propext, Quot.sound}. Discharged via Mathlib 'iSup_apply' (pointwise complete-lattice apply)."
+    },
+    {
+      "concept": "function-map composition (associativity)",
+      "isabelle": "Basic_BNFs.fun.map_comp",
+      "mathlib": "Function.comp_assoc",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch2",
+      "note": "g (f v) = (g f) v; BNF-prefixed but the statement is composition associativity. zproof path-B (u16): Aristotle-proven + Lean-kernel-verified; #print axioms = none (fully constructive). Discharged by '(Function.comp_assoc g f v).symm'."
+    },
+    {
+      "concept": "list append associativity",
+      "isabelle": "List.append_assoc",
+      "mathlib": "List.append_assoc",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "(xs@ys)@zs = xs@(ys@zs). zproof path-B batch3 (c01): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "append nil (right unit)",
+      "isabelle": "List.append_Nil2",
+      "mathlib": "List.append_nil",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "xs @ [] = xs. zproof path-B batch3 (c02): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "reverse of append",
+      "isabelle": "List.rev_append",
+      "mathlib": "List.reverse_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "rev (xs@ys) = rev ys @ rev xs. zproof path-B batch3 (c03): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "map over append",
+      "isabelle": "List.map_append",
+      "mathlib": "List.map_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "map f (xs@ys) = map f xs @ map f ys. zproof path-B batch3 (c04): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "length of append",
+      "isabelle": "List.length_append",
+      "mathlib": "List.length_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "length (xs@ys) = length xs + length ys. zproof path-B batch3 (c05): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "map composition (fusion)",
+      "isabelle": "List.map_map",
+      "mathlib": "List.map_map",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "map f (map g xs) = map (f o g) xs. zproof path-B batch3 (c06): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "reverse commutes with map",
+      "isabelle": "List.rev_map",
+      "mathlib": "List.map_reverse",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch3",
+      "note": "rev (map f xs) = map f (rev xs). zproof path-B batch3 (c07): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Mathlib lemma is the SYMMETRIC orientation (map f l.reverse = (map f l).reverse)."
+    },
+    {
+      "concept": "reverse involutive",
+      "isabelle": "List.rev_rev_ident",
+      "mathlib": "List.reverse_reverse",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "rev (rev xs) = xs. zproof path-B batch3 (c08): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "length of map",
+      "isabelle": "List.length_map",
+      "mathlib": "List.length_map",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "length (map f xs) = length xs. zproof path-B batch3 (c09): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "filter over append",
+      "isabelle": "List.filter_append",
+      "mathlib": "List.filter_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "filter P (xs@ys) = filter P xs @ filter P ys. zproof path-B batch3 (c10): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides; Isabelle set-predicate becomes Bool predicate."
+    },
+    {
+      "concept": "add zero (right, nat)",
+      "isabelle": "Nat.add_0_right",
+      "mathlib": "Nat.add_zero",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "m + 0 = m on nat. zproof path-B batch3 (c11): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {} (axiom-free)."
+    },
+    {
+      "concept": "right distributivity (nat)",
+      "isabelle": "Nat.add_mult_distrib",
+      "mathlib": "Nat.add_mul",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "(m+n)*k = m*k+n*k on nat. zproof path-B batch3 (c12): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "left distributivity (nat)",
+      "isabelle": "Nat.add_mult_distrib2",
+      "mathlib": "Nat.mul_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch3",
+      "note": "k*(m+n) = k*m+k*n on nat. zproof path-B batch3 (c13): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {} (axiom-free)."
+    },
+    {
+      "concept": "set union commutative",
+      "isabelle": "Set.Un_commute",
+      "mathlib": "Set.union_comm",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "A ∪ B = B ∪ A. zproof path-B batch3 (c14): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "set intersection commutative",
+      "isabelle": "Set.Int_commute",
+      "mathlib": "Set.inter_comm",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "A ∩ B = B ∩ A. zproof path-B batch3 (c15): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "set union associative",
+      "isabelle": "Set.Un_assoc",
+      "mathlib": "Set.union_assoc",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "(A∪B)∪C = A∪(B∪C). zproof path-B batch3 (c16): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "set intersection associative",
+      "isabelle": "Set.Int_assoc",
+      "mathlib": "Set.inter_assoc",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "(A∩B)∩C = A∩(B∩C). zproof path-B batch3 (c17): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "set union idempotent",
+      "isabelle": "Set.Un_absorb",
+      "mathlib": "Set.union_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "A ∪ A = A. zproof path-B batch3 (c18): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "set intersection idempotent",
+      "isabelle": "Set.Int_absorb",
+      "mathlib": "Set.inter_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "A ∩ A = A. zproof path-B batch3 (c19): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "linear order totality",
+      "isabelle": "Orderings.linorder_linear",
+      "mathlib": "le_total",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch3",
+      "note": "x ≤ y ∨ y ≤ x on a linorder. zproof path-B batch3 (c20): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "double negation (additive group)",
+      "isabelle": "Groups.group_add.minus_minus",
+      "mathlib": "neg_neg",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch3",
+      "note": "-(-a) = a. zproof path-B batch3 (c23): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Isabelle group_add locale premise -> Mathlib [AddGroup] typeclass (class hop)."
+    },
+    {
+      "concept": "subtraction self is zero",
+      "isabelle": "Groups.group_add.diff_self",
+      "mathlib": "sub_self",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch3",
+      "note": "a - a = 0. zproof path-B batch3 (c24): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Isabelle group_add locale premise -> Mathlib [AddGroup] typeclass (class hop)."
+    },
+    {
+      "concept": "add right-monotone (nat)",
+      "isabelle": "Nat.add_le_mono1",
+      "mathlib": "Nat.add_le_add_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch3",
+      "note": "i ≤ j ==> i+k ≤ j+k on nat. zproof path-B batch3 (c25): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {} (axiom-free)."
+    },
+    {
+      "concept": "drop over append",
+      "isabelle": "List.drop_append",
+      "mathlib": "List.drop_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "drop n (xs@ys) = drop n xs @ drop (n - |xs|) ys. zproof path-B batch3 (c27): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. Same name both sides; identical truncated-subtraction statement in Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "take over append",
+      "isabelle": "List.take_append",
+      "mathlib": "List.take_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "take n (xs@ys) = take n xs @ take (n - |xs|) ys. zproof path-B batch3 (c28): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. Same name both sides; identical truncated-subtraction statement in Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "multiset cons swap",
+      "isabelle": "Multiset.add_mset_commute",
+      "mathlib": "Multiset.cons_swap",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch3",
+      "note": "add_mset x (add_mset y M) = add_mset y (add_mset x M). zproof path-B batch3 (c29): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {Quot.sound}."
+    },
+    {
+      "concept": "take++drop identity",
+      "isabelle": "List.append_take_drop_id",
+      "mathlib": "List.take_append_drop",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c001): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "flatten of append",
+      "isabelle": "List.concat_append",
+      "mathlib": "List.flatten_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c002): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Isabelle concat = Lean flatten."
+    },
+    {
+      "concept": "count over append",
+      "isabelle": "List.count_list_append",
+      "mathlib": "List.count_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c003): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "count of reverse",
+      "isabelle": "List.count_list_rev",
+      "mathlib": "List.count_reverse",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c004): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Single-rw witness."
+    },
+    {
+      "concept": "drop of drop",
+      "isabelle": "List.drop_drop",
+      "mathlib": "List.drop_drop",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c005): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Addend order commuted (needs add_comm)."
+    },
+    {
+      "concept": "filter of filter",
+      "isabelle": "List.filter_filter",
+      "mathlib": "List.filter_filter",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c007): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. Conjunct order commuted (Bool.and_comm)."
+    },
+    {
+      "concept": "filter of map",
+      "isabelle": "List.filter_map",
+      "mathlib": "List.filter_map",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c008): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "drop of replicate",
+      "isabelle": "List.drop_replicate",
+      "mathlib": "List.drop_replicate",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c009): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "drop succ as tail",
+      "isabelle": "List.drop_Suc",
+      "mathlib": "List.drop_tail",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c010): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Symmetric orientation."
+    },
+    {
+      "concept": "drop of take",
+      "isabelle": "List.drop_take",
+      "mathlib": "List.drop_take",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c011): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. Same name both sides."
+    },
+    {
+      "concept": "dropWhile idempotent",
+      "isabelle": "List.dropWhile_idem",
+      "mathlib": "List.dropWhile_idempotent",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c012): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "dropLast of snoc",
+      "isabelle": "List.butlast_snoc",
+      "mathlib": "List.dropLast_concat",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c013): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "map of replicate",
+      "isabelle": "List.map_replicate",
+      "mathlib": "List.map_replicate",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c014): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "map/dropLast commute",
+      "isabelle": "List.map_butlast",
+      "mathlib": "List.map_dropLast",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c015): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "map/tail commute",
+      "isabelle": "List.map_tl",
+      "mathlib": "List.map_tail",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c016): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "length of replicate",
+      "isabelle": "List.length_replicate",
+      "mathlib": "List.length_replicate",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c017): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "length of reverse",
+      "isabelle": "List.length_rev",
+      "mathlib": "List.length_reverse",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c018): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "length of drop",
+      "isabelle": "List.length_drop",
+      "mathlib": "List.length_drop",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c019): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. Same name both sides."
+    },
+    {
+      "concept": "length of zip",
+      "isabelle": "List.length_zip",
+      "mathlib": "List.length_zip",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c021): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Same name both sides."
+    },
+    {
+      "concept": "all over append",
+      "isabelle": "List.list_all_append",
+      "mathlib": "List.all_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c022): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Mechanically #check-verified."
+    },
+    {
+      "concept": "any over append",
+      "isabelle": "List.list_ex_append",
+      "mathlib": "List.any_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c023): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Mechanically #check-verified."
+    },
+    {
+      "concept": "foldr over append",
+      "isabelle": "List.foldr_append",
+      "mathlib": "List.foldr_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c024): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. Same name both sides."
+    },
+    {
+      "concept": "foldl over append",
+      "isabelle": "List.foldl_append",
+      "mathlib": "List.foldl_append",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c025): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. Same name both sides."
+    },
+    {
+      "concept": "set diff self",
+      "isabelle": "Set.Diff_cancel",
+      "mathlib": "Set.diff_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c026): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "set diff empty",
+      "isabelle": "Set.Diff_empty",
+      "mathlib": "Set.diff_empty",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c027): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "double complement",
+      "isabelle": "Set.double_complement",
+      "mathlib": "compl_compl",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c028): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. General complement lemma at Set."
+    },
+    {
+      "concept": "de Morgan inter",
+      "isabelle": "Set.Compl_Int",
+      "mathlib": "Set.compl_inter",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c029): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "union with complement",
+      "isabelle": "Set.Compl_partition",
+      "mathlib": "Set.union_compl_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c030): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "inter with complement",
+      "isabelle": "Set.Compl_disjoint",
+      "mathlib": "Set.inter_compl_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c031): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "image of empty",
+      "isabelle": "Set.image_empty",
+      "mathlib": "Set.image_empty",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c032): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. Same name both sides."
+    },
+    {
+      "concept": "image of image",
+      "isabelle": "Set.image_image",
+      "mathlib": "Set.image_image",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c033): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. Same name both sides."
+    },
+    {
+      "concept": "image of insert",
+      "isabelle": "Set.image_insert",
+      "mathlib": "Set.image_insert_eq",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c034): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "insert commute",
+      "isabelle": "Set.insert_commute",
+      "mathlib": "Set.insert_comm",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c035): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "insert idempotent",
+      "isabelle": "Set.insert_absorb2",
+      "mathlib": "Set.insert_idem",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c036): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "inter with diff",
+      "isabelle": "Set.Diff_disjoint",
+      "mathlib": "Set.inter_diff_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c037): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "diff of complement",
+      "isabelle": "Set.Diff_Compl",
+      "mathlib": "Set.diff_compl",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c038): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "complement of univ",
+      "isabelle": "Set.Compl_UNIV_eq",
+      "mathlib": "Set.compl_univ",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c039): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "complement of empty",
+      "isabelle": "Set.Compl_empty_eq",
+      "mathlib": "Set.compl_empty",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c040): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "diff diff self",
+      "isabelle": "Set.Diff_Diff_Int",
+      "mathlib": "Set.diff_diff_right_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c041): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "diff subset",
+      "isabelle": "Set.Diff_subset",
+      "mathlib": "Set.diff_subset",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c042): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "empty subset",
+      "isabelle": "Set.empty_subsetI",
+      "mathlib": "Set.empty_subset",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c043): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "multiset diff of sum",
+      "isabelle": "Multiset.diff_diff_add_mset",
+      "mathlib": "Multiset.sub_add_eq_sub_sub",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c045): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. Symmetric orientation."
+    },
+    {
+      "concept": "multiset right cancel",
+      "isabelle": "Multiset.diff_union_cancelR",
+      "mathlib": "Multiset.add_sub_cancel_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c047): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "count in empty multiset",
+      "isabelle": "Multiset.count_empty",
+      "mathlib": "Multiset.count_zero",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c048): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "count over multiset sum",
+      "isabelle": "Multiset.count_union",
+      "mathlib": "Multiset.count_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c049): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. convert using 1 (defeq wrinkle)."
+    },
+    {
+      "concept": "cons nonzero",
+      "isabelle": "Multiset.add_mset_not_empty",
+      "mathlib": "Multiset.cons_ne_zero",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c050): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "zero ne cons",
+      "isabelle": "Multiset.empty_not_add_mset",
+      "mathlib": "Multiset.zero_ne_cons",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c051): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "multiset union idempotent",
+      "isabelle": "Multiset.subset_mset.sup_idem",
+      "mathlib": "sup_idem",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c053): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. General lattice idempotence; Multiset ∪ is the lattice sup (mechanically verified)."
+    },
+    {
+      "concept": "multiset inter idempotent",
+      "isabelle": "Multiset.subset_mset.inf_idem",
+      "mathlib": "inf_idem",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c054): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. General lattice idempotence; Multiset ∩ is the lattice inf (mechanically verified)."
+    },
+    {
+      "concept": "replicate succ",
+      "isabelle": "Multiset.replicate_mset_Suc",
+      "mathlib": "Multiset.replicate_succ",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c055): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {Quot.sound}. convert using 1 (defeq wrinkle)."
+    },
+    {
+      "concept": "nat left cancel",
+      "isabelle": "Nat.diff_add_inverse",
+      "mathlib": "Nat.add_sub_cancel_left",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c057): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "nat right cancel",
+      "isabelle": "Nat.diff_add_inverse2",
+      "mathlib": "Nat.add_sub_cancel",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c058): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "nat sub add left",
+      "isabelle": "Nat.diff_cancel",
+      "mathlib": "Nat.add_sub_add_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c059): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Single-rw witness."
+    },
+    {
+      "concept": "nat sub sub",
+      "isabelle": "Nat.diff_diff_left",
+      "mathlib": "tsub_tsub",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c060): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. General truncated-sub lemma at nat."
+    },
+    {
+      "concept": "nat sub le",
+      "isabelle": "Nat.diff_le_self",
+      "mathlib": "Nat.sub_le",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c061): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "nat le add right",
+      "isabelle": "Nat.le_add1",
+      "mathlib": "Nat.le_add_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c062): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "nat le add left",
+      "isabelle": "Nat.le_add2",
+      "mathlib": "Nat.le_add_left",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c063): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "nat mul zero",
+      "isabelle": "Nat.mult_0_right",
+      "mathlib": "Nat.mul_zero",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c064): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "nat max zero",
+      "isabelle": "Nat.max_0R",
+      "mathlib": "Nat.max_zero",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c065): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Mechanically #check-verified."
+    },
+    {
+      "concept": "succ sub succ",
+      "isabelle": "Nat.diff_Suc_Suc",
+      "mathlib": "Nat.succ_sub_succ",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c066): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. succ spelled n+1 in translation."
+    },
+    {
+      "concept": "max succ succ",
+      "isabelle": "Nat.max_Suc_Suc",
+      "mathlib": "Nat.succ_max_succ",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c067): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. succ spelled n+1 in translation."
+    },
+    {
+      "concept": "natCast injective",
+      "isabelle": "Int.int_int_eq",
+      "mathlib": "Int.natCast_inj",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c068): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "toNat of natCast",
+      "isabelle": "Int.nat_int",
+      "mathlib": "Int.toNat_natCast",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c069): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "double eq zero",
+      "isabelle": "Int.double_eq_0_iff",
+      "mathlib": "add_self_eq_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c070): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. General lemma at int."
+    },
+    {
+      "concept": "add one le iff",
+      "isabelle": "Int.add1_zle_eq",
+      "mathlib": "Int.add_one_le_iff",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c071): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "toNat eq zero",
+      "isabelle": "Int.nat_0_iff",
+      "mathlib": "Int.toNat_eq_zero",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c072): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "gcd zero left",
+      "isabelle": "GCD.gcd_0_left_nat",
+      "mathlib": "Nat.gcd_zero_left",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c074): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {Quot.sound}."
+    },
+    {
+      "concept": "gcd zero right",
+      "isabelle": "GCD.gcd_0_nat",
+      "mathlib": "Nat.gcd_zero_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c075): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "gcd one right",
+      "isabelle": "GCD.gcd_1_nat",
+      "mathlib": "Nat.gcd_one_right",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c076): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "gcd self",
+      "isabelle": "GCD.gcd_idem_nat",
+      "mathlib": "Nat.gcd_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c077): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}."
+    },
+    {
+      "concept": "left neg cancel",
+      "isabelle": "Groups.ab_left_minus",
+      "mathlib": "neg_add_cancel",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c078): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Class hop ab_group_add -> AddGroup."
+    },
+    {
+      "concept": "eq iff le both ways",
+      "isabelle": "Orderings.eq_iff",
+      "mathlib": "le_antisymm_iff",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c080): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. Mechanically #check-verified."
+    },
+    {
+      "concept": "le iff lt or eq",
+      "isabelle": "Orderings.order_class.le_less",
+      "mathlib": "le_iff_lt_or_eq",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c081): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. Mechanically #check-verified."
+    },
+    {
+      "concept": "lt iff le and ne",
+      "isabelle": "Orderings.order_class.less_le",
+      "mathlib": "lt_iff_le_and_ne",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c082): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "sUnion of empty",
+      "isabelle": "Complete_Lattices.Union_empty",
+      "mathlib": "Set.sUnion_empty",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c083): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. Harvest initially failed; re-downloaded (task COMPLETE)."
+    },
+    {
+      "concept": "no max order exists gt",
+      "isabelle": "Orderings.no_top_class.gt_ex",
+      "mathlib": "exists_gt",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c086): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "no min order exists lt",
+      "isabelle": "Orderings.no_bot_class.lt_ex",
+      "mathlib": "exists_lt",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c087): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1."
+    },
+    {
+      "concept": "lattice absorption inf-sup",
+      "isabelle": "Lattices.lattice.inf_sup_absorb",
+      "mathlib": "inf_sup_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c088): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Mechanically #check-verified."
+    },
+    {
+      "concept": "lattice absorption sup-inf",
+      "isabelle": "Lattices.lattice.sup_inf_absorb",
+      "mathlib": "sup_inf_self",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c089): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "prefix of nil",
+      "isabelle": "Sublist.prefix_Nil",
+      "mathlib": "List.prefix_nil",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c092): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}."
+    },
+    {
+      "concept": "infix of reverses",
+      "isabelle": "Sublist.sublist_rev",
+      "mathlib": "List.reverse_infix",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c095): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Mechanically #check-verified."
+    },
+    {
+      "concept": "pair set equality",
+      "isabelle": "Set.doubleton_eq_iff",
+      "mathlib": "Set.pair_eq_pair_iff",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c097): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "multiset eq iff mutual le",
+      "isabelle": "Multiset.subset_mset.eq_iff",
+      "mathlib": "le_antisymm_iff",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c098): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. General partial-order fact at Multiset le."
+    },
+    {
+      "concept": "disjoint symmetric",
+      "isabelle": "Set.disjnt_commute",
+      "mathlib": "disjoint_comm",
+      "kind": "theorem",
+      "confidence": 0.95,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c100): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}."
+    },
+    {
+      "concept": "length of take",
+      "isabelle": "List.length_take",
+      "mathlib": "List.length_take",
+      "kind": "theorem",
+      "confidence": 0.9,
+      "verified": "aristotle-lean-batch4",
+      "note": "zproof path-B batch4 (c020): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. Retry proved (first attempt OUT_OF_BUDGET); min operand order commuted (Nat.min_comm), single-rw witness."
+    },
+    {
+      "concept": "zmult zless mono2",
+      "isabelle": "Int.zmult_zless_mono2",
+      "mathlib": "mul_lt_mul_of_pos_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1844390): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. bare `exact mul_lt_mul_of_pos_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "plus int code 1",
+      "isabelle": "Int.plus_int_code_1",
+      "mathlib": "add_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1918752): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact add_zero` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "plus int code 2",
+      "isabelle": "Int.plus_int_code_2",
+      "mathlib": "zero_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1918756): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact zero_add` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "minus int code 1",
+      "isabelle": "Int.minus_int_code_1",
+      "mathlib": "sub_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1918928): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact sub_zero` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "times int code 1",
+      "isabelle": "Int.times_int_code_1",
+      "mathlib": "mul_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1919042): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact mul_zero` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "int distrib 1",
+      "isabelle": "Int.int_distrib_1",
+      "mathlib": "add_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1921268): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact add_mul` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "int distrib 2",
+      "isabelle": "Int.int_distrib_2",
+      "mathlib": "mul_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s1921272): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact mul_add` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "map comp",
+      "isabelle": "List.List.list.map_comp",
+      "mathlib": "List.map_map",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2737024): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact List.map_map` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "length filter le",
+      "isabelle": "List.length_filter_le",
+      "mathlib": "List.length_filter_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2802066): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact List.length_filter_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "take 0",
+      "isabelle": "List.take_0",
+      "mathlib": "List.take_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2819198): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact List.take_zero` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "drop all",
+      "isabelle": "List.drop_all",
+      "mathlib": "List.drop_eq_nil_of_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2821636): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact List.drop_eq_nil_of_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "rev drop",
+      "isabelle": "List.rev_drop",
+      "mathlib": "List.reverse_drop",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2824886): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact List.reverse_drop` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "drop rev",
+      "isabelle": "List.drop_rev",
+      "mathlib": "List.drop_reverse",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2825026): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact List.drop_reverse` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "take rev",
+      "isabelle": "List.take_rev",
+      "mathlib": "List.take_reverse",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2825166): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact List.take_reverse` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "take add",
+      "isabelle": "List.take_add",
+      "mathlib": "List.take_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s2828344): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. bare `exact List.take_add` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Int left commute",
+      "isabelle": "Set.Int_left_commute",
+      "mathlib": "Set.inter_left_comm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s294268): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.inter_left_comm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Int ac 1",
+      "isabelle": "Set.Int_ac_1",
+      "mathlib": "Set.inter_assoc",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s294372): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.inter_assoc` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Int ac 3",
+      "isabelle": "Set.Int_ac_3",
+      "mathlib": "Set.inter_comm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s294376): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.inter_comm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Int ac 4",
+      "isabelle": "Set.Int_ac_4",
+      "mathlib": "Set.inter_left_comm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s294378): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.inter_left_comm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Int Un distrib",
+      "isabelle": "Set.Int_Un_distrib",
+      "mathlib": "Set.inter_union_distrib_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s294914): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.inter_union_distrib_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Int Un distrib2",
+      "isabelle": "Set.Int_Un_distrib2",
+      "mathlib": "Set.union_inter_distrib_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s294974): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_inter_distrib_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Un left commute",
+      "isabelle": "Set.Un_left_commute",
+      "mathlib": "Set.union_left_comm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s295372): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_left_comm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Un ac 1",
+      "isabelle": "Set.Un_ac_1",
+      "mathlib": "Set.union_assoc",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s295476): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_assoc` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Un ac 3",
+      "isabelle": "Set.Un_ac_3",
+      "mathlib": "Set.union_comm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s295480): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_comm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Un ac 4",
+      "isabelle": "Set.Un_ac_4",
+      "mathlib": "Set.union_left_comm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s295482): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_left_comm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Un Int distrib",
+      "isabelle": "Set.Un_Int_distrib",
+      "mathlib": "Set.union_inter_distrib_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s296352): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_inter_distrib_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Un Int eq 1",
+      "isabelle": "Set.Un_Int_eq_1",
+      "mathlib": "Set.union_inter_cancel_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s296892): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Set.union_inter_cancel_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "inject",
+      "isabelle": "Nat.nat.inject",
+      "mathlib": "Nat.succ.injEq",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s666798): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.succ.injEq` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "inject",
+      "isabelle": "Nat.old.nat.inject",
+      "mathlib": "Nat.succ.injEq",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s667296): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.succ.injEq` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "simps 1",
+      "isabelle": "Nat.old.nat.simps_1",
+      "mathlib": "Nat.succ.injEq",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s669524): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.succ.injEq` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "simps 1",
+      "isabelle": "Nat.nat.simps_1",
+      "mathlib": "Nat.succ.injEq",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s670060): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.succ.injEq` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc inject",
+      "isabelle": "Nat.Suc_inject",
+      "mathlib": "Nat.succ.inj",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s671640): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.succ.inj` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc eq plus1",
+      "isabelle": "Nat.Suc_eq_plus1",
+      "mathlib": "Nat.succ_eq_add_one",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s677496): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.succ_eq_add_one` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "le SucI",
+      "isabelle": "Nat.le_SucI",
+      "mathlib": "Nat.le_succ_of_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s682758): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.le_succ_of_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "less SucI",
+      "isabelle": "Nat.less_SucI",
+      "mathlib": "Nat.lt_succ_of_lt",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s683062): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.lt_succ_of_lt` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc lessD",
+      "isabelle": "Nat.Suc_lessD",
+      "mathlib": "Nat.lt_of_succ_lt",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s683110): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.lt_of_succ_lt` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "lessI",
+      "isabelle": "Nat.lessI",
+      "mathlib": "Nat.lt_succ_self",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s686514): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.lt_succ_self` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc less SucD",
+      "isabelle": "Nat.Suc_less_SucD",
+      "mathlib": "Nat.lt_of_succ_lt_succ",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s688982): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.lt_of_succ_lt_succ` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc le lessD",
+      "isabelle": "Nat.Suc_le_lessD",
+      "mathlib": "Nat.lt_of_succ_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s689950): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.lt_of_succ_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "le simps 1",
+      "isabelle": "Nat.le_simps_1",
+      "mathlib": "Nat.le_of_lt",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s690050): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.le_of_lt` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "le antisym",
+      "isabelle": "Nat.le_antisym",
+      "mathlib": "Nat.le_antisymm",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s690642): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.le_antisymm` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "le neq implies less",
+      "isabelle": "Nat.le_neq_implies_less",
+      "mathlib": "lt_of_le_of_ne",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s690912): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact lt_of_le_of_ne` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc diff 1",
+      "isabelle": "Nat.Suc_diff_1",
+      "mathlib": "Nat.succ_pred_eq_of_pos",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s695530): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.succ_pred_eq_of_pos` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "add less mono1",
+      "isabelle": "Nat.add_less_mono1",
+      "mathlib": "Nat.add_lt_add_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s696338): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.add_lt_add_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "add less mono",
+      "isabelle": "Nat.add_less_mono",
+      "mathlib": "Nat.add_lt_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s696662): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.add_lt_add` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "mult less mono2",
+      "isabelle": "Nat.mult_less_mono2",
+      "mathlib": "Nat.mul_lt_mul_of_pos_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s698014): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.mul_lt_mul_of_pos_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "extremum uniqueI",
+      "isabelle": "Nat.bot_nat_0.extremum_uniqueI",
+      "mathlib": "Nat.eq_zero_of_le_zero",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s699232): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.eq_zero_of_le_zero` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "add le mono",
+      "isabelle": "Nat.add_le_mono",
+      "mathlib": "Nat.add_le_add",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s707118): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.add_le_add` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "trans le add1",
+      "isabelle": "Nat.trans_le_add1",
+      "mathlib": "Nat.le_add_right_of_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s707458): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.le_add_right_of_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "Suc diff le",
+      "isabelle": "Nat.Suc_diff_le",
+      "mathlib": "Nat.succ_sub",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s708628): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.succ_sub` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff is 0 eq'",
+      "isabelle": "Nat.diff_is_0_eq'",
+      "mathlib": "Nat.sub_eq_zero_of_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s709436): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.sub_eq_zero_of_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "mult le mono1",
+      "isabelle": "Nat.mult_le_mono1",
+      "mathlib": "Nat.mul_le_mul_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s710466): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.mul_le_mul_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "mult le mono2",
+      "isabelle": "Nat.mult_le_mono2",
+      "mathlib": "Nat.mul_le_mul_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s710520): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.mul_le_mul_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "mult le mono",
+      "isabelle": "Nat.mult_le_mono",
+      "mathlib": "Nat.mul_le_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s710594): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.mul_le_mul` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "mult less mono1",
+      "isabelle": "Nat.mult_less_mono1",
+      "mathlib": "Nat.mul_lt_mul_of_pos_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s710650): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.mul_lt_mul_of_pos_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "le square",
+      "isabelle": "Nat.le_square",
+      "mathlib": "Nat.le_mul_self",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s711548): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.le_mul_self` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff less mono",
+      "isabelle": "Nat.diff_less_mono",
+      "mathlib": "tsub_lt_tsub_right_of_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s746490): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. bare `exact tsub_lt_tsub_right_of_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff diff cancel",
+      "isabelle": "Nat.diff_diff_cancel",
+      "mathlib": "Nat.sub_sub_self",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s746910): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.sub_sub_self` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff less",
+      "isabelle": "Nat.diff_less",
+      "mathlib": "Nat.sub_lt",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s746984): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.sub_lt` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff diff eq",
+      "isabelle": "Nat.diff_diff_eq",
+      "mathlib": "Nat.sub_sub_sub_cancel_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s747072): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Quot.sound}. bare `exact Nat.sub_sub_sub_cancel_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff le mono",
+      "isabelle": "Nat.diff_le_mono",
+      "mathlib": "Nat.sub_le_sub_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s747846): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.sub_le_sub_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff le mono2",
+      "isabelle": "Nat.diff_le_mono2",
+      "mathlib": "Nat.sub_le_sub_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s748010): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.sub_le_sub_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff less mono2",
+      "isabelle": "Nat.diff_less_mono2",
+      "mathlib": "Nat.sub_lt_sub_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s748148): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.sub_lt_sub_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff diff right",
+      "isabelle": "Nat.diff_diff_right",
+      "mathlib": "tsub_tsub_eq_add_tsub_of_le",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s748450): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext, Classical.choice, Quot.sound}. bare `exact tsub_tsub_eq_add_tsub_of_le` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "one less mult",
+      "isabelle": "Nat.one_less_mult",
+      "mathlib": "one_lt_mul''",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s748910): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact one_lt_mul''` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "n less m mult n",
+      "isabelle": "Nat.n_less_m_mult_n",
+      "mathlib": "lt_mul_of_one_lt_left",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s748958): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact lt_mul_of_one_lt_left` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "n less n mult m",
+      "isabelle": "Nat.n_less_n_mult_m",
+      "mathlib": "lt_mul_of_one_lt_right",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s749006): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact lt_mul_of_one_lt_right` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "nat mult 1",
+      "isabelle": "Nat.nat_mult_1",
+      "mathlib": "Nat.one_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s755724): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.one_mul` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff mult distrib",
+      "isabelle": "Nat.diff_mult_distrib",
+      "mathlib": "Nat.sub_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s755816): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.sub_mul` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "diff self eq 0",
+      "isabelle": "Nat.diff_self_eq_0",
+      "mathlib": "Nat.sub_self",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s755970): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1. bare `exact Nat.sub_self` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "nat distrib 1",
+      "isabelle": "Nat.nat_distrib_1",
+      "mathlib": "Nat.add_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s756418): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.add_mul` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "nat distrib 3",
+      "isabelle": "Nat.nat_distrib_3",
+      "mathlib": "Nat.sub_mul",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s756422): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.sub_mul` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    },
+    {
+      "concept": "nat distrib 4",
+      "isabelle": "Nat.nat_distrib_4",
+      "mathlib": "Nat.mul_sub_left_distrib",
+      "kind": "theorem",
+      "confidence": 0.92,
+      "verified": "aristotle-lean-batch5",
+      "note": "zproof path-B batch5 (s756424): Aristotle-proven + Lean-kernel-verified vs Mathlib v4.32.0-rc1; #print axioms = {propext}. bare `exact Nat.mul_sub_left_distrib` applied to the theorem's own binders closed the faithful goal in the passing combined re-verify -> same-statement Mathlib decl."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "lane": "Init",
+  "total_imported": 0,
+  "reverified": 0,
+  "fraction": 0.0,
+  "note": "Pillar-2 item 5 (G5) dep-closure re-verified-fraction metric. UNMEASURED BASELINE (0/0): this host has no Lean toolchain, so the live Init/Std closure count is not yet recorded. Populate + ratchet with `clean olean import-reverify-metric --module Init [--module Std] [--timestamp]` on a host with a matching Lean toolchain (or set CLEAN_AC1_FULL_VALIDATION and run the gated import_reverify_metric test). The write ratchets: the recorded `fraction` only ever RISES; a regression is refused. reverified counts constants the Clean kernel add_decl-re-checked (typecheck_constants_full), an honest lower bound on kernel-verified imports for the lane."
+}

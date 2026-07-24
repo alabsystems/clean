@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "generated_at": "unix:1779644790",
+  "lean4_version": "Lean (version 4.29.1, arm64-apple-darwin24.6.0, commit f72c35b3f637c8c6571d353742168ab66cc22c00, Release)",
+  "corpus_sha256": "8454e6a3629372c812788af4fee4e3041e02943aca1fb78ffa7b51e92a7749ec",
+  "cases": [
+    {
+      "path": "accept/basic_identity_const.lean",
+      "verdict": "accept"
+    },
+    {
+      "path": "accept/pi_let_beta.lean",
+      "verdict": "accept"
+    },
+    {
+      "path": "accept/nat_succ_type.lean",
+      "verdict": "accept"
+    },
+    {
+      "path": "reject/ill_typed_app.lean",
+      "verdict": "reject"
+    },
+    {
+      "path": "reject/type_mismatch_def.lean",
+      "verdict": "reject"
+    },
+    {
+      "path": "reject/type_mismatch_theorem.lean",
+      "verdict": "reject"
+    },
+    {
+      "path": "reject/sort_universe_error.lean",
+      "verdict": "reject"
+    }
+  ]
+}

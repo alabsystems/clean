@@ -1,0 +1,39 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "nn-verify-pilot",
+  "domain_profile": "nn-verify",
+  "producer": {
+    "system": "gamma-crown",
+    "commit": "fixture-gamma-crown-serialized-kernel-pilot"
+  },
+  "goal": {
+    "expr": {
+      "FVar": 0
+    },
+    "pretty": "Gamma-Crown certificate proves the serialized local linear bound"
+  },
+  "local_context": [
+    {
+      "name": "gamma_crown_local_linear_bound",
+      "type_pp": "Prop",
+      "type_expr": "{\"Sort\":\"Zero\"}"
+    },
+    {
+      "name": "h_gamma_crown_certificate_result",
+      "type_pp": "gamma_crown_local_linear_bound",
+      "type_expr": "{\"FVar\":0}"
+    }
+  ],
+  "side_conditions": [
+    "Gamma-Crown certificate replay produced the local linear-bound proposition",
+    "Farkas multipliers certify the affine bound side condition"
+  ],
+  "metadata": {
+    "fixture": "gamma-crown-serialized-kernel-pilot",
+    "transformation": "local-linear-bound",
+    "scope": "serialized kernel local-context proof-state closure; semantic replay remains in separate artifact obligations",
+    "issue_plan": "non-filing",
+    "fixture_role": "proof-state-smoke"
+  },
+  "trust_policy": "constructive-only"
+}

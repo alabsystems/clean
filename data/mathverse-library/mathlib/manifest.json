@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "base_shards": [
+    {
+      "path": "base/lean4_0000.mathverse",
+      "content_hash": "f106292988055904ff661c2ee46fff43586ae76e0d26b832b2b3999c2a0259d3",
+      "constant_count": 10068,
+      "expr_count": 192257,
+      "source": "lean4_0000"
+    },
+    {
+      "path": "base/lean4_0001.mathverse",
+      "content_hash": "222b904bfcc5c371437893ca04d0bee45f5ed08bd174b9cb1d845e73dfda689a",
+      "constant_count": 10061,
+      "expr_count": 306840,
+      "source": "lean4_0001"
+    },
+    {
+      "path": "base/lean4_0002.mathverse",
+      "content_hash": "c9281f717a521ee3a16ca001174ae8dab33e4ec8f94fa324cbdea87b2423cc2e",
+      "constant_count": 10209,
+      "expr_count": 162468,
+      "source": "lean4_0002"
+    },
+    {
+      "path": "base/lean4_0003.mathverse",
+      "content_hash": "a70fd1060e5aaf4fa349783ca410b1faf3b3a07d8dfb16c3929b0f9955df1868",
+      "constant_count": 10043,
+      "expr_count": 193919,
+      "source": "lean4_0003"
+    },
+    {
+      "path": "base/lean4_0004.mathverse",
+      "content_hash": "89a8c058dc1783b6899a45edce747fd67b95eb0890b3f3b028554c26df3d3d5a",
+      "constant_count": 10018,
+      "expr_count": 123573,
+      "source": "lean4_0004"
+    },
+    {
+      "path": "base/lean4_0005.mathverse",
+      "content_hash": "746badde49975fc9f5be21b99f07fb6630f0c72fcbbcbc9d787385913df06a00",
+      "constant_count": 10015,
+      "expr_count": 155939,
+      "source": "lean4_0005"
+    }
+  ],
+  "delta_shards": [],
+  "total_constants": 60414,
+  "total_exprs": 1134996
+}

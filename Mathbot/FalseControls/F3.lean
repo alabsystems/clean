@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F3_nonfresh_conservative_extension_accepted : Mathbot.nonfreshConservativeExtensionAccepted

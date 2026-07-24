@@ -1,0 +1,16 @@
+{
+  "kernel_verified": 116461,
+  "load_failure": 8033,
+  "load_success": 30,
+  "pass_rate_pct": 63.96741787183557,
+  "processed_files": 8063,
+  "source": "lean",
+  "system": "lean4",
+  "tc_fail": 65602,
+  "tc_pass": 116461,
+  "total_constants": 177788,
+  "total_elapsed_secs": 4207.106013542,
+  "total_files": 8063,
+  "total_skipped": 45516,
+  "trust_level": "KernelVerified"
+}

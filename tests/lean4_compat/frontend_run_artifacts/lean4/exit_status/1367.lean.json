@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "1367.lean",
+  "source_sha256": "sha256:8505ceb8a74d59cc7b10c1b857f5d65ec1e42043d93931d223c6ee46096ba867",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1367.lean"
+  ],
+  "exit_code": 0,
+  "status": "success",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.204,
+  "observed_stdout": "\ud835\udfda : Nat\n\ud835\udfdb 10 : Nat\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

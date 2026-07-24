@@ -1,0 +1,17 @@
+{
+  "id": "auto/false_unprovable",
+  "module": "PropositionalTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": false,
+
+  "tactic_hint": "auto",
+  "expected_result": false,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["propositional", "negative_test"]
+}

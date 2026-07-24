@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "309.lean",
+  "source_sha256": "sha256:eb815b0f6ac1ce52a1bf6e0ba7f2f330235d26f89f55c66cd4c4410c4b1689de",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/309.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 1.123,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/309.lean:1:19: error: don't know how to synthesize placeholder\ncontext:\n\u22a2 False\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

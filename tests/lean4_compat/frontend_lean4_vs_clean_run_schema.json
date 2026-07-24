@@ -1,0 +1,49 @@
+{
+  "schema_version": "clean-frontend-lean4-vs-clean-run-schema-v1",
+  "artifact_schema_version": "clean-frontend-lean4-vs-clean-run-artifact-v1",
+  "kind": "lean4_vs_clean_run_schema",
+  "artifact_kind": "frontend_lean4_vs_clean_run",
+  "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/run/{filename}.json",
+  "description": "Schema for deterministic per-file Lean4-vs-clean frontend run comparison artifacts consumed by generate_frontend_classification.py. The generator treats absent artifacts as missing evidence and present artifacts that violate this schema or disagree with the referenced per-engine artifacts as stale_or_invalid evidence.",
+  "required_fields": [
+    "schema_version",
+    "kind",
+    "engine",
+    "filename",
+    "source_sha256",
+    "command",
+    "lean4_artifact_path",
+    "clean_artifact_path",
+    "comparison_basis",
+    "comparison_status",
+    "lean4_status",
+    "clean_status",
+    "replacement_ready"
+  ],
+  "field_constraints": {
+    "schema_version": "must equal clean-frontend-lean4-vs-clean-run-artifact-v1",
+    "kind": "must equal frontend_lean4_vs_clean_run",
+    "engine": "must equal lean4_vs_clean and match the path engine segment",
+    "filename": "must equal the corpus filename, including .lean",
+    "source_sha256": "must equal the current sha256: digest from tests/lean4_compat/MANIFEST.json",
+    "command": "must be a non-empty array of non-empty strings describing the cross-check command or generator check",
+    "lean4_artifact_path": "must reference the validated Lean4 per-engine artifact used for comparison",
+    "clean_artifact_path": "must reference the validated clean per-engine artifact used for comparison",
+    "comparison_basis": "must equal exit_status_and_first_error_signature",
+    "comparison_status": "must match the referenced artifacts, for example exit_status_match_first_error_signature_mismatch",
+    "lean4_status": "must match the referenced Lean4 artifact status",
+    "clean_status": "must match the referenced clean artifact status",
+    "replacement_ready": "must be false"
+  },
+  "optional_evidence_fields": [
+    "lean4_diagnostic_artifact_path",
+    "clean_diagnostic_artifact_path",
+    "lean4_diagnostic_category",
+    "clean_diagnostic_category",
+    "lean4_first_error_signature",
+    "clean_first_error_signature",
+    "cross_check_status",
+    "artifact_note"
+  ],
+  "replacement_readiness": false
+}

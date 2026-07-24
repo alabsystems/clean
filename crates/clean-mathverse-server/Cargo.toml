@@ -1,0 +1,32 @@
+[package]
+name = "clean-mathverse-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Mathverse hosting service — HTTP browse/search API + SSR web over the verified Core (GCP Cloud Run MVP)"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Read-only dependency on the Mathverse library. `default-features = false`
+# drops the `automation` feature → no `clean-auto` → no `../ay` / `../trust-ir`
+# sibling path-deps, so this crate builds in a bare Docker / Cloud Build context.
+clean-mathverse = { workspace = true, default-features = false }
+axum.workspace = true
+tower-http = { workspace = true }
+tokio.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+anyhow.workspace = true
+clap = { workspace = true }
+thiserror.workspace = true
+
+[[bin]]
+name = "mathverse-api"
+path = "src/bin/mathverse_api.rs"

@@ -1,0 +1,30 @@
+{
+  "id": "central_angle_inscribed",
+  "objects": {
+    "O": {"type": "point"},
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "P": {"type": "point"},
+    "mathverse": {"type": "circle", "definition": {"circle_center_radius": {"center": "O", "radius_point": "A"}}}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "A", "circle": "mathverse"},
+    {"type": "on_circle", "point": "B", "circle": "mathverse"},
+    {"type": "on_circle", "point": "P", "circle": "mathverse"},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "P", "b": "A"},
+    {"type": "not_equal", "a": "P", "b": "B"}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "angle_double",
+    "args": ["A", "O", "B", "A", "P", "B"]
+  },
+  "metadata": {
+    "source": "Central angle theorem",
+    "difficulty": 4,
+    "tags": ["circle", "central_angle", "inscribed_angle", "arc"],
+    "known_solvable": true,
+    "statement": "A central angle is twice any inscribed angle that subtends the same arc."
+  }
+}

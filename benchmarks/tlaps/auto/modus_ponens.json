@@ -1,0 +1,39 @@
+{
+  "id": "auto/modus_ponens",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_p",
+      "formula": "P"
+    },
+    {
+      "name": "h_impl",
+      "formula": {
+        "implies": [
+          "P",
+          "Q"
+        ]
+      }
+    }
+  ],
+  "goal": "Q",
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "implication"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "348.lean",
+  "source_sha256": "sha256:913e1b9ce28dd60ab6e7cd7b9cc8df788b356c67f0240f3ea8c9c2193c022591",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/348.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "unexpected_token_expected",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "unexpected token '\u27e9'; expected ')'",
+      "line": 3,
+      "column": 24
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 1.284,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/348.lean:3:24: error: unexpected token '\u27e9'; expected ')'\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

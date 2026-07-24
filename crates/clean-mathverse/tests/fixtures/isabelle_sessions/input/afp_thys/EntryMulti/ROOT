@@ -1,0 +1,13 @@
+chapter AFP
+
+session EntryMultiTools (AFP) in "tools" = HOL +
+  theories [quick_and_dirty = false]
+    Tool_A "Extra_Quoted"
+  theories
+    Sub/Path_Helper (global)
+
+session "EntryMulti" = "HOL-Analysis" +
+  sessions
+    "HOL-Library"
+  theories
+    Main_Thy

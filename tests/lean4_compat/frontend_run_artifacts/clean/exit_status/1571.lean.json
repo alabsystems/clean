@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "1571.lean",
+  "source_sha256": "sha256:404f915a1b15f6672bafe0de7a55fb7d19b57ab0470a09b1cc70203a56305b3b",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1571.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.093,
+  "observed_stdout": "Read 139 bytes from \"tests/lean4_compat/lean4_tests/1571.lean\"\nParsed 2 declarations in 422.709\u00b5s\nChecked 2 declarations in 75.092292ms\n  0 passed, 2 failed\n\nErrors:\n  \u2717 elaboration error: TooManyArguments { func_type: \"Sort(Param(Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"u_0\\\"), cached_hash: 10536891783547105659 }))\", remaining_args: 2 }\n  \u2717 elaboration error: TooManyArguments { func_type: \"Sort(Param(Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"u_0\\\"), cached_hash: 10536891783547105659 }))\", remaining_args: 2 }\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

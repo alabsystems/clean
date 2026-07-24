@@ -1,0 +1,27 @@
+{
+  "schema_version": "clean-frontend-macro-artifact-v1",
+  "kind": "frontend_macro",
+  "engine": "lean4",
+  "filename": "1321.lean",
+  "source_sha256": "sha256:4179054021fadf454329c1f3a4195ad40c670d99aa643c7124ec3b537fa84d55",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1321.lean"
+  ],
+  "macro_status": "success",
+  "expansions_checked": 1,
+  "expansions_failed": 0,
+  "notations_checked": 0,
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_stdout": "@[reducible] meta def fooParser : Lean.ParserDescr :=\nLean.ParserDescr.node `fooParser 1022\n  (Lean.ParserDescr.binary `andthen (Lean.ParserDescr.symbol \"foo\") (Lean.ParserDescr.cat `term 0))\n5 + 1 : Nat\n",
+  "observed_stderr": "",
+  "checked_expansions": [
+    "term macro `foo 5` expands and elaborates through `foo $x => $x + 1`; Lean4 #check prints `5 + 1 : Nat`"
+  ],
+  "artifact_note": "Lean4 parsed the custom term syntax, registered the macro_rules expansion for foo, and the final #check observed the expanded Nat term. This is Lean4 evidence only; no clean macro parity is claimed."
+}

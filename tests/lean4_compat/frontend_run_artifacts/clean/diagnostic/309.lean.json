@@ -1,0 +1,30 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "309.lean",
+  "source_sha256": "sha256:eb815b0f6ac1ce52a1bf6e0ba7f2f330235d26f89f55c66cd4c4410c4b1689de",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/309.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "elaboration_error_cannotinfer",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "elaboration error: CannotInfer"
+    }
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.095,
+  "observed_stdout": "Read 75 bytes from \"tests/lean4_compat/lean4_tests/309.lean\"\nParsed 3 declarations in 228.667\u00b5s\nChecked 3 declarations in 75.337ms\n  0 passed, 1 failed\n\nErrors:\n  \u2717 elaboration error: CannotInfer\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean diagnostic evidence; this is not replacement-readiness evidence."
+}

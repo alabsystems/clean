@@ -1,0 +1,57 @@
+# dscan configuration for Mathverse Library indexing
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Tells dscan which files to index for the clean Mathverse Library.
+# Used when publishing to alabsystems/clean for external discovery.
+
+[project]
+name = "clean-mathverse"
+description = "Mathverse Library — 30M+ formal math declarations from 238 proof systems"
+repo = "alabsystems/clean"
+mirror = "alabsystems/clean"
+
+[index]
+# Core mathverse documentation files to index
+files = [
+    "data/MATHVERSE_LIBRARIES.md",
+    "data/MATHVERSE_PROVENANCE.md",
+    "data/MATHVERSE_KERNEL_COMPATIBILITY.md",
+    "data/MATHVERSE_PROVENANCE.json",
+    "data/mathverse_import_results.json",
+]
+
+# Release assets to index (resolved from GitHub Releases)
+[index.releases]
+tag_prefix = "mathverse-v"
+assets = [
+    "mathverse_summary.json",
+    "MATHVERSE_KERNEL_COMPATIBILITY.md",
+    "clean-mathverse-full.tar.gz",
+    "clean-mathverse-src.tar.gz",
+    "mathverse_convert-darwin-arm64.tar.gz",
+]
+
+[metadata]
+# dscan annotation directives applied to indexed docs
+annotations = [
+    "dscan:allow(volatile_numbers)",  # Census numbers change on each re-import
+    "dscan:reviewed",                  # README.md reviewed marker
+]
+
+# Tags for dscan search/filtering
+tags = [
+    "formal-math",
+    "theorem-prover",
+    "mathverse-library",
+    "lean4",
+    "proof-assistant",
+]
+
+[mirror]
+# Mirror configuration for cross-repo publishing
+source_repo = "alabsystems/clean"
+target_repo = "alabsystems/clean"
+# Script to run for mirroring releases
+mirror_script = "scripts/publish_mathverse_mirror.sh"

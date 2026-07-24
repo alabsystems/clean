@@ -1,0 +1,25 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "1112.lean",
+  "source_sha256": "sha256:20cdd8be3411e872b89eb90665f35224ff2d02851c7f6ee6179e4fa70b22512f",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1112.lean"
+  ],
+  "diagnostic_category": null,
+  "first_error_signature": null,
+  "diagnostics": [],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_elapsed_seconds": 0.096,
+  "observed_stdout": "Read 129 bytes from \"tests/lean4_compat/lean4_tests/1112.lean\"\nParsed 1 declarations in 387.084\u00b5s\nChecked 1 declarations in 74.804709ms\n  0 passed, 0 failed\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded clean diagnostic evidence; this is not replacement-readiness evidence."
+}

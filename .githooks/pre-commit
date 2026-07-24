@@ -1,0 +1,34 @@
+#!/bin/sh
+# Auto-format staged Rust files so commits stay clean against the CI
+# `cargo fmt --check` gate (the gate drifts whenever unformatted code lands on
+# main). Design choices:
+#   * Non-blocking: it formats in place and re-stages; it NEVER fails the commit,
+#     so it cannot wedge automated/scripted committers. Worst case it does
+#     nothing and CI's fmt job still catches drift.
+#   * Per-file `rustfmt` (not `cargo fmt`) so it needs neither a full workspace
+#     load nor the `../ay` sibling — fast, and works in detached/partial trees.
+#   * Only touches files already staged (added/copied/modified), and only
+#     re-stages the ones rustfmt actually changed.
+#
+# core.hooksPath is set to .githooks, so this runs automatically on `git commit`
+# (unless --no-verify). To skip ad hoc: `git commit --no-verify`.
+
+command -v rustfmt >/dev/null 2>&1 || exit 0
+
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs' 2>/dev/null)
+[ -z "$staged" ] && exit 0
+
+applied=""
+for f in $staged; do
+    [ -f "$f" ] || continue
+    before=$(git hash-object "$f" 2>/dev/null) || continue
+    rustfmt --edition 2021 --quiet "$f" 2>/dev/null || continue
+    after=$(git hash-object "$f" 2>/dev/null) || continue
+    if [ "$before" != "$after" ]; then
+        git add -- "$f"
+        applied="$applied $f"
+    fi
+done
+
+[ -n "$applied" ] && printf 'pre-commit: rustfmt applied to:%s\n' "$applied" >&2
+exit 0

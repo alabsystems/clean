@@ -1,0 +1,53 @@
+{
+  "schema_version": "clean-frontend-structure-inductive-recursor-artifact-schema-v1",
+  "artifact_schema_version": "clean-frontend-structure-inductive-recursor-artifact-v1",
+  "kind": "frontend_structure_inductive_recursor_artifact_schema",
+  "artifact_kind": "frontend_structure_inductive_recursor",
+  "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/structure_inductive_recursor/{filename}.json",
+  "description": "Schema for deterministic per-file Lean4/clean frontend structure field, inductive declaration, match compilation, and recursor artifacts consumed by generate_frontend_classification.py. The generator treats absent artifacts as missing evidence and present artifacts that violate this schema as stale_or_invalid evidence. Valid artifacts remain pending cross-check until compared against parse, elaboration, kernel, and structure_inductive_recursor classifications.",
+  "required_fields": [
+    "schema_version",
+    "kind",
+    "engine",
+    "filename",
+    "source_sha256",
+    "command",
+    "structure_inductive_recursor_status",
+    "structure_fields_checked",
+    "inductives_checked",
+    "recursors_checked",
+    "match_compilations_checked",
+    "construction_failures"
+  ],
+  "optional_evidence_fields": [
+    "checked_structures",
+    "checked_inductives",
+    "checked_recursors",
+    "checked_match_compilations",
+    "engine_version",
+    "observed_exit_code",
+    "artifact_note"
+  ],
+  "field_constraints": {
+    "schema_version": "must equal clean-frontend-structure-inductive-recursor-artifact-v1",
+    "kind": "must equal frontend_structure_inductive_recursor",
+    "engine": "must equal lean4 or clean and match the path engine segment",
+    "filename": "must equal the corpus filename, including .lean",
+    "source_sha256": "must equal the current sha256: digest from tests/lean4_compat/MANIFEST.json",
+    "command": "must be a non-empty array of non-empty strings",
+    "structure_inductive_recursor_status": "must be success when construction_failures is 0 and failure otherwise",
+    "structure_fields_checked": "must be a non-negative integer",
+    "inductives_checked": "must be a non-negative integer",
+    "recursors_checked": "must be a non-negative integer",
+    "match_compilations_checked": "must be a non-negative integer",
+    "construction_failures": "must be a non-negative integer less than or equal to structure_fields_checked + inductives_checked + recursors_checked + match_compilations_checked",
+    "checked_structures": "when present, must be an array of non-empty strings naming checked structure declarations or fields, with length equal to structure_fields_checked",
+    "checked_inductives": "when present, must be an array of non-empty strings naming checked inductive declarations, with length equal to inductives_checked",
+    "checked_recursors": "when present, must be an array of non-empty strings naming checked recursor declarations, with length equal to recursors_checked",
+    "checked_match_compilations": "when present, must be an array of non-empty strings naming checked match compilation targets, with length equal to match_compilations_checked",
+    "observed_exit_code": "when present with success status, must be 0",
+    "engine_version": "when present, must be a non-empty string",
+    "artifact_note": "when present, must be a non-empty string"
+  },
+  "replacement_readiness": false
+}

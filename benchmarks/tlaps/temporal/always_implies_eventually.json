@@ -1,0 +1,24 @@
+{
+  "id": "temporal/always_implies_eventually",
+  "module": "TemporalTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "P", "arity": 0}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "h_always",
+      "formula": {"always": "P"}
+    }
+  ],
+
+  "goal": {"eventually": "P"},
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["temporal", "always", "eventually"]
+}

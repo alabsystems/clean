@@ -1,0 +1,8 @@
+# fixture Wave A list — format mirror of scripts/isabelle/afp_wave_a.txt
+Entry_Simple
+EntryBig # BIG
+EntryMulti   # CODEGEN
+EntryNoRoot
+EntryEmpty
+EntryNoSess
+EntryCycle

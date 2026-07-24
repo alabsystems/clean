@@ -1,0 +1,11 @@
+# Python dependencies for the tactic-parity generated-count runner
+# (scripts/tactic_parity/generated_count_runner.py).
+#
+# Install with:  python3 -m pip install -r scripts/tactic_parity/requirements.txt
+#
+# Without PyYAML the runner cannot parse the YAML count corpora under
+# evals/tactic-parity/corpora/, and the Rust integration test
+# `tactic::tests::tactic_parity_registry::
+#   test_tactic_parity_generated_count_manifest_schema_records_missing_runner_absence`
+# fails in environments where this dependency is not provisioned.
+PyYAML>=6.0

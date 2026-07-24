@@ -1,0 +1,26 @@
+{
+  "id": "triangle_median",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "M": {"type": "point", "definition": {"midpoint_of": ["B", "C"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "collinear",
+    "points": ["A", "M"]
+  },
+  "metadata": {
+    "source": "Basic geometry",
+    "difficulty": 2,
+    "tags": ["triangle", "median", "midpoint"],
+    "known_solvable": true,
+    "statement": "The median from vertex A to side BC passes through the midpoint M of BC."
+  }
+}

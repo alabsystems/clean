@@ -1,0 +1,28 @@
+{
+  "id": "centroid_divides_median",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "M": {"type": "point", "definition": {"midpoint_of": ["B", "C"]}},
+    "G": {"type": "point", "definition": {"centroid": ["A", "B", "C"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "ratio_equal",
+    "args": ["A", "G", "G", "M", "2", "1"]
+  },
+  "metadata": {
+    "source": "Basic geometry",
+    "difficulty": 4,
+    "tags": ["centroid", "median", "ratio"],
+    "known_solvable": true,
+    "statement": "The centroid divides each median in the ratio 2:1 from the vertex."
+  }
+}

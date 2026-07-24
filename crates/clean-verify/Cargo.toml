@@ -1,0 +1,60 @@
+[package]
+name = "clean-verify"
+version = "0.1.0"
+edition = "2021"
+description = "Self-verification proofs for Clean kernel correctness"
+license = "Apache-2.0"
+repository.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Expose test_utils for integration tests; propagates to clean-kernel
+test-utils = ["clean-kernel/test-utils"]
+# Enables the `cli` module (`clean verify proof` / `proof_check` compat shim).
+# Default-off so non-CLI consumers keep a minimal dependency graph (no clap,
+# no clean-features). Epic #3436, issue #3511.
+sat-verify = ["dep:clap", "dep:clean-features"]
+
+[dependencies]
+blake3.workspace = true
+clap = { workspace = true, optional = true }
+clean-features = { workspace = true, features = ["serde"], optional = true }
+clean-kernel = { path = "../clean-kernel" }
+clean-parser = { path = "../clean-parser" }
+clean-elab = { path = "../clean-elab" }
+num-bigint.workspace = true
+num-rational.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+syn = { workspace = true, features = ["full"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+# Real deployed-workload corpus source for the model↔kernel fidelity gate
+# (`src/fidelity_gate.rs`): load real `.olean` constant headers and partition
+# them by the supported-fragment predicate. Dev-only — no `clean-*/src` crate
+# gains an `.olean` dependency.
+clean-olean = { path = "../clean-olean" }
+
+# Self-dependency to enable test-utils + cli during cargo test. The `sat-verify`
+# feature gates the `cli` module (and its behavioral tests); enabling it here
+# means `cargo test -p clean-verify` exercises the proof-checker dispatch
+# end-to-end without requiring `--features sat-verify` on the command line.
+[dev-dependencies.clean-verify]
+path = "."
+features = ["test-utils", "sat-verify"]
+
+# Compat shim binary for the legacy `proof_check` path. Retained for one
+# release per Epic #3436 because SAT-COMP / SMT-COMP judges hard-code the
+# binary path. Feature-gated so the heavy sat/smt dependency graph only links
+# when the caller opts in. Issue #3511.
+[[bin]]
+name = "proof_check"
+path = "src/bin/proof_check.rs"
+required-features = ["sat-verify"]

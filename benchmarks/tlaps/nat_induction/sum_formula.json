@@ -1,0 +1,42 @@
+{
+  "id": "nat_induction/sum_formula",
+  "module": "SumFormulaTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "sum", "arity": 1}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "sum_def_0",
+      "formula": {"eq": [{"op": ["sum", 0]}, 0]}
+    },
+    {
+      "name": "sum_def_succ",
+      "formula": {
+        "forall_in": ["k", "Nat", {
+          "eq": [
+            {"op": ["sum", {"add": ["k", 1]}]},
+            {"add": [{"op": ["sum", "k"]}, {"add": ["k", 1]}]}
+          ]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "eq": [
+        {"op": ["sum", "n"]},
+        {"div": [{"mul": ["n", {"add": ["n", 1]}]}, 2]}
+      ]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "closed_form"]
+}

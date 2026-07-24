@@ -1,0 +1,51 @@
+[package]
+name = "clean-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean JSON-RPC server for AI agent integration"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+carcara-verify = ["clean-elab/carcara-verify"]
+
+[dependencies]
+clean-kernel.workspace = true
+clean-features.workspace = true
+clean-olean.workspace = true
+clap.workspace = true
+clean-parser.workspace = true
+clean-elab.workspace = true
+clean-auto.workspace = true
+clean-math-project.workspace = true
+clean-mathverse.workspace = true
+clean-c-sem.workspace = true
+clean-tla.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bincode.workspace = true
+base64.workspace = true
+rayon.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+semver = "1.0"
+uuid = { version = "1.0", features = ["v7", "serde"] }
+lru = "0.18"
+sha2.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "macros"] }
+
+[[bench]]
+name = "server_ops"
+harness = false

@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "1673.lean",
+  "source_sha256": "sha256:788b283e77300a7a68d46dff9a7ec8bfa8b61ee74b62c36c509f0a7ae9163fa9",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1673.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.089,
+  "observed_stdout": "Read 62 bytes from \"tests/lean4_compat/lean4_tests/1673.lean\"\nParsed 1 declarations in 234.084\u00b5s\nChecked 1 declarations in 73.167416ms\n  0 passed, 1 failed\nTrust summary:\n  sorry axioms: 1\n\nErrors:\n  \u2717 elaboration error: TypeMismatch { expected: \"valid type\", actual: \"UnknownFVar(FVarId(2))\" }\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

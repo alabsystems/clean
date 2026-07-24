@@ -1,0 +1,28 @@
+# Copyright 2026 Andrew Yates
+# SPDX-License-Identifier: Apache-2.0
+#
+# clean-ck0 — the FROZEN decision-core SEED of the ck2 kernel (design:
+# designs/2026-06-16-ck2-kernel.md, milestone M0). This crate contains ONLY the
+# seed layer: Name / Level / BigNat / RawExpr / Term private types + the
+# Term::validate chokepoint + the two-valued Verdict. No whnf/def_eq/infer/
+# recursors/certs (those are M1+).
+[package]
+name = "clean-ck0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ck2 kernel frozen decision-core seed (M0): private Term/Level/Name/BigNat + validate chokepoint"
+
+[lints]
+workspace = true
+
+[dependencies]
+num-bigint.workspace = true
+num-traits.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

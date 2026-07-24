@@ -1,0 +1,30 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "248.lean",
+  "source_sha256": "sha256:f0f484c959077276179f17875f0370233c3aae314f0db5259959571b0e0bd7d5",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/248.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "elaboration_error_unsupported_feature_invalid_implemented_by_argument_foo_definition_cannot_be_implemented_by_itself",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "elaboration error: Unsupported { feature: \"invalid implemented_by argument foo: definition cannot be implemented by itself\" }"
+    }
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.09,
+  "observed_stdout": "Read 49 bytes from \"tests/lean4_compat/lean4_tests/248.lean\"\nParsed 1 declarations in 232.208\u00b5s\nChecked 1 declarations in 74.3125ms\n  0 passed, 1 failed\n\nErrors:\n  \u2717 elaboration error: Unsupported { feature: \"invalid implemented_by argument foo: definition cannot be implemented by itself\" }\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean diagnostic evidence; this is not replacement-readiness evidence."
+}

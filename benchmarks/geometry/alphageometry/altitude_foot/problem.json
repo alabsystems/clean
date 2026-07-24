@@ -1,0 +1,27 @@
+{
+  "id": "altitude_foot",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "H": {"type": "point", "definition": {"foot_of_altitude": {"from": "A", "to_segment": ["B", "C"]}}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "perpendicular",
+    "line1": {"through": ["A", "H"]},
+    "line2": {"through": ["B", "C"]}
+  },
+  "metadata": {
+    "source": "Altitude definition",
+    "difficulty": 2,
+    "tags": ["altitude", "perpendicular", "foot", "triangle"],
+    "known_solvable": true,
+    "statement": "The altitude from vertex A is perpendicular to side BC."
+  }
+}

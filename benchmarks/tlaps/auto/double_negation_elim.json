@@ -1,0 +1,31 @@
+{
+  "id": "auto/double_negation_elim",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_nnp",
+      "formula": {
+        "not": {
+          "not": "P"
+        }
+      }
+    }
+  ],
+  "goal": "P",
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "negation",
+    "classical"
+  ]
+}

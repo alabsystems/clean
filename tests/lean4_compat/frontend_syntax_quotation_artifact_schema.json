@@ -1,0 +1,59 @@
+{
+  "schema_version": "clean-frontend-syntax-quotation-artifact-schema-v1",
+  "artifact_schema_version": "clean-frontend-syntax-quotation-artifact-v1",
+  "kind": "syntax_quotation_artifact_schema",
+  "artifact_kind": "frontend_syntax_quotation",
+  "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/syntax_quotation/{filename}.json",
+  "description": "Schema for deterministic per-file Lean4/clean frontend syntax quotation, antiquotation, and hygiene-context artifacts consumed by generate_frontend_classification.py. The generator treats absent artifacts as missing evidence and present artifacts that violate this schema as stale_or_invalid evidence. Valid artifacts remain fail-closed until compared against parse, elaboration, syntax_quotation classifications, and clean parity artifacts.",
+  "required_fields": [
+    "schema_version",
+    "kind",
+    "engine",
+    "filename",
+    "source_sha256",
+    "command",
+    "syntax_quotation_status",
+    "quotations_checked",
+    "antiquotations_checked",
+    "hygiene_contexts_checked",
+    "quotation_failures"
+  ],
+  "field_constraints": {
+    "schema_version": "must equal clean-frontend-syntax-quotation-artifact-v1",
+    "kind": "must equal frontend_syntax_quotation",
+    "engine": "must equal lean4 or clean and match the path engine segment",
+    "filename": "must equal the corpus filename, including .lean",
+    "source_sha256": "must equal the current sha256: digest from tests/lean4_compat/MANIFEST.json",
+    "command": "must be a non-empty array of non-empty strings",
+    "syntax_quotation_status": "must be success when quotation_failures is 0; otherwise it must be failure",
+    "quotations_checked": "must be a non-negative integer",
+    "antiquotations_checked": "must be a non-negative integer",
+    "hygiene_contexts_checked": "must be a non-negative integer",
+    "quotation_failures": "must be a non-negative integer less than or equal to quotations_checked plus antiquotations_checked plus hygiene_contexts_checked"
+  },
+  "optional_evidence_fields": [
+    "engine_version",
+    "observed_process_status",
+    "observed_exit_code",
+    "observed_stdout",
+    "observed_stderr",
+    "checked_quotations",
+    "checked_antiquotations",
+    "checked_hygiene_contexts",
+    "observed_eval_results",
+    "artifact_note"
+  ],
+  "optional_evidence_constraints": {
+    "engine_version": "must be a string when present",
+    "observed_process_status": "must be exited or timeout when present; timeout evidence cannot claim syntax_quotation_status success",
+    "observed_exit_code": "must be an integer when present; successful syntax quotation evidence must record exit code 0",
+    "observed_stdout": "must be a string when present",
+    "observed_stderr": "must be a string when present",
+    "checked_quotations": "must be an array of non-empty strings with length equal to quotations_checked when present",
+    "checked_antiquotations": "must be an array of non-empty strings with length equal to antiquotations_checked when present",
+    "checked_hygiene_contexts": "must be an array of non-empty strings with length equal to hygiene_contexts_checked when present",
+    "observed_eval_results": "must be an array of non-empty strings when present",
+    "artifact_note": "must be a string when present"
+  },
+  "replacement_readiness": false
+}

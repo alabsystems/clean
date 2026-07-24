@@ -1,0 +1,42 @@
+{
+  "id": "nat_induction/triangular_number",
+  "module": "TriangularNumberTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "tri", "arity": 1}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "tri_base",
+      "formula": {"eq": [{"op": ["tri", 0]}, 0]}
+    },
+    {
+      "name": "tri_step",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "eq": [
+            {"op": ["tri", {"add": ["n", 1]}]},
+            {"add": [{"op": ["tri", "n"]}, {"add": ["n", 1]}]}
+          ]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "eq": [
+        {"mul": [2, {"op": ["tri", "n"]}]},
+        {"mul": ["n", {"add": ["n", 1]}]}
+      ]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "closed_form"]
+}

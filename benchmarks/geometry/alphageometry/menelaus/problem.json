@@ -1,0 +1,34 @@
+{
+  "id": "menelaus",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "E": {"type": "point"},
+    "F": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]},
+    {"type": "collinear", "points": ["D", "E", "F"]},
+    {"type": "on_line", "point": "D", "line": {"through": ["B", "C"]}},
+    {"type": "on_line", "point": "E", "line": {"through": ["C", "A"]}},
+    {"type": "on_line", "point": "F", "line": {"through": ["A", "B"]}}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "menelaus_product",
+    "args": ["A", "F", "F", "B", "B", "D", "D", "C", "C", "E", "E", "A"]
+  },
+  "metadata": {
+    "source": "Menelaus' Theorem",
+    "origin": "Menelaus of Alexandria, ~100 AD",
+    "difficulty": 6,
+    "tags": ["menelaus", "collinear", "ratio", "transversal"],
+    "known_solvable": true,
+    "statement": "If a transversal line intersects the sides (or extensions) of triangle ABC at D, E, F, then (AF/FB)(BD/DC)(CE/EA) = 1."
+  }
+}

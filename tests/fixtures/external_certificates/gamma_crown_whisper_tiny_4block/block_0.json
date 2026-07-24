@@ -1,0 +1,2895 @@
+{
+  "type": "entailment_certificate",
+  "version": "1.0",
+  "premises": [
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_0": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_1": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_2": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_3": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_4": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_5": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_6": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_7": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_8": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_9": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_10": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_11": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_12": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_13": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_14": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_15": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_16": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_17": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_18": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_19": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_20": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_21": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_22": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_23": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_24": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_25": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_26": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_27": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_28": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_29": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_30": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_31": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_32": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_33": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_34": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_35": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_36": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_37": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_38": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_39": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_40": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_41": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_42": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_43": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_44": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_45": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_46": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_47": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_48": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_49": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_50": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_51": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_52": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_53": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_54": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_55": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_56": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_57": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_58": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_59": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_60": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_61": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_62": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_63": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_64": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_65": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_66": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_67": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_68": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_69": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_70": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_71": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_72": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_73": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_74": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_75": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_76": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_77": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_78": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_79": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_80": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_81": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_82": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_83": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_84": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_85": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_86": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_87": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_88": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_89": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_90": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_91": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_92": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_93": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_94": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_95": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_96": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_97": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_98": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_99": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_100": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_101": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_102": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_103": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_104": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_105": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_106": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_107": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_108": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_109": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_110": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_111": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_112": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_113": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_114": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_115": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_116": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_117": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_118": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_119": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_120": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_121": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_122": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_123": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_124": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_125": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_126": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_127": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_128": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_129": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_130": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_131": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_132": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_133": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_134": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_135": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_136": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_137": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_138": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_139": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_140": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_141": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_142": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_143": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_144": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_145": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_146": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_147": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_148": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_149": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_150": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_151": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_152": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_153": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_154": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_155": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_156": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_157": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_158": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_159": "1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_0": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_1": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_2": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_3": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_4": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_5": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_6": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_7": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_8": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_9": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_10": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_11": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_12": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_13": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_14": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_15": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_16": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_17": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_18": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_19": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_20": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_21": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_22": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_23": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_24": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_25": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_26": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_27": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_28": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_29": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_30": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_31": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_32": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_33": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_34": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_35": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_36": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_37": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_38": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_39": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_40": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_41": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_42": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_43": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_44": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_45": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_46": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_47": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_48": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_49": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_50": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_51": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_52": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_53": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_54": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_55": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_56": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_57": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_58": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_59": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_60": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_61": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_62": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_63": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_64": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_65": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_66": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_67": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_68": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_69": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_70": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_71": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_72": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_73": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_74": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_75": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_76": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_77": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_78": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_79": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_80": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_81": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_82": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_83": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_84": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_85": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_86": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_87": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_88": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_89": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_90": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_91": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_92": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_93": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_94": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_95": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_96": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_97": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_98": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_99": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_100": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_101": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_102": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_103": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_104": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_105": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_106": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_107": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_108": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_109": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_110": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_111": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_112": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_113": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_114": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_115": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_116": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_117": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_118": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_119": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_120": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_121": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_122": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_123": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_124": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_125": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_126": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_127": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_128": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_129": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_130": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_131": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_132": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_133": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_134": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_135": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_136": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_137": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_138": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_139": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_140": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_141": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_142": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_143": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_144": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_145": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_146": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_147": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_148": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_149": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_150": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_151": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_152": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_153": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_154": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_155": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_156": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_157": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_158": "-1"
+      },
+      "constant": "0.00001"
+    },
+    {
+      "type": "linear_constraint",
+      "kind": "le",
+      "coefficients": {
+        "x_block_0_159": "-1"
+      },
+      "constant": "0.00001"
+    }
+  ],
+  "multipliers": [
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1"
+  ],
+  "conclusion": {
+    "type": "linear_constraint",
+    "kind": "le",
+    "coefficients": {},
+    "constant": "0.0032"
+  },
+  "gamma_crown_block_id": "block_0"
+}

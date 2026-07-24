@@ -1,0 +1,19 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "sat-pb-pilot",
+  "domain_profile": "sat-pb",
+  "producer": {
+    "system": "fixture",
+    "commit": "serialized-kernel-goal"
+  },
+  "goal": {
+    "expr": {
+      "Sort": "Zero"
+    },
+    "pretty": "Prop"
+  },
+  "metadata": {
+    "fixture": "serialized-kernel-goal"
+  },
+  "trust_policy": "constructive-only"
+}

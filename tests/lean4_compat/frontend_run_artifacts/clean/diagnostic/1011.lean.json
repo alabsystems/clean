@@ -1,0 +1,42 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "1011.lean",
+  "source_sha256": "sha256:2b1959c15e77051094788283ff9b224bac6667f42d9dea677f7683874a50091a",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1011.lean"
+  ],
+  "diagnostic_category": "unknown_identifier_or_scope",
+  "first_error_signature": "unknown_ident_with_suggestions",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "elaboration error: UnknownIdentWithSuggestions { name: \"AA\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }"
+    },
+    {
+      "severity": "error",
+      "message": "elaboration error: UnknownIdentWithSuggestions { name: \"A1\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }"
+    },
+    {
+      "severity": "error",
+      "message": "elaboration error: UnknownIdentWithSuggestions { name: \"A\u2081\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }"
+    },
+    {
+      "severity": "error",
+      "message": "elaboration error: UnknownIdentWithSuggestions { name: \"A'\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }"
+    }
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.143,
+  "observed_stdout": "Read 159 bytes from \"tests/lean4_compat/lean4_tests/1011.lean\"\nParsed 7 declarations in 6.801083ms\n  \u2713 f\n  \u2713 g\nChecked 7 declarations in 115.720834ms\n  2 passed, 4 failed\n\nErrors:\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"AA\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"A1\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"A\u2081\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n  \u2717 elaboration error: UnknownIdentWithSuggestions { name: \"A'\", suggestions: [\"HEq.symm\", \"Iff.symm\"] }\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean diagnostic evidence; this is not replacement-readiness evidence."
+}

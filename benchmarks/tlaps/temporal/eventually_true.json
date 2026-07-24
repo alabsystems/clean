@@ -1,0 +1,17 @@
+{
+  "id": "temporal/eventually_true",
+  "module": "TemporalTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {"eventually": true},
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["temporal", "eventually"]
+}

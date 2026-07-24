@@ -1,0 +1,1060 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-23T00:00:00Z",
+  "source": "clean issue #3673 research-program manifest foundation",
+  "items": [
+    {
+      "id": "C004",
+      "title": "CROWN through LayerNorm degenerates to IBP",
+      "owner_repo": "alabsystems/clean",
+      "domain": "gamma-crown",
+      "family": "gamma-crown core conjectures",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "TrustReportAgreement",
+      "summary": "LayerNorm CROWN degeneration remains an explicit axiom surface after demasquerade; executable tests cover the phenomenon but no kernel proof is closed.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/nn_verify/ibp_crown/tests_crown_layernorm_degeneration.rs",
+        "data/proof_queue.json"
+      ],
+      "references": [
+        "issue #3373",
+        "issue #3460"
+      ],
+      "tags": [
+        "layernorm",
+        "crown",
+        "ibp",
+        "demasquerade"
+      ]
+    },
+    {
+      "id": "C006",
+      "title": "Block-wise CROWN equivalence to monolithic CROWN",
+      "owner_repo": "alabsystems/clean",
+      "domain": "gamma-crown",
+      "family": "gamma-crown core conjectures",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "TrustReportAgreement",
+      "summary": "Block-wise CROWN equivalence is tracked as an honest axiom while faithful carrier work remains active.",
+      "dependencies": [
+        {
+          "id": "C004",
+          "reason": "LayerNorm boundary reasoning is part of the block-wise-to-monolithic equivalence story."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/nn_verify/ibp_crown/block_wise_crown.rs",
+        "crates/clean-verify/src/nn_verify/ibp_crown/tests_block_wise_crown.rs",
+        "data/axiom_audit.json"
+      ],
+      "references": [
+        "issue #3375",
+        "issue #3493",
+        "issue #3638"
+      ],
+      "tags": [
+        "block-wise-crown",
+        "crown",
+        "faithful-carriers",
+        "demasquerade"
+      ]
+    },
+    {
+      "id": "T60",
+      "title": "Block-wise CROWN extension equivalence",
+      "owner_repo": "alabsystems/clean",
+      "domain": "gamma-crown",
+      "family": "gamma-crown block extensions",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "TrustReportAgreement",
+      "summary": "NNVerify.Block.blockwise_crown_equiv was demoted from a theorem wrapper to an explicit axiom; faithful extension proof work remains separate.",
+      "dependencies": [
+        {
+          "id": "C006",
+          "reason": "T60 delegates to the C006 block-wise equivalence claim."
+        }
+      ],
+      "evidence": [
+        "data/axiom_audit.json",
+        "crates/clean-kernel/src/env/nn_verify_blockwise_crown_ext_defs.rs",
+        "crates/clean-kernel/src/env/tests_nn_verify_blockwise_crown_ext.rs"
+      ],
+      "references": [
+        "issue #3494"
+      ],
+      "tags": [
+        "t60",
+        "block-wise-crown",
+        "demasquerade"
+      ]
+    },
+    {
+      "id": "C010",
+      "title": "Zonotope and CROWN linear-region equivalence",
+      "owner_repo": "alabsystems/clean",
+      "domain": "gamma-crown",
+      "family": "gamma-crown core conjectures",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "The C010 surface includes demoted axiom claims after alias-collapse cleanup; the substantive linear equivalence remains tracked separately from kernel-proved status.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/nn_verify/zonotope/c010_equiv.rs",
+        "crates/clean-verify/src/nn_verify/zonotope/tests_c010_equiv.rs",
+        "data/axiom_audit.json"
+      ],
+      "references": [
+        "issue #3463",
+        "issue #3593"
+      ],
+      "tags": [
+        "zonotope",
+        "crown",
+        "demasquerade"
+      ]
+    },
+    {
+      "id": "S40",
+      "title": "Haken tree-resolution PHP lower bound",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Tree-like resolution lower bound for pigeonhole formulas is stated and computationally exercised, with the formal combinatorial proof pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/mod.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/tree_resolution.rs"
+      ],
+      "references": [
+        "Haken 1985"
+      ],
+      "tags": [
+        "resolution",
+        "lower-bound",
+        "pigeonhole"
+      ]
+    },
+    {
+      "id": "S41",
+      "title": "Fourier Parseval identity",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Parseval's identity is checked by executable Boolean Fourier infrastructure; the closed proof term remains pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/fourier.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_fourier.rs"
+      ],
+      "references": [
+        "O'Donnell 2014"
+      ],
+      "tags": [
+        "fourier",
+        "parseval"
+      ]
+    },
+    {
+      "id": "S42",
+      "title": "Influence Fourier identity",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Variable influence is connected to Fourier level weights by executable checks; the kernel proof is still pending.",
+      "dependencies": [
+        {
+          "id": "S41",
+          "reason": "Influence identities reuse the same Boolean Fourier basis infrastructure."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/fourier.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_fourier.rs"
+      ],
+      "references": [
+        "O'Donnell 2014"
+      ],
+      "tags": [
+        "fourier",
+        "influence"
+      ]
+    },
+    {
+      "id": "S43",
+      "title": "KKL inequality statement",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "KKL is represented as a frontier statement; full proof depends on hypercontractivity machinery.",
+      "dependencies": [
+        {
+          "id": "S50",
+          "reason": "The usual proof route depends on Bonami-Beckner hypercontractivity."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/kkl_proof.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_kkl_proof.rs"
+      ],
+      "references": [
+        "Kahn-Kalai-Linial 1988"
+      ],
+      "tags": [
+        "kkl",
+        "boolean-analysis"
+      ]
+    },
+    {
+      "id": "S44",
+      "title": "Polynomial Calculus over GF(2)",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "GF(2) Polynomial Calculus checker infrastructure exists; the formal soundness proof remains pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/polynomial_calculus.rs",
+        "crates/clean-verify/src/sat_verify/frontier/pc_proof_system.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_pc.rs"
+      ],
+      "references": [
+        "Clegg-Edmonds-Impagliazzo 1996"
+      ],
+      "tags": [
+        "polynomial-calculus",
+        "gf2"
+      ]
+    },
+    {
+      "id": "S45",
+      "title": "Noise sensitivity Fourier formula",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Noise sensitivity formula is exercised against executable Fourier computations; formal proof is pending.",
+      "dependencies": [
+        {
+          "id": "S41",
+          "reason": "Noise sensitivity is expressed through Fourier coefficients."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/noise_sensitivity.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_noise.rs"
+      ],
+      "references": [
+        "O'Donnell 2014"
+      ],
+      "tags": [
+        "noise-sensitivity",
+        "fourier"
+      ]
+    },
+    {
+      "id": "S46",
+      "title": "Total influence level-weight identity",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Total influence as a weighted sum of Fourier levels is executable-checked; closed proof term is pending.",
+      "dependencies": [
+        {
+          "id": "S42",
+          "reason": "Total influence aggregates per-variable influence identities."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/noise_sensitivity.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_noise.rs"
+      ],
+      "references": [
+        "O'Donnell 2014"
+      ],
+      "tags": [
+        "total-influence",
+        "fourier"
+      ]
+    },
+    {
+      "id": "S47",
+      "title": "KKL computational verification",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "ExecutableChecked",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Small-instance KKL checks run through executable Boolean-function infrastructure; this does not close the full theorem.",
+      "dependencies": [
+        {
+          "id": "S41",
+          "reason": "Computational KKL evidence uses Fourier coefficients."
+        },
+        {
+          "id": "S42",
+          "reason": "Computational KKL evidence uses influence values."
+        },
+        {
+          "id": "S43",
+          "reason": "This item is executable evidence for the KKL statement."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/kkl_proof.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_kkl_proof.rs"
+      ],
+      "references": [
+        "Kahn-Kalai-Linial 1988"
+      ],
+      "tags": [
+        "kkl",
+        "executable-check"
+      ]
+    },
+    {
+      "id": "S48",
+      "title": "Extension variable preserves satisfiability",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Extended Resolution variable introduction has executable validation, with the formal satisfiability-preservation proof pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/extension_variable.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_extension_var.rs"
+      ],
+      "references": [
+        "extended resolution"
+      ],
+      "tags": [
+        "extended-resolution",
+        "equisat"
+      ]
+    },
+    {
+      "id": "S49",
+      "title": "Extension proof compression",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Proof-compression family is represented with executable examples; full asymptotic proof is pending.",
+      "dependencies": [
+        {
+          "id": "S48",
+          "reason": "Compression by extension variables depends on the extension rule preserving satisfiability."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/extension_variable.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_extension_var.rs"
+      ],
+      "references": [
+        "extended resolution"
+      ],
+      "tags": [
+        "extended-resolution",
+        "proof-compression"
+      ]
+    },
+    {
+      "id": "S50",
+      "title": "Bonami-Beckner hypercontractivity",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Bonami-Beckner hypercontractivity is tracked as a pending formalization target with executable checks for small cases.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/hypercontractivity.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_hypercontractivity.rs"
+      ],
+      "references": [
+        "Bonami-Beckner hypercontractivity"
+      ],
+      "tags": [
+        "hypercontractivity",
+        "boolean-analysis"
+      ]
+    },
+    {
+      "id": "S51",
+      "title": "Hypercontractive norm via Fourier",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-frontier",
+      "family": "boolean-analysis frontier S40-S51",
+      "status": "ExecutableChecked",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Hypercontractive norm computation is checked against direct truth-table evaluation for small dimensions; formal proof is pending.",
+      "dependencies": [
+        {
+          "id": "S41",
+          "reason": "The norm computation uses the Fourier basis."
+        },
+        {
+          "id": "S50",
+          "reason": "This is the executable norm side of the hypercontractivity story."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/hypercontractivity.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_hypercontractivity.rs"
+      ],
+      "references": [
+        "Bonami-Beckner hypercontractivity"
+      ],
+      "tags": [
+        "hypercontractivity",
+        "executable-check"
+      ]
+    },
+    {
+      "id": "GF01",
+      "title": "Clause-polynomial encoding soundness",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-gf2",
+      "family": "GF(2) Polynomial Calculus GF01-GF03",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "CNF clause encoding into GF(2) polynomials is specified and executable-checked; formal proof remains pending.",
+      "dependencies": [
+        {
+          "id": "S44",
+          "reason": "GF01 is the clause-encoding side of the Polynomial Calculus over GF(2) frontier item."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/gf2_polynomial/mod.rs",
+        "crates/clean-verify/src/sat_verify/gf2_polynomial/spec_registration.rs"
+      ],
+      "references": [
+        "Clegg-Edmonds-Impagliazzo 1996"
+      ],
+      "tags": [
+        "gf2",
+        "clause-encoding"
+      ]
+    },
+    {
+      "id": "GF02",
+      "title": "Tseitin exponential separation",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-gf2",
+      "family": "GF(2) Polynomial Calculus GF01-GF03",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Tseitin formulas are represented as a GF(2)-PC versus resolution separation family; full asymptotic formal proof remains pending.",
+      "dependencies": [
+        {
+          "id": "GF01",
+          "reason": "The separation relies on the GF(2) clause-polynomial encoding semantics."
+        },
+        {
+          "id": "PC06_TSEITIN_LOWER_BOUND",
+          "reason": "The resolution lower-bound side is tracked by the proof-complexity lower-bound family."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/gf2_polynomial/tseitin.rs",
+        "crates/clean-verify/src/sat_verify/gf2_polynomial/spec_registration.rs"
+      ],
+      "references": [
+        "Tseitin 1968",
+        "Ben-Sasson-Wigderson 1999"
+      ],
+      "tags": [
+        "gf2",
+        "tseitin",
+        "separation"
+      ]
+    },
+    {
+      "id": "GF03",
+      "title": "Boolean Groebner basis termination",
+      "owner_repo": "alabsystems/clean",
+      "domain": "sat-gf2",
+      "family": "GF(2) Polynomial Calculus GF01-GF03",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Buchberger termination over Boolean GF(2) rings is specified; executable Groebner tests exist while the formal termination proof is pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/gf2_polynomial/groebner.rs",
+        "crates/clean-verify/src/sat_verify/gf2_polynomial/spec_registration.rs"
+      ],
+      "references": [
+        "Buchberger 1965"
+      ],
+      "tags": [
+        "gf2",
+        "groebner",
+        "termination"
+      ]
+    },
+    {
+      "id": "GC_CERT_PROP",
+      "title": "Gamma-crown propositional SAT certificates",
+      "owner_repo": "alabsystems/gamma-crown",
+      "domain": "gamma-crown",
+      "family": "gamma-crown certificate families",
+      "status": "ProofCarrying",
+      "artifact_state": "Replayable",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "Propositional gamma-crown obligations can be represented as SAT instances and checked through DRAT/LRAT-style certificate replay.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/gamma_crown_sat.rs"
+      ],
+      "references": [
+        "DRAT",
+        "LRAT"
+      ],
+      "tags": [
+        "gamma-crown",
+        "sat-certificate",
+        "proof-carrying"
+      ]
+    },
+    {
+      "id": "GC_CERT_FARKAS",
+      "title": "Gamma-crown Farkas certificates",
+      "owner_repo": "alabsystems/gamma-crown",
+      "domain": "gamma-crown",
+      "family": "gamma-crown certificate families",
+      "status": "ProofCarrying",
+      "artifact_state": "Replayable",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "External Farkas multipliers are replayed against linear constraints and can be bridged to interval bounds.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/nn_verify/certificate/farkas_bridge.rs",
+        "crates/clean-verify/src/nn_verify/certificate/tests_farkas_chain.rs"
+      ],
+      "references": [
+        "Farkas lemma"
+      ],
+      "tags": [
+        "gamma-crown",
+        "farkas",
+        "proof-carrying"
+      ]
+    },
+    {
+      "id": "GC_CERT_ENTAILMENT",
+      "title": "Gamma-crown entailment certificates",
+      "owner_repo": "alabsystems/gamma-crown",
+      "domain": "gamma-crown",
+      "family": "gamma-crown certificate families",
+      "status": "ProofCarrying",
+      "artifact_state": "Replayable",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "Entailment certificates can be verified and composed, giving a proof-carrying path for block certificate chains.",
+      "dependencies": [
+        {
+          "id": "GC_CERT_FARKAS",
+          "reason": "Farkas certificates provide a concrete entailment-certificate source."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/nn_verify/certificate/pipeline.rs",
+        "crates/clean-verify/src/nn_verify/certificate/composition.rs"
+      ],
+      "references": [
+        "T70",
+        "T71",
+        "T72"
+      ],
+      "artifact_ids": [
+        "gamma-crown-whisper-tiny-4block-block-0",
+        "gamma-crown-whisper-tiny-4block-block-1",
+        "gamma-crown-whisper-tiny-4block-block-2",
+        "gamma-crown-whisper-tiny-4block-block-3",
+        "gamma-crown-whisper-tiny-4block-entailments"
+      ],
+      "tags": [
+        "gamma-crown",
+        "entailment",
+        "proof-carrying"
+      ]
+    },
+    {
+      "id": "GC_CERT_STREAMING",
+      "title": "Gamma-crown streaming and partial certificates",
+      "owner_repo": "alabsystems/gamma-crown",
+      "domain": "gamma-crown",
+      "family": "gamma-crown certificate families",
+      "status": "ExecutableChecked",
+      "artifact_state": "FixtureOnly",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "Streaming partial certificates and BaB certificate coverage are executable-checked, while end-to-end kernel proof integration remains pending.",
+      "dependencies": [
+        {
+          "id": "GC_CERT_ENTAILMENT",
+          "reason": "Streaming certificate coverage composes local certificate evidence into larger verification regions."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/nn_verify/streaming/partial_cert.rs",
+        "crates/clean-verify/src/nn_verify/streaming/stream.rs",
+        "crates/clean-verify/src/nn_verify/streaming/bab.rs"
+      ],
+      "references": [
+        "branch-and-bound certificates"
+      ],
+      "artifact_ids": [
+        "gamma-crown-whisper-tiny-4block-metadata",
+        "gamma-crown-verification-report-2026-04-19"
+      ],
+      "tags": [
+        "gamma-crown",
+        "streaming",
+        "partial-certificates"
+      ]
+    },
+    {
+      "id": "PC01",
+      "title": "Resolution soundness",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity PC01-PC04",
+      "status": "KernelProved",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Resolution-step soundness (forall nc step, ResolvSound nc step) is a genuine Declaration::Theorem whose value is structural recursion over the ResolvStep inductive via its kernel-generated recursor (ResolvStep.rec): the input case discharges to ResolvSound.input and the resolve case to ResolvSound.resolve with the two induction hypotheses. ResolvStep/ResolvSound are now real inductives (ResolvSound is Prop-valued), the prior Theorem-wrapping-Axiom masquerade and its PC01 axiom are removed, and the kernel type-checks the proof term against the soundness proposition at registration.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-kernel/src/env/proof_complexity_proofs.rs",
+        "crates/clean-kernel/src/env/tests_proof_complexity_proofs.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/mod.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/kernel_proofs.rs"
+      ],
+      "references": [
+        "resolution"
+      ],
+      "tags": [
+        "resolution",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC02",
+      "title": "Resolution completeness",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity PC01-PC04",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Resolution completeness (forall n, ResolvComplete n) is admitted as an HONEST Declaration::Axiom carrying the unwrapped proposition — a genuine metatheorem (Davis-Putnam variable-elimination completeness) that is not yet structurally provable in-kernel. It previously masqueraded as a Declaration::Theorem whose value was Nonempty.intro over an underlying axiom; that Theorem-wrapping-Axiom wrapper was removed (2026-06-15). A recursor-based kernel proof (cf. PC01) is future work.",
+      "dependencies": [
+        {
+          "id": "PC01",
+          "reason": "Completeness is layered on the same resolution proof system whose steps PC01 validates."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/mod.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/spec_registration.rs"
+      ],
+      "references": [
+        "resolution"
+      ],
+      "tags": [
+        "resolution",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC03",
+      "title": "Cutting planes soundness",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity PC01-PC04",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Cutting-planes soundness (forall ni step, CPSound ni step) is admitted as an HONEST Declaration::Axiom carrying the unwrapped proposition — a genuine metatheorem (addition / non-negative scalar multiplication / ceiling division each preserve validity over 0-1 assignments, the ceiling-division case resting on integer-rounding arithmetic) that is not yet structurally provable in-kernel. It previously masqueraded as a Declaration::Theorem whose value was Nonempty.intro over an underlying axiom; that Theorem-wrapping-Axiom wrapper was removed (2026-06-15). A recursor-based kernel proof (cf. PC01) is future work.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/cutting_planes.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/tests_cutting_planes.rs"
+      ],
+      "references": [
+        "cutting planes"
+      ],
+      "tags": [
+        "cutting-planes",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC04",
+      "title": "Cutting planes subsumes resolution",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity PC01-PC04",
+      "status": "Axiomatized",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "CP-subsumes-resolution (forall nc step, CPSimResolvSound nc step) is admitted as an HONEST Declaration::Axiom carrying the unwrapped proposition — a genuine metatheorem (a resolution pivot is simulated by adding the two parent inequalities, cancelling the pivot via x_p + (1 - x_p) = 1, then dividing by 2 with ceiling rounding to recover the resolvent encoding) that is not yet structurally provable in-kernel. It previously masqueraded as a Declaration::Theorem whose value was Nonempty.intro over an underlying axiom; that Theorem-wrapping-Axiom wrapper was removed (2026-06-15). A recursor-based kernel proof (cf. PC01) is future work.",
+      "dependencies": [
+        {
+          "id": "PC01",
+          "reason": "The resolution side uses PC01."
+        },
+        {
+          "id": "PC03",
+          "reason": "The cutting-planes side uses PC03."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/mod.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/spec_registration.rs"
+      ],
+      "references": [
+        "cutting planes",
+        "resolution"
+      ],
+      "tags": [
+        "cutting-planes",
+        "resolution",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC05_TSEITIN_EQUISAT",
+      "title": "Tseitin transformation preserves satisfiability",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity encodings",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Tseitin circuit transformation has executable equisatisfiability checks; the theorem remains pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/encodings.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/tseitin_circuit.rs"
+      ],
+      "references": [
+        "Tseitin transformation"
+      ],
+      "tags": [
+        "tseitin",
+        "encoding",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC06_PHP_UNSAT",
+      "title": "Pigeonhole encoding unsatisfiability",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity encodings",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "The PHP(n+1,n) encoding and unsatisfiability checks are represented as a pending theorem family.",
+      "dependencies": [
+        {
+          "id": "PC01",
+          "reason": "Resolution/proof-system soundness underlies certified refutations."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/encodings.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/tests_encodings.rs"
+      ],
+      "references": [
+        "pigeonhole principle"
+      ],
+      "tags": [
+        "pigeonhole",
+        "encoding",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC05_PHP_LOWER_BOUND",
+      "title": "PHP tree-resolution lower bound",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity lower bounds",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "PHP tree-resolution exponential lower-bound computations are present, while formal asymptotic proof remains pending.",
+      "dependencies": [
+        {
+          "id": "S40",
+          "reason": "S40 tracks the same Haken/PHP tree-resolution lower-bound frontier."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/lower_bounds.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/tests_lower_bounds.rs"
+      ],
+      "references": [
+        "Ben-Sasson-Wigderson 1999"
+      ],
+      "tags": [
+        "pigeonhole",
+        "lower-bound",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "PC06_TSEITIN_LOWER_BOUND",
+      "title": "Tseitin resolution lower bound",
+      "owner_repo": "alabsystems/clean",
+      "domain": "proof-complexity",
+      "family": "proof-complexity lower bounds",
+      "status": "DerivedPending",
+      "artifact_state": "NotApplicable",
+      "promotion_gate": "KernelProofAndAxiomAudit",
+      "summary": "Tseitin expander lower-bound computations are represented, with the proof-complexity formalization still pending.",
+      "dependencies": [],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/proof_complexity/lower_bounds.rs",
+        "crates/clean-verify/src/sat_verify/proof_complexity/tseitin_graphs.rs"
+      ],
+      "references": [
+        "Ben-Sasson-Wigderson 1999"
+      ],
+      "tags": [
+        "tseitin",
+        "lower-bound",
+        "proof-complexity"
+      ]
+    },
+    {
+      "id": "ZT01",
+      "title": "ay Extended Resolution mechanism certificate",
+      "owner_repo": "alabsystems/ay",
+      "domain": "ay-contract",
+      "family": "ay certificate families",
+      "status": "DerivedPending",
+      "artifact_state": "Planned",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "The ay Extended Resolution mechanism schema is modeled, but enabling theorem dependencies are not KernelProved.",
+      "dependencies": [
+        {
+          "id": "PC01",
+          "reason": "ZT01 requires resolution soundness."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/ay_contract.rs"
+      ],
+      "references": [
+        "designs/2026-04-16-theorem-to-ay-contract.md"
+      ],
+      "tags": [
+        "ay",
+        "extended-resolution",
+        "certificate"
+      ]
+    },
+    {
+      "id": "ZT03",
+      "title": "ay Cutting Planes mechanism certificate",
+      "owner_repo": "alabsystems/ay",
+      "domain": "ay-contract",
+      "family": "ay certificate families",
+      "status": "DerivedPending",
+      "artifact_state": "Planned",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "The ay Cutting Planes mechanism schema and GF(2) PC soundness checker exist, while proof dependencies remain pending.",
+      "dependencies": [
+        {
+          "id": "PC03",
+          "reason": "ZT03 requires cutting planes soundness."
+        },
+        {
+          "id": "S44",
+          "reason": "GF(2) Polynomial Calculus soundness is part of the algebraic proof-system story."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/ay_contract.rs",
+        "crates/clean-verify/src/sat_verify/frontier/gf2_algebra.rs"
+      ],
+      "references": [
+        "designs/2026-04-16-theorem-to-ay-contract.md"
+      ],
+      "tags": [
+        "ay",
+        "cutting-planes",
+        "certificate"
+      ]
+    },
+    {
+      "id": "ZT04",
+      "title": "ay Polynomial Calculus competition certificate",
+      "owner_repo": "alabsystems/ay",
+      "domain": "ay-contract",
+      "family": "ay certificate families",
+      "status": "ExecutableChecked",
+      "artifact_state": "FixtureOnly",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "The clean side can compile bounded GF(2) Polynomial Calculus refutations to a competition-checkable binary certificate; ay-side integration is partial.",
+      "dependencies": [
+        {
+          "id": "GF01",
+          "reason": "Certificate correctness depends on GF(2) clause encoding."
+        },
+        {
+          "id": "ZT03",
+          "reason": "ZT04 is layered on the PC soundness contract."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/frontier/gf2_algebra.rs",
+        "crates/clean-verify/src/sat_verify/frontier/tests_gf2_algebra.rs"
+      ],
+      "references": [
+        "PC2 binary certificate format"
+      ],
+      "tags": [
+        "ay",
+        "gf2",
+        "certificate"
+      ]
+    },
+    {
+      "id": "ZT05",
+      "title": "ay Pseudo-Boolean mechanism certificate",
+      "owner_repo": "alabsystems/ay",
+      "domain": "ay-contract",
+      "family": "ay certificate families",
+      "status": "DerivedPending",
+      "artifact_state": "Planned",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "The ay Pseudo-Boolean mechanism schema is modeled, depending on cutting planes soundness and CP subsuming resolution.",
+      "dependencies": [
+        {
+          "id": "PC03",
+          "reason": "ZT05 requires cutting planes soundness."
+        },
+        {
+          "id": "PC04",
+          "reason": "ZT05 requires CP to subsume resolution."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/ay_contract.rs"
+      ],
+      "references": [
+        "designs/2026-04-16-theorem-to-ay-contract.md"
+      ],
+      "tags": [
+        "ay",
+        "pseudo-boolean",
+        "certificate"
+      ]
+    },
+    {
+      "id": "AY_DRAT_IMPORT",
+      "title": "ay DRAT/LRAT proof import",
+      "owner_repo": "alabsystems/ay",
+      "domain": "ay-contract",
+      "family": "ay certificate families",
+      "status": "ProofCarrying",
+      "artifact_state": "Replayable",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "ay proof output can be imported and checked through DRAT/LRAT bridge code, producing proof-carrying certificate envelopes.",
+      "dependencies": [
+        {
+          "id": "PC01",
+          "reason": "Resolution-style proof logging is rooted in resolution soundness."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/ay_import.rs",
+        "crates/clean-verify/src/sat_verify/lrat_kernel_bridge.rs",
+        "crates/clean-verify/src/sat_verify/pipeline.rs"
+      ],
+      "references": [
+        "DRAT",
+        "LRAT"
+      ],
+      "tags": [
+        "ay",
+        "drat",
+        "lrat",
+        "proof-carrying"
+      ]
+    },
+    {
+      "id": "Ay_THEOREM_EXPORT",
+      "title": "ay theorem export registry",
+      "owner_repo": "alabsystems/ay",
+      "domain": "ay-contract",
+      "family": "ay certificate families",
+      "status": "DerivedPending",
+      "artifact_state": "Planned",
+      "promotion_gate": "ArtifactReplayAndKernelImport",
+      "summary": "The theorem-export registry and certificate serialization are implemented, but standard exports only activate for DerivedProved theorem inputs.",
+      "dependencies": [
+        {
+          "id": "PC01",
+          "reason": "Standard proof-complexity exports include PC01."
+        },
+        {
+          "id": "PC03",
+          "reason": "Standard proof-complexity exports include PC03."
+        }
+      ],
+      "evidence": [
+        "crates/clean-verify/src/sat_verify/ay_export.rs",
+        "crates/clean-verify/src/sat_verify/ay_contract.rs"
+      ],
+      "references": [
+        "designs/2026-04-16-theorem-to-ay-contract.md"
+      ],
+      "tags": [
+        "ay",
+        "export",
+        "certificate"
+      ]
+    }
+  ]
+}

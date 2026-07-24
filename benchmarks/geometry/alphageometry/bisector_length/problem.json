@@ -1,0 +1,29 @@
+{
+  "id": "bisector_length",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point", "definition": {"intersection": {"line1": {"through": ["A", "B"]}, "line2": {"through": ["B", "C"]}}}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]},
+    {"type": "custom", "predicate": "angle_bisector_on_line", "args": ["D", "A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "bisector_length_formula",
+    "args": ["B", "D", "A", "B", "B", "C", "A", "C"]
+  },
+  "metadata": {
+    "source": "Angle bisector length formula",
+    "origin": "Stewart's theorem application",
+    "difficulty": 6,
+    "tags": ["bisector", "length", "formula", "stewarts"],
+    "known_solvable": true,
+    "statement": "The length of the angle bisector from B to AC can be computed from the side lengths."
+  }
+}

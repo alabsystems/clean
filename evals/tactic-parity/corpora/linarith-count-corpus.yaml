@@ -1,0 +1,12 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+# Deterministic, hand-maintained source corpus for the linarith generated-count
+# manifest. `generated: false` keeps launch readiness fail-closed until a
+# real Lean4-vs-clean runner artifact replaces this fixture row.
+schema_version: clean-tactic-generated-count-source-corpus-v1
+tactic_lane: linarith
+generated: false
+cases:
+  - id: linarith-proof-carry
+    lean4_tactic: linarith
+    clean_tactic: linarith
+    expected_bucket: linarith-real-proof-carry-fixture

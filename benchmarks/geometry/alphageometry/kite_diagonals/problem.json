@@ -1,0 +1,28 @@
+{
+  "id": "kite_diagonals",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "congruent_segments", "seg1": ["A", "B"], "seg2": ["A", "D"]},
+    {"type": "congruent_segments", "seg1": ["C", "B"], "seg2": ["C", "D"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "not_equal", "a": "B", "b": "D"}
+  ],
+  "goal": {
+    "type": "perpendicular",
+    "line1": {"through": ["A", "C"]},
+    "line2": {"through": ["B", "D"]}
+  },
+  "metadata": {
+    "source": "Kite properties",
+    "difficulty": 4,
+    "tags": ["kite", "diagonal", "perpendicular"],
+    "known_solvable": true,
+    "statement": "The diagonals of a kite are perpendicular."
+  }
+}

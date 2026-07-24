@@ -1,0 +1,63 @@
+{
+  "id": "wf_induction/gcd_terminates",
+  "module": "GcdTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "gcd", "arity": 2}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "gcd_base",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "eq": [{"op": ["gcd", "n", 0]}, "n"]
+        }]
+      }
+    },
+    {
+      "name": "gcd_step",
+      "formula": {
+        "forall_in": ["m", "Nat", {
+          "forall_in": ["n", "Nat", {
+            "implies": [
+              {"expr": {"gt": ["n", 0]}},
+              {"eq": [
+                {"op": ["gcd", "m", "n"]},
+                {"op": ["gcd", "n", {"mod": ["m", "n"]}]}
+              ]}
+            ]
+          }]
+        }]
+      }
+    },
+    {
+      "name": "mod_decreases",
+      "formula": {
+        "forall_in": ["m", "Nat", {
+          "forall_in": ["n", "Nat", {
+            "implies": [
+              {"expr": {"gt": ["n", 0]}},
+              {"expr": {"lt": [{"mod": ["m", "n"]}, "n"]}}
+            ]
+          }]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["m", "Nat", {
+      "forall_in": ["n", "Nat", {
+        "mem": [{"op": ["gcd", "m", "n"]}, "Nat"]
+      }]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "medium",
+  "source": "TLAPS/Euclid",
+  "tags": ["wf_induction", "gcd", "termination", "arithmetic"]
+}

@@ -1,0 +1,65 @@
+[package]
+name = "clean-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean Language Server Protocol implementation"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "clean-lsp"
+path = "src/main.rs"
+
+[features]
+default = []
+# CLI surface for Epic #3436 Phase 3 (#3450): exposes `clean_lsp::cli` with
+# clap-derived argument structs and a `FeatureDescriptor` array. Non-CLI
+# consumers (test harnesses, downstream library users) do not pay for clap
+# + clean-features unless they opt in.
+cli = ["dep:clap", "dep:clean-features"]
+
+[dependencies]
+clean-kernel.workspace = true
+clean-parser.workspace = true
+clean-elab.workspace = true
+
+# LSP framework
+tower-lsp = "0.20"
+# Note: Use lsp-types 0.94 to match tower-lsp's internal dependency
+
+# Async runtime
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "macros", "io-util"] }
+
+# Error handling
+thiserror.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Data structures
+dashmap = "6.0"
+ropey = "1.6"
+
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 3,
+# #3450). Gated behind the `cli` feature so non-CLI consumers keep a minimal
+# dep graph — `clap` + `clean-features` are only pulled in when callers opt
+# in.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "macros"] }
+# The `cli::tests` module relies on clap's derive parser and the
+# feature-descriptor helpers. Run CLI unit tests with
+# `cargo test -p clean-lsp --features cli`. The drift-tests in
+# `crates/clean-cli/tests/feature_coverage.rs` already activate the feature
+# transitively via `clean-cli`'s dependency entry.

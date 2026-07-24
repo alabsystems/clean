@@ -1,0 +1,41 @@
+{
+  "id": "auto/or_comm",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_pq",
+      "formula": {
+        "or": [
+          "P",
+          "Q"
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "or": [
+      "Q",
+      "P"
+    ]
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "disjunction",
+    "commutativity"
+  ]
+}

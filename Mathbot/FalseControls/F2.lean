@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F2_arbitrary_neural_network_is_globally_robust : Mathbot.arbitraryNeuralNetworkIsGloballyRobust

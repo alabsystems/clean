@@ -1,0 +1,46 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-schema-v1",
+  "artifact_schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic_artifact_schema",
+  "artifact_kind": "frontend_diagnostic",
+  "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/diagnostic/{filename}.json",
+  "description": "Schema for deterministic per-file Lean4/clean frontend diagnostic artifacts consumed by generate_frontend_classification.py. The generator treats absent artifacts as missing evidence and present artifacts that violate this schema as stale_or_invalid evidence. Valid artifacts remain pending cross-check until compared against diagnostic_category and first_error_signature.",
+  "required_fields": [
+    "schema_version",
+    "kind",
+    "engine",
+    "filename",
+    "source_sha256",
+    "command",
+    "diagnostic_category",
+    "first_error_signature",
+    "diagnostics"
+  ],
+  "field_constraints": {
+    "schema_version": "must equal clean-frontend-diagnostic-artifact-v1",
+    "kind": "must equal frontend_diagnostic",
+    "engine": "must equal lean4 or clean and match the path engine segment",
+    "filename": "must equal the corpus filename, including .lean",
+    "source_sha256": "must equal the current sha256: digest from tests/lean4_compat/MANIFEST.json",
+    "command": "must be a non-empty array of non-empty strings",
+    "diagnostic_category": "must be null or a non-empty string; later cross-checks compare it with the generated diagnostic_category dimension",
+    "first_error_signature": "must be null or a non-empty string; later cross-checks compare it with the generated first_error_signature dimension",
+    "diagnostics": "must be an array of diagnostic objects; each object must include severity and message",
+    "diagnostics[].severity": "must be error, warning, or information",
+    "diagnostics[].message": "must be a non-empty string",
+    "diagnostics[].line": "when present, must be an integer",
+    "diagnostics[].column": "when present, must be an integer"
+  },
+  "optional_evidence_fields": [
+    "engine_version",
+    "observed_process_status",
+    "observed_exit_code",
+    "observed_timeout_seconds",
+    "observed_elapsed_seconds",
+    "observed_stdout",
+    "observed_stderr",
+    "failure_mode",
+    "artifact_note"
+  ],
+  "replacement_readiness": false
+}

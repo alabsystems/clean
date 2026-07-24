@@ -1,0 +1,19 @@
+{
+  "id": "nat_induction/trivial_forall",
+  "module": "TrivialForallTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {
+    "forall_in": ["n", "Nat", true]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["nat_induction", "trivial"]
+}

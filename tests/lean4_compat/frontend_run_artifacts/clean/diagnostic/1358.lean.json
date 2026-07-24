@@ -1,0 +1,34 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "1358.lean",
+  "source_sha256": "sha256:7d2df8fe8d215fa9b036150441c9160b5bfc2838ff6f96ccec51d64f9f302812",
+  "command": [
+    "timeout",
+    "2",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1358.lean"
+  ],
+  "diagnostic_category": "clean_frontend_error",
+  "first_error_signature": "unsupported_import_lean_elab_tactic",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "Unsupported { feature: \"import Lean.Elab.Tactic: Lean metaprogramming modules are not yet supported by the frontend import path; blocked before .olean loading to keep import processing bounded\" }"
+    },
+    {
+      "severity": "error",
+      "message": "TacticFailed(UnknownTactic(\"print!\"))"
+    }
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_stdout": "Read 155 bytes from \"tests/lean4_compat/lean4_tests/1358.lean\"\nParsed 3 declarations in 262.041\u00b5s\nChecked 3 declarations in 87.03375ms\n  0 passed, 2 failed\n\nErrors:\n  \u2717 elaboration error: Unsupported { feature: \"import Lean.Elab.Tactic: Lean metaprogramming modules are not yet supported by the frontend import path; blocked before .olean loading to keep import processing bounded\" }\n  \u2717 elaboration error: TacticFailed(UnknownTactic(\"print!\"))\n",
+  "observed_stderr": "Error: check failed\n",
+  "failure_mode": "clean_frontend_unsupported_import_and_unknown_tactic",
+  "artifact_note": "The bounded clean diagnostic probe exited with frontend errors before reproducing the Lean4 user-thrown tactic diagnostic; this is failure evidence, not parity-success evidence."
+}

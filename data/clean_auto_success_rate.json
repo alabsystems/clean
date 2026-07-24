@@ -1,0 +1,10 @@
+{
+  "last_updated": "2026-06-13",
+  "engine": "clean-auto AutomationEngine::auto_prove_with_query (cascade SMT->superposition->oracle)",
+  "corpus": "minif2f_bench benchmark_problems",
+  "total": 30,
+  "proved": 5,
+  "disproved": 21,
+  "error": 4,
+  "pass_rate_pct": 16
+}

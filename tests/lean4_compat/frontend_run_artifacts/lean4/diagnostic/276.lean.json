@@ -1,0 +1,35 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "276.lean",
+  "source_sha256": "sha256:f631385dffbd91e1864f615252d69a51a02ac423a48864e569d4894654d75b83",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/276.lean"
+  ],
+  "diagnostic_category": "termination_check_failure",
+  "first_error_signature": "termination_check_failure",
+  "diagnostics": [
+    {
+      "severity": "information",
+      "message": "fun {\u03b1 : Sort v} => PEmpty.rec.{v, u_1} fun (x : PEmpty.{u_1}) => \u03b1 : {\u03b1 : Sort v} \u2192 (t : PEmpty.{u_1}) \u2192 \u03b1"
+    },
+    {
+      "severity": "error",
+      "message": "code generator does not support recursor `PEmpty.rec` yet, consider using 'match ... with' and/or structural recursion",
+      "line": 9,
+      "column": 4
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.142,
+  "observed_stdout": "fun {\u03b1 : Sort v} => PEmpty.rec.{v, u_1} fun (x : PEmpty.{u_1}) => \u03b1 : {\u03b1 : Sort v} \u2192 (t : PEmpty.{u_1}) \u2192 \u03b1\ntests/lean4_compat/lean4_tests/276.lean:9:4: error: code generator does not support recursor `PEmpty.rec` yet, consider using 'match ... with' and/or structural recursion\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

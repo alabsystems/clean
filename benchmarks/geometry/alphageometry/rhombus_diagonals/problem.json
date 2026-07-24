@@ -1,0 +1,28 @@
+{
+  "id": "rhombus_diagonals",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "congruent_segments", "seg1": ["A", "B"], "seg2": ["B", "C"]},
+    {"type": "congruent_segments", "seg1": ["B", "C"], "seg2": ["C", "D"]},
+    {"type": "congruent_segments", "seg1": ["C", "D"], "seg2": ["D", "A"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "A", "b": "C"}
+  ],
+  "goal": {
+    "type": "perpendicular",
+    "line1": {"through": ["A", "C"]},
+    "line2": {"through": ["B", "D"]}
+  },
+  "metadata": {
+    "source": "Rhombus properties",
+    "difficulty": 4,
+    "tags": ["rhombus", "diagonal", "perpendicular"],
+    "known_solvable": true,
+    "statement": "The diagonals of a rhombus are perpendicular."
+  }
+}

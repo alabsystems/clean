@@ -1,0 +1,8 @@
+{
+  "module": "TrivialTrue",
+  "line": null,
+  "declares": [],
+  "hypotheses": [],
+  "goal": "True",
+  "tactic_hint": "auto"
+}

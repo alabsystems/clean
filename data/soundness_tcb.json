@@ -1,0 +1,12 @@
+{
+  "schema": "clean-soundness-tcb-v1",
+  "axiom_count": 3,
+  "foundational_count": 3,
+  "admitted_domain_count": 0,
+  "other_admitted_count": 0,
+  "axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ]
+}

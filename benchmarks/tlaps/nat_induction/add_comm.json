@@ -1,0 +1,23 @@
+{
+  "id": "nat_induction/add_comm",
+  "module": "AddCommTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "forall_in": ["m", "Nat", {
+        "eq": [{"add": ["n", "m"]}, {"add": ["m", "n"]}]
+      }]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "medium",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "commutativity"]
+}

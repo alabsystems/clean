@@ -1,0 +1,30 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "clean",
+  "filename": "348.lean",
+  "source_sha256": "sha256:913e1b9ce28dd60ab6e7cd7b9cc8df788b356c67f0240f3ea8c9c2193c022591",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/348.lean"
+  ],
+  "diagnostic_category": "other_frontend_error",
+  "first_error_signature": "elaboration_error_parseerror_parser_recovery_produced_raw_declaration_error_recovery_db",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "elaboration error: ParseError(\"parser recovery produced raw declaration: error-recovery   db\")"
+    }
+  ],
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.096,
+  "observed_stdout": "Read 131 bytes from \"tests/lean4_compat/lean4_tests/348.lean\"\nParsed 1 declarations in 1.044125ms\nChecked 1 declarations in 76.872959ms\n  0 passed, 1 failed\n\nErrors:\n  \u2717 elaboration error: ParseError(\"parser recovery produced raw declaration: error-recovery   db\")\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean diagnostic evidence; this is not replacement-readiness evidence."
+}

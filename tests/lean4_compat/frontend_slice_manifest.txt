@@ -1,0 +1,24 @@
+# Lean4 Frontend Replacement Slice Manifest
+# Format: <filename>,<level>
+# Levels:
+#   elab - must parse, elaborate, and type-check all declarations
+#
+# Scope: deliberately bounded evidence for #3700. These rows exercise a
+# narrow Lean4 frontend slice through the existing Phase 1 parse/elab/check
+# helpers. This is not a full Lean4 frontend parity claim.
+220.lean,elab
+223.lean,elab
+236.lean,elab
+243.lean,elab
+1918.lean,elab
+1057.lean,elab
+1112.lean,elab
+1367.lean,elab
+1571.lean,elab
+276.lean,elab
+348.lean,elab
+1616.lean,elab
+
+# Profiled expected-failure files stay in the Phase 1 elab corpus and are not
+# counted as all-pass parse+elab+kernel slice evidence:
+#   1011.lean, 255.lean, 248.lean, 309.lean

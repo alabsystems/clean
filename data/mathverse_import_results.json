@@ -1,0 +1,10 @@
+{
+  "axioms": 3799039,
+  "definitions": 14169665,
+  "other": 0,
+  "systems": 238,
+  "theorems": 12080730,
+  "total_declarations": 30049434,
+  "total_time_secs": 229.7,
+  "version": "0.9.0"
+}

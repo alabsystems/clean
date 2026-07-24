@@ -1,0 +1,26 @@
+{
+  "id": "nat_induction/succ_add",
+  "module": "SuccAddTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "forall_in": ["m", "Nat", {
+        "eq": [
+          {"add": [{"add": ["n", 1]}, "m"]},
+          {"add": ["n", {"add": [1, "m"]}]}
+        ]
+      }]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "medium",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "addition"]
+}

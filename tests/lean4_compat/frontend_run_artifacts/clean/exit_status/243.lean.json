@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "243.lean",
+  "source_sha256": "sha256:d935458e42925193912a2a7951d28f863c1813bee1850f68662975898f93a1c4",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/243.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.12,
+  "observed_stdout": "Read 200 bytes from \"tests/lean4_compat/lean4_tests/243.lean\"\nParsed 3 declarations in 346.375\u00b5s\nwarning: declaration 'f' uses synthetic sorry\n  \u2717 f (synthetic sorry)\nChecked 3 declarations in 102.726959ms\n  0 passed, 1 failed\nTrust summary:\n  sorry axioms: 2\n\nErrors:\n  \u2717 f: declaration uses synthetic sorry\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

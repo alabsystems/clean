@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "release_date": "2026-04-16",
+  "sources_refreshed": 13,
+  "sources_failed": 1,
+  "sources_total": 14,
+  "lean4_toolchains_processed": 5,
+  "lean4_constants_v4.29.1": 144868,
+  "lean4_constants_v4.30.0_rc1": 150337,
+  "lean4_shards_v4.29.1": 15,
+  "lean4_shards_v4.30.0_rc1": 15,
+  "lean4_shard_size_mb_v4.29.1": 52.0,
+  "lean4_shard_size_mb_v4.30.0_rc1": 53.5,
+  "lean4_shard_integrity": "all_valid",
+  "lean4_v4.27.0_tc_pass": 203049,
+  "lean4_v4.27.0_tc_fail": 2,
+  "lean4_v4.27.0_pass_rate": "100.00%",
+  "metamath_databases": 5,
+  "metamath_rpn_verified_total": 70372,
+  "metamath_rpn_failed_total": 0,
+  "metamath_set_mm_theorems": 47287,
+  "metamath_iset_mm_theorems": 15818,
+  "metamath_hol_mm_theorems": 151,
+  "metamath_ql_mm_theorems": 1140,
+  "metamath_nf_mm_theorems": 5976,
+  "source_systems": 69,
+  "mathverse_shards_lean4": 15,
+  "delta_from_v0.9.0": {
+    "metamath_rpn_verified": "+330 (70042 -> 70372)",
+    "lean4_constants_v4.29.1": 144868,
+    "mizar_status": "source repo removed, migrated to digama0/mizar-rs"
+  },
+  "build_notes": {
+    "full_pipeline_status": "in_progress",
+    "lean4_kernel_verify_isolated": "0.0% (expected: isolated shard verification without environment context)",
+    "lean4_kernel_verify_cumulative": "100.00% (v4.27.0 with cumulative Environment)"
+  }
+}

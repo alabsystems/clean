@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "1057.lean",
+  "source_sha256": "sha256:b2c244c57c1119ea924d0bdbbda928e1e30b447a38ca4b38431074c268d7a23c",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1057.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.171,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/1057.lean:9:4: error: Dependent elimination failed: Type mismatch when solving this alternative: it has type\n  motive t Int\nbut is expected to have type\n  motive t x\u271d\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "nn-verify-pilot",
+  "domain_profile": "nn-verify",
+  "producer": {
+    "system": "gamma-crown",
+    "commit": "fixture-gamma-crown-generic-true-serialized-kernel-smoke"
+  },
+  "goal": {
+    "expr": {
+      "Const": [
+        {
+          "Str": [
+            "Anon",
+            "True"
+          ]
+        },
+        []
+      ]
+    },
+    "pretty": "True"
+  },
+  "local_context": [],
+  "side_conditions": [],
+  "metadata": {
+    "fixture": "gamma-crown-generic-true-serialized-kernel-smoke",
+    "scope": "serialized kernel proof-state smoke closure without producer-provided local assumptions; semantic replay remains in separate artifact obligations",
+    "closure_tactic": "exact True.intro",
+    "issue_plan": "non-filing",
+    "fixture_role": "proof-state-smoke"
+  },
+  "trust_policy": "constructive-only"
+}

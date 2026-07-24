@@ -1,0 +1,48 @@
+# Cargo configuration for clean
+# Limit parallelism to prevent memory exhaustion crashes
+
+[build]
+# Limit parallel jobs to prevent OOM during compilation
+# Default uses all cores which can exhaust memory on large workspaces
+jobs = 4
+# Tune local builds for the host CPU; this repo targets maximum single-machine
+# verification throughput rather than cross-machine artifact portability.
+rustflags = ["-C", "target-cpu=native"]
+
+[target.'cfg(all(target_arch = "x86_64", target_os = "linux"))']
+# ARM-mac packaging cross-builds target Linux/x86_64 inside Docker (#3019).
+# Keep the host-only native tune for local builds, but pin Linux/x86_64 to a
+# portable baseline so cross-target rustc does not inherit Apple CPU names.
+rustflags = ["-C", "target-cpu=x86-64"]
+
+[env]
+# Set minimum stack size to 64MB for all Rust threads.
+# Required because the env init chain (init_topology_higher_homotopy -> ... -> init_topological_space)
+# stacks 7 levels of massive init functions (700-1200 lines each, hundreds of Expr locals per frame).
+# The cumulative frame size exceeds the default 8MB thread stack, causing SIGABRT on test run.
+# See #1455.
+RUST_MIN_STACK = { value = "67108864", force = false }
+
+# Local development override for ay co-development.
+# The workspace already path-depends on ../ay (see Cargo.toml ay* aliases);
+# uncomment below only to point at a differently-located ay checkout.
+# [patch."ssh://git@github.com/alabsystems/ay"]
+# ay = { package = "ay", path = "../ay/crates/ay" }
+# ay-dpll = { package = "ay-dpll", path = "../ay/crates/ay-dpll" }
+# ay-core = { package = "ay-core", path = "../ay/crates/ay-core" }
+# ay-proof = { package = "ay-proof", path = "../ay/crates/ay-proof" }
+# ay-frontend = { package = "ay-frontend", path = "../ay/crates/ay-frontend" }
+
+# Tooling aliases that replace thin shell wrappers under scripts/.
+# Use these instead of running `scripts/*.sh` for common workflows.
+[alias]
+# Regenerate `docs/cli/` from the FeatureDescriptor registry.
+# Replaces `scripts/gen_cli_docs.sh`.
+gen-cli-docs = ["run", "--locked", "--quiet", "-p", "clean-cli", "--bin", "gen_cli_docs", "--"]
+# Strict warning-free check of clean-auto.
+# Replaces `scripts/test_clean_auto_no_warnings.sh`.
+# Note: also run `RUSTFLAGS='-D warnings' cargo check-auto` for the full no-warnings gate.
+check-auto = ["check", "--locked", "--message-format=short", "-p", "clean-auto"]
+# Build + run the gamma-crown verifier (15 conjectures through the kernel).
+# Replaces `scripts/verify_gamma_crown.sh`. Pass-through args: --json/--csv/--latex.
+verify-gamma-crown = ["run", "--locked", "-p", "clean-kernel", "--features", "test-utils,math-overlays", "--bin", "verify_gamma_crown", "--release", "--"]

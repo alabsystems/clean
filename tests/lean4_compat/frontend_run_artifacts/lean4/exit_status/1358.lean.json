@@ -1,0 +1,21 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "1358.lean",
+  "source_sha256": "sha256:7d2df8fe8d215fa9b036150441c9160b5bfc2838ff6f96ccec51d64f9f302812",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1358.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_stdout": "foo\n",
+  "observed_stderr": "tests/lean4_compat/lean4_tests/1358.lean:9:2: error: error\n",
+  "artifact_note": "Lean4 reached the custom tactic diagnostic and exited nonzero; this is failure evidence, not parity-success evidence."
+}

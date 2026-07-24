@@ -1,0 +1,62 @@
+[package]
+name = "clean"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Clean — Pure Rust theorem-proving infrastructure for AI-driven verification"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+carcara-verify = ["clean-cli/carcara-verify"]
+# Forwards to `clean-cli/math-overlays`, enabling the in-process
+# `clean kernel verify-gamma-crown` handler (#3446, Epic #3436 Phase 3).
+math-overlays = ["clean-cli/math-overlays"]
+# Enable the ay SMT solver for enhanced decision tactics in the absorbed
+# check pipeline (ex clean-lib; rearch stage 9 facade consolidation).
+ay-smt = ["clean-elab/ay-smt"]
+# Install mimalloc as the process-wide `#[global_allocator]` (Track B1). Off by
+# default so default builds keep the system allocator; release/full-corpus
+# builds enable it to bound the PARAGON high-water-mark. Forwards to
+# `clean-mathverse/mimalloc` so the per-module `mi_collect` purge is live too.
+mimalloc = ["dep:mimalloc", "clean-cli/mimalloc"]
+
+[[bin]]
+name = "clean"
+path = "src/bin/clean.rs"
+doc = false
+
+[dependencies]
+# The clean library API surface (re-exports kernel + olean + parser, plus
+# the absorbed clean-lib check pipeline over parser + elab).
+clean-kernel = { workspace = true, features = ["geometry-tools"] }
+clean-olean.workspace = true
+clean-parser.workspace = true
+clean-elab.workspace = true
+thiserror.workspace = true
+rayon.workspace = true
+
+# Thin binary wrapper deps
+clean-cli.workspace = true
+tokio.workspace = true
+
+# Optional global allocator (Track B1). Pulled in only with `--features mimalloc`.
+mimalloc = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+criterion.workspace = true
+blake3.workspace = true
+
+[[bench]]
+name = "pipeline_bench"
+harness = false
+
+[[bench]]
+name = "e2e_bench"
+harness = false

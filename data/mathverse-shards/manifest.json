@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "base_shards": [
+    {
+      "path": "base/acl2.mathverse",
+      "content_hash": "50ba50126c6691d9af309a4c10876f914912e19e382e2d696edf4a67330ad3ca",
+      "constant_count": 85202,
+      "expr_count": 449730,
+      "source": "acl2"
+    },
+    {
+      "path": "base/coq_v.mathverse",
+      "content_hash": "6924de20029a3c460058d3dae2d20d08934f2f72721170960ee435149d25189a",
+      "constant_count": 22049,
+      "expr_count": 64213,
+      "source": "coq_v"
+    },
+    {
+      "path": "base/dafny.mathverse",
+      "content_hash": "13d0e1344fedbab6e03fa3d61053e61ecaa1ce2614a06c0207f495e2c7ca4712",
+      "constant_count": 10178,
+      "expr_count": 5006,
+      "source": "dafny"
+    },
+    {
+      "path": "base/fstar.mathverse",
+      "content_hash": "a6586e0dad79265cce4d0a0228b6c24c084d413f549c99161148e8298783e7e6",
+      "constant_count": 12320,
+      "expr_count": 6915,
+      "source": "fstar"
+    },
+    {
+      "path": "base/isabelle_thy.mathverse",
+      "content_hash": "4537e6c4835c33c0e7aae22fe3e928c5a25df89a86942900baa74eeb3ed1ab44",
+      "constant_count": 55609,
+      "expr_count": 152733,
+      "source": "isabelle_thy"
+    },
+    {
+      "path": "base/lean3.mathverse",
+      "content_hash": "8f4ca87dd817940c14c9a559bc604413be2d3a2292d59fc679e5095e1e83c832",
+      "constant_count": 46366,
+      "expr_count": 157124,
+      "source": "lean3"
+    },
+    {
+      "path": "base/lean4_mathlib4.mathverse",
+      "content_hash": "9966852b97b918a94bbd96aec3d4110dacb0e46c3c51c9af1382b671423bd426",
+      "constant_count": 482407,
+      "expr_count": 23826153,
+      "source": "lean4_mathlib4"
+    },
+    {
+      "path": "base/lean4_stdlib.mathverse",
+      "content_hash": "70e01542142d9d36913e562b695700bf7cac7a7fa443688823d6b7ef0431afd4",
+      "constant_count": 158608,
+      "expr_count": 3046690,
+      "source": "lean4_stdlib"
+    },
+    {
+      "path": "base/metamath_hol.mathverse",
+      "content_hash": "e73c4de6b02fe5a1d58ca347351fb7c6fe1363e9b0fb6ebe03465d3f931fffd4",
+      "constant_count": 511,
+      "expr_count": 412,
+      "source": "metamath_hol"
+    },
+    {
+      "path": "base/metamath_iset.mathverse",
+      "content_hash": "a63b20e34faf15d65c4751dddfa900287cf0aad020a0b67d957e3b423af9f6d7",
+      "constant_count": 30357,
+      "expr_count": 35420,
+      "source": "metamath_iset"
+    },
+    {
+      "path": "base/metamath_nf.mathverse",
+      "content_hash": "c550264142f3aa23158ee493e402a9e152553215e882a0724ff68319e56a7b02",
+      "constant_count": 10542,
+      "expr_count": 12120,
+      "source": "metamath_nf"
+    },
+    {
+      "path": "base/metamath_ql.mathverse",
+      "content_hash": "6a9e8cb217369498c516c97112655c2ab2883ab82e1749bd04cdc03fc8aaa0df",
+      "constant_count": 1976,
+      "expr_count": 2394,
+      "source": "metamath_ql"
+    },
+    {
+      "path": "base/metamath_set.mathverse",
+      "content_hash": "319be16016a2b9bfa06e8953a82344e665500491afc66d5056ec7441c0a64244",
+      "constant_count": 117922,
+      "expr_count": 108309,
+      "source": "metamath_set"
+    },
+    {
+      "path": "base/opentheory.mathverse",
+      "content_hash": "4229d01bf9c0fa339ff408f697368f15bc56b54ed1d3cdfc3814090a777fec71",
+      "constant_count": 18839,
+      "expr_count": 53922,
+      "source": "opentheory"
+    }
+  ],
+  "delta_shards": []
+}

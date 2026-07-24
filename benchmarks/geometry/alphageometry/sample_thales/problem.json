@@ -1,0 +1,31 @@
+{
+  "id": "sample_thales",
+  "objects": {
+    "O": {"type": "point"},
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "circle": {"type": "circle", "definition": {"circle_center_radius": {"center": "O", "radius_point": "A"}}}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "A", "circle": "circle"},
+    {"type": "on_circle", "point": "B", "circle": "circle"},
+    {"type": "on_circle", "point": "C", "circle": "circle"},
+    {"type": "collinear", "points": ["A", "O", "B"]},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "C", "b": "A"},
+    {"type": "not_equal", "a": "C", "b": "B"}
+  ],
+  "goal": {
+    "type": "angle_measure",
+    "angle": {"points": ["A", "C", "B"]},
+    "measure": {"numerator": 1, "denominator": 2}
+  },
+  "metadata": {
+    "source": "Thales' Theorem",
+    "difficulty": 3,
+    "tags": ["circle", "right_angle", "diameter"],
+    "known_solvable": true,
+    "statement": "If AB is a diameter of a circle and C is any other point on the circle, then angle ACB is a right angle."
+  }
+}

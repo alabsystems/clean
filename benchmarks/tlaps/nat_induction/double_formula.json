@@ -1,0 +1,39 @@
+{
+  "id": "nat_induction/double_formula",
+  "module": "DoubleFormulaTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "double", "arity": 1}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "double_0",
+      "formula": {"eq": [{"op": ["double", 0]}, 0]}
+    },
+    {
+      "name": "double_succ",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "eq": [
+            {"op": ["double", {"add": ["n", 1]}]},
+            {"add": [{"op": ["double", "n"]}, 2]}
+          ]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "eq": [{"op": ["double", "n"]}, {"mul": [2, "n"]}]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "closed_form"]
+}

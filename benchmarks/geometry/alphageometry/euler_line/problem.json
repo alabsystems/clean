@@ -1,0 +1,29 @@
+{
+  "id": "euler_line",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "O": {"type": "point", "definition": {"circumcenter": ["A", "B", "C"]}},
+    "G": {"type": "point", "definition": {"centroid": ["A", "B", "C"]}},
+    "H": {"type": "point", "definition": {"orthocenter": ["A", "B", "C"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "collinear",
+    "points": ["O", "G", "H"]
+  },
+  "metadata": {
+    "source": "Classical geometry",
+    "origin": "Leonhard Euler, 1765",
+    "difficulty": 6,
+    "tags": ["euler_line", "circumcenter", "centroid", "orthocenter", "collinear"],
+    "known_solvable": true,
+    "statement": "In any triangle, the circumcenter O, centroid G, and orthocenter H are collinear (the Euler line)."
+  }
+}

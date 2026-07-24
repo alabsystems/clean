@@ -1,0 +1,7 @@
+session	entry	parent	n_theories	capture_prefix
+ZP-AFP-Entry_Simple	Entry_Simple	ZP-Lib3e	3	Entry_Simple.
+ZP-AFP-EntryBig-1	EntryBig	ZP-Lib3e	3	EntryBig.
+ZP-AFP-EntryBig-2	EntryBig	ZP-AFP-EntryBig-1	3	EntryBig.
+ZP-AFP-EntryBig-3	EntryBig	ZP-AFP-EntryBig-2	2	EntryBig.
+ZP-AFP-EntryMulti	EntryMulti	ZP-Lib3e	2	EntryMulti.
+ZP-AFP-EntryCycle	EntryCycle	ZP-Lib3e	3	EntryCycle.

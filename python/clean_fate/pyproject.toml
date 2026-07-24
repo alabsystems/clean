@@ -1,0 +1,55 @@
+# Copyright 2026 Andrew Yates
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "Clean-fate"
+version = "0.9.0"
+description = "Clean integration for FATE-Eval benchmarking"
+authors = [
+    {name = "Andrew Yates", email = "andrewyates.name@gmail.com"}
+]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["lean", "theorem-prover", "verification", "fate", "benchmark"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+dependencies = [
+    "httpx>=0.25.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+fate-eval = [
+    # For direct FATE-Eval integration
+    # pip install Clean-fate[fate-eval]
+]
+
+[project.scripts]
+Clean-fate = "clean_fate.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/alabsystems/Clean"
+Repository = "https://github.com/alabsystems/Clean"
+Documentation = "https://github.com/alabsystems/Clean/blob/main/python/clean_fate/README.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clean_fate"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F10_invalid_qbf_strategy_f10_accepted : Mathbot.invalidQbfStrategyF10Accepted

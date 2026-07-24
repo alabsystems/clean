@@ -1,0 +1,22 @@
+{
+  "id": "auto/hypothesis_true",
+  "module": "PropositionalTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [
+    {
+      "name": "h_true",
+      "formula": true
+    }
+  ],
+
+  "goal": true,
+
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["propositional", "trivial"]
+}

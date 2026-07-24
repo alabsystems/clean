@@ -1,0 +1,80 @@
+[package]
+name = "clean-elab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean elaborator - type inference and tactics"
+readme.workspace = true
+repository.workspace = true
+
+[package.metadata.cargo-machete]
+# clean-compiler is referenced only via a rustdoc intra-doc link
+# (`[FfiBridge](clean_compiler)` in src/ffi_extern.rs). cargo-machete
+# does not see doc links, but cargo doc needs the dep to resolve the
+# link. Removing would silently break the rendered FfiBridge reference.
+ignored = ["clean-compiler"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Enable ay SMT solver for enhanced decision tactics
+ay-smt = ["clean-auto/ay-smt"]
+carcara-verify = ["ay-smt", "clean-auto/carcara-verify"]
+# Expose synthetic trust-envelope constructors for cross-crate test fixtures.
+# Propagates to clean-auto/test-utils. Part of #2773.
+test-utils = ["clean-auto/test-utils"]
+# Enable mathverse_use / mathverse_suggest tactics backed by clean-mathverse library
+mathverse-library = ["dep:clean-mathverse"]
+# CLI surface for Epic #3436 Phase 2: exposes `clean_elab::cli` with
+# clap-derived argument structs and `FeatureDescriptor` entries consumed
+# by the top-level `clean` binary.
+cli = ["dep:clap", "dep:clean-features"]
+
+[dependencies]
+clean-kernel = { workspace = true, features = ["math-overlays"] }
+clean-parser.workspace = true
+clean-macro.workspace = true
+clean-auto.workspace = true
+clean-olean.workspace = true
+clean-compiler.workspace = true
+clean-runtime.workspace = true
+clean-mathverse = { workspace = true, optional = true }
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 2).
+# Gated behind the `cli` feature so default builds stay lean.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+anyhow.workspace = true
+thiserror.workspace = true
+hashbrown.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+stacker.workspace = true
+tempfile.workspace = true
+tracing-subscriber.workspace = true
+num-bigint.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+
+[[bin]]
+name = "lrat_oracle_conformance"
+path = "src/bin/lrat_oracle_conformance.rs"
+
+[[bin]]
+name = "soundness_gate"
+path = "src/bin/soundness_gate/main.rs"
+
+[dev-dependencies]
+clean-kernel = { workspace = true, features = ["math-overlays", "test-utils"] }
+proptest.workspace = true
+serial_test.workspace = true
+syn = { workspace = true, features = ["full", "visit"] }
+
+# Self-dependency to enable test-utils during cargo test.
+# Mirrors clean-verify pattern. Part of #2773.
+[dev-dependencies.clean-elab]
+path = "."
+features = ["test-utils"]

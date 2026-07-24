@@ -1,0 +1,45 @@
+{
+  "id": "nat_induction/power_positive",
+  "module": "PowerPositiveTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "pow", "arity": 2}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "pow_base",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "eq": [{"op": ["pow", "n", 0]}, 1]
+        }]
+      }
+    },
+    {
+      "name": "pow_step",
+      "formula": {
+        "forall_in": ["n", "Nat", {
+          "forall_in": ["k", "Nat", {
+            "eq": [
+              {"op": ["pow", "n", {"add": ["k", 1]}]},
+              {"mul": ["n", {"op": ["pow", "n", "k"]}]}
+            ]
+          }]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["k", "Nat", {
+      "gt": [{"op": ["pow", 2, "k"]}, 0]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "positivity"]
+}

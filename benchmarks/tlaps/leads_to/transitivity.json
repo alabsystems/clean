@@ -1,0 +1,30 @@
+{
+  "id": "leads_to/transitivity",
+  "module": "LeadsToTransTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "P", "arity": 0},
+    {"type": "constant", "name": "Q", "arity": 0},
+    {"type": "constant", "name": "R", "arity": 0}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "h_pq",
+      "formula": {"leads_to": ["P", "Q"]}
+    },
+    {
+      "name": "h_qr",
+      "formula": {"leads_to": ["Q", "R"]}
+    }
+  ],
+
+  "goal": {"leads_to": ["P", "R"]},
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["temporal", "leads_to", "transitivity"]
+}

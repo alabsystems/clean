@@ -1,0 +1,29 @@
+{
+  "id": "orthocenter_reflection",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "H": {"type": "point", "definition": {"orthocenter": ["A", "B", "C"]}},
+    "H_a": {"type": "point", "definition": {"reflection": {"point": "H", "over": {"through": ["B", "C"]}}}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "on_circumcircle",
+    "args": ["H_a", "A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Advanced geometry",
+    "origin": "Classical result",
+    "difficulty": 6,
+    "tags": ["orthocenter", "reflection", "circumcircle"],
+    "known_solvable": true,
+    "statement": "The reflection of the orthocenter over any side of the triangle lies on the circumcircle."
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "sas_congruence",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "E": {"type": "point"},
+    "F": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "congruent_segments", "seg1": ["A", "B"], "seg2": ["D", "E"]},
+    {"type": "congruent_segments", "seg1": ["A", "C"], "seg2": ["D", "F"]},
+    {"type": "congruent_angles", "angle1": {"points": ["B", "A", "C"]}, "angle2": {"points": ["E", "D", "F"]}},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "not_equal", "a": "D", "b": "E"},
+    {"type": "not_equal", "a": "E", "b": "F"},
+    {"type": "not_equal", "a": "D", "b": "F"}
+  ],
+  "goal": {
+    "type": "congruent_triangles",
+    "tri1": ["A", "B", "C"],
+    "tri2": ["D", "E", "F"]
+  },
+  "metadata": {
+    "source": "SAS Congruence (Euclid I.4)",
+    "difficulty": 3,
+    "tags": ["congruence", "sas", "triangles"],
+    "known_solvable": true,
+    "statement": "If two triangles have two sides and the included angle equal, then the triangles are congruent (SAS)."
+  }
+}

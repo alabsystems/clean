@@ -1,0 +1,4 @@
+# Default ignore list for the dead-code audit.
+#
+# Add one `[[ignore]]` table per intentional public item you want to suppress.
+# Matching fields are exact unless `path_glob` is used.

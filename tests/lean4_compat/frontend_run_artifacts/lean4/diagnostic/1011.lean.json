@@ -1,0 +1,31 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "1011.lean",
+  "source_sha256": "sha256:2b1959c15e77051094788283ff9b224bac6667f42d9dea677f7683874a50091a",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1011.lean"
+  ],
+  "diagnostic_category": "unknown_identifier_or_scope",
+  "first_error_signature": "unknown_identifier",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "Unknown identifier `AA`",
+      "line": 6,
+      "column": 11
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 1.279,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/1011.lean:6:11: error(lean.unknownIdentifier): Unknown identifier `AA`\n\nNote: It is not possible to treat `AA` as an implicitly bound variable here because it has multiple characters while the `relaxedAutoImplicit` option is set to `false`.\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

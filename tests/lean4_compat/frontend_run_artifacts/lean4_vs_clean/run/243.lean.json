@@ -1,0 +1,30 @@
+{
+  "schema_version": "clean-frontend-lean4-vs-clean-run-artifact-v1",
+  "kind": "frontend_lean4_vs_clean_run",
+  "engine": "lean4_vs_clean",
+  "filename": "243.lean",
+  "source_sha256": "sha256:d935458e42925193912a2a7951d28f863c1813bee1850f68662975898f93a1c4",
+  "command": [
+    "python3",
+    "scripts/lean4_compat/generate_frontend_run_artifacts.py",
+    "--files",
+    "223.lean",
+    "236.lean",
+    "243.lean"
+  ],
+  "lean4_artifact_path": "tests/lean4_compat/frontend_run_artifacts/lean4/exit_status/243.lean.json",
+  "clean_artifact_path": "tests/lean4_compat/frontend_run_artifacts/clean/exit_status/243.lean.json",
+  "lean4_diagnostic_artifact_path": "tests/lean4_compat/frontend_run_artifacts/lean4/diagnostic/243.lean.json",
+  "clean_diagnostic_artifact_path": "tests/lean4_compat/frontend_run_artifacts/clean/diagnostic/243.lean.json",
+  "comparison_basis": "exit_status_and_first_error_signature",
+  "comparison_status": "exit_status_match_first_error_signature_mismatch",
+  "lean4_status": "failure",
+  "clean_status": "failure",
+  "lean4_diagnostic_category": "other_frontend_error",
+  "clean_diagnostic_category": "other_frontend_error",
+  "lean4_first_error_signature": "application_type_mismatch_the_argument",
+  "clean_first_error_signature": "f_declaration_uses_synthetic_sorry",
+  "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges",
+  "replacement_ready": false,
+  "artifact_note": "Generated bounded Lean4-vs-clean frontend run evidence. This records differential evidence only and does not claim replacement readiness."
+}

@@ -1,0 +1,42 @@
+{
+  "id": "nat_induction/sum_squares",
+  "module": "SumSquaresTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "sum_sq", "arity": 1}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "sum_sq_base",
+      "formula": {"eq": [{"op": ["sum_sq", 0]}, 0]}
+    },
+    {
+      "name": "sum_sq_step",
+      "formula": {
+        "forall_in": ["k", "Nat", {
+          "eq": [
+            {"op": ["sum_sq", {"add": ["k", 1]}]},
+            {"add": [{"op": ["sum_sq", "k"]}, {"mul": [{"add": ["k", 1]}, {"add": ["k", 1]}]}]}
+          ]
+        }]
+      }
+    }
+  ],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "eq": [
+        {"mul": [6, {"op": ["sum_sq", "n"]}]},
+        {"mul": ["n", {"mul": [{"add": ["n", 1]}, {"add": [{"mul": [2, "n"]}, 1]}]}]}
+      ]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "medium",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "closed_form"]
+}

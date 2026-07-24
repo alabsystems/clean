@@ -1,0 +1,17 @@
+[package]
+name = "clean-macro"
+version = "0.1.0"
+edition = "2021"
+description = "Macro system for Clean - syntax quotations, macros, and syntax extensions"
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel = { path = "../clean-kernel" }
+thiserror.workspace = true
+
+[dev-dependencies]

@@ -1,0 +1,28 @@
+{
+  "schema_version": "clean-frontend-macro-artifact-v1",
+  "kind": "frontend_macro",
+  "engine": "clean",
+  "filename": "1321.lean",
+  "source_sha256": "sha256:4179054021fadf454329c1f3a4195ad40c670d99aa643c7124ec3b537fa84d55",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1321.lean"
+  ],
+  "macro_status": "failure",
+  "expansions_checked": 1,
+  "expansions_failed": 1,
+  "notations_checked": 0,
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "timeout",
+  "observed_exit_code": 124,
+  "observed_stdout": "",
+  "observed_stderr": "",
+  "checked_expansions": [
+    "clean bounded frontend probe attempted the custom `foo 5` term macro expansion from `foo $x => $x + 1`, but timed out before producing frontend output."
+  ],
+  "artifact_note": "clean did not complete the bounded macro frontend probe for this parse-only corpus row. This records clean failure evidence only; no macro parity or replacement readiness is claimed."
+}

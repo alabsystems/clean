@@ -1,0 +1,33 @@
+[package]
+name = "clean-discovery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "AI-driven proof discovery loop for Clean"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Enable LLM oracle backends (AI Model, AI Model, AI Provider) for guided discovery.
+oracle = ["dep:clean-auto"]
+
+[dependencies]
+clean-kernel = { workspace = true, features = ["math-overlays"] }
+clean-features = { workspace = true }
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap = { workspace = true }
+
+# Optional: LLM oracle for guided discovery
+clean-auto = { workspace = true, features = ["oracle-http"], optional = true }
+
+[dev-dependencies]
+
+[[bin]]
+name = "clean-discover"
+path = "src/bin/discover.rs"

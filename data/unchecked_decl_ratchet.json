@@ -1,0 +1,71 @@
+{
+  "add_decl_structural_count": 1,
+  "add_decl_unchecked_count": 0,
+  "add_decl_structural_production_sites": [
+    {
+      "file": "crates/clean-mathverse/src/bin/mathverse_shard/proof_commands.rs",
+      "line": 522,
+      "method": "add_decl_structural",
+      "trust": "SOUND BY ISOLATION (G3 honesty correction, 2026-07-01): fn add_shard_to_env builds a READ-ONLY audit/proof-search Environment from pre-verified .mathverse shard data for analysis (SoundnessReport emission), NOT for proof production. It mints NO KernelVerified verdict, never re-exports, and the audit env never enters the kernel TCB. Structural (not full) add is used because shard data is already upstream-verified and the audit only needs the declaration shapes present; a wrong shard byte at worst produces a wrong audit finding, not unsoundness. This is a LIVE non-#[cfg(test)] production site: the prior ratchet prose ('ZERO production code path registers via add_decl_structural') was INACCURATE and is corrected below."
+    }
+  ],
+  "extend_constants": {
+    "note": "Production call sites of the bulk extend_constants_unchecked / extend_constants_structural bypass. Addresses #4: these are NOT counted by add_decl_*_count above (which track only add_decl_structural/add_decl_unchecked). Each production site below carries a // SOUNDNESS: comment at its call. ENFORCEMENT: scripts/check_extend_constants_ratchet.py (wired into scripts/local_gate.sh) fails the pre-push gate if any source .extend_constants_*( call site is not accounted for in production_sites or test_excluded_sites, or if a production count exceeds the baseline. test_excluded_sites are listed explicitly because they live in inline #[cfg(test)] blocks that path globs do not catch. Counts are flat-or-down: removing a bypass should lower the baseline. G4 (2026-07-01): the GENUINE-DEBT generated_overlay.rs overlay lane was moved OFF extend_constants_unchecked onto the new kernel-checked extend_constants_checked (infer_sort every type + check_type every value-bearing record, UnknownConst-tolerant for legitimate forward/external refs) — the sole trust-bearing unchecked overlay bypass is CLOSED, dropping unchecked_production_count 2 -> 1 (only the isolated merge_check.rs scratch env remains as a production unchecked bypass).",
+    "unchecked_production_count": 1,
+    "structural_production_count": 5,
+    "production_sites": [
+      {
+        "file": "crates/clean-cli/src/factory/merge_check.rs",
+        "method": "extend_constants_unchecked",
+        "trust": "SOUND BY ISOLATION: throwaway scratch env backing is_def_eq for duplicate-theorem-statement detection; never persisted, never re-exported, never enters the kernel TCB. Worst case is a wrong merge finding (or is_def_eq DoS on hostile input), not unsoundness."
+      },
+      {
+        "file": "crates/clean-olean/src/import/load_register.rs",
+        "method": "extend_constants_structural",
+        "occurrences": 2,
+        "trust": "IMPORT BOUNDARY: runs O(1) structural checks (no dup level params / metavars / free vars / level-scope) and rejects failures, but NOT kernel type-checking. Type-correctness delegated to the upstream Lean kernel that produced the .olean/CleanPayload; constants stored Unverified; opt-in typecheck_constants_full re-check available."
+      },
+      {
+        "file": "crates/clean-mathverse/src/cli/graduate_closure_cache.rs",
+        "method": "extend_constants_structural",
+        "trust": "SAME IMPORT BOUNDARY, content-addressed: the content-addressed closure cache (graduate --env olean warm load) materializes the SAME definitional constants, from the SAME .olean set, that load_register.rs registers via this exact hook — the cache only changes the source of the bytes (a blake3-union-digest-bound, per-constant-recon-digest-stamped .mathverse shard) not the trust. Constants stored Unverified; every graduation candidate is re-type-checked from scratch downstream (graduate_with_base_keep_env -> add_decl check_type), so a wrong cached byte fails a candidate's recheck, it cannot mint a KernelVerified. Fail-closed: any union-digest / per-shard-binding / coverage / decode mismatch falls back to the eager .olean reconstruction. Opt-in via $CLEAN_CLOSURE_CACHE_DIR (off by default)."
+      },
+      {
+        "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
+        "method": "extend_constants_structural",
+        "trust": "SOUND AS TRUSTED CLOSURE CONTEXT (2026-07-08, gate green-up after the P4 per-constant-verify landing left 2 unaccounted sites): fn insert_or_upgrade demand-loads the transitive CONSTANT closure of a per-constant-verify target into the shared kernel environment (2 call sites: the stale-entry re-insert arm and the fresh-insert arm). Closure constants are imported CONTEXT, trusted exactly like the eager import closure `stamp-verified --closure-root` loads: they are never stamped KernelVerified, never certified, and never enter a trust receipt. Only the named TARGET constant(s) run the kernel's add_decl-equivalent check_type gauntlet, and only kernel-accepted targets become receipt leaves. A corrupt or wrong closure constant can at worst fail the target's kernel check (fail closed) - it cannot mint a false KernelVerified or widen any certified claim."
+      }
+    ],
+    "test_excluded_sites": [
+      {
+        "file": "crates/clean-kernel/src/tc/monad_reduce.rs",
+        "method": "extend_constants_unchecked",
+        "reason": "inside #[cfg(test)] mod tests (install_stub): intentionally ill-typed stub giving the WHNF reducer a delta-unfoldable head. Compiled out of every non-test build."
+      },
+      {
+        "file": "crates/clean-cli/src/cmd_audit.rs",
+        "method": "extend_constants_unchecked",
+        "reason": "inside #[cfg(test)] mod tests: fabricated non-foundational axiom fixture asserting the trust-ledger audit REJECTS it. Compiled out of every non-test build."
+      },
+      {
+        "file": "crates/clean-mathverse/src/closure_source.rs",
+        "method": "extend_constants_unchecked",
+        "reason": "inside the #[cfg(test)] mod tests at closure_source.rs:523 (fn lazy_closure_verdict_matches_eager): builds a throwaway scratch env for the eager-vs-lazy closure consistency probe. Compiled out of every non-test build. Listed 2026-07-01 (previously unaccounted / stale ratchet)."
+      },
+      {
+        "file": "crates/clean-elab/src/infer/elab_monad_materialize.rs",
+        "method": "extend_constants_unchecked",
+        "reason": "inside the #[cfg(test)] mod tests (register helper): installs synthetic monad-stub and class-projection constants solely to exercise the materialization shape discriminator. Compiled out of every non-test build; cannot reach a stored environment, kernel verdict, or exported artifact."
+      },
+      {
+        "file": "crates/clean-olean/src/import/load_register.rs",
+        "method": "extend_constants_unchecked",
+        "occurrences": 3,
+        "reason": "inside the #[cfg(test)] mod at load_register.rs:1743 (seed_structure test helper + projection-index test fixtures). Compiled out of every non-test build. Previously unaccounted (stale ratchet after parallel work landed the projection-index tests); listed 2026-07-01."
+      }
+    ]
+  },
+  "note": "Counts are production call sites only (not definitions, trait impls, test files, or comments). The kernel definition (decl_add.rs) and trait delegation (trusted_ext.rs) are infrastructure, not usage. HONESTY (2026-06-14): the add_decl_*_count fields track ONLY add_decl_structural/add_decl_unchecked. RESOLVED 2026-06-17 (#4): the dominant extend_constants_unchecked / extend_constants_structural bulk-import bypass is now accounted in the `extend_constants` block above, every production site carries a // SOUNDNESS: comment, and a fail-closed code-scanning gate (scripts/check_extend_constants_ratchet.py via scripts/local_gate.sh) blocks a new unaccounted bypass. G3 CORRECTION (2026-07-01): the prior claim 'ZERO production code path registers via add_decl_structural/add_decl_unchecked' was INACCURATE. crates/clean-mathverse/src/bin/mathverse_shard/proof_commands.rs:522 (fn add_shard_to_env) is a LIVE non-#[cfg(test)] production add_decl_structural site. It is SOUND BY ISOLATION (read-only audit/proof-search env, mints no KernelVerified, never re-exports) and is now counted in add_decl_structural_production_sites above with add_decl_structural_count=1. The remaining add_decl_structural / add_decl_unchecked call sites are TEST-only (tests_axiom_audit.rs, tests_sorry_tracer.rs, #[cfg(test)] fixtures, tc/tests*, env/tests*, build_library_native.rs #[cfg(test)] helpers). Production axioms enter via add_decl with full check, or via the #4-gated extend_constants_* (generated_overlay.rs now kernel-checked via extend_constants_checked, G4). Re C1 (post-G2, 2026-07-01): a fabricated AXIOM's *value* is not re-type-checked by C1 (it skips non-Theorem/Definition kinds), but its declared TYPE is now re-checked for well-formedness by C1's symmetric infer_sort pass, and its truth is enumerated + golden-pinned by C2 (and refutation-tested by C4/C4'); see crates/clean-kernel/src/env/soundness_certificate.rs.",
+  "files": [],
+  "last_updated": "2026-07-01"
+}

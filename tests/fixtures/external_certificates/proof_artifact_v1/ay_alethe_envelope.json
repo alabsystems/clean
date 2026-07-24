@@ -1,0 +1,26 @@
+{
+  "version": "proof-artifact-v1",
+  "producer": {
+    "repo": "tests/fixtures/external_certificates",
+    "commit": "fixture-ay-alethe-envelope"
+  },
+  "source_system": "ay",
+  "problem_hash": "blake3:fixture-ay-alethe-problem",
+  "model_hash": "blake3:fixture-ay-alethe-model",
+  "proof_hash": "blake3:fixture-ay-alethe-proof",
+  "certification": {
+    "evidence_kind": "replay_only"
+  },
+  "artifact_kind": "ay_alethe_envelope",
+  "verifier_constants": [],
+  "certificate": {
+    "format": "ay-alethe-envelope-v1",
+    "encoding": "json",
+    "payload": {
+      "type": "alethe_certificate",
+      "version": "1.0",
+      "problem": "(set-logic QF_UF)\n(declare-const p Bool)\n(assert p)\n(assert (not p))\n(check-sat)\n",
+      "proof": "(assume t0 p)\n(assume t1 (not p))\n(step t2 (cl) :rule resolution :premises (t1 t0))\n"
+    }
+  }
+}

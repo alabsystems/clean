@@ -1,0 +1,31 @@
+{
+  "id": "radical_axis",
+  "objects": {
+    "O1": {"type": "point"},
+    "O2": {"type": "point"},
+    "P": {"type": "point"},
+    "Q": {"type": "point"},
+    "mathverse1": {"type": "circle", "definition": {"circle_center_radius": {"center": "O1", "radius_point": "P"}}},
+    "mathverse2": {"type": "circle", "definition": {"circle_center_radius": {"center": "O2", "radius_point": "Q"}}}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "P", "circle": "mathverse1"},
+    {"type": "on_circle", "point": "P", "circle": "mathverse2"},
+    {"type": "on_circle", "point": "Q", "circle": "mathverse1"},
+    {"type": "on_circle", "point": "Q", "circle": "mathverse2"},
+    {"type": "not_equal", "a": "O1", "b": "O2"},
+    {"type": "not_equal", "a": "P", "b": "Q"}
+  ],
+  "goal": {
+    "type": "perpendicular",
+    "line1": {"through": ["P", "Q"]},
+    "line2": {"through": ["O1", "O2"]}
+  },
+  "metadata": {
+    "source": "Radical axis theorem",
+    "difficulty": 5,
+    "tags": ["radical_axis", "circles", "perpendicular", "intersection"],
+    "known_solvable": true,
+    "statement": "The radical axis (line through intersection points) of two circles is perpendicular to the line joining their centers."
+  }
+}

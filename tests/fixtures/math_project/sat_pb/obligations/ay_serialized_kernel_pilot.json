@@ -1,0 +1,39 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "sat-pb-pilot",
+  "domain_profile": "sat-pb",
+  "producer": {
+    "system": "ay",
+    "commit": "fixture-ay-serialized-kernel-pilot"
+  },
+  "goal": {
+    "expr": {
+      "FVar": 0
+    },
+    "pretty": "SAT/PB subsumption deletion preserves satisfiability"
+  },
+  "local_context": [
+    {
+      "name": "sat_pb_subsumption_deletion_preserves",
+      "type_pp": "Prop",
+      "type_expr": "{\"Sort\":\"Zero\"}"
+    },
+    {
+      "name": "h_ay_subsumption_deletion",
+      "type_pp": "sat_pb_subsumption_deletion_preserves",
+      "type_expr": "{\"FVar\":0}"
+    }
+  ],
+  "side_conditions": [
+    "SatPb.subsumes candidate deleted = true",
+    "SatPb.preservesSatisfiability formula (SatPb.deleteClause formula deleted)"
+  ],
+  "metadata": {
+    "fixture": "ay-serialized-kernel-pilot",
+    "transformation": "subsumption-deletion",
+    "scope": "serialized kernel local-context proof-state closure; semantic replay remains in separate artifact obligations",
+    "issue_plan": "non-filing",
+    "fixture_role": "proof-state-smoke"
+  },
+  "trust_policy": "constructive-only"
+}

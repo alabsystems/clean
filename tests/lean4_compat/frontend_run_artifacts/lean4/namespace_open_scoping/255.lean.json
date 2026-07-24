@@ -1,0 +1,19 @@
+{
+  "schema_version": "clean-frontend-namespace-open-scoping-artifact-v1",
+  "kind": "frontend_namespace_open_scoping",
+  "engine": "lean4",
+  "filename": "255.lean",
+  "source_sha256": "sha256:a13e25c699f30629daf086a5ae516542e4e26b5075d35acc992a9c7d48d80f93",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/255.lean"
+  ],
+  "namespace_open_scoping_status": "success",
+  "namespace_commands_checked": 0,
+  "open_commands_checked": 0,
+  "scoping_rules_checked": 4,
+  "scoping_failures": 0
+}

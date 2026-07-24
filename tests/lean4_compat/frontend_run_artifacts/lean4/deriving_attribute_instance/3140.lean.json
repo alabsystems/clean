@@ -1,0 +1,32 @@
+{
+  "schema_version": "clean-frontend-deriving-attribute-instance-artifact-v1",
+  "kind": "frontend_deriving_attribute_instance",
+  "engine": "lean4",
+  "filename": "3140.lean",
+  "source_sha256": "sha256:92bae2c3104f9ff23208923c20e060af9d06eeed01861570ba1d8d6e55c53156",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/3140.lean"
+  ],
+  "deriving_attribute_instance_status": "success",
+  "deriving_outputs_checked": 1,
+  "attributes_checked": 0,
+  "instances_checked": 1,
+  "metadata_failures": 0,
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_stdout": "false\nfalse\ntrue\n",
+  "observed_stderr": "",
+  "checked_deriving_outputs": [
+    "structure S deriving BEq"
+  ],
+  "checked_attributes": [],
+  "checked_instances": [
+    "BEq S synthesized by deriving BEq and used by all three equality evaluations"
+  ],
+  "artifact_note": "Lean4 elaborated the BEq deriving clause for S, including the Prop field, and evaluated the three equality checks. This is Lean4 evidence only; no clean parity is claimed."
+}

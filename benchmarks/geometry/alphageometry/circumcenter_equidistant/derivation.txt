@@ -1,0 +1,6 @@
+# Circumcenter equidistant derivation
+# Given: O is circumcenter of ABC
+# Goal: OA = OB
+
+CONSTRUCT circumcenter(O, A, B, C)
+DERIVE congruent_segments(O, A, O, B) FROM circumcenter_property(O, A, B, C)

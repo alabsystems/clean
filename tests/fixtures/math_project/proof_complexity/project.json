@@ -1,0 +1,46 @@
+{
+  "schema_version": "clean-math-project-v1",
+  "project": "proof-complexity-pilot",
+  "domain_profile": "proof-complexity",
+  "owner": "clean-math-factory",
+  "theorem_packs": [
+    "theorem_packs/ProofComplexityPilot.lean"
+  ],
+  "obligation_sources": [
+    "obligations/resolution_width.json",
+    "obligations/generic_true_serialized_kernel_smoke.json"
+  ],
+  "artifact_formats": [
+    "proof-artifact-v1"
+  ],
+  "trust_policy": {
+    "name": "constructive-only",
+    "allowed_axioms": [],
+    "forbidden_trust_markers": [
+      "sorry",
+      "sorryAx",
+      "trustedArith",
+      "synthetic_sorry"
+    ],
+    "require_artifact_replay": true,
+    "allow_synthetic_sorry": false
+  },
+  "normalizers": [
+    "cert_simp",
+    "proof_complexity_nf"
+  ],
+  "evidence": [],
+  "issue_routing": {
+    "labels": [
+      "math-project",
+      "proof-complexity",
+      "proof-factory"
+    ],
+    "owners": [],
+    "blocking_categories": [
+      "manifest",
+      "obligation",
+      "trust"
+    ]
+  }
+}

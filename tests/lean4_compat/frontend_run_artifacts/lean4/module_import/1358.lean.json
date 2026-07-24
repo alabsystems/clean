@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-module-import-artifact-v1",
+  "kind": "frontend_module_import",
+  "engine": "lean4",
+  "filename": "1358.lean",
+  "source_sha256": "sha256:7d2df8fe8d215fa9b036150441c9160b5bfc2838ff6f96ccec51d64f9f302812",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1358.lean"
+  ],
+  "module_import_status": "success",
+  "imports_requested": 1,
+  "imports_resolved": 1,
+  "imports_failed": 0,
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_exit_code": 1,
+  "observed_stdout": "foo\n",
+  "observed_stderr": "tests/lean4_compat/lean4_tests/1358.lean:9:2: error: error\n",
+  "artifact_note": "The Lean4 process reached the source's tactic diagnostic after resolving import Lean.Elab.Tactic; the process failure is not an import-resolution failure."
+}

@@ -1,0 +1,31 @@
+# Keep the Docker build context lean for deploy/cloud-run/Dockerfile.
+# Build context is the repo root; exclude everything the release build of the
+# `mathverse_serve` binary does not need.
+
+# Build output — by far the largest dir; rebuilt inside the image.
+target/
+**/target/
+
+# Version control + local agent state.
+.git/
+.gitignore
+.github/
+
+# The verified Core never goes in the image — it comes from GCS at runtime.
+# These are the local Core layouts / release archives a developer may have.
+*.mathverse
+*.mvix
+mathverse-library-v*.tar.zst
+core/
+**/core/
+data/mathverse/
+
+# Editor / OS cruft.
+.DS_Store
+.idea/
+.vscode/
+
+# Research material (gitignored locally anyway) and docs not needed to build.
+research/
+benchmarks/
+demos/

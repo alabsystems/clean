@@ -1,0 +1,5 @@
+{"version": "0.9.0",
+ "packagesDir": ".lake/packages",
+ "packages": [],
+ "name": "lean4_kernel_bench",
+ "lakeDir": ".lake"}

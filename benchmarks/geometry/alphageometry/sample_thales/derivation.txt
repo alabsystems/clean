@@ -1,0 +1,12 @@
+# Thales' Theorem proof
+# AB is diameter, C on circle => angle ACB = 90°
+
+GIVEN on_circle(A, circle)
+GIVEN on_circle(B, circle)
+GIVEN on_circle(C, circle)
+GIVEN collinear(A, O, B)
+GIVEN not_equal(A, B)
+GIVEN not_equal(C, A)
+GIVEN not_equal(C, B)
+AXIOM diameter(A, B, circle)
+DERIVE right_angle(A, C, B) FROM thales USING diameter(A, B, circle) AND on_circle(C, circle)

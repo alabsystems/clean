@@ -1,0 +1,1401 @@
+{
+  "schema_version": "clean-frontend-parity-scorecard-v1",
+  "generated_by": "clean replacement validate-report --kind frontend-parity backed by generated corpus classification for #3700",
+  "generated_at": "2026-04-26",
+  "replacement_row": {
+    "id": "frontend-parity",
+    "issue": 3700,
+    "scorecard_source": "crates/clean-cli/src/cmd_replacement.rs",
+    "expected_by_scorecard": true,
+    "recommended_scorecard_status": "in_progress"
+  },
+  "overall_status": "in_progress",
+  "launch_ready": false,
+  "source_artifacts": [
+    {
+      "kind": "exit_status_artifact_schema",
+      "path": "tests/lean4_compat/frontend_exit_status_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_exit_status_artifact_classification.py"
+    },
+    {
+      "kind": "diagnostic_artifact_schema",
+      "path": "tests/lean4_compat/frontend_diagnostic_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_diagnostic_artifact_classification.py"
+    },
+    {
+      "kind": "kernel_artifact_schema",
+      "path": "tests/lean4_compat/frontend_kernel_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_kernel_artifact_classification.py"
+    },
+    {
+      "kind": "macro_artifact_schema",
+      "path": "tests/lean4_compat/frontend_macro_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_macro_artifact_classification.py"
+    },
+    {
+      "kind": "syntax_quotation_artifact_schema",
+      "path": "tests/lean4_compat/frontend_syntax_quotation_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_syntax_quotation_artifact_classification.py"
+    },
+    {
+      "kind": "namespace_open_scoping_artifact_schema",
+      "path": "tests/lean4_compat/frontend_namespace_open_scoping_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_namespace_open_scoping_artifact_classification.py"
+    },
+    {
+      "kind": "module_import_artifact_schema",
+      "path": "tests/lean4_compat/frontend_module_import_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_module_import_artifact_classification.py"
+    },
+    {
+      "kind": "level_typeclass_artifact_schema",
+      "path": "tests/lean4_compat/frontend_level_typeclass_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_level_typeclass_artifact_classification.py"
+    },
+    {
+      "kind": "deriving_attribute_instance_artifact_schema",
+      "path": "tests/lean4_compat/frontend_deriving_attribute_instance_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_deriving_attribute_instance_artifact_classification.py"
+    },
+    {
+      "kind": "structure_inductive_recursor_artifact_schema",
+      "path": "tests/lean4_compat/frontend_structure_inductive_recursor_artifact_schema.json",
+      "pytest_module": "tests/test_frontend_structure_inductive_recursor_artifact_classification.py"
+    }
+  ],
+  "claim": "clean has corpus-level frontend classification evidence and a bounded Phase 1 slice with parse, elaboration, and kernel registration tracked separately. Full Lean4 surface, macro, syntax quotation, namespace/open/scoping, module/import resolution, deriving/attribute/instance, structure/inductive/recursor, diagnostic, tactic, or trust parity is not claimed.",
+  "non_claims": [
+    "Parse-only corpus success does not count as Lean4 ecosystem replacement.",
+    "This fixture does not claim full Lean4 surface language, macro, or diagnostics parity.",
+    "Generated corpus classification is dimensional evidence, not a full frontend parity proof.",
+    "No scorecard bucket may become replacement-ready without a matching generated Lean4-vs-clean run artifact.",
+    "Kernel artifact evidence has one generated Lean4 artifact and one generated clean artifact, but remaining elab files are missing artifacts and the bounded kernel dimension is not cross-checked.",
+    "Tactic artifact evidence is classified as missing and is not cross-checked against the tactic surface dimension.",
+    "Macro/notation expansion artifacts are incomplete; generated parse-only artifacts do not replace missing elab evidence and are not cross-checked against parse or elaboration classifications.",
+    "Syntax quotation artifacts include one generated parse-only artifact per engine, but remaining surface files are missing artifact coverage and are not cross-checked against parse or elaboration classifications.",
+    "Namespace/open/scoping artifacts include one generated Lean4 elab artifact, but remaining Lean4 and clean evidence is missing or incomplete and is not cross-checked against parse or elaboration classifications.",
+    "Module/import resolution artifacts include one generated elab artifact pair, but that narrow cross-check is not a full module/import parity claim and remaining corpus evidence is missing.",
+    "Universe/level and typeclass-resolution artifacts are incomplete; generated Lean4 parse-only evidence does not replace missing elab/kernel cross-check evidence.",
+    "Deriving, attribute, and instance metadata artifacts are incomplete; generated parse-only artifacts do not replace missing elab cross-check evidence.",
+    "Structure, inductive, match, and recursor artifacts include one generated elab artifact per engine, but remaining evidence is missing and is not cross-checked against parse, elaboration, or kernel classifications.",
+    "Trust artifact evidence is classified as missing and is not cross-checked against the trust marker dimension.",
+    "Lean4-vs-clean run artifact evidence includes 19 generated differential artifacts, but the artifacts are not replacement-ready.",
+    "Exit-status artifact evidence includes 19 generated results per engine, but expected success/failure cross-check evidence is still missing.",
+    "Diagnostic text artifacts include 19 generated results per engine, but diagnostic category/signature cross-check evidence is still missing.",
+    "This fixture does not certify tactic automation, kernel differential, diagnostic parity, or zero-trust replacement readiness.",
+    "This fixture does not certify launch readiness for the Lean4 replacement scorecard."
+  ],
+  "summary": {
+    "phase1_manifest_entries": 80,
+    "phase1_elab_entries": 19,
+    "phase1_parse_only_entries": 61,
+    "frontend_slice_elab_entries": 12,
+    "frontend_corpus_classification_entries": 100,
+    "frontend_artifact_valid_files_by_engine": {
+      "lean4": 46,
+      "clean": 44
+    },
+    "frontend_artifact_stale_or_invalid_files_by_engine": {
+      "lean4": 0,
+      "clean": 0
+    },
+    "dimensions": [
+      "parse",
+      "elab",
+      "kernel",
+      "kernel_artifact_cross_check",
+      "tactic",
+      "tactic_artifact_cross_check",
+      "macro_notation",
+      "macro_artifact_cross_check",
+      "syntax_quotation",
+      "syntax_quotation_artifact_cross_check",
+      "namespace_open_scoping",
+      "namespace_open_scoping_artifact_cross_check",
+      "module_import_resolution",
+      "module_import_artifact_cross_check",
+      "level_typeclass_resolution",
+      "level_typeclass_artifact_cross_check",
+      "deriving_attribute_instance",
+      "deriving_attribute_instance_artifact_cross_check",
+      "structure_inductive_recursor",
+      "structure_inductive_recursor_artifact_cross_check",
+      "trust",
+      "trust_artifact_cross_check",
+      "diagnostic",
+      "first_error_signature",
+      "phase1_transition",
+      "expected_success_accountability",
+      "lean4_vs_clean_run_artifact",
+      "exit_status_cross_check",
+      "diagnostic_artifact_cross_check",
+      "expected_failure"
+    ]
+  },
+  "rows": [
+    {
+      "id": "phase1-parse-only-corpus",
+      "dimension": "parse",
+      "status": "parse_only",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_pass": 61,
+      "observed_total": 61,
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/phase1_gate_manifest.txt"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_phase1_compat",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_phase1 -- --nocapture"
+        }
+      ],
+      "acceptance": "All parse-only entries are required to parse, but this row is classified as non-replacement evidence.",
+      "blockers": [
+        "Parse-only rows still need elaboration targets, diagnostics profiles, kernel registration, or explicit non-frontend ownership before they can support replacement readiness."
+      ]
+    },
+    {
+      "id": "phase1-profiled-elab-corpus",
+      "dimension": "elab",
+      "status": "partial_profiled_elab",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_pass_minimum": 15,
+      "observed_total": 19,
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/phase1_gate_manifest.txt"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_phase1_compat",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_phase1 -- --nocapture"
+        }
+      ],
+      "acceptance": "The Phase 1 gate classifies profiled elaboration outcomes without timing out.",
+      "blockers": [
+        "The gate is still threshold-based and does not require all elab files to pass.",
+        "Diagnostics and macro parity are not fully covered by this row."
+      ]
+    },
+    {
+      "id": "frontend-slice-parse-elab-kernel",
+      "dimension": "kernel",
+      "status": "bounded_slice_pass",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_pass": 12,
+      "observed_total": 12,
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/frontend_slice_manifest.txt"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_slice_evidence",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_slice_evidence -- --nocapture"
+        }
+      ],
+      "acceptance": "The bounded frontend slice parses, elaborates, and registers/checks every declaration through the kernel-backed declaration path.",
+      "blockers": [
+        "The slice is intentionally narrow and cannot certify the full Lean4 frontend surface.",
+        "Kernel differential parity is tracked outside Slot 2."
+      ]
+    },
+    {
+      "id": "kernel-artifact-cross-check-guard",
+      "dimension": "kernel_artifact_cross_check",
+      "status": "missing_kernel_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_elab_rows_requiring_kernel_artifacts": 19,
+      "observed_elab_missing_lean4_kernel_artifacts": 18,
+      "observed_elab_missing_clean_kernel_artifacts": 18,
+      "observed_parse_only_without_lean4_kernel_artifact_target": 61,
+      "observed_parse_only_without_clean_kernel_artifact_target": 61,
+      "observed_excluded_without_lean4_kernel_artifact_target": 20,
+      "observed_excluded_without_clean_kernel_artifact_target": 20,
+      "observed_kernel_pass_rows_requiring_artifact_cross_check": 12,
+      "observed_kernel_artifact_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/frontend_slice_manifest.txt"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean kernel artifacts unavailable until each required artifact or check result exists and can be cross-checked against the bounded kernel dimension.",
+      "blockers": [
+        "18 Phase 1 elab files still have missing generated Lean4 kernel artifacts; the single generated Lean4 kernel artifact remains pending cross-check.",
+        "18 Phase 1 elab files still have missing generated clean kernel artifacts; the single generated clean kernel artifact remains pending cross-check.",
+        "The bounded kernel-pass slice is not cross-checked against Lean4 and clean kernel artifacts."
+      ]
+    },
+    {
+      "id": "tactic-surface-boundary",
+      "dimension": "tactic",
+      "status": "out_of_scope_to_3711",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "source",
+          "path": "crates/clean-cli/src/cmd_replacement.rs",
+          "function": "tactic_parity_rows"
+        }
+      ],
+      "acceptance": "Frontend evidence separates tactic surface parsing from proof-carrying tactic replacement.",
+      "blockers": [
+        "Proof-carrying tactic parity and automation are tracked by #3711 and must not be inferred from frontend parse/elab rows."
+      ]
+    },
+    {
+      "id": "tactic-artifact-cross-check-guard",
+      "dimension": "tactic_artifact_cross_check",
+      "status": "missing_tactic_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_tactic_surface_files": 40,
+      "observed_elab_tactic_surface_rows_requiring_tactic_artifacts": 2,
+      "observed_elab_missing_lean4_tactic_artifacts": 2,
+      "observed_elab_missing_clean_tactic_artifacts": 2,
+      "observed_elab_without_lean4_tactic_artifact_target": 17,
+      "observed_elab_without_clean_tactic_artifact_target": 17,
+      "observed_parse_only_tactic_surface_without_lean4_tactic_artifact_target": 33,
+      "observed_parse_only_tactic_surface_without_clean_tactic_artifact_target": 33,
+      "observed_parse_only_no_tactic_surface_without_lean4_tactic_artifact_target": 28,
+      "observed_parse_only_no_tactic_surface_without_clean_tactic_artifact_target": 28,
+      "observed_excluded_tactic_surface_without_lean4_tactic_artifact_target": 5,
+      "observed_excluded_tactic_surface_without_clean_tactic_artifact_target": 5,
+      "observed_excluded_no_tactic_surface_without_lean4_tactic_artifact_target": 15,
+      "observed_excluded_no_tactic_surface_without_clean_tactic_artifact_target": 15,
+      "observed_tactic_artifact_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean tactic artifacts unavailable until each required artifact or check result exists and can be cross-checked against tactic surface rows.",
+      "blockers": [
+        "No generated Lean4 tactic artifact or check result is recorded for any Phase 1 elab file with tactic surface markers.",
+        "No generated clean tactic artifact or check result is recorded for any Phase 1 elab file with tactic surface markers.",
+        "The tactic surface dimension is not cross-checked against Lean4 and clean tactic artifacts."
+      ]
+    },
+    {
+      "id": "macro-notation-boundary",
+      "dimension": "macro_notation",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_macro_notation_surface_files": 16,
+      "observed_no_macro_notation_surface_files": 84,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates macro/notation surface markers from macro expansion parity claims.",
+      "blockers": [
+        "Macro/notation surface rows still need generated Lean4 and clean expansion artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "macro-artifact-cross-check-guard",
+      "dimension": "macro_artifact_cross_check",
+      "status": "missing_macro_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_macro_notation_surface_files": 16,
+      "observed_elab_macro_notation_surface_rows_requiring_macro_artifacts": 2,
+      "observed_elab_missing_lean4_macro_artifacts": 2,
+      "observed_elab_missing_clean_macro_artifacts": 2,
+      "observed_elab_without_lean4_macro_artifact_target": 17,
+      "observed_elab_without_clean_macro_artifact_target": 17,
+      "observed_parse_only_macro_notation_surface_without_lean4_macro_artifact_target": 12,
+      "observed_parse_only_macro_notation_surface_without_clean_macro_artifact_target": 12,
+      "observed_parse_only_no_macro_notation_surface_without_lean4_macro_artifact_target": 48,
+      "observed_parse_only_no_macro_notation_surface_without_clean_macro_artifact_target": 48,
+      "observed_excluded_macro_notation_surface_without_lean4_macro_artifact_target": 1,
+      "observed_excluded_macro_notation_surface_without_clean_macro_artifact_target": 1,
+      "observed_excluded_no_macro_notation_surface_without_lean4_macro_artifact_target": 19,
+      "observed_excluded_no_macro_notation_surface_without_clean_macro_artifact_target": 19,
+      "observed_macro_artifact_cross_checked_files": 0,
+      "observed_macro_artifact_parse_elab_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean macro/notation expansion artifacts unavailable until each required artifact exists and can be cross-checked against parse and elab classifications.",
+      "blockers": [
+        "No generated Lean4 macro/notation expansion artifact or check result is recorded for any Phase 1 elab file with macro/notation surface markers.",
+        "No generated clean macro/notation expansion artifact or check result is recorded for any Phase 1 elab file with macro/notation surface markers.",
+        "The macro/notation surface dimension is not cross-checked against Lean4 and clean macro expansion artifacts or parse/elab classifications."
+      ]
+    },
+    {
+      "id": "syntax-quotation-boundary",
+      "dimension": "syntax_quotation",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_syntax_quotation_surface_files": 8,
+      "observed_no_syntax_quotation_surface_files": 92,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates syntax quotation, antiquotation, and hygienic syntax construction surface markers from syntax quotation artifact parity claims.",
+      "blockers": [
+        "Syntax quotation surface rows still need generated Lean4 and clean quotation artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "syntax-quotation-artifact-cross-check-guard",
+      "dimension": "syntax_quotation_artifact_cross_check",
+      "status": "missing_syntax_quotation_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_syntax_quotation_surface_files": 8,
+      "observed_elab_syntax_quotation_surface_rows_requiring_artifacts": 0,
+      "observed_elab_missing_lean4_syntax_quotation_artifacts": 0,
+      "observed_elab_missing_clean_syntax_quotation_artifacts": 0,
+      "observed_elab_without_lean4_syntax_quotation_artifact_target": 19,
+      "observed_elab_without_clean_syntax_quotation_artifact_target": 19,
+      "observed_parse_only_syntax_quotation_surface_without_lean4_artifact_target": 7,
+      "observed_parse_only_syntax_quotation_surface_without_clean_artifact_target": 7,
+      "observed_parse_only_no_syntax_quotation_surface_without_lean4_artifact_target": 53,
+      "observed_parse_only_no_syntax_quotation_surface_without_clean_artifact_target": 53,
+      "observed_excluded_no_syntax_quotation_surface_without_lean4_artifact_target": 20,
+      "observed_excluded_no_syntax_quotation_surface_without_clean_artifact_target": 20,
+      "observed_syntax_quotation_artifact_cross_checked_files": 0,
+      "observed_syntax_quotation_artifact_parse_elab_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean syntax quotation artifacts unavailable until each required artifact exists and can be cross-checked against parse and elaboration classifications.",
+      "blockers": [
+        "One generated Lean4 syntax quotation, antiquotation, or hygiene artifact is recorded for a Phase 1 parse-only file, but seven parse-only surface files still have missing Lean4 artifacts.",
+        "One generated clean syntax quotation, antiquotation, or hygiene artifact is recorded for a Phase 1 parse-only file, but seven parse-only surface files still have missing clean artifacts.",
+        "The syntax quotation surface dimension is not cross-checked against Lean4 and clean artifacts or parse/elab classifications."
+      ]
+    },
+    {
+      "id": "namespace-open-scoping-boundary",
+      "dimension": "namespace_open_scoping",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_namespace_open_scoping_surface_files": 26,
+      "observed_no_namespace_open_scoping_surface_files": 74,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates namespace, open, section, local-notation, and scoped-notation surface markers from scoping artifact parity claims.",
+      "blockers": [
+        "Namespace/open/scoping surface rows still need generated Lean4 and clean scoping artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "namespace-open-scoping-artifact-cross-check-guard",
+      "dimension": "namespace_open_scoping_artifact_cross_check",
+      "status": "missing_namespace_open_scoping_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_namespace_open_scoping_surface_files": 26,
+      "observed_elab_namespace_open_scoping_surface_rows_requiring_artifacts": 2,
+      "observed_elab_missing_lean4_namespace_open_scoping_artifacts": 2,
+      "observed_elab_missing_clean_namespace_open_scoping_artifacts": 3,
+      "observed_elab_without_lean4_namespace_open_scoping_artifact_target": 16,
+      "observed_elab_without_clean_namespace_open_scoping_artifact_target": 16,
+      "observed_parse_only_namespace_open_scoping_surface_without_lean4_artifact_target": 20,
+      "observed_parse_only_namespace_open_scoping_surface_without_clean_artifact_target": 20,
+      "observed_parse_only_no_namespace_open_scoping_surface_without_lean4_artifact_target": 41,
+      "observed_parse_only_no_namespace_open_scoping_surface_without_clean_artifact_target": 41,
+      "observed_excluded_namespace_open_scoping_surface_without_lean4_artifact_target": 3,
+      "observed_excluded_namespace_open_scoping_surface_without_clean_artifact_target": 3,
+      "observed_excluded_no_namespace_open_scoping_surface_without_lean4_artifact_target": 17,
+      "observed_excluded_no_namespace_open_scoping_surface_without_clean_artifact_target": 17,
+      "observed_namespace_open_scoping_artifact_cross_checked_files": 0,
+      "observed_namespace_open_scoping_artifact_parse_elab_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean namespace/open/scoping artifacts unavailable until each required artifact exists and can be cross-checked against parse and elab classifications.",
+      "blockers": [
+        "Two Phase 1 elab files still have missing Lean4 namespace/open/scoping artifacts; the single generated Lean4 artifact remains pending cross-check.",
+        "No generated clean namespace/open/scoping artifact or check result is recorded for any Phase 1 elab file with namespace, open, section, local-notation, or scoped-notation surface markers.",
+        "The namespace/open/scoping surface dimension is not cross-checked against Lean4 and clean scoping artifacts or parse/elab classifications."
+      ]
+    },
+    {
+      "id": "module-import-resolution-boundary",
+      "dimension": "module_import_resolution",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_module_import_surface_files": 17,
+      "observed_no_module_import_surface_files": 83,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates import commands and importModules API surface markers from module/import resolution artifact parity claims.",
+      "blockers": [
+        "Module/import surface rows still need generated Lean4 and clean import resolution artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "module-import-artifact-cross-check-guard",
+      "dimension": "module_import_artifact_cross_check",
+      "status": "missing_module_import_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_module_import_surface_files": 17,
+      "observed_elab_module_import_surface_rows_requiring_artifacts": 0,
+      "observed_elab_missing_lean4_module_import_artifacts": 0,
+      "observed_elab_missing_clean_module_import_artifacts": 0,
+      "observed_elab_without_lean4_module_import_artifact_target": 18,
+      "observed_elab_without_clean_module_import_artifact_target": 18,
+      "observed_parse_only_module_import_surface_without_lean4_artifact_target": 16,
+      "observed_parse_only_module_import_surface_without_clean_artifact_target": 16,
+      "observed_parse_only_no_module_import_surface_without_lean4_artifact_target": 45,
+      "observed_parse_only_no_module_import_surface_without_clean_artifact_target": 45,
+      "observed_excluded_no_module_import_surface_without_lean4_artifact_target": 20,
+      "observed_excluded_no_module_import_surface_without_clean_artifact_target": 20,
+      "observed_module_import_artifact_cross_checked_files": 1,
+      "observed_module_import_artifact_parse_elab_cross_checked_files": 1,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps module/import replacement readiness unavailable until generated artifacts cover the required corpus and can be cross-checked against parse and elaboration classifications.",
+      "blockers": [
+        "Only one generated Lean4 module/import artifact is cross-checked; broader module/import corpus evidence is still missing.",
+        "Only one generated clean module/import artifact is cross-checked; broader module/import corpus evidence is still missing.",
+        "The module/import surface dimension is not fully cross-checked against Lean4 and clean import resolution artifacts or parse/elab classifications."
+      ]
+    },
+    {
+      "id": "level-typeclass-boundary",
+      "dimension": "level_typeclass_resolution",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_level_typeclass_surface_files": 24,
+      "observed_no_level_typeclass_surface_files": 76,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates universe/level and typeclass-resolution surface markers from artifact parity claims.",
+      "blockers": [
+        "Universe/level and typeclass-resolution surface rows still need generated Lean4 and clean artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "level-typeclass-artifact-cross-check-guard",
+      "dimension": "level_typeclass_artifact_cross_check",
+      "status": "missing_level_typeclass_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_level_typeclass_surface_files": 24,
+      "observed_elab_level_typeclass_surface_rows_requiring_artifacts": 4,
+      "observed_elab_missing_lean4_level_typeclass_artifacts": 4,
+      "observed_elab_missing_clean_level_typeclass_artifacts": 4,
+      "observed_elab_without_lean4_level_typeclass_artifact_target": 15,
+      "observed_elab_without_clean_level_typeclass_artifact_target": 15,
+      "observed_parse_only_level_typeclass_surface_without_lean4_artifact_target": 14,
+      "observed_parse_only_level_typeclass_surface_without_clean_artifact_target": 15,
+      "observed_parse_only_no_level_typeclass_surface_without_lean4_artifact_target": 46,
+      "observed_parse_only_no_level_typeclass_surface_without_clean_artifact_target": 46,
+      "observed_excluded_level_typeclass_surface_without_lean4_artifact_target": 5,
+      "observed_excluded_level_typeclass_surface_without_clean_artifact_target": 5,
+      "observed_excluded_no_level_typeclass_surface_without_lean4_artifact_target": 15,
+      "observed_excluded_no_level_typeclass_surface_without_clean_artifact_target": 15,
+      "observed_kernel_pass_rows_requiring_level_typeclass_artifact_cross_check": 12,
+      "observed_level_typeclass_artifact_cross_checked_files": 0,
+      "observed_level_typeclass_artifact_parse_elab_kernel_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/frontend_slice_manifest.txt"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean universe/level and typeclass-resolution artifacts unavailable until each required artifact exists and can be cross-checked against parse, elab, and kernel classifications.",
+      "blockers": [
+        "No generated Lean4 universe/level or typeclass-resolution artifact is recorded for any Phase 1 elab file with matching surface markers.",
+        "No generated clean universe/level or typeclass-resolution artifact is recorded for any Phase 1 elab file with matching surface markers.",
+        "The universe/level and typeclass-resolution surface dimension is not cross-checked against Lean4 and clean artifacts or parse/elab/kernel classifications."
+      ]
+    },
+    {
+      "id": "deriving-attribute-instance-boundary",
+      "dimension": "deriving_attribute_instance",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_deriving_attribute_instance_surface_files": 24,
+      "observed_no_deriving_attribute_instance_surface_files": 76,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates deriving, attribute, and instance metadata surface markers from artifact parity claims.",
+      "blockers": [
+        "Deriving, attribute, and instance metadata surface rows still need generated Lean4 and clean artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "deriving-attribute-instance-artifact-cross-check-guard",
+      "dimension": "deriving_attribute_instance_artifact_cross_check",
+      "status": "missing_deriving_attribute_instance_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_deriving_attribute_instance_surface_files": 24,
+      "observed_elab_deriving_attribute_instance_surface_rows_requiring_artifacts": 2,
+      "observed_elab_missing_lean4_deriving_attribute_instance_artifacts": 2,
+      "observed_elab_missing_clean_deriving_attribute_instance_artifacts": 2,
+      "observed_elab_without_lean4_deriving_attribute_instance_artifact_target": 17,
+      "observed_elab_without_clean_deriving_attribute_instance_artifact_target": 17,
+      "observed_parse_only_deriving_attribute_instance_surface_without_lean4_artifact_target": 18,
+      "observed_parse_only_deriving_attribute_instance_surface_without_clean_artifact_target": 18,
+      "observed_parse_only_no_deriving_attribute_instance_surface_without_lean4_artifact_target": 42,
+      "observed_parse_only_no_deriving_attribute_instance_surface_without_clean_artifact_target": 42,
+      "observed_excluded_deriving_attribute_instance_surface_without_lean4_artifact_target": 3,
+      "observed_excluded_deriving_attribute_instance_surface_without_clean_artifact_target": 3,
+      "observed_excluded_no_deriving_attribute_instance_surface_without_lean4_artifact_target": 17,
+      "observed_excluded_no_deriving_attribute_instance_surface_without_clean_artifact_target": 17,
+      "observed_deriving_attribute_instance_artifact_cross_checked_files": 0,
+      "observed_deriving_attribute_instance_artifact_parse_elab_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean deriving, attribute, and instance metadata artifacts unavailable until each required artifact exists and can be cross-checked against parse and elaboration classifications.",
+      "blockers": [
+        "No generated Lean4 deriving output, attribute state, or instance metadata artifact is recorded for any Phase 1 elab file with matching surface markers.",
+        "No generated clean deriving output, attribute state, or instance metadata artifact is recorded for any Phase 1 elab file with matching surface markers.",
+        "The deriving, attribute, and instance metadata surface dimension is not cross-checked against Lean4 and clean artifacts or parse/elab classifications."
+      ]
+    },
+    {
+      "id": "structure-inductive-recursor-boundary",
+      "dimension": "structure_inductive_recursor",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_structure_inductive_recursor_surface_files": 37,
+      "observed_no_structure_inductive_recursor_surface_files": 63,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates structure, inductive, match, and recursor surface markers from artifact parity claims.",
+      "blockers": [
+        "Structure, inductive, match, and recursor surface rows still need generated Lean4 and clean artifacts before they can support frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "structure-inductive-recursor-artifact-cross-check-guard",
+      "dimension": "structure_inductive_recursor_artifact_cross_check",
+      "status": "missing_structure_inductive_recursor_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_structure_inductive_recursor_surface_files": 37,
+      "observed_elab_structure_inductive_recursor_surface_rows_requiring_artifacts": 7,
+      "observed_elab_missing_lean4_structure_inductive_recursor_artifacts": 7,
+      "observed_elab_missing_clean_structure_inductive_recursor_artifacts": 7,
+      "observed_elab_without_lean4_structure_inductive_recursor_artifact_target": 11,
+      "observed_elab_without_clean_structure_inductive_recursor_artifact_target": 11,
+      "observed_parse_only_structure_inductive_recursor_surface_without_lean4_artifact_target": 20,
+      "observed_parse_only_structure_inductive_recursor_surface_without_clean_artifact_target": 20,
+      "observed_parse_only_no_structure_inductive_recursor_surface_without_lean4_artifact_target": 41,
+      "observed_parse_only_no_structure_inductive_recursor_surface_without_clean_artifact_target": 41,
+      "observed_excluded_structure_inductive_recursor_surface_without_lean4_artifact_target": 9,
+      "observed_excluded_structure_inductive_recursor_surface_without_clean_artifact_target": 9,
+      "observed_excluded_no_structure_inductive_recursor_surface_without_lean4_artifact_target": 11,
+      "observed_excluded_no_structure_inductive_recursor_surface_without_clean_artifact_target": 11,
+      "observed_kernel_pass_rows_requiring_structure_inductive_recursor_artifact_cross_check": 12,
+      "observed_structure_inductive_recursor_artifact_cross_checked_files": 0,
+      "observed_structure_inductive_recursor_artifact_parse_elab_kernel_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/frontend_slice_manifest.txt"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean structure, inductive, match, and recursor artifacts unavailable until each required artifact exists and can be cross-checked against parse, elab, and kernel classifications.",
+      "blockers": [
+        "Seven Phase 1 elab files still have missing Lean4 structure field, inductive recursor, match compilation, or recursor artifacts; the single generated Lean4 artifact remains pending cross-check.",
+        "Seven Phase 1 elab files still have missing clean structure field, inductive recursor, match compilation, or recursor artifacts; the single generated clean artifact remains pending cross-check.",
+        "The structure, inductive, match, and recursor surface dimension is not cross-checked against Lean4 and clean artifacts or parse/elab/kernel classifications."
+      ]
+    },
+    {
+      "id": "trust-boundary",
+      "dimension": "trust",
+      "status": "out_of_scope_to_3699_3705",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "source",
+          "path": "crates/clean-cli/src/cmd_replacement.rs",
+          "function": "TrustCoreEvidenceReport::current"
+        },
+        {
+          "kind": "gate",
+          "path": "scripts/deny_sorry_gate.sh"
+        }
+      ],
+      "acceptance": "Frontend evidence does not certify kernel differential or trusted-fallback denial.",
+      "blockers": [
+        "Kernel differential and zero-trust fallback denial are tracked by #3699 and #3705."
+      ]
+    },
+    {
+      "id": "trust-artifact-cross-check-guard",
+      "dimension": "trust_artifact_cross_check",
+      "status": "missing_trust_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_trust_marker_files": 17,
+      "observed_elab_trust_marker_rows_requiring_trust_artifacts": 2,
+      "observed_elab_missing_lean4_trust_artifacts": 2,
+      "observed_elab_missing_clean_trust_artifacts": 2,
+      "observed_elab_without_lean4_trust_artifact_target": 17,
+      "observed_elab_without_clean_trust_artifact_target": 17,
+      "observed_parse_only_trust_marker_without_lean4_trust_artifact_target": 13,
+      "observed_parse_only_trust_marker_without_clean_trust_artifact_target": 13,
+      "observed_parse_only_no_trust_marker_without_lean4_trust_artifact_target": 48,
+      "observed_parse_only_no_trust_marker_without_clean_trust_artifact_target": 48,
+      "observed_excluded_trust_marker_without_lean4_trust_artifact_target": 2,
+      "observed_excluded_trust_marker_without_clean_trust_artifact_target": 2,
+      "observed_excluded_no_trust_marker_without_lean4_trust_artifact_target": 18,
+      "observed_excluded_no_trust_marker_without_clean_trust_artifact_target": 18,
+      "observed_trust_artifact_cross_checked_files": 0,
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification keeps Lean4 and clean trust, sorry, and fallback artifacts unavailable until each required artifact exists and can be cross-checked against trust marker rows.",
+      "blockers": [
+        "No generated Lean4 trust, sorry, or fallback artifact is recorded for any Phase 1 elab file with trust markers.",
+        "No generated clean trust, sorry, or fallback artifact is recorded for any Phase 1 elab file with trust markers.",
+        "The trust marker dimension is not cross-checked against Lean4 and clean trust artifacts."
+      ]
+    },
+    {
+      "id": "diagnostic-profile-boundary",
+      "dimension": "diagnostic",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_profiled_expected_diagnostics": 7,
+      "evidence": [
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification separates profiled expected diagnostics and diagnostic-surface markers from parity claims.",
+      "blockers": [
+        "Lean4 diagnostic text, ranges, macro expansion notes, and command output parity are not generated or differentially checked across the corpus."
+      ]
+    },
+    {
+      "id": "first-error-signature-boundary",
+      "dimension": "first_error_signature",
+      "status": "classified_not_parity",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_profiled_first_error_files": 7,
+      "observed_unique_first_error_signatures": 7,
+      "evidence": [
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification groups the first profiled expected-failure substring per file into deterministic signatures.",
+      "blockers": [
+        "First-error signatures are derived from expected-outcome substrings and are not Lean4 differential first-diagnostic parity."
+      ]
+    },
+    {
+      "id": "phase1-transition-boundary",
+      "dimension": "phase1_transition",
+      "status": "classified_not_green",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_elab_unprofiled_must_succeed": 11,
+      "observed_elab_profiled_all_decl_success": 1,
+      "observed_elab_profiled_expected_failure": 7,
+      "observed_parse_only_elab_not_entered": 61,
+      "observed_excluded_no_phase1_transition": 20,
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/phase1_gate_manifest.txt"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification buckets every corpus file by its Phase 1 parse/elab/profile transition without upgrading expected-success or expected-failure buckets to readiness.",
+      "blockers": [
+        "Expected-success transition buckets still need full pass contracts, and parse-only, excluded, or expected-failure buckets need explicit promotion or ownership before frontend replacement readiness."
+      ]
+    },
+    {
+      "id": "expected-success-accountability-boundary",
+      "dimension": "expected_success_accountability",
+      "status": "classified_not_green",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_elab_unprofiled_must_succeed_contracts": 11,
+      "observed_elab_profiled_all_decl_success_contracts": 1,
+      "observed_elab_profiled_expected_failure_no_success_credit": 7,
+      "observed_parse_only_no_elab_success_credit": 61,
+      "observed_excluded_no_success_contract": 20,
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "tests/lean4_compat/phase1_gate_manifest.txt"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification makes every expected-success path accountable without allowing parse-only, excluded, or expected-failure files to count as success evidence.",
+      "blockers": [
+        "Expected-success contracts remain non-launch evidence until the frontend scorecard requires complete elaboration, diagnostics, macro surface, tactic ownership, and trust boundaries."
+      ]
+    },
+    {
+      "id": "lean4-vs-clean-run-artifact-guard",
+      "dimension": "lean4_vs_clean_run_artifact",
+      "status": "partial_differential_artifacts",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_elab_missing_run_artifacts": 0,
+      "observed_elab_valid_run_artifacts": 19,
+      "observed_elab_diagnostic_mismatch_run_artifacts": 8,
+      "observed_elab_exit_status_mismatch_run_artifacts": 6,
+      "observed_elab_matching_exit_status_and_first_error_signature_run_artifacts": 5,
+      "observed_parse_only_without_run_target": 61,
+      "observed_excluded_without_run_target": 20,
+      "observed_scorecard_rows_with_matching_run_artifact": 1,
+      "observed_replacement_ready_rows": 0,
+      "observed_replacement_ready_rows_without_matching_run_artifact": 0,
+      "artifact_schema": "tests/lean4_compat/frontend_lean4_vs_clean_run_schema.json",
+      "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/run/{filename}.json",
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "artifact_schema",
+          "path": "tests/lean4_compat/frontend_lean4_vs_clean_run_schema.json"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1011.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1057.lean.json",
+          "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+          "cross_check_status": "frontend_exit_status_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1079.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_match",
+          "cross_check_status": "matched_exit_status_and_first_error_signature"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1112.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_match",
+          "cross_check_status": "matched_exit_status_and_first_error_signature"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1358.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_nonzero_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1367.lean.json",
+          "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+          "cross_check_status": "frontend_exit_status_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1571.lean.json",
+          "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+          "cross_check_status": "frontend_exit_status_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1616.lean.json",
+          "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+          "cross_check_status": "frontend_exit_status_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1673.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/1918.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_match",
+          "cross_check_status": "matched_exit_status_and_first_error_signature"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/220.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_match",
+          "cross_check_status": "matched_exit_status_and_first_error_signature"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/223.lean.json",
+          "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+          "cross_check_status": "frontend_exit_status_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/236.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_match",
+          "cross_check_status": "matched_exit_status_and_first_error_signature"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/243.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/255.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/248.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/276.lean.json",
+          "comparison_status": "exit_status_mismatch_first_error_signature_mismatch",
+          "cross_check_status": "frontend_exit_status_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+          "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/309.lean.json",
+          "comparison_status": "exit_status_match_first_error_signature_mismatch",
+          "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "lean4_vs_clean_run_artifact",
+          "dimension": "lean4_vs_clean_run_artifact",
+      "path": "tests/lean4_compat/frontend_run_artifacts/lean4_vs_clean/run/348.lean.json",
+      "comparison_status": "exit_status_match_first_error_signature_mismatch",
+      "cross_check_status": "matched_exit_status_but_frontend_diagnostic_diverges"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_run_artifacts.py"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification buckets every file by whether a matching Lean4-vs-clean run artifact can support frontend replacement readiness.",
+      "blockers": [
+    "Nineteen generated Lean4-vs-clean run artifacts are recorded; eight are diagnostic mismatch evidence, six are exit-status mismatch evidence, and five are matching exit/signature evidence, but none is replacement-ready parity.",
+        "Parse-only and excluded files do not yet have differential run targets."
+      ]
+    },
+    {
+      "id": "exit-status-evidence-cross-check-guard",
+      "dimension": "exit_status_cross_check",
+      "status": "partial_exit_status_cross_check",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_elab_rows_requiring_exit_status_evidence": 19,
+      "observed_elab_missing_lean4_exit_status_results": 0,
+      "observed_elab_missing_clean_exit_status_results": 0,
+      "observed_parse_only_without_lean4_exit_status_target": 61,
+      "observed_parse_only_without_clean_exit_status_target": 61,
+      "observed_excluded_without_lean4_exit_status_target": 20,
+      "observed_excluded_without_clean_exit_status_target": 20,
+      "observed_expected_success_contracts_requiring_exit_status_cross_check": 12,
+      "observed_expected_failure_profiles_requiring_exit_status_cross_check": 7,
+      "observed_exit_status_cross_checked_files": 13,
+      "observed_valid_lean4_exit_status_artifacts": 19,
+      "observed_valid_clean_exit_status_artifacts": 19,
+      "observed_stale_or_invalid_lean4_exit_status_artifacts": 0,
+      "observed_stale_or_invalid_clean_exit_status_artifacts": 0,
+      "artifact_schema": "tests/lean4_compat/frontend_exit_status_artifact_schema.json",
+      "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/exit_status/{filename}.json",
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "artifact_schema",
+          "path": "tests/lean4_compat/frontend_exit_status_artifact_schema.json"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_run_artifacts.py"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+  "acceptance": "The generated corpus classification records complete Lean4 and clean exit-status artifacts for the current 19 elab files and promotes the 13 run artifacts with matching exit status as fail-closed cross-check evidence.",
+      "blockers": [
+    "Thirteen generated Lean4/clean exit-status pairs are cross-checked through matching Lean4-vs-clean run artifacts, but replacement readiness remains false.",
+    "Six generated elab artifacts still have exit-status mismatch evidence and remain blockers: three clean unexpected-success cases and three clean unexpected-failure cases; unexpected-success sub-buckets now include the Lean4 dependent-elimination rejection in 1057.lean, the Lean4 implicit-argument synthesis rejection in 1616.lean, and the Lean4 termination-check rejection in 276.lean; unexpected-failure sub-buckets now include the clean unknown-identifier notation rejection in 1367.lean, the clean too-many-arguments rejection in 1571.lean, and the clean synthetic-sorry rejection in 223.lean. Exit-status reviewer buckets now fail-close the exact 1057.lean drift from Lean4 dependent_elimination_failed_type_mismatch_when_solving_this_alternative_it_has_type to clean success, the exact 1616.lean drift from Lean4 don_t_know_how_to_synthesize_implicit_argument_z to clean success, the exact 276.lean drift from Lean4 termination_check_failure to clean success, the exact 1367.lean drift from Lean4 success to clean unknown_ident_with_suggestions, the exact 1571.lean drift from Lean4 success to clean too_many_arguments, and the exact 223.lean drift from Lean4 success to clean ex_declaration_uses_synthetic_sorry.",
+    "Eight exit-status-matched artifacts still have first-error-signature divergence and do not count as diagnostic cross-check evidence, including 248.lean now failing closed with clean unsupported-feature invalid implemented_by evidence instead of Lean4's native implemented_by diagnostic, 309.lean now failing closed with clean CannotInfer instead of Lean4's placeholder synthesis diagnostic, and 348.lean now failing closed with clean parser-recovery RawDecl rejection instead of Lean4's unexpected-token parse error. Aggregate reviewer-bucket coverage now accounts for all 14 incomplete or mismatched elab artifacts and exposes zero unbucketed residuals. The 1057.lean dependent-elimination bucket now carries an auditable run-artifact path plus Lean4/clean status, category, and first-error signature evidence.",
+        "Placeholder exit-status artifacts with missing schema fields are classified as stale_or_invalid evidence.",
+        "Parse-only and excluded files do not have exit-status cross-check targets."
+      ]
+    },
+    {
+      "id": "diagnostic-artifact-cross-check-guard",
+      "dimension": "diagnostic_artifact_cross_check",
+      "status": "partial_diagnostic_cross_check",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_elab_rows_requiring_diagnostic_artifacts": 19,
+      "observed_elab_missing_lean4_diagnostic_artifacts": 0,
+      "observed_elab_missing_clean_diagnostic_artifacts": 0,
+      "observed_parse_only_without_lean4_diagnostic_artifact_target": 61,
+      "observed_parse_only_without_clean_diagnostic_artifact_target": 61,
+      "observed_excluded_without_lean4_diagnostic_artifact_target": 20,
+      "observed_excluded_without_clean_diagnostic_artifact_target": 20,
+      "observed_profiled_expected_diagnostic_files_requiring_artifact_cross_check": 7,
+      "observed_unique_diagnostic_categories_requiring_artifact_cross_check": 5,
+      "observed_unique_first_error_signatures_requiring_artifact_cross_check": 7,
+      "observed_diagnostic_artifact_cross_checked_files": 5,
+      "observed_valid_lean4_diagnostic_artifacts": 19,
+      "observed_valid_clean_diagnostic_artifacts": 19,
+      "observed_stale_or_invalid_lean4_diagnostic_artifacts": 0,
+      "observed_stale_or_invalid_clean_diagnostic_artifacts": 0,
+      "artifact_schema": "tests/lean4_compat/frontend_diagnostic_artifact_schema.json",
+      "artifact_path_template": "tests/lean4_compat/frontend_run_artifacts/{engine}/diagnostic/{filename}.json",
+      "evidence": [
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "artifact_schema",
+          "path": "tests/lean4_compat/frontend_diagnostic_artifact_schema.json"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_run_artifacts.py"
+        },
+        {
+          "kind": "generator",
+          "path": "scripts/lean4_compat/generate_frontend_classification.py"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_replacement_scorecard_fixture_is_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard_fixture_is_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "The generated corpus classification records complete Lean4 and clean diagnostic text artifacts for the current 19 elab files and promotes only the 5 run artifacts with matching exit status and first-error signatures as fail-closed diagnostic cross-check evidence.",
+      "blockers": [
+        "Five generated Lean4/clean diagnostic artifact pairs are cross-checked through matching Lean4-vs-clean run artifacts, but replacement readiness remains false.",
+        "Fourteen generated elab artifacts still have exit-status or first-error-signature mismatch evidence and remain blockers; five are diagnostic-only divergences after exit-status cross-check, including one clean unsupported-import diagnostic blocker, one clean synthetic-sorry diagnostic blocker, one clean unknown-identifier diagnostic blocker, one clean unknown-fvar diagnostic blocker, and one clean too-many-arguments diagnostic blocker. Diagnostic-only reviewer buckets now fail-close the exact 1011.lean signature drift from Lean4 unknown_identifier to clean unknown_ident_with_suggestions, the exact 1358.lean drift from Lean4 user-thrown error to clean unsupported_import_lean_elab_tactic, the exact 1673.lean drift from Lean4 termination_check_failure to clean unknown_fvar_type_mismatch, the exact 243.lean drift from Lean4 application_type_mismatch_the_argument to clean f_declaration_uses_synthetic_sorry, and the exact 255.lean drift from Lean4 unknown_constant to clean too_many_arguments. All five diagnostic-only reviewer buckets now carry auditable run-artifact paths plus Lean4/clean status, category, and first-error signature evidence.",
+        "Placeholder diagnostic artifacts with missing schema fields are classified as stale_or_invalid evidence.",
+        "Parse-only and excluded files do not have diagnostic artifact cross-check targets."
+      ]
+    },
+    {
+      "id": "expected-failure-profile-boundary",
+      "dimension": "expected_failure",
+      "status": "classified_not_green",
+      "replacement_ready": false,
+      "fail_closed": true,
+      "observed_profiled_expected_failures": 7,
+      "observed_excluded_expected_failures": 20,
+      "evidence": [
+        {
+          "kind": "profile",
+          "path": "tests/lean4_compat/phase1_expected_outcomes.json"
+        },
+        {
+          "kind": "classification",
+          "path": "tests/lean4_compat/frontend_corpus_classification.json"
+        },
+        {
+          "kind": "test",
+          "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+          "function": "lean4_frontend_corpus_classification_is_generated_fail_closed",
+          "command": "cargo test --locked -p clean-elab --test integration lean4_frontend_corpus_classification_is_generated_fail_closed -- --nocapture"
+        }
+      ],
+      "acceptance": "Expected failures are explicit classifications rather than silently weakening parse, elaboration, kernel, tactic, trust, or diagnostic rows.",
+      "blockers": [
+        "Excluded parser-error/fuzz files and profiled failure declarations remain non-green until they have generated pass/fail contracts with Lean4 differential diagnostics."
+      ]
+    }
+  ],
+  "overall_blockers": [
+    "HN launch readiness remains false until the frontend-parity scorecard row and all other replacement rows are green.",
+    "Parse-only success remains explicitly non-replacement evidence.",
+    "Macro, syntax quotation, namespace/open/scoping, module/import resolution, deriving/attribute/instance metadata, structure/inductive/recursor artifacts, diagnostics, complete elaboration, expected-success accountability, Lean4-vs-clean run artifacts, Lean4/clean kernel artifacts, Lean4/clean tactic artifacts, Lean4/clean syntax quotation artifacts, Lean4/clean namespace/open/scoping artifacts, Lean4/clean module/import artifacts, Lean4/clean universe/typeclass artifacts, Lean4/clean deriving/attribute/instance artifacts, Lean4/clean structure/inductive/recursor artifacts, Lean4/clean trust artifacts, Lean4/clean exit statuses, Lean4/clean diagnostic artifacts, tactic, trust, and expected-failure parity remain separately classified.",
+    "Macro/notation expansion artifacts remain missing and are not cross-checked against parse or elaboration classifications.",
+    "Syntax quotation artifacts remain missing and are not cross-checked against parse or elaboration classifications.",
+    "Namespace/open/scoping artifacts remain missing and are not cross-checked against parse or elaboration classifications.",
+    "Module/import resolution artifacts remain missing and are not cross-checked against parse or elaboration classifications.",
+    "Universe/level and typeclass-resolution artifacts remain missing and are not cross-checked against parse, elaboration, or kernel classifications.",
+    "Deriving, attribute, and instance metadata artifacts remain missing and are not cross-checked against parse or elaboration classifications.",
+    "Structure, inductive, match, and recursor artifacts remain missing and are not cross-checked against parse, elaboration, or kernel classifications."
+  ]
+}

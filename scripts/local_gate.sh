@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# Local enforcement gate (roadmap A1, revised 2026-06-10: GitHub CI deleted by
+# owner decision — enforcement is local and fail-closed).
+#
+# Run before pushing main:  scripts/local_gate.sh [--fast]
+# Install as a pre-push hook: ln -sf ../../scripts/local_gate.sh .git/hooks/pre-push
+#
+# Gates (each fail-closed):
+#   1. Soundness certificate (C1-C5+C4') + golden TCB pin + false-axiom guards
+#   1b. axiom_audit.json ↔ soundness_tcb.json (cert C2 golden) consistency —
+#      fail-closed; binds the first-class domain-axiom metric to the live cert
+#   2. CLI feature coverage (descriptor registry ↔ clap paths ↔ referenced files)
+#   3. Ratchets: unchecked-decl + axiom audit surfaced from the cert golden pins;
+#      extend_constants_* bulk-bypass ratchet (fail-closed); path-to-3 TCB ratchet
+#      (domain-axiom count monotonic-down toward the 3-axiom goal, fail-closed)
+#   4. Paragon quality ratchet (shrink-only: file-size, unwrap/expect,
+#      bare-pub, dead-code suppressions — data/paragon_ratchet.json)
+#   5. (full mode) workspace check + NON-VACUOUS KernelVerified gate (re-stamps a
+#      pinned OOM-safe slice → KV ratchet + elision subset, scripts/kv_ratchet_gate.sh)
+#      + full clean-kernel --lib suite + trusted-kernel lint ratchet (dead_code/
+#      unused the workspace allow hides)
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+FAST=0
+[[ "${1:-}" == "--fast" ]] && FAST=1
+fail() { echo "LOCAL GATE: FAIL — $1" >&2; exit 1; }
+
+echo "== local gate: cross-repo dependency boundary =="
+python3 scripts/check_workspace_dependency_boundary.py \
+  || fail "Clean must consume shared verification vocabulary through trust-ir-contract, never the Trust workspace"
+
+echo "== local gate: soundness certificate =="
+cargo test -p clean-kernel --lib --locked --features math-overlays -q \
+  -- test_soundness_certificate golden_matches_live_axioms tests_false_axiom_prevention soundness_nested_arg \
+  || fail "soundness certificate / golden TCB / regression suites"
+
+echo "== local gate: axiom-audit <-> cert consistency =="
+cargo test -p clean-kernel --test verify_axiom_audit_integration --locked -q \
+  -- axiom_audit_tcb_mirror_matches_soundness_tcb_golden \
+  || fail "axiom_audit.json drifted from data/soundness_tcb.json (cert C2 golden) — sync the soundness_tcb_mirror block"
+
+echo "== local gate: feature coverage =="
+cargo test --locked -p clean-cli --test feature_coverage -q \
+  || fail "CLI feature coverage"
+
+echo "== local gate: ratchet surfaces =="
+python3 - <<'EOF' || exit 1
+import json, sys
+r = json.load(open('data/unchecked_decl_ratchet.json'))
+tcb = json.load(open('data/soundness_tcb.json'))
+audit = json.load(open('data/axiom_audit.json'))
+mirror = audit.get('soundness_tcb_mirror', {})
+print(f"  unchecked-decl call sites: structural={r.get('structural_call_sites', r.get('add_decl_structural', 'n/a'))} "
+      f"unchecked={r.get('unchecked_call_sites', r.get('add_decl_unchecked', 'n/a'))}")
+print(f"  TCB axioms: {tcb.get('axiom_count', 'n/a')} "
+      f"(foundational={tcb.get('foundational_count', 'n/a')}, "
+      f"domain={tcb.get('admitted_domain_count', 0) + tcb.get('other_admitted_count', 0)})")
+print(f"  axiom_audit.json mirror: domain_axiom_count={mirror.get('domain_axiom_count', 'MISSING')} "
+      f"(asserted == cert by step 1b)")
+EOF
+
+echo "== local gate: extend_constants bypass ratchet =="
+python3 scripts/check_extend_constants_ratchet.py \
+  || fail "extend_constants_* bypass ratchet — a new unaccounted bulk-import bypass; add a // SOUNDNESS: comment + a data/unchecked_decl_ratchet.json entry"
+
+echo "== local gate: trust-verdict emitter discipline (Pillar 1) =="
+python3 scripts/check_trust_verdict_emitters.py \
+  || fail "trust-verdict emitter discipline — a new unclassified KernelVerified green in clean-kernel, a mislabeled kernel-rechecked entry, an un-justified asserts-own-authority emitter, or a raised own-authority ratchet; classify it in data/trust_verdict_emitters.json (Pillar-1 gate)"
+
+echo "== local gate: path-to-3 TCB ratchet =="
+python3 scripts/tcb_target_ratchet.py \
+  || fail "path-to-3 TCB ratchet — a domain axiom was added (moving away from the 3-axiom goal) or the foundational set drifted; see data/tcb_target_ratchet.json"
+
+echo "== local gate: paragon quality ratchet =="
+scripts/paragon_ratchet.sh || fail "paragon quality ratchet (see data/paragon_ratchet.json)"
+
+echo "== local gate: portable Isabelle/Trust operations =="
+python3 scripts/test_isabelle_ops_portability.py \
+  || fail "Isabelle/Trust operations portability regression"
+
+if [[ $FAST -eq 0 ]]; then
+  echo "== local gate: workspace check =="
+  cargo check --locked -q || fail "workspace check"
+
+  # Dependency trust-boundary gate (paragon axis 1: "every dependency verified,
+  # continuously gated"). Runs the cargo-deny policy in deny.toml over the whole
+  # resolved dep graph: advisories (RustSec DB), licenses (SPDX allow-list),
+  # bans (rustls-only: no openssl/native-tls), sources (registry locked to
+  # crates.io, git locked to carcara). FULL-mode only — it resolves the entire
+  # graph against the advisory DB, too slow for the <30s --fast pre-push path.
+  # Current state recorded in data/dep_boundary_state.json (GREEN: all four
+  # sections ok). SKIPs green with a notice if cargo-deny is not installed, so a
+  # contributor without the tool is not blocked (install: cargo install
+  # cargo-deny --locked). cargo-deny reads Cargo.lock directly, so the benign
+  # ../ay path-dep lock drift does not block it.
+  echo "== local gate: dependency trust boundary (cargo-deny) =="
+  if command -v cargo-deny >/dev/null 2>&1; then
+    cargo deny check \
+      || fail "dependency trust boundary (cargo deny check — advisory/license/ban/source violation; see deny.toml + data/dep_boundary_state.json)"
+  else
+    echo "  SKIP: cargo-deny not installed (install: cargo install cargo-deny --locked)"
+  fi
+
+  # Per-crate supply-chain AUDIT tracker (cargo-vet — paragon axis 1: "every
+  # third-party dependency VERIFIED"). Complements the cargo-deny GATE above:
+  # deny checks advisories/licenses/bans/sources; vet adds per-crate human/imported
+  # audit attestation (supply-chain/config.toml + audits.toml + imports.lock against
+  # the trusted Mozilla/Google/Bytecode-Alliance/Embark/ISRG/Zcash registries).
+  # SOFT/INFORMATIONAL by design — `cargo vet` exits 0 today because the remaining
+  # unaudited crates are carried as exemptions (the snapshotted baseline), so this is
+  # a MONOTONIC coverage tracker (audited fraction only rises / exemptions only
+  # shrink), NOT a fail-closed gate that would block every push. It prints the
+  # audited-vs-exempted counts as a tracked metric. State: data/dep_audit_state.json.
+  # SKIPs green with a notice if cargo-vet is absent (install: cargo install
+  # cargo-vet --locked). cargo-vet reads the resolved graph, so the benign ../ay
+  # path-dep lock drift does not block it.
+  echo "== local gate: dependency supply-chain audit (cargo-vet, soft tracker) =="
+  if command -v cargo-vet >/dev/null 2>&1; then
+    if vet_out="$(cargo vet 2>&1)"; then
+      vet_line="$(printf '%s\n' "$vet_out" | grep -i 'Vetting Succeeded' || true)"
+      echo "  ${vet_line:-$(printf '%s' "$vet_out" | tail -1)}"
+      echo "  (informational tracker — monotonic: audited fraction only rises; see data/dep_audit_state.json)"
+    else
+      # Non-zero vet means a crate is neither audited nor exempted (a NEW unvetted
+      # dependency slipped in). Surface it loudly but do NOT fail the gate — this is
+      # the warn-mode contract. Refresh the baseline: `cargo vet` then re-run.
+      echo "  WARN: cargo vet reported unvetted dependencies (a new dep is neither audited nor exempted)."
+      echo "        Refresh the baseline and update data/dep_audit_state.json. NOT failing the gate (soft tracker)."
+      printf '%s\n' "$vet_out" | tail -8 | sed 's/^/        /'
+    fi
+  else
+    echo "  SKIP: cargo-vet not installed (install: cargo install cargo-vet --locked)"
+  fi
+
+  # KernelVerified gate (NON-VACUOUS): re-stamps the pinned, OOM-safe, deterministic
+  # slice (data/kv_ratchet_slice.txt) on every run and enforces BOTH the KV ratchet
+  # (kernel_verified must not drop below data/mathlib_kv_ratchet.json's baseline;
+  # heuristic_kernel_verified must be 0) AND the elision subset gate (KV(opaque) ⊆
+  # KV(opaque-and-theorem)). Re-measuring a real slice is what makes these guards
+  # bite — a static committed summary or a 0 baseline would catch nothing. SKIPs
+  # green inside the script when the clean binary or the Mathlib checkout is absent.
+  # Full-mode only: re-stamping the slice costs ~75s, so the --fast pre-push hook
+  # skips it (same contract as the elision gate it replaces + the full kernel suite).
+  echo "== local gate: KernelVerified gate (re-stamps pinned slice) =="
+  scripts/kv_ratchet_gate.sh \
+    || fail "KernelVerified gate — re-stamping the pinned slice dropped a KernelVerified verdict (ratchet regression or elision subset breach); see data/mathlib_kv_ratchet.json + data/kv_ratchet_slice.txt"
+
+  # CLEAN_LAZY_CLOSURE no-weaker invariance gate. Now ALWAYS-ON: seeded by the
+  # committed Minimal.olean fixture, it runs the truly-independent eager-vs-lazy
+  # parity unit tests (clean-olean convert_expr vs the lazy mmap source) so a v3
+  # shard-format encoder divergence is caught without a Mathlib checkout. The
+  # corpus-scale binary leg still activates when KV_GATE_* are set.
+  echo "== local gate: CLEAN_LAZY_CLOSURE no-weaker invariance gate =="
+  scripts/kv_invariance_gate.sh \
+    || fail "kv invariance gate — lazy closure loading is not no-weaker than eager (an independent-parity unit test or the corpus leg failed)"
+
+  # Full clean-kernel lib suite (slow, ~30min). The soundness step above runs only
+  # a name-filtered SUBSET; the full suite catches the rest — e.g. the env::tests
+  # add_inductive duplicate-detection regression that sat red for days
+  # (2026-06-13..15, fixed in 97e465e3) precisely because no gate ran the whole
+  # suite. Full-mode only; the pre-push hook (`--fast`) deliberately skips it.
+  echo "== local gate: full clean-kernel --lib suite (slow) =="
+  cargo test -p clean-kernel --lib --locked --features math-overlays -q \
+    || fail "clean-kernel --lib suite (full)"
+
+  # Trusted-kernel lint ratchet (audit #6): re-surfaces the dead_code/unused
+  # debt the workspace [lints] allow hides in clean-kernel. Last because it
+  # `cargo clean -p clean-kernel` (force-warn needs a fresh compile), which
+  # would otherwise invalidate the suite's artifacts above. Full-mode only.
+  echo "== local gate: trusted-kernel lint ratchet =="
+  scripts/kernel_lint_ratchet.sh \
+    || fail "kernel lint ratchet (clean-kernel dead_code/unused grew — see data/kernel_lint_ratchet.json)"
+fi
+
+# Trust-verify SOUNDNESS ratchet (conditional): if a local Trust stage1 can be
+# discovered portably, assert the verifier still leaves the genuinely-false
+# canary obligations unproved (no false-proves). An explicitly configured but
+# invalid/ambiguous toolchain fails closed; a machine with no Trust checkout
+# retains the historical conditional skip. Fast (canaries only); the heavy
+# coverage re-verify runs separately: scripts/trust_verify_ratchet.sh --coverage.
+if stage1_bin="$(bash scripts/trust_verify_ratchet.sh --locate-stage1)"; then
+  echo "  using Trust stage1: $stage1_bin"
+  echo "== local gate: trust-verify soundness ratchet =="
+  bash scripts/trust_verify_ratchet.sh --soundness \
+    || fail "trust-verify soundness ratchet — a genuinely-false canary obligation was PROVED (verifier unsoundness; data/trust_verify_ratchet.json)"
+else
+  locate_rc=$?
+  if [[ "$locate_rc" -eq 2 ]]; then
+    echo "== local gate: trust-verify soundness ratchet (SKIP: no local Trust stage1) =="
+  else
+    fail "Trust stage1 discovery is invalid or ambiguous; set TRUST_STAGE1_BIN explicitly"
+  fi
+fi
+
+echo "LOCAL GATE: PASS"

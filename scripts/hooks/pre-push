@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Local fail-closed pre-push gate. GitHub CI is dead in this repo — this is the
+# only gate. Runs scripts/local_gate.sh --fast: soundness certificate (C1-C5+C4')
+# + golden TCB pin + false-axiom guards + CLI feature coverage + paragon ratchet,
+# each fail-closed. Install repo-wide with `just install-hooks` (sets
+# core.hooksPath); a non-zero exit blocks the push.
+exec "$(git rev-parse --show-toplevel)/scripts/local_gate.sh" --fast

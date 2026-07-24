@@ -1,0 +1,31 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "1673.lean",
+  "source_sha256": "sha256:788b283e77300a7a68d46dff9a7ec8bfa8b61ee74b62c36c509f0a7ae9163fa9",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1673.lean"
+  ],
+  "diagnostic_category": "termination_check_failure",
+  "first_error_signature": "termination_check_failure",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "fail to show termination for",
+      "line": 1,
+      "column": 4
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_elapsed_seconds": 0.193,
+  "observed_stdout": "tests/lean4_compat/lean4_tests/1673.lean:1:4: error: fail to show termination for\n  foo.a\nwith errors\nfailed to infer structural recursion:\nNot considering parameter n of foo.a:\n  it is unchanged in the recursive calls\nNot considering parameter #2 of foo.a:\n  it is unchanged in the recursive calls\nno parameters suitable for structural recursion\n\nwell-founded recursion cannot be used, `foo.a` does not take any (non-fixed) arguments\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

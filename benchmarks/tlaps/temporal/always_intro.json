@@ -1,0 +1,26 @@
+{
+  "id": "temporal/always_intro",
+  "module": "TemporalTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [
+    {
+      "name": "h_init",
+      "formula": "P"
+    },
+    {
+      "name": "h_stable",
+      "formula": {"always": {"implies": ["P", {"always": "P"}]}}
+    }
+  ],
+
+  "goal": {"always": "P"},
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["temporal", "always", "stability"]
+}

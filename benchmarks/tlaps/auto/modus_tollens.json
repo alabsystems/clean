@@ -1,0 +1,44 @@
+{
+  "id": "auto/modus_tollens",
+  "module": "PropositionalTest",
+  "line": null,
+  "declares": [
+    {
+      "type": "prop",
+      "name": "P"
+    },
+    {
+      "type": "prop",
+      "name": "Q"
+    }
+  ],
+  "hypotheses": [
+    {
+      "name": "h_impl",
+      "formula": {
+        "implies": [
+          "P",
+          "Q"
+        ]
+      }
+    },
+    {
+      "name": "h_not_q",
+      "formula": {
+        "not": "Q"
+      }
+    }
+  ],
+  "goal": {
+    "not": "P"
+  },
+  "tactic_hint": "auto",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": [
+    "propositional",
+    "implication",
+    "modus_tollens"
+  ]
+}

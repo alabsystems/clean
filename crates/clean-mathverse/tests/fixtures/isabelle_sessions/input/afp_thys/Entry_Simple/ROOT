@@ -1,0 +1,10 @@
+chapter AFP
+
+session "Entry_Simple" (AFP) = "HOL" +
+  options [timeout = 300]
+  theories
+    Alpha
+    Beta
+    Gamma
+  document_files
+    "root.tex"

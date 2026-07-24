@@ -1,0 +1,65 @@
+[package]
+name = "clean-olean"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lean 4 .olean file parser for Clean"
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel = { workspace = true }
+thiserror.workspace = true
+rayon = { workspace = true }
+libc = { workspace = true }
+hashbrown = { workspace = true }
+smallvec = { workspace = true }
+ahash = { workspace = true }
+mimalloc = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+blake3 = { workspace = true }
+# Explicit pin on blake3's transitive dep so cargo resolution cannot pick
+# constant_time_eq 0.4.3 (which requires rustc 1.95). See issue #3535.
+constant_time_eq = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 3,
+# #3441 + #3442). Gated behind the `cli` feature so non-CLI consumers keep a
+# minimal dep graph — `clap` + `clean-features` are only pulled in when
+# callers opt in.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+
+[features]
+default = []
+mimalloc = ["dep:mimalloc"]
+math-overlays = ["clean-kernel/math-overlays"]
+# Forward debug-def-eq to kernel for .olean test diagnostics (#3134)
+debug-def-eq = ["clean-kernel/debug-def-eq"]
+# CLI surface for Epic #3436 Phase 3: exposes `clean_olean::cli` with
+# clap-derived argument structs and a `FeatureDescriptor` array. Non-CLI
+# consumers (the kernel, test-only callers, downstream crates) do not pay for
+# clap + clean-features unless they opt in. `math-overlays` is forwarded so
+# that `cli::overlay::generate_namespace_overlay` can call the kernel's
+# `init_topology_manifold` / `init_topology_lie_group` helpers (#3442).
+cli = ["dep:clap", "dep:clean-features", "math-overlays"]
+
+[[bin]]
+name = "generate_namespace_overlay"
+# Compat shim around `clean olean generate-overlay` (#3442). Requires the
+# `cli` feature (which forwards `math-overlays`) so the shared library entry
+# point is visible.
+required-features = ["cli"]
+
+[[bin]]
+name = "verify_olean_batch"
+
+[dev-dependencies]
+clean-kernel = { workspace = true, features = ["math-overlays", "test-utils"] }
+proptest = { workspace = true }
+tempfile = { workspace = true }

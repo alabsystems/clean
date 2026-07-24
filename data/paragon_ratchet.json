@@ -1,0 +1,271 @@
+{
+  "note": "Paragon quality ratchet (rust_excellence.md enforced as ratchets, not advice). Shrink-only: scripts/paragon_ratchet.sh fails if any total increases; rerun with --update only for intentional ratchet-downs.",
+  "fix_forward_context": "2026-07-22 owner-approved current-state fix-forward, not a quality reduction: files_over_500 1249 -> 1341, unwrap_expect_production 1737 -> 1860, bare_pub_non_lib 12698 -> 13139, allow_dead_code_sites unchanged at 15. The same scanner produced exactly these totals on an immutable explicit-origin/main worktree before the AY pin and gate repairs, proving those changes were metric-neutral. This snapshot restores shrink-only enforcement from the current published baseline.",
+  "heuristics": {
+    "scope": "all .rs files under crates/<crate>/; excludes */target/* and crates/clean-kernel/src/env/ (another lane owns its content)",
+    "files_over_500": "every in-scope .rs file with >500 lines (src, tests, benches, examples) \u2014 rust_excellence 500-line rule",
+    "unwrap_expect_production": "occurrences of `.unwrap()` and `.expect(` in src/ files only (tests/, benches/, examples/ dirs, sibling test files tests.rs/*_tests.rs/tests_*.rs, and sibling test dirs tests_*/ excluded \u2014 all verified #[cfg(test)]-gated), skipping #[cfg(test)]-gated items via a naive brace-depth scanner (string literals and // comments stripped first) and skipping comment text; string contents containing the patterns are not detected \u2014 grep heuristic, not a parse",
+    "bare_pub_non_lib": "lines in src/ non-lib.rs files (same test-skip heuristic) matching `pub [async|const|unsafe|extern] fn|struct|enum` \u2014 bare pub, not pub(crate)/pub(super); proxy for pub(crate) discipline",
+    "allow_dead_code_sites": "`#![allow(...dead_code...)]` inner-attribute lines in src/ files (whole-file/module dead-code suppressions)"
+  },
+  "totals": {
+    "files_over_500": 1341,
+    "unwrap_expect_production": 1860,
+    "bare_pub_non_lib": 13139,
+    "allow_dead_code_sites": 15
+  },
+  "crates": {
+    "clean": {
+      "files_over_500": 4,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 31,
+      "allow_dead_code_sites": 0
+    },
+    "clean-auto": {
+      "files_over_500": 44,
+      "unwrap_expect_production": 65,
+      "bare_pub_non_lib": 977,
+      "allow_dead_code_sites": 3
+    },
+    "clean-autoform": {
+      "files_over_500": 0,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 43,
+      "allow_dead_code_sites": 0
+    },
+    "clean-c-sem": {
+      "files_over_500": 22,
+      "unwrap_expect_production": 12,
+      "bare_pub_non_lib": 442,
+      "allow_dead_code_sites": 0
+    },
+    "clean-cake": {
+      "files_over_500": 1,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 23,
+      "allow_dead_code_sites": 0
+    },
+    "clean-ck0": {
+      "files_over_500": 8,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 127,
+      "allow_dead_code_sites": 0
+    },
+    "clean-cli": {
+      "files_over_500": 36,
+      "unwrap_expect_production": 24,
+      "bare_pub_non_lib": 6,
+      "allow_dead_code_sites": 0
+    },
+    "clean-compiler": {
+      "files_over_500": 148,
+      "unwrap_expect_production": 31,
+      "bare_pub_non_lib": 555,
+      "allow_dead_code_sites": 1
+    },
+    "clean-discovery": {
+      "files_over_500": 3,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 222,
+      "allow_dead_code_sites": 0
+    },
+    "clean-elab": {
+      "files_over_500": 364,
+      "unwrap_expect_production": 281,
+      "bare_pub_non_lib": 1397,
+      "allow_dead_code_sites": 8
+    },
+    "clean-features": {
+      "files_over_500": 0,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 20,
+      "allow_dead_code_sites": 0
+    },
+    "clean-fold": {
+      "files_over_500": 4,
+      "unwrap_expect_production": 11,
+      "bare_pub_non_lib": 89,
+      "allow_dead_code_sites": 0
+    },
+    "clean-kernel": {
+      "files_over_500": 123,
+      "unwrap_expect_production": 568,
+      "bare_pub_non_lib": 1220,
+      "allow_dead_code_sites": 1
+    },
+    "clean-lake": {
+      "files_over_500": 7,
+      "unwrap_expect_production": 5,
+      "bare_pub_non_lib": 118,
+      "allow_dead_code_sites": 0
+    },
+    "clean-lsp": {
+      "files_over_500": 11,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 62,
+      "allow_dead_code_sites": 0
+    },
+    "clean-macro": {
+      "files_over_500": 5,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 242,
+      "allow_dead_code_sites": 0
+    },
+    "clean-math-project": {
+      "files_over_500": 1,
+      "unwrap_expect_production": 2,
+      "bare_pub_non_lib": 25,
+      "allow_dead_code_sites": 0
+    },
+    "clean-mathverse": {
+      "files_over_500": 219,
+      "unwrap_expect_production": 340,
+      "bare_pub_non_lib": 3266,
+      "allow_dead_code_sites": 0
+    },
+    "clean-mathverse-server": {
+      "files_over_500": 0,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 21,
+      "allow_dead_code_sites": 0
+    },
+    "clean-olean": {
+      "files_over_500": 29,
+      "unwrap_expect_production": 47,
+      "bare_pub_non_lib": 338,
+      "allow_dead_code_sites": 0
+    },
+    "clean-parser": {
+      "files_over_500": 30,
+      "unwrap_expect_production": 268,
+      "bare_pub_non_lib": 119,
+      "allow_dead_code_sites": 0
+    },
+    "clean-reflect": {
+      "files_over_500": 2,
+      "unwrap_expect_production": 1,
+      "bare_pub_non_lib": 27,
+      "allow_dead_code_sites": 0
+    },
+    "clean-runtime": {
+      "files_over_500": 10,
+      "unwrap_expect_production": 45,
+      "bare_pub_non_lib": 177,
+      "allow_dead_code_sites": 0
+    },
+    "clean-rust-sem": {
+      "files_over_500": 34,
+      "unwrap_expect_production": 57,
+      "bare_pub_non_lib": 667,
+      "allow_dead_code_sites": 2
+    },
+    "clean-server": {
+      "files_over_500": 23,
+      "unwrap_expect_production": 4,
+      "bare_pub_non_lib": 440,
+      "allow_dead_code_sites": 0
+    },
+    "clean-sys": {
+      "files_over_500": 1,
+      "unwrap_expect_production": 0,
+      "bare_pub_non_lib": 0,
+      "allow_dead_code_sites": 0
+    },
+    "clean-tla": {
+      "files_over_500": 24,
+      "unwrap_expect_production": 18,
+      "bare_pub_non_lib": 245,
+      "allow_dead_code_sites": 0
+    },
+    "clean-verify": {
+      "files_over_500": 188,
+      "unwrap_expect_production": 81,
+      "bare_pub_non_lib": 2240,
+      "allow_dead_code_sites": 0
+    }
+  },
+  "worst_offenders_over_500": [
+    {
+      "path": "crates/clean-mathverse/src/coq/alpha.rs",
+      "lines": 18509
+    },
+    {
+      "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
+      "lines": 9877
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
+      "lines": 9265
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/par_reduction.rs",
+      "lines": 8615
+    },
+    {
+      "path": "crates/clean-lsp/src/backend/tests.rs",
+      "lines": 7539
+    },
+    {
+      "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
+      "lines": 7107
+    },
+    {
+      "path": "crates/clean-parser/src/grammar/tests.rs",
+      "lines": 6797
+    },
+    {
+      "path": "crates/clean-rust-sem/src/eval/tests.rs",
+      "lines": 6370
+    },
+    {
+      "path": "crates/clean-mathverse/src/shard.rs",
+      "lines": 6339
+    },
+    {
+      "path": "crates/clean-kernel/src/bitvec_coercion.rs",
+      "lines": 6137
+    },
+    {
+      "path": "crates/clean-mathverse/src/hol/isabelle_pure_translate/def_axioms/conj_bundle.rs",
+      "lines": 6000
+    },
+    {
+      "path": "crates/clean-mathverse/src/verify/incremental/tests.rs",
+      "lines": 5650
+    },
+    {
+      "path": "crates/clean-math-project/src/lib.rs",
+      "lines": 5641
+    },
+    {
+      "path": "crates/clean-elab/src/tactic/tests/core.rs",
+      "lines": 5589
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
+      "lines": 5588
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/iota_core.rs",
+      "lines": 5339
+    },
+    {
+      "path": "crates/clean-kernel/src/tc/reduction/kan.rs",
+      "lines": 5241
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/complete_development.rs",
+      "lines": 5035
+    },
+    {
+      "path": "crates/clean-compiler/src/emit_trust_ir_tests.rs",
+      "lines": 4956
+    },
+    {
+      "path": "crates/clean-elab/tests/trustir_typesystem_e2e.rs",
+      "lines": 4952
+    }
+  ],
+  "generated_by": "scripts/paragon_ratchet.sh --update",
+  "last_updated": "2026-07-22"
+}

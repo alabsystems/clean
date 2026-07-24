@@ -1,0 +1,35 @@
+# Opt-in OFFLINE / vendored-source cargo config for clean.
+#
+# ⚠️  This file is NOT the default cargo config. Do NOT rename it to
+# `config.toml` and do NOT merge these stanzas into `.cargo/config.toml`.
+# The `[source.crates-io] replace-with = "vendored-sources"` stanza FORCES
+# every build to resolve dependencies from the local `vendor/` tree. That tree
+# is GITIGNORED (released as an artifact, not committed), so making it the
+# default would break every checkout that has not run `cargo vendor` first —
+# including all the parallel build sessions. Keep it strictly opt-in.
+#
+# USE IT EXPLICITLY, e.g.:
+#   cargo build  --config .cargo/config.offline.toml --offline
+#   cargo check  --config .cargo/config.offline.toml --offline -p clean-kernel
+# or via the wrapper: scripts/build_offline.sh [cargo args...]
+#
+# PREREQUISITE: the vendor/ tree must exist. Generate it with
+#   cargo vendor --versioned-dirs vendor/
+# or fetch + extract the released vendor-sources-v*.tar.zst artifact
+#   (see scripts/package_vendor.sh and docs/SUPPLY_CHAIN_VENDORING.md).
+#
+# The `directory` path below is relative to the workspace root (cargo's config
+# discovery walks up from the invocation cwd), so invoke cargo from the repo
+# root. Regenerate the source stanzas with `cargo vendor --versioned-dirs vendor/`
+# if the dependency graph changes (the git rev tracks Cargo.lock's carcara pin).
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/ufmg-smite/carcara?rev=fecb4224def3c26f93a5d4f1804ecf58eb979650"]
+git = "https://github.com/ufmg-smite/carcara"
+rev = "fecb4224def3c26f93a5d4f1804ecf58eb979650"
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

@@ -1,0 +1,35 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "223.lean",
+  "source_sha256": "sha256:b27a5f6cf14b24265fff279674c24d88a98a44834526315a1cdd066880142c5a",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/223.lean"
+  ],
+  "diagnostic_category": null,
+  "first_error_signature": null,
+  "diagnostics": [
+    {
+      "severity": "information",
+      "message": "def h.{u_1, u_2} : {\u03b1 : Type u_1} \u2192 {\u03b2 : Type u_2} \u2192 {f : \u03b1 \u2192 \u03b2} \u2192 {b : \u03b2} \u2192 Imf f b \u2192 \u03b1 :="
+    },
+    {
+      "severity": "warning",
+      "message": "unused variable `\u03b1`",
+      "line": 11,
+      "column": 4
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 0,
+  "observed_elapsed_seconds": 0.319,
+  "observed_stdout": "def h.{u_1, u_2} : {\u03b1 : Type u_1} \u2192 {\u03b2 : Type u_2} \u2192 {f : \u03b1 \u2192 \u03b2} \u2192 {b : \u03b2} \u2192 Imf f b \u2192 \u03b1 :=\nfun {\u03b1} {\u03b2} {f} x x_1 =>\n  match x, x_1 with\n  | .(f a), Imf.mk a => a\ntests/lean4_compat/lean4_tests/223.lean:11:4: warning: unused variable `\u03b1`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\ntheorem ex.{u} : \u2200 {\u03b1 \u03b2 : Sort u} (h : \u03b1 = \u03b2) (a : \u03b1), cast h a \u224d a :=\nfun x x_1 x_2 x_3 =>\n  match x, x_1, x_2, x_3 with\n  | \u03b1, .(\u03b1), Eq.refl \u03b1, a => HEq.refl a\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 diagnostic evidence; this is not replacement-readiness evidence."
+}

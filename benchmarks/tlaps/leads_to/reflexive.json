@@ -1,0 +1,17 @@
+{
+  "id": "leads_to/reflexive",
+  "module": "LeadsToTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {"leads_to": ["P", "P"]},
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["temporal", "leads_to", "reflexivity"]
+}

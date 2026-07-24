@@ -1,0 +1,21 @@
+{
+  "version": "proof-artifact-v1",
+  "producer": {
+    "repo": "tests/fixtures/external_certificates",
+    "commit": "fixture-sat-pb-veripb-wellformed"
+  },
+  "source_system": "sat-pb",
+  "problem_hash": "blake3:fixture-sat-pb-veripb-problem",
+  "model_hash": "blake3:fixture-sat-pb-veripb-model",
+  "proof_hash": "blake3:fixture-sat-pb-veripb-proof",
+  "certification": {
+    "evidence_kind": "replay_only"
+  },
+  "artifact_kind": "veripb",
+  "verifier_constants": [],
+  "certificate": {
+    "format": "veripb",
+    "encoding": "text",
+    "payload": "pseudo-Boolean proof version 1.0\nf 1 >= 1 ;\n"
+  }
+}

@@ -1,0 +1,183 @@
+[package]
+name = "clean-mathverse"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "The Mathverse Library — cross-system mathematics storage, multi-system import, trust enforcement, and retrieval"
+
+[lints]
+workspace = true
+
+[dependencies]
+# `proof-import` exposes the kernel's coq_import / open_theory /
+# hol_light_import translators, which the mathverse import pipelines wrap
+# (rearch stage 6a: default-off in the kernel itself).
+clean-kernel = { workspace = true, features = ["test-utils", "math-overlays", "proof-import"] }
+# The in-repo native hammer (AutomationEngine) drives the swarm worker's proof
+# search: propositional / equational reconstruction, superposition, and (with
+# the default `ay-smt` backend) SMT.
+clean-auto.workspace = true
+clean-olean.workspace = true
+clean-cake = { path = "../clean-cake" }
+clean-features.workspace = true
+thiserror.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["unbounded_depth"] }
+toml.workspace = true
+zstd.workspace = true
+hashbrown.workspace = true
+bincode.workspace = true
+memmap2.workspace = true
+blake3.workspace = true
+sha2.workspace = true
+# Phase-2 trust layer: real Ed25519 provenance signing (see trust_sign module).
+ring.workspace = true
+# Phase-2.1 GCP Cloud KMS backend: decode the SPKI base64 (PEM body) of the KMS
+# public key and the base64 signature payload returned by `gcloud kms
+# asymmetric-sign --format=json`. Already a workspace dep; no lock drift.
+base64.workspace = true
+fd-lock = "4.0.4"
+rayon.workspace = true
+tracing.workspace = true
+clap = { workspace = true }
+clap_complete = { workspace = true }
+regex = "1"
+# Async HTTP/1.1 distribution front-end (`mathverse_serve` bin). tokio is
+# already a workspace dependency (clean-server uses it); httparse + the
+# percent decoder keep the request path dependency-light, and anyhow is the
+# binary-side error type (the library keeps using thiserror::MathverseError).
+tokio = { workspace = true }
+httparse.workspace = true
+percent-encoding.workspace = true
+anyhow.workspace = true
+# Track B1: the `MiMalloc` global-allocator type for the `mathverse_shard`
+# binary entrypoint. Behind the `mimalloc` feature so default builds never link
+# it. The per-module `mi_collect` purge calls a self-declared `extern "C"`
+# symbol (in `parallel_verify.rs`) exported by the linked mimalloc static lib,
+# so no `libmimalloc-sys`/`extended` dependency is needed.
+mimalloc = { workspace = true, optional = true }
+
+[features]
+# Gate slow tests (25+ min) that require .olean toolchain files behind this feature.
+# Run with: cargo test -p clean-mathverse --lib --features slow_tests -- verify_measurement
+slow_tests = []
+# Track B1: enable the per-module `mi_collect(true)` purge in the PARAGON worker
+# loop AND install mimalloc as the `mathverse_shard` binary's global allocator.
+# The purge has effect only when a mimalloc allocator is installed; a no-op
+# otherwise.
+mimalloc = ["dep:mimalloc"]
+
+[dev-dependencies]
+criterion.workspace = true
+# The `clean` facade crate provides the check pipeline (CheckConfig,
+# load_source_into) used by the kernel-export bridge test in
+# `src/tests_e2e_pipeline.rs`. Repointed from the deleted `clean-lib`
+# duplicate facade (rearch stage 9). Dev-dependency cycles are allowed by
+# cargo; the `clean` lib is built without its own dev-deps here.
+clean.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+# Enable the `math-overlays` feature on clean-kernel for tests that exercise
+# gamma-crown conjecture initialization (#3379). The overlay-gated
+# `gamma_crown_verify` module and `init_nn_verify_c*` registration helpers
+# are compiled only when the feature is active.
+clean-kernel = { workspace = true, features = ["math-overlays"] }
+
+[[bin]]
+name = "mathverse_search"
+path = "src/bin/mathverse_search.rs"
+
+[[bin]]
+name = "mathverse"
+path = "src/bin/mathverse/main.rs"
+
+# Hard-theorem dependency-graph analyzer (#3595). Lets agents pick the
+# highest-leverage next-unblockable lemma by ranking closure impact.
+[[bin]]
+name = "clean-depgraph"
+path = "src/bin/clean_depgraph.rs"
+
+# Real math library converter: reads Metamath / OpenTheory / Lean 4 / Isabelle
+# sources and emits .mathverse shards (canonical full-featured importer entry).
+[[bin]]
+name = "mathverse_convert"
+path = "src/bin/mathverse_convert.rs"
+
+# Audits each `.mathverse` shard's semantic density (kernel-verified vs
+# surface-names-only) by inspecting headers without decompressing bodies.
+[[bin]]
+name = "mathverse_fidelity_check"
+path = "src/bin/mathverse_fidelity_check.rs"
+
+# One-shot driver for a single structured importer
+# (dafny | acl2 | lean3 | coq | isabelle).
+[[bin]]
+name = "mathverse_structured_import"
+path = "src/bin/mathverse_structured_import.rs"
+
+# Mathverse shard build/verify CLI: builds `.mathverse` shards from Lean 4 `.olean`
+# libraries and runs blake3 + kernel verification on their constants.
+[[bin]]
+name = "mathverse_shard"
+path = "src/bin/mathverse_shard/main.rs"
+
+# Fast proof-term sketchpad CLI (#3551). Lets a human or AI agent submit a
+# goal + proof term and get pass/fail + axiom closure back in seconds without
+# rebuilding a clean-Native shard.
+[[bin]]
+name = "mathverse_try"
+path = "src/bin/mathverse_try/main.rs"
+
+# Residual-MATH bucket dissector (deep-reducers investigation). Diagnostic
+# only: loads one module's olean closure and dumps the kernel's declared-type
+# vs inferred-type / WHNF view for named constants. No trust path.
+[[bin]]
+name = "mathverse_bucket_probe"
+path = "src/bin/mathverse_bucket_probe.rs"
+
+# First autoprove swarm worker: loops the in-repo clean-auto hammer over a
+# stream of tier-1 obligations (corpus shard dir or a constructed demo source)
+# and graduates every solved goal through the C1 kernel-recheck trust gate
+# (`graduate::recheck::recheck_and_classify`).
+[[bin]]
+name = "mathverse_swarm_worker"
+path = "src/bin/mathverse_swarm_worker/main.rs"
+
+# Mathverse Cloud Run distribution front-end (Phase 1): a read-only async
+# HTTP/1.1 service that browses / searches / streams the verified Core. It is
+# a DISTRIBUTION front-end, NOT a trust authority — it serves the STORED trust
+# labels plus `expr_canonical_digest`s so consumers re-verify independently.
+[[bin]]
+name = "mathverse_serve"
+path = "src/bin/mathverse_serve/main.rs"
+
+# Mathverse Phase-2 re-auditor: re-earn every published KernelVerified claim in
+# a Core under the live kernel and emit signed verdicts + a signed revocation
+# list. The signature attests provenance; correctness stays independently
+# re-verifiable via the de Bruijn digest. See the trust_sign module.
+[[bin]]
+name = "mathverse_reauditor"
+path = "src/bin/mathverse_reauditor.rs"
+
+# Mathverse Phase-2.1 publisher: the privileged process that re-verifies every
+# PENDING submission in a queue (fresh kernel, single trust verdict), signs a
+# mathverse-signed-verdict-v1, and publishes the KernelVerified ones. The public
+# `mathverse_serve` front-end holds no signing key and never mints.
+[[bin]]
+name = "mathverse_publisher"
+path = "src/bin/mathverse_publisher.rs"
+
+# COQ-0 corpus dump driver: drives sertop (isolated mathverse-serapi opam
+# switch, Coq 8.20) to dump stdlib modules into per-module .sexp files in the
+# exact importer forms consumed by coq::alpha::CoqImporter::import_sexp
+# (CoqConstant / CoqAxiom / CoqInductive with raw SerAPI Constr payloads).
+[[bin]]
+name = "mathverse_coq_dump"
+path = "src/bin/mathverse_coq_dump/main.rs"
+
+[[bench]]
+name = "retrieval_bench"
+harness = false

@@ -1,0 +1,27 @@
+{
+  "id": "circumradius_formula",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "O": {"type": "point", "definition": {"circumcenter": ["A", "B", "C"]}}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "circumradius_formula",
+    "args": ["O", "A", "B", "C"]
+  },
+  "metadata": {
+    "source": "Circumradius formula",
+    "difficulty": 5,
+    "tags": ["circumcircle", "radius", "sine_rule"],
+    "known_solvable": true,
+    "statement": "The circumradius R = a / (2 sin A) = abc / (4 * Area)."
+  }
+}

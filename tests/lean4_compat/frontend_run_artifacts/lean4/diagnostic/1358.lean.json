@@ -1,0 +1,35 @@
+{
+  "schema_version": "clean-frontend-diagnostic-artifact-v1",
+  "kind": "frontend_diagnostic",
+  "engine": "lean4",
+  "filename": "1358.lean",
+  "source_sha256": "sha256:7d2df8fe8d215fa9b036150441c9160b5bfc2838ff6f96ccec51d64f9f302812",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/1358.lean"
+  ],
+  "diagnostic_category": "user_thrown_tactic_error",
+  "first_error_signature": "error",
+  "diagnostics": [
+    {
+      "severity": "information",
+      "message": "foo"
+    },
+    {
+      "severity": "error",
+      "message": "error",
+      "line": 9,
+      "column": 2
+    }
+  ],
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_stdout": "foo\ntests/lean4_compat/lean4_tests/1358.lean:9:2: error: error\n",
+  "observed_stderr": "",
+  "failure_mode": "profiled_user_thrown_tactic_error",
+  "artifact_note": "Lean4 reached the profiled custom tactic diagnostic; this is diagnostic failure evidence, not parity-success evidence."
+}

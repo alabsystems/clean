@@ -1,0 +1,229 @@
+// Copyright 2026 Andrew Yates
+// Author: Andrew Yates <andrewyates.name@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
+//! Mode `afp` — per-entry checkpointed ROOT fragments (Wave A, and the
+//! per-entry bodies of Wave C).
+//!
+//! One session per entry (per-entry Poly/ML process isolation, RSS resets
+//! between entries); an entry with more than `cap` theories is split into
+//! chained sub-sessions with heap saves at each checkpoint. Entries are
+//! never merged into one session — that would re-accrete RSS and
+//! re-introduce the Lib3 OOM.
+
+use std::path::Path;
+
+use super::root_parse::{entry_theories_topo, parse_root_headers, TheoryWalk};
+use super::{
+    ensure_outdir, join_lines, py_repr, read_text_py, write_file, IsabelleSessionsError,
+    ManifestRow, SessionFragment,
+};
+
+/// Planned output of an afp-mode run (pure data; nothing written yet).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AfpPlan {
+    /// `ROOT.<session>` fragments in emit order.
+    pub fragments: Vec<SessionFragment>,
+    /// `manifest.tsv` rows.
+    pub manifest: Vec<ManifestRow>,
+    /// Session names in chain-respecting build order (`sessions.txt`).
+    pub order: Vec<String>,
+    /// `WARN: …` diagnostics for skipped entries, in scan order.
+    pub warnings: Vec<String>,
+    /// Number of entries requested (before skips) — for the summary line.
+    pub entries_requested: usize,
+}
+
+impl AfpPlan {
+    /// Total theories across all emitted chunks.
+    #[must_use]
+    pub fn theories_total(&self) -> usize {
+        self.manifest.iter().map(|m| m.n_theories).sum()
+    }
+}
+
+/// Plan the checkpointed fragments for `entries` chained on `parent`.
+///
+/// Mirrors the Python `emit()`: entries missing a ROOT, parsing no session,
+/// or holding no theories are warned and skipped; every entry's own `.thy`
+/// closure is topo-ordered and chunked at `cap` theories per process.
+pub fn plan_afp_wave(
+    entries: &[String],
+    afp_thys: &Path,
+    parent: &str,
+    cap: usize,
+) -> Result<AfpPlan, IsabelleSessionsError> {
+    if cap == 0 {
+        return Err(IsabelleSessionsError::ZeroCap);
+    }
+    let mut plan = AfpPlan {
+        fragments: Vec::new(),
+        manifest: Vec::new(),
+        order: Vec::new(),
+        warnings: Vec::new(),
+        entries_requested: entries.len(),
+    };
+    for entry in entries {
+        let entry_dir = afp_thys.join(entry);
+        let root = entry_dir.join("ROOT");
+        if !root.exists() {
+            plan.warnings
+                .push(format!("WARN: no ROOT for {entry} (skipped)"));
+            continue;
+        }
+        if parse_root_headers(&read_text_py(&root)?).is_empty() {
+            plan.warnings
+                .push(format!("WARN: no session parsed in {entry}/ROOT (skipped)"));
+            continue;
+        }
+        // Enumerate the entry's OWN theories in intra-entry topo order (the
+        // true per-process closure above the base heap) and chunk at cap —
+        // this bounds cumulative record_proofs RSS, not the shorter ROOT
+        // umbrella list.
+        let thys = entry_theories_topo(&entry_dir, TheoryWalk::Recursive)?;
+        if thys.is_empty() {
+            plan.warnings
+                .push(format!("WARN: no theories parsed for {entry} (skipped)"));
+            continue;
+        }
+        let chunks: Vec<&[String]> = thys.chunks(cap).collect();
+        let n = chunks.len();
+        let mut prev = parent.to_string();
+        for (idx, chunk) in chunks.iter().enumerate() {
+            let k = idx + 1;
+            let sess = if n == 1 {
+                format!("ZP-AFP-{entry}")
+            } else {
+                format!("ZP-AFP-{entry}-{k}")
+            };
+            let contents = fragment_text(entry, &prev, &sess, cap, k, n, chunk);
+            plan.fragments.push(SessionFragment {
+                session: sess.clone(),
+                contents,
+            });
+            plan.manifest.push(ManifestRow {
+                session: sess.clone(),
+                source: entry.clone(),
+                parent: prev.clone(),
+                n_theories: chunk.len(),
+                capture_prefix: format!("{entry}."),
+            });
+            plan.order.push(sess.clone());
+            prev = sess;
+        }
+    }
+    Ok(plan)
+}
+
+/// Header + session stanza for one checkpoint chunk — structurally the Python
+/// `_HEADER` / `_SESSION` templates, with the header now crediting the Rust
+/// generator (`clean mathverse isabelle-sessions`) that replaced the retired
+/// Python script. The golden fixtures are pinned to this output.
+fn fragment_text(
+    entry: &str,
+    parent: &str,
+    sess: &str,
+    cap: usize,
+    k: usize,
+    n: usize,
+    chunk: &[String],
+) -> String {
+    let thy_lines = chunk
+        .iter()
+        .map(|t| format!("    \"{entry}.{t}\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"(* corpus v4 (AFP) — auto-generated by clean mathverse isabelle-sessions. DO NOT EDIT BY HAND.
+   Re-elaborates AFP entry {entry_repr} on the captured post-Library heap {parent_repr}
+   under record_proofs=4 so the baked zproof hook captures <{sess}>.<thy>.jsonl.
+   Lib3-lesson checkpointing: <= {cap} theories per Poly/ML process (RSS reset at
+   each session boundary). See docs/analysis/zproof-afp-staging.md. *)
+session "{sess}" = "{parent}" +
+  description "corpus v4 AFP: {entry} slice {k}/{n} (chained on {parent})."
+  options [quick_and_dirty = false, record_proofs = 4, parallel_limit = 200]
+  sessions
+    "{entry}"
+  theories
+{thy_lines}
+"#,
+        entry_repr = py_repr(entry),
+        parent_repr = py_repr(parent),
+    )
+}
+
+/// Write the planned fragments plus `manifest.tsv` / `sessions.txt` /
+/// `prefixes.txt` into `outdir` (created if missing).
+pub fn write_afp_wave(plan: &AfpPlan, outdir: &Path) -> Result<(), IsabelleSessionsError> {
+    ensure_outdir(outdir)?;
+    for frag in &plan.fragments {
+        write_file(
+            &outdir.join(format!("ROOT.{}", frag.session)),
+            &frag.contents,
+        )?;
+    }
+    write_manifest(&plan.manifest, "entry", outdir)?;
+    write_file(&outdir.join("sessions.txt"), &join_lines(&plan.order))?;
+    write_file(
+        &outdir.join("prefixes.txt"),
+        &join_lines(&sorted_unique_prefixes(&plan.manifest)),
+    )?;
+    Ok(())
+}
+
+/// `manifest.tsv` with the mode's source-column name (`entry` / `spine`).
+pub(crate) fn write_manifest(
+    rows: &[ManifestRow],
+    source_column: &str,
+    outdir: &Path,
+) -> Result<(), IsabelleSessionsError> {
+    let mut out = format!("session\t{source_column}\tparent\tn_theories\tcapture_prefix\n");
+    for row in rows {
+        out.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            row.session, row.source, row.parent, row.n_theories, row.capture_prefix
+        ));
+    }
+    write_file(&outdir.join("manifest.tsv"), &out)
+}
+
+/// Unique capture prefixes, sorted (Python `sorted({m[4] for m in manifest})`).
+pub(crate) fn sorted_unique_prefixes(rows: &[ManifestRow]) -> Vec<String> {
+    let set: std::collections::BTreeSet<String> =
+        rows.iter().map(|r| r.capture_prefix.clone()).collect();
+    set.into_iter().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fragment_text_single_chunk_shape() {
+        let text = fragment_text(
+            "Graph_Theory",
+            "ZP-Lib3e",
+            "ZP-AFP-Graph_Theory",
+            12,
+            1,
+            1,
+            &["A".to_string(), "B".to_string()],
+        );
+        assert!(text.starts_with(
+            "(* corpus v4 (AFP) — auto-generated by clean mathverse isabelle-sessions."
+        ));
+        assert!(
+            text.contains("AFP entry 'Graph_Theory' on the captured post-Library heap 'ZP-Lib3e'")
+        );
+        assert!(text.contains("session \"ZP-AFP-Graph_Theory\" = \"ZP-Lib3e\" +"));
+        assert!(text.contains("slice 1/1 (chained on ZP-Lib3e)."));
+        assert!(text.ends_with("  theories\n    \"Graph_Theory.A\"\n    \"Graph_Theory.B\"\n"));
+    }
+
+    #[test]
+    fn test_plan_afp_wave_zero_cap_is_refused() {
+        let err = plan_afp_wave(&["X".to_string()], Path::new("/nonexistent"), "ZP-Lib3e", 0)
+            .expect_err("cap 0 must be a typed error");
+        assert!(matches!(err, IsabelleSessionsError::ZeroCap));
+    }
+}

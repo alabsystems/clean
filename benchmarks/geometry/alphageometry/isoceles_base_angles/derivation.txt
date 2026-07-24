@@ -1,0 +1,6 @@
+# Isoceles base angles theorem derivation
+# Given: AB = AC
+# Goal: angle ABC = angle ACB
+
+GIVEN congruent_segments(A, B, A, C)
+DERIVE congruent_angles(A, B, C, A, C, B) FROM isoceles_base_angles(A, B, C)

@@ -1,0 +1,15 @@
+{
+  "axiom_count": 3026,
+  "axiom_profile": "AxiomProfile(1)",
+  "database_name": "unnamed",
+  "rpn_compressed_skipped": 0,
+  "rpn_failed": 0,
+  "rpn_verified": 47290,
+  "source": "set.mm",
+  "system": "metamath",
+  "theorem_count": 47343,
+  "total_proof_steps": 1926699,
+  "total_time_secs": 43.547899583,
+  "trust_level": "CertificateReplayed",
+  "verify_time_secs": 43.529671917
+}

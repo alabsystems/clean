@@ -1,0 +1,27 @@
+{
+  "id": "chord_bisector",
+  "objects": {
+    "O": {"type": "point"},
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "M": {"type": "point", "definition": {"midpoint_of": ["A", "B"]}},
+    "mathverse": {"type": "circle", "definition": {"circle_center_radius": {"center": "O", "radius_point": "A"}}}
+  },
+  "constraints": [
+    {"type": "on_circle", "point": "A", "circle": "mathverse"},
+    {"type": "on_circle", "point": "B", "circle": "mathverse"},
+    {"type": "not_equal", "a": "A", "b": "B"}
+  ],
+  "goal": {
+    "type": "perpendicular",
+    "line1": {"through": ["O", "M"]},
+    "line2": {"through": ["A", "B"]}
+  },
+  "metadata": {
+    "source": "Perpendicular bisector of chord",
+    "difficulty": 3,
+    "tags": ["circle", "chord", "perpendicular", "bisector"],
+    "known_solvable": true,
+    "statement": "The line from the center of a circle to the midpoint of a chord is perpendicular to the chord."
+  }
+}

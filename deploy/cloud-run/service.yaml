@@ -1,0 +1,134 @@
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cloud Run (Knative) Service manifest for the Mathverse distribution
+# front-end (Phase 1: read-only browse / search / download).
+#
+# Apply with:
+#   gcloud run services replace deploy/cloud-run/service.yaml --region REGION
+# (deploy.sh wraps the build/push and uses `gcloud run deploy` flags instead;
+#  this YAML is the declarative equivalent for GitOps / review.)
+#
+# PLACEHOLDERS to fill before applying (all UPPERCASE):
+#   PROJECT_ID   your GCP project id
+#   REGION       Cloud Run region (e.g. us-central1)
+#   IMAGE        full Artifact Registry image+tag, e.g.
+#                REGION-docker.pkg.dev/PROJECT_ID/mathverse/mathverse-serve:TAG
+#   CORE_BUCKET  GCS bucket holding the verified Core, e.g. mathverse-core-PROJECT_ID
+#                (the Core lives under gs://CORE_BUCKET/core — see gcs_sync.sh)
+#
+# ---------------------------------------------------------------------------
+# Core delivery: gcsfuse CSI volume (the simpler path; chosen here)
+# ---------------------------------------------------------------------------
+# The bucket is mounted read-only at /core via the built-in gcsfuse CSI driver,
+# so $MATHVERSE_CORE_DIR=/core just works with NO startup-sync code in the
+# image. Tradeoff vs download-on-start:
+#
+#   gcsfuse mount (THIS file):
+#     + zero extra code, instant cold start (no multi-GB copy at boot)
+#     + one Core in the bucket feeds every revision/instance ("convert once")
+#     + read-only mount matches the read-only service posture
+#     - per-file reads go over the network; first touch of each shard is
+#       slower. Mitigated here: /healthz + /stats + /search + /theorem read the
+#       manifest and constant headers (small); only /download streams a full
+#       shard, and that is exactly the bytes the client wanted anyway.
+#     - requires Gen2 execution environment (set below).
+#
+#   download-on-start (ALTERNATIVE, documented in README):
+#     + local-disk read speed after the initial sync
+#     - multi-GB `gsutil rsync` at every cold start -> slow boot, needs a large
+#       tmpfs/ephemeral disk and a startup wrapper; rejected for Phase 1.
+#
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: mathverse-serve
+  labels:
+    app: mathverse-serve
+    phase: phase-1-read-only
+  annotations:
+    # Gen2 is required for gcsfuse volume mounts.
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        # --- scaling -----------------------------------------------------
+        # min-instances 0 = scale to zero (cheapest; cold starts on first hit).
+        # Set to 1 if you want a warm instance for demos.
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "4"
+        # The library is loaded once per instance and is !Sync (thread-local
+        # BM25 index); the binary serves requests sequentially on one thread.
+        # Keep per-instance concurrency modest and let Cloud Run scale OUT by
+        # instance count rather than in by threads.
+        run.googleapis.com/execution-environment: gen2
+        # Mount the Core bucket via the gcsfuse CSI driver (read-only).
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      # Per-instance request concurrency. The front-end is single-threaded by
+      # design; a small value keeps latency predictable and triggers scale-out.
+      containerConcurrency: 8
+      timeoutSeconds: 300
+      # Runtime service account needs roles/storage.objectViewer on CORE_BUCKET.
+      serviceAccountName: mathverse-serve@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - name: mathverse-serve
+          image: IMAGE
+          ports:
+            # Cloud Run injects $PORT; the container listens on it. 8080 default.
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: MATHVERSE_CORE_DIR
+              value: /core
+            # OPTIONAL: 302-redirect /download/{shard} to a public/signed GCS
+            # base instead of streaming bytes through the service. Leave unset
+            # to stream from the mounted Core. Example value:
+            #   https://storage.googleapis.com/CORE_BUCKET/core
+            # - name: MATHVERSE_DOWNLOAD_BASE
+            #   value: https://storage.googleapis.com/CORE_BUCKET/core
+            - name: RUST_MIN_STACK
+              value: "67108864"
+          resources:
+            limits:
+              # The loaded Core's headers + arenas live in memory; 2Gi is a safe
+              # Phase-1 ceiling for the v1.3.0 Core. Raise if /stats reports OOM
+              # restarts on a larger Core.
+              memory: 2Gi
+              cpu: "1"
+          # gcsfuse mount of the Core bucket at /core (read-only).
+          volumeMounts:
+            - name: core-bucket
+              mountPath: /core
+              readOnly: true
+          startupProbe:
+            # Loading the Core can take seconds; give it generous startup budget
+            # before the first liveness check.
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: core-bucket
+          csi:
+            driver: gcsfuse.run.googleapis.com
+            readOnly: true
+            volumeAttributes:
+              bucketName: CORE_BUCKET
+              # Mount only the core/ prefix (where gcs_sync.sh uploads the Core).
+              mountOptions: "only-dir=core,implicit-dirs"
+  traffic:
+    - percent: 100
+      latestRevision: true

@@ -1,0 +1,170 @@
+[package]
+name = "clean-kernel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean trusted type checker kernel"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+hashbrown.workspace = true
+ahash.workspace = true
+smallvec.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json.workspace = true
+bincode.workspace = true
+lz4_flex.workspace = true
+zstd.workspace = true
+rayon.workspace = true
+stacker.workspace = true
+anyhow = { workspace = true, optional = true }
+sha2.workspace = true
+num-bigint.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+tempfile = { workspace = true, optional = true }
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 2).
+# Gated behind the `cli` feature so non-CLI consumers keep a minimal dep graph.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+clean-elab.workspace = true
+clean-parser.workspace = true
+# Test-only edge: the ck0 ingest-bridge integration test
+# (tests/ck0_ingest_bridge.rs) re-checks a real clean-kernel artifact through
+# the minimal trust-root kernel. Dev-dependency only; clean-kernel/src does NOT
+# depend on clean-ck0 (the bridge is untrusted test glue, design ck2 §ingest).
+clean-ck0.workspace = true
+serial_test.workspace = true
+sysinfo = "0.39"
+# Also needed as dev-dep: env/tests.rs, cert/tests/streaming.rs use tempfile in #[cfg(test)]
+# without the test-utils feature gate. Do not remove — see #1830.
+tempfile.workspace = true
+
+[features]
+# Feature flag for Kani bounded model checking harnesses
+# Usage: cargo kani --features kani
+kani = []
+
+# CLI surface for Epic #3436 Phase 2+: exposes `clean_kernel::cli` with
+# clap-derived argument structs, `FeatureDescriptor` entries, and the
+# kernel-owned runtime contracts for unified `clean kernel ...` verbs.
+# Leaf consumers (kernel-only users) do not pay for clap + clean-features
+# + anyhow unless they opt in.
+cli = ["dep:anyhow", "dep:clap", "dep:clean-features"]
+
+# Expose test_utils module for cross-crate test stack/timeout helpers (#2101)
+test-utils = ["dep:anyhow", "dep:tempfile"]
+
+# Feature flag for verbose WHNF debugging (for #643 investigation)
+# Usage: cargo test --features debug-whnf
+debug-whnf = []
+
+# Per-name reduction statistics (whnf cache hit rates, unfold/iota counts)
+# for kernel performance-parity diagnostics. Zero overhead when disabled —
+# every hook call site is cfg-gated. See tc/reduction_stats.rs.
+# Usage: cargo test --features reduction-stats
+reduction-stats = []
+
+# Feature flag for verbose type inference debugging (for #821 investigation)
+# Usage: cargo test --features debug-infer
+debug-infer = []
+
+# Feature flag for verbose def_eq tracing (for #3134 investigation)
+# Logs key decision points: WHNF reduction, delta steps, structural
+# comparison branches, and failure locations.
+# Usage: cargo test --features debug-def-eq
+debug-def-eq = []
+
+# Compile 15 pure-overlay math modules (~6.4K LOC) whose functions are
+# only called from tests or other gated modules. Without this feature,
+# these modules are excluded from `cargo check` builds, reducing LLVM IR
+# generation. Always compiled in test builds via cfg(test). (#1432)
+math-overlays = []
+
+# Gate cert geometry application modules (benchmark, derivation, geometry,
+# problem) so they are excluded from the default trusted kernel build (#2183).
+# Usage: cargo check -p clean-kernel --features geometry-tools
+geometry-tools = []
+
+# Compile the external proof importers (coq_import, open_theory,
+# hol_light_import). Default-off so the trusted kernel build excludes the
+# foreign-format translators (rearch stage 6a / roadmap A2); clean-mathverse
+# enables it for its import pipelines. In-module unit tests still compile in
+# test builds via cfg(test), mirroring the math-overlays pattern.
+proof-import = []
+
+# Deprecation shim: re-execs `clean kernel generate-lean4-baseline` (Epic
+# #3436 Phase 3, #3445). The shim itself only uses `std::{env, path, process}`
+# so it no longer needs the `test-utils` feature; the canonical pipeline is
+# driven from `clean-cli` and gates on `test-utils` there.
+[[bin]]
+name = "generate_lean4_baseline"
+
+[[bin]]
+name = "verify_gamma_crown"
+required-features = ["test-utils", "math-overlays"]
+
+# KKL cbrt (cube-root) layer verification harness. A bin (not a test/example)
+# so it compiles WITHOUT dev-dependencies, sidestepping the unrelated
+# sibling-crate (clean-auto/ay) drift that blocks the dev-dep test path.
+[[bin]]
+name = "verify_cbrt"
+required-features = ["math-overlays"]
+
+# Recovered unconditional-KKL (consolidate/kkl) kernel-verification harness. A
+# bin (not a test) so it compiles WITHOUT dev-dependencies, sidestepping the
+# heavy criterion/ay dev-dep build that stalls `cargo test -p clean-kernel`.
+[[bin]]
+name = "verify_kkl_recovered"
+required-features = ["math-overlays"]
+
+# Deprecation shim: forwards to `clean kernel verify-constructive-claims`
+# while preserving stdout JSON and exit-code parity with the unified CLI.
+# Kept for one release window after #3510.
+[[bin]]
+name = "verify_constructive_claims"
+
+[[test]]
+name = "lean4_parity"
+required-features = ["test-utils"]
+
+# Integration test links the non-test lib, so cfg(test) gating does not
+# expose hol_light_import to it; require the proof-import feature instead.
+[[test]]
+name = "hol_light_import"
+required-features = ["proof-import"]
+
+# C006 block-wise CROWN integration test uses the math-overlays
+# `init_nn_verify_blockwise_crown_ext` to walk transitive axiom deps
+# (#3375, mirror of C008 test at `nn_verification_c008_tightness.rs`).
+[[test]]
+name = "nn_verification_c006_blockwise"
+path = "tests/nn_verification_c006_blockwise.rs"
+required-features = ["math-overlays"]
+
+# Gate for `proof_mechanism: constructive` claims in data/axiom_audit.json
+# (#3435). Uses `init_conjecture` from the math-overlays module.
+[[test]]
+name = "verify_axiom_audit_integration"
+path = "tests/verify_axiom_audit_integration.rs"
+required-features = ["math-overlays"]
+
+[[bin]]
+name = "clean_cert"
+
+[[bench]]
+name = "kernel_bench"
+harness = false
+
+[[bench]]
+name = "cert_macro_bench"
+harness = false

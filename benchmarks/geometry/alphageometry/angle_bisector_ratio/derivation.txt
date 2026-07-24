@@ -1,0 +1,7 @@
+# Angle bisector ratio theorem derivation
+# Given: AD bisects angle BAC, D on BC
+# Goal: BD/DC = AB/AC
+
+CONSTRUCT angle_bisector(D, A, B, C)
+GIVEN on_segment(D, B, C)
+DERIVE ratio_equal(B, D, D, C, A, B, A, C) FROM angle_bisector_theorem(A, B, C, D)

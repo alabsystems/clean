@@ -1,0 +1,138 @@
+[package]
+name = "clean-auto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean native automation - SMT, superposition, premise selection"
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["ay-smt"]
+# Enable ay SMT solver integration for enhanced automation
+ay-smt = [
+    "dep:ay",
+    "dep:ay-core",
+    "dep:ay-dpll",
+    "dep:ay-proof",
+    "dep:ay-translate",
+    "dep:num-bigint",
+]
+# Enable Carcara proof verification for Alethe proofs (requires ay-smt)
+# Note: Carcara depends on GMP via the `rug` crate
+carcara-verify = ["ay-smt", "dep:carcara"]
+# Gate the BV bit-blast proof-reconstruction lane (the modules that import
+# `ay_proof::bv_blast_export` / `bv_blast_solver`). Off by default — and
+# deliberately NOT pulled in by `ay-smt` — so the default + `ay-smt` build stays
+# minimal and independent of the BV blast API's presence. The production modules
+# (`bv_blast_reflection`, `bv_lowering_bridge`, `theory_lemma_bv`,
+# `theory_lemma_bv_compute_blast`, and the proof-carrying-ay MILESTONE-2
+# `pcay_bvmul` bvmul certifier) plus their tests build under this flag whenever
+# the pinned `ay` exposes the export API (it does at the current pin). The live
+# `BvBitBlast` theory-lemma path is the zero-trust `trustedAy` fallback in
+# `theory_lemma.rs` and does NOT depend on this feature, so the DEFAULT proof
+# behaviour is unchanged; enabling `ay-bv-blast` only ADDS the native bvadd/bvmul
+# reflection-certification surface (`Unsat` via the PROVED `checkRefutes_sound`
+# bridge — zero domain axioms, `trust_count == 0`). Consumed by trust-router's
+# `ay-certify` feature to promote a bvmul UNSAT VC SmtBacked → Certified.
+ay-bv-blast = ["ay-smt"]
+# Expose a minimal root-level CDCL API to the separate fuzz crate without
+# widening the default public surface for normal consumers.
+fuzz = []
+# Expose synthetic trust-envelope constructors for cross-crate test fixtures.
+# Production code must not depend on this feature. Part of #2773.
+test-utils = []
+# Enable HTTP-based neural proof oracle backend (AI Provider-compatible endpoints).
+# `serde_json` is now a base dependency (used by the solver-cache telemetry
+# sink), so it is no longer feature-gated here.
+oracle-http = ["dep:ureq"]
+# Passthrough to the kernel's per-name reduction profiler (diagnostic only;
+# zero production overhead when off). Used by the reflection-scaling benchmark.
+reduction-stats = ["clean-kernel/reduction-stats"]
+# CLI surface for Epic #3436 Phase 4 (#3454): exposes `clean_auto::cli` with
+# clap-derived argument structs and a `FeatureDescriptor` array for the
+# top-level `clean auto prove` verb. Non-CLI consumers (the kernel, tests,
+# downstream crates) do not pay for clap + clean-features unless they opt in.
+cli = ["dep:clap", "dep:clean-features"]
+
+[dependencies]
+clean-kernel.workspace = true
+hashbrown.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+stacker.workspace = true
+bincode.workspace = true
+serde.workspace = true
+# JSONL serialization for the solver-results-cache telemetry sink
+# (`solver-attempt-record-v1`, Phase 0). Was previously feature-gated behind
+# `oracle-http`/`cli`; promoted to a base dependency for the always-available
+# (zero-overhead-when-disabled) telemetry layer. Already resolved in the lock
+# via those features, so the offline graph is unchanged.
+serde_json.workspace = true
+# blake3 obligation-key digest over the kernel FlatExpr encoding (the same
+# alpha-canonical primitive the novelty gate uses); see solver_cache::obligation.
+blake3.workspace = true
+num-bigint = { workspace = true, optional = true }
+num-rational.workspace = true
+rayon.workspace = true
+
+# Phase-2 solver-cache distribution + ingest front-end (`solver_serve` bin),
+# mirroring `clean-mathverse`'s `mathverse_serve` posture: raw-`tokio` HTTP/1.1
+# (axum is not vendored offline) with `httparse` + a percent decoder for the
+# request path, and `anyhow` for the binary's ad-hoc error context. These are
+# only used by the binary; the library surface stays `thiserror`-typed.
+tokio = { workspace = true }
+httparse.workspace = true
+percent-encoding.workspace = true
+anyhow.workspace = true
+
+# Optional ay SMT solver
+ay = { workspace = true, optional = true }
+ay-core = { workspace = true, optional = true }
+ay-dpll = { workspace = true, optional = true }
+ay-proof = { workspace = true, optional = true }
+ay-translate = { workspace = true, optional = true }
+
+# Optional Carcara proof verifier (Alethe format)
+# Note: Carcara requires GMP via the `rug` crate
+carcara = { git = "https://github.com/ufmg-smite/carcara", rev = "fecb4224def3c26f93a5d4f1804ecf58eb979650", optional = true }
+
+# Optional HTTP oracle backend
+ureq = { workspace = true, optional = true }
+
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 4,
+# #3454). Gated behind the `cli` feature so non-CLI consumers keep a minimal
+# dep graph — `clap` + `clean-features` are only pulled in when callers opt
+# in.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+
+[dev-dependencies]
+clean-kernel = { workspace = true, features = ["math-overlays"] }
+proptest.workspace = true
+criterion.workspace = true
+serial_test = { workspace = true, features = ["file_locks"] }
+ntest.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
+num-rational.workspace = true
+tempfile.workspace = true
+ay-lean-bridge.workspace = true
+[[bench]]
+name = "smt_fast_path"
+harness = false
+
+[[example]]
+name = "oracle_http_smoke"
+required-features = ["oracle-http"]
+
+# Phase-2 solver-results-cache SERVICE: an async HTTP/1.1 query + ingest front-end
+# over the VCIDX01 index + solver-attempt telemetry. A DISTRIBUTION front-end, NOT
+# a trust authority — it serves telemetry + content digests + (where present)
+# re-checkable proof terms so a consumer re-verifies through the kernel; ingest
+# never mints a `verified` badge. See solver_cache::serve / solver_cache::ingest.
+[[bin]]
+name = "solver_serve"
+path = "src/bin/solver_serve/main.rs"

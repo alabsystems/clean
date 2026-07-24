@@ -1,0 +1,12 @@
+{
+  "note": "Trusted-kernel (clean-kernel --lib) count of dead_code/unused_* warnings that the workspace [lints] allow hides. Flat-or-down ratchet (audit #6); enforced by scripts/kernel_lint_ratchet.sh, wired into scripts/local_gate.sh full mode. Lower it by removing dead imports / unused vars / redundant `mut` in clean-kernel.",
+  "lints_forced": [
+    "dead_code",
+    "unused_imports",
+    "unused_variables",
+    "unused_mut",
+    "unused_qualifications"
+  ],
+  "kernel_warnings": 65,
+  "generated_by": "scripts/kernel_lint_ratchet.sh --update"
+}

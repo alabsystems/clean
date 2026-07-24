@@ -1,0 +1,30 @@
+{
+  "id": "stewarts_theorem",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "A", "b": "C"},
+    {"type": "custom", "predicate": "not_collinear", "args": ["A", "B", "C"]},
+    {"type": "on_line", "point": "D", "line": {"through": ["B", "C"]}},
+    {"type": "between", "point": "D", "endpoints": ["B", "C"]}
+  ],
+  "goal": {
+    "type": "custom",
+    "predicate": "stewarts_relation",
+    "args": ["A", "B", "C", "D"]
+  },
+  "metadata": {
+    "source": "Stewart's Theorem",
+    "origin": "Matthew Stewart, 1746",
+    "difficulty": 6,
+    "tags": ["stewarts", "cevian", "length", "formula"],
+    "known_solvable": true,
+    "statement": "For a cevian AD in triangle ABC: b^2*m + c^2*n - a*m*n = a*d^2, where m = BD, n = DC, d = AD."
+  }
+}

@@ -1,0 +1,12 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+# Deterministic, hand-maintained source corpus for the mathverse generated-count
+# manifest. `generated: false` keeps launch readiness fail-closed until a
+# real Lean4-vs-clean runner artifact replaces this fixture row.
+schema_version: clean-tactic-generated-count-source-corpus-v1
+tactic_lane: mathverse
+generated: false
+cases:
+  - id: mathverse_certified_arithmetic_replay_rejected
+    lean4_tactic: mathverse
+    clean_tactic: mathverse
+    expected_bucket: mathverse-certified-arithmetic-fail-closed-fixture

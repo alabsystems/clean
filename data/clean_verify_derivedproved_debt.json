@@ -1,0 +1,6 @@
+{
+  "_schema": "clean-verify-derivedproved-debt-v1",
+  "_doc": "DerivedProved-debt pin for the clean-verify spec. count=0: verified by spec_axiom_closure_honesty::derivedproved_debt_overclaim_subset_of_golden \u2014 EVERY DerivedProved def has a transitive non-foundational axiom closure that is EMPTY (closure MINUS the 3 foundational axioms MINUS trust markers = {}). The debt is fully drained; no DerivedProved label overclaims. Re-pinned 2026-07-17 from a stale 20-entry pin (all entries had drained: their defs are either deleted or now rest solely on the foundational base). SUBSET semantics: any future live debt entry absent here fails the honesty test closed.",
+  "count": 0,
+  "entries": {}
+}

@@ -1,0 +1,581 @@
+{
+  "generated_at": "2026-04-22T00:19:14Z",
+  "source": "gh issue list --repo alabsystems/clean --state open --limit 500",
+  "queue": [
+    {
+      "issue": 3544,
+      "tier": "B",
+      "title": "Tier B: IntervalArith containment family (mul, abs, recip, div, sqrt, pow, helpers)",
+      "axiom": "",
+      "axioms": [],
+      "labels": [
+        "P3",
+        "do-audit",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3545,
+      "tier": "B",
+      "title": "Tier B: Rat.abs_* family (8 axioms, batch commit)",
+      "axiom": "",
+      "axioms": [],
+      "labels": [
+        "P3",
+        "blocked",
+        "do-audit",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3546,
+      "tier": "B",
+      "title": "Tier B: Fin.sum_* family remaining (2 axioms, blockwise CROWN dep)",
+      "axiom": "Fin.sum_smul/single",
+      "axioms": [
+        "Fin.sum_smul",
+        "Fin.sum_single"
+      ],
+      "blocked_on": {
+        "Fin.sum_single": [
+          "FALSE-AXIOM RESOLVED (2026-06-08): Fin.mk accepts isLt : Prop instead of val < n, so Fin 0 is not structurally empty and the unconditioned statement implied Rat.zero = x for arbitrary x. FIXED by adding the load-bearing in-range premise Nat.lt (Fin.val i) n (i.val < n), making it TRUE-but-admitted (the junk witnesses have an uninhabited premise). The Fin-carrier prevention gate (tests_false_axiom_prevention.rs) pins it non-refutable.",
+          "REMAINING (constructive-proof obligation only, NOT a soundness gap): the Kronecker delta statement still depends on instDecidableEqFin, which is registered as a bare axiom for typechecking — so the @ite is stuck and a constructive Eq.refl proof is blocked. A full Declaration::Theorem needs a computable Fin decidable-equality plus induction with case analysis."
+        ],
+        "Fin.sum_smul": [
+          "Base case needs Rat.mul_zero, which remains a Rat field axiom under the current free-inductive Rat carrier because Rat.mk is a free constructor: (a * 0) normalizes to a Rat.mk term whose denominator is not definitionally Rat.zero's denominator. A sound quotient/constructor-equality replacement for the old unsound Rat.mk_eq_mk_of_cross_eq bridge is missing.",
+          "Successor step needs Rat.left_distrib for c * (prefix + last) = c * prefix + c * last; Rat.left_distrib remains a non-foundational axiom until the quotient-Rat carrier or another sound bridge lands."
+        ]
+      },
+      "labels": [
+        "P3",
+        "mathverse-native",
+        "tracking",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": true
+    },
+    {
+      "issue": 3547,
+      "tier": "C",
+      "title": "Tier C tracking: CROWN/LayerNorm/Zonotope headline axioms (STATEMENT-BROKEN — needs Researcher design first)",
+      "axiom": "",
+      "axioms": [],
+      "labels": [
+        "P3",
+        "mathverse-native",
+        "tracking",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 4,
+      "claimed": false,
+      "tracking": true
+    },
+    {
+      "issue": 3653,
+      "tier": "D",
+      "title": "Tier D.3.1: Prove Rat.add_left_neg + Rat.mul_inv_cancel via existing Rat.mk_eq_mk_of_cross_eq bridge",
+      "axiom": "Rat.add_left_neg + Rat.mul_inv_cancel",
+      "axioms": [
+        "Rat.add_left_neg",
+        "Rat.mul_inv_cancel"
+      ],
+      "labels": [
+        "P3",
+        "design",
+        "mathverse-native",
+        "using-clean"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 1,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3548,
+      "tier": "D",
+      "title": "Tier D: Expand FOUNDATIONAL_AXIOMS whitelist (17 interface/definitional axioms)",
+      "axiom": "",
+      "axioms": [],
+      "labels": [
+        "P2",
+        "do-audit",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [
+        3536
+      ],
+      "estimated_sessions": 1,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3371,
+      "tier": "?",
+      "title": "Prove C001 axioms constructively (3 axioms)",
+      "axiom": "C001 axioms constructively",
+      "axioms": [
+        "C001 axioms constructively"
+      ],
+      "labels": [
+        "P1",
+        "W5",
+        "do-audit",
+        "gamma-crown-proofs",
+        "in-progress",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3373,
+      "tier": "?",
+      "title": "Prove C004 core axioms (8 axioms)",
+      "axiom": "C004 core axioms",
+      "axioms": [
+        "C004 core axioms"
+      ],
+      "labels": [
+        "P1",
+        "blocked",
+        "gamma-crown-proofs",
+        "local-maximum",
+        "tracking",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": true
+    },
+    {
+      "issue": 3374,
+      "tier": "?",
+      "title": "Prove C008 inductive axioms (5 axioms)",
+      "axiom": "C008 inductive axioms",
+      "axioms": [
+        "C008 inductive axioms"
+      ],
+      "labels": [
+        "P1",
+        "W1",
+        "gamma-crown-proofs",
+        "in-progress",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3375,
+      "tier": "?",
+      "title": "Prove C006 axioms (14 axioms, block-wise CROWN equivalence)",
+      "axiom": "C006 axioms",
+      "axioms": [
+        "C006 axioms"
+      ],
+      "labels": [
+        "P1",
+        "blocked",
+        "gamma-crown-proofs",
+        "local-maximum",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3376,
+      "tier": "?",
+      "title": "Prove C009 from scratch (23+ axioms, matrix rank spectral separation)",
+      "axiom": "C009",
+      "axioms": [
+        "C009"
+      ],
+      "labels": [
+        "P2",
+        "gamma-crown-proofs",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3377,
+      "tier": "?",
+      "title": "Prove C028 restricted version (Neural Nullstellensatz)",
+      "axiom": "C028 restricted version",
+      "axioms": [
+        "C028 restricted version"
+      ],
+      "labels": [
+        "P2",
+        "gamma-crown-proofs",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3378,
+      "tier": "?",
+      "title": "Prove C029 PAC-to-Proof (probability theory)",
+      "axiom": "C029 PAC-to-Proof",
+      "axioms": [
+        "C029 PAC-to-Proof"
+      ],
+      "labels": [
+        "P2",
+        "gamma-crown-proofs",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": false
+    },
+    {
+      "issue": 3457,
+      "tier": "?",
+      "title": "Prove C001 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C001 constructively",
+      "axioms": [
+        "C001 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W1",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3458,
+      "tier": "?",
+      "title": "Prove C002 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C002 constructively",
+      "axioms": [
+        "C002 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W4",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3459,
+      "tier": "?",
+      "title": "Prove C003 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C003 constructively",
+      "axioms": [
+        "C003 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W4",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3460,
+      "tier": "?",
+      "title": "Prove C004 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C004 constructively",
+      "axioms": [
+        "C004 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W3",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3461,
+      "tier": "?",
+      "title": "Prove C007 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C007 constructively",
+      "axioms": [
+        "C007 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W2",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3462,
+      "tier": "?",
+      "title": "Prove C009 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C009 constructively",
+      "axioms": [
+        "C009 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W4",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3463,
+      "tier": "?",
+      "title": "Prove C010 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C010 constructively",
+      "axioms": [
+        "C010 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W5",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3464,
+      "tier": "?",
+      "title": "Prove C011 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C011 constructively",
+      "axioms": [
+        "C011 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W4",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3465,
+      "tier": "?",
+      "title": "Prove C012 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C012 constructively",
+      "axioms": [
+        "C012 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W2",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3466,
+      "tier": "?",
+      "title": "Prove C028 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C028 constructively",
+      "axioms": [
+        "C028 constructively"
+      ],
+      "labels": [
+        "P2",
+        "W3",
+        "do-audit",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3469,
+      "tier": "?",
+      "title": "Prove C005 constructively (no sorry-inhabited Opaques)",
+      "axiom": "C005 constructively",
+      "axioms": [
+        "C005 constructively"
+      ],
+      "labels": [
+        "P1",
+        "W2",
+        "in-progress",
+        "mathverse-native",
+        "urgent",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3476,
+      "tier": "?",
+      "title": "Prove C008 ibp_tightness_base + step with eps ≥ 0 hypothesis",
+      "axiom": "C008 ibp_tightness_base + step",
+      "axioms": [
+        "C008 ibp_tightness_base",
+        "step"
+      ],
+      "labels": [
+        "P1",
+        "W3",
+        "design",
+        "in-progress",
+        "mathverse-native",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": true,
+      "tracking": false
+    },
+    {
+      "issue": 3581,
+      "tier": "?",
+      "title": "Demote 7 trivial-unfold Rat field-instance axioms (Tranche B)",
+      "axiom": "7 trivial-unfold Rat field-instance axioms",
+      "axioms": [
+        "7 trivial-unfold Rat field-instance axioms"
+      ],
+      "labels": [
+        "P2",
+        "mathverse-native",
+        "tracking",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": true
+    },
+    {
+      "issue": 3582,
+      "tier": "?",
+      "title": "Demote 3 compound-unfold Rat field-instance axioms (Tranche C)",
+      "axiom": "3 compound-unfold Rat field-instance axioms",
+      "axioms": [
+        "3 compound-unfold Rat field-instance axioms"
+      ],
+      "labels": [
+        "P2",
+        "do-audit",
+        "mathverse-native",
+        "tracking",
+        "using-clean",
+        "zone:proof-corpus"
+      ],
+      "depends_on": [],
+      "estimated_sessions": 2,
+      "claimed": false,
+      "tracking": true
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "gates": [
+    {
+      "serial": 82306,
+      "name": "<anon.s82306>",
+      "description": "conj-bundle structural tree discharge (non-right-assoc fix 2f0d19912)",
+      "slice": "~/isabelle-work/corpora/flip_gates/s82306.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "b83c5332eb26313e215402023e8030a6de24b3ee39b101b6008f6b0bd2c1bb24",
+      "lines": 14450,
+      "added": "2026-07-17",
+      "round": "conj-tree-assoc-2026-07-17"
+    },
+    {
+      "serial": 83088,
+      "name": "<anon.s83088>",
+      "description": "eq_ac — associativity+commutativity normal form of HOL equality; flips via the congruence-tower/operand-keying discharge arm",
+      "slice": "~/isabelle-work/corpora/flip_gates/s83088.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "33fb35168442ce58b8106e65a5fd44ad776d20a6e612e8ee762cb680014642d8",
+      "lines": 14405,
+      "added": "2026-07-17",
+      "round": "flip-gate-bootstrap-2026-07-17"
+    },
+    {
+      "serial": 87998,
+      "name": "<anon.s87998>",
+      "description": "conj-bundle structural tree discharge (non-right-assoc fix 2f0d19912)",
+      "slice": "~/isabelle-work/corpora/flip_gates/s87998.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "86cdb2e21f50bdd3d7384f8b1f24fe0210401638cca717ee16ab5647a726ad64",
+      "lines": 14429,
+      "added": "2026-07-17",
+      "round": "conj-tree-assoc-2026-07-17"
+    },
+    {
+      "serial": 88136,
+      "name": "<anon.s88136>",
+      "description": "conj-bundle structural tree discharge (non-right-assoc fix 2f0d19912)",
+      "slice": "~/isabelle-work/corpora/flip_gates/s88136.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "51fe4fa0430df7465a73e1ffbe95ba4a1795e5a7dd71381f4711fc71b6713c61",
+      "lines": 14418,
+      "added": "2026-07-17",
+      "round": "conj-tree-assoc-2026-07-17"
+    }
+  ]
+}

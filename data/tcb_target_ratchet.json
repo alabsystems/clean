@@ -1,0 +1,15 @@
+{
+  "goal": "Kernel TCB = the 3 Lean-4-core axioms only (propext, Quot.sound, Classical.choice); eliminate ALL domain axioms.",
+  "target_total_axioms": 3,
+  "target_domain_axioms": 0,
+  "foundational_axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
+  "baseline_total_axioms": 3,
+  "baseline_domain_axioms": 0,
+  "remaining_domain_axioms": [],
+  "source": "data/soundness_tcb.json (cert C2 golden, pinned to the live cert)",
+  "generated_by": "scripts/tcb_target_ratchet.py --update"
+}

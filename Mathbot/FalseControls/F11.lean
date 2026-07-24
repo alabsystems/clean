@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F11_invalid_ty_step_accepted : Mathbot.invalidTyStepAccepted

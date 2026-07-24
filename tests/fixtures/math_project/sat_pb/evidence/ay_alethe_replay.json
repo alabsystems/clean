@@ -1,0 +1,21 @@
+{
+  "schema_version": "clean-artifact-replay-report-v1",
+  "artifact_path": "../../external_certificates/proof_artifact_v1/ay_alethe_envelope.json",
+  "project": "sat-pb-pilot",
+  "source_system": "ay",
+  "artifact_kind": "ay_alethe_envelope",
+  "problem_hash": "blake3:fixture-ay-alethe-problem",
+  "proof_hash": "blake3:fixture-ay-alethe-proof",
+  "certificate_format": "ay-alethe-envelope-v1",
+  "evidence_kind": "replay_only",
+  "kernel_certified": false,
+  "replay_status": "pass",
+  "replay_adapter": "ay-alethe-v1",
+  "linked_obligations": [
+    "sha256:85bf98b980623aba6f1e9e9d5dc23bd8b2a85b7887f631dfdf4615a958339ee2"
+  ],
+  "trusted_assumptions": [],
+  "details": [
+    "fixture evidence for the SAT/PB Ay proof-artifact replay link"
+  ]
+}

@@ -1,0 +1,45 @@
+[package]
+name = "clean-fold"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Nova-style folding schemes for Clean proof compression"
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Arkworks cryptography libraries (ark-ec / ark-poly serve the absorbed
+# polynomial-commitment module `commit/`, ex clean-commit — rearch stage 9).
+ark-ff.workspace = true
+ark-ec.workspace = true
+ark-poly.workspace = true
+ark-bls12-381.workspace = true
+ark-serialize.workspace = true
+ark-std.workspace = true
+
+# Workspace dependencies
+clean-kernel.workspace = true
+clean-features.workspace = true
+clap.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+# Hashing
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+proptest.workspace = true
+criterion.workspace = true
+smallvec.workspace = true
+
+[[bench]]
+name = "fold_bench"
+harness = false
+
+[[bench]]
+name = "commit_bench"
+harness = false

@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F9_missing_branch_cover_accepted : Mathbot.missingBranchCoverAccepted

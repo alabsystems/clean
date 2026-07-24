@@ -1,0 +1,6 @@
+# Cyclic quadrilateral opposite angles derivation
+# Given: ABCD cyclic quadrilateral
+# Goal: angles ABC + CDA = 180
+
+GIVEN cyclic(A, B, C, D)
+DERIVE supplementary_angles(A, B, C, C, D, A) FROM cyclic_opposite_angles(A, B, C, D)

@@ -1,0 +1,11 @@
+{
+  "sorry_count": 3,
+  "description": "Expected sorry term count in test_sorry_ratchet representative workload. Ratchet: only update downward as sorry sites are eliminated.",
+  "paths_exercised": [
+    "create_sorry_term (Prop goal)",
+    "create_sorry_term (Type goal)",
+    "sorry tactic (ProofState)"
+  ],
+  "issue": "#2026",
+  "updated": "2026-03-01"
+}

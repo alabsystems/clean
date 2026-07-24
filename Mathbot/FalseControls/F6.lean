@@ -1,0 +1,2 @@
+import Mathbot
+axiom Mathbot.F6_changed_llvm2_denotation_accepted : Mathbot.changedLlvm2DenotationAccepted

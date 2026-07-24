@@ -1,0 +1,22 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "lean4",
+  "filename": "276.lean",
+  "source_sha256": "sha256:f631385dffbd91e1864f615252d69a51a02ac423a48864e569d4894654d75b83",
+  "command": [
+    "elan",
+    "run",
+    "leanprover/lean4:v4.27.0",
+    "lean",
+    "tests/lean4_compat/lean4_tests/276.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "Lean (version 4.27.0, arm64-apple-darwin24.6.0, commit db93fe1608548721853390a10cd40580fe7d22ae, Release)",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.142,
+  "observed_stdout": "fun {\u03b1 : Sort v} => PEmpty.rec.{v, u_1} fun (x : PEmpty.{u_1}) => \u03b1 : {\u03b1 : Sort v} \u2192 (t : PEmpty.{u_1}) \u2192 \u03b1\ntests/lean4_compat/lean4_tests/276.lean:9:4: error: code generator does not support recursor `PEmpty.rec` yet, consider using 'match ... with' and/or structural recursion\n",
+  "observed_stderr": "",
+  "artifact_note": "Generated bounded lean4 frontend run evidence; this is not replacement-readiness evidence."
+}

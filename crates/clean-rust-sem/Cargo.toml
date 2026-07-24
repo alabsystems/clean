@@ -1,0 +1,46 @@
+[package]
+name = "clean-rust-sem"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Rust semantics formalization for Clean self-verification"
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel = { workspace = true }
+thiserror.workspace = true
+serde = { workspace = true }
+syn = { workspace = true, features = ["full"] }
+proc-macro2 = { workspace = true }
+# Optional CLI surface for the unified `clean` binary (Epic #3436 Phase 3,
+# #3451). Gated behind the `cli` feature so non-CLI consumers keep a minimal
+# dep graph — `clap` + `clean-features` are only pulled in when callers opt in.
+clean-features = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+# M2.4: the `.lean`-source elaboration route for the value-at-address `step`
+# definition + metatheory lemmas. Optional + opt-in behind `lean-elab` because
+# clean-elab transitively pulls clean-auto/clean-olean/clean-compiler — a heavy
+# graph that would otherwise bloat the default build and expand the clippy
+# surface to unrelated crates. Acyclic: neither depends on clean-rust-sem.
+clean-parser = { workspace = true, optional = true }
+clean-elab = { workspace = true, optional = true }
+
+[features]
+default = []
+# Enables the `.lean`-source elaboration route (RustSem `step` + lemmas) and its
+# tests. Opt-in: `cargo test -p clean-rust-sem --features lean-elab`.
+lean-elab = ["dep:clean-parser", "dep:clean-elab"]
+# CLI surface for Epic #3436 Phase 3 (#3451): exposes `clean_rust_sem::cli`
+# with clap-derived argument structs and a `FeatureDescriptor` array for the
+# top-level `clean verify rust` verb. Non-CLI consumers (the kernel, tests,
+# downstream crates) do not pay for clap + clean-features unless they opt in.
+cli = ["dep:clap", "dep:clean-features"]
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }

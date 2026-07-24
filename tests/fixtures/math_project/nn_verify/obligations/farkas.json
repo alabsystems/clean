@@ -1,0 +1,36 @@
+{
+  "schema_version": "clean-obligation-v1",
+  "project": "nn-verify-pilot",
+  "domain_profile": "nn-verify",
+  "producer": {
+    "system": "gamma-crown",
+    "commit": "fixture-gamma-crown"
+  },
+  "goal": {
+    "expr": "NNVerify.farkas_certificate_sound cert",
+    "pretty": "Gamma-Crown Farkas certificate proves the local linear bound"
+  },
+  "local_context": [
+    {
+      "name": "cert",
+      "type_pp": "ExternalFarkasCert",
+      "type_expr": "ExternalFarkasCert"
+    }
+  ],
+  "side_conditions": [
+    "all multipliers are nonnegative",
+    "linear combination cancels variables"
+  ],
+  "artifact_refs": [
+    {
+      "kind": "proof-artifact-v1",
+      "path": "../../external_certificates/proof_artifact_v1/gamma_crown_farkas_valid.json",
+      "hash": "blake3:fixture-gamma-crown-farkas-proof"
+    }
+  ],
+  "metadata": {
+    "artifact_kind": "gamma_crown_farkas",
+    "benchmark_family": "gamma-crown-fixture"
+  },
+  "trust_policy": "constructive-only"
+}

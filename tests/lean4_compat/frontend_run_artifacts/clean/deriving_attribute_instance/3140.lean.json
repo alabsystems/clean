@@ -1,0 +1,33 @@
+{
+  "schema_version": "clean-frontend-deriving-attribute-instance-artifact-v1",
+  "kind": "frontend_deriving_attribute_instance",
+  "engine": "clean",
+  "filename": "3140.lean",
+  "source_sha256": "sha256:92bae2c3104f9ff23208923c20e060af9d06eeed01861570ba1d8d6e55c53156",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/3140.lean"
+  ],
+  "deriving_attribute_instance_status": "failure",
+  "deriving_outputs_checked": 1,
+  "attributes_checked": 0,
+  "instances_checked": 1,
+  "metadata_failures": 1,
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_exit_code": 1,
+  "observed_stdout": "Read 315 bytes from \"tests/lean4_compat/lean4_tests/3140.lean\"\nParsed 4 declarations in 269.5\u00b5s\n  \u2713 S\nChecked 4 declarations in 78.2095ms\n  1 passed, 3 failed\n\nErrors:\n  \u2717 elaboration error: TypeMismatch { expected: \"Const(Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"Nat\\\"), cached_hash: 11442535297760353691 }, [])\", actual: \"const mismatch: Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"S\\\"), cached_hash: 6617729982999610174 } vs Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"Nat\\\"), cached_hash: 11442535297760353691 }\" }\n  \u2717 elaboration error: TypeMismatch { expected: \"Const(Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"Nat\\\"), cached_hash: 11442535297760353691 }, [])\", actual: \"const mismatch: Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"S\\\"), cached_hash: 6617729982999610174 } vs Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"Nat\\\"), cached_hash: 11442535297760353691 }\" }\n  \u2717 elaboration error: TypeMismatch { expected: \"Const(Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"Nat\\\"), cached_hash: 11442535297760353691 }, [])\", actual: \"const mismatch: Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"S\\\"), cached_hash: 6617729982999610174 } vs Name { inner: Str(Name { inner: Anon, cached_hash: 1723 }, \\\"Nat\\\"), cached_hash: 11442535297760353691 }\" }\n",
+  "observed_stderr": "Error: check failed\n",
+  "checked_deriving_outputs": [
+    "structure S deriving BEq accepted as declaration S"
+  ],
+  "checked_attributes": [],
+  "checked_instances": [
+    "BEq S was not usable for the three equality evaluations; clean reported TypeMismatch expecting Nat with actual S"
+  ],
+  "artifact_note": "clean accepted the structure declaration but failed all three equality evaluations, so this is clean deriving/instance failure evidence only; no parity success is claimed."
+}

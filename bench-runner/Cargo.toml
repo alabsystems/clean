@@ -1,0 +1,26 @@
+# Standalone driver for the paragon integration benchmark (its own workspace
+# root). In a *worktree* of this repo, a full-workspace build collides in the
+# lockfile — `trust-ir` (a non-dev dep of the leaf crates `clean-reflect` /
+# `clean-autoform`) hardcodes the MAIN checkout's `clean-kernel`, a *different*
+# package from this worktree's own `clean-kernel`. Cargo refuses to write both.
+#
+# clean-auto's NON-dev dependency closure is trust-ir-free (trust-cg/trust-ir
+# are clean-auto *dev*-deps only), so a standalone consumer workspace that
+# path-deps on this worktree's `clean-auto` + `clean-kernel` resolves only that
+# trust-ir-free closure and builds cleanly. It runs the SAME benchmark body as
+# `crates/clean-cli/tests/paragon_integration_bench.rs` via `include!`.
+[package]
+name = "paragon-bench-runner"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "paragon-bench"
+path = "src/main.rs"
+
+[dependencies]
+clean-auto = { path = "../crates/clean-auto" }
+clean-kernel = { path = "../crates/clean-kernel" }
+
+[workspace]

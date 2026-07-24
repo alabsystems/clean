@@ -1,0 +1,7 @@
+session "Prov_Root" = "HOL" +
+  theories
+    PR_One
+
+session "Shared_Base" = "Prov_Root" +
+  theories
+    PR_Two

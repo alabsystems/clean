@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Pre-push hook (opt-in): rebuild the clean-native shard and kernel-verify
+# it end-to-end (#3608). Blocks a push if any constructive theorem in the
+# native shard fails kernel re-verification — the MASQUERADE guard of the
+# proof factory.
+#
+# Commands run:
+#   cargo run --locked -p clean-mathverse --bin mathverse_shard --release -- \
+#       build-native <NATIVE_DIR>
+#   cargo run --locked -p clean-mathverse --bin mathverse_shard --release -- \
+#       verify-kernel --native <NATIVE_DIR>
+#
+# By default NATIVE_DIR is `$TMPDIR/clean-native-verify` (falls back to
+# /tmp/clean-native-verify). Override with AIT_NATIVE_VERIFY_DIR.
+#
+# Performance note (#3608 §acceptance): a cold build of the release
+# binary plus build-native + verify-kernel typically exceeds 90 seconds
+# on first run. This hook is therefore **OFF by default** at the
+# pre-push stage — it is intended to run in CI, and to be opt-in
+# locally via `AIT_PRE_PUSH_NATIVE_VERIFY=1`. Incremental rebuilds
+# after the release artifacts are warm are usually <90s; use
+# `AIT_PRE_PUSH_NATIVE_VERIFY=1` locally once you have a warm target/.
+#
+#   stdin: `<local_ref> <local_sha> <remote_ref> <remote_sha>` per line
+#   env:   GIT_* vars (unused here)
+#
+# Controls:
+#   AIT_PRE_PUSH_NATIVE_VERIFY=1   Opt in locally (default: skip with notice)
+#   AIT_SKIP_NATIVE_VERIFY=1       Hard skip (even when opted in)
+#   AIT_NATIVE_VERIFY_DIR=<path>   Override output dir (default /tmp/clean-native-verify)
+#   AIT_NATIVE_VERIFY_CARGO_ARGS   Extra cargo args after --locked (e.g. --offline)
+#   AIT_NATIVE_VERIFY_TIMEOUT_SEC  Per-command timeout (default 600)
+#
+# Override contract: when AIT_SKIP_NATIVE_VERIFY=1 is used to bypass a
+# push that would otherwise fail, the pusher MUST commit a `## Why`
+# justification referencing a tracking issue (#3608 design §4.2). This
+# is an org-level policy, not a shell-level enforcement — the pre-push
+# hook does not have access to the prospective HEAD's commit message
+# content that a reviewer would want to audit.
+
+set -euo pipefail
+trap '' PIPE
+
+log() { printf '[native-verify] %s\n' "$*"; }
+warn() { printf '[native-verify] WARN: %s\n' "$*" >&2; }
+err() { printf '[native-verify] ERROR: %s\n' "$*" >&2; }
+
+# Drain stdin unconditionally — git expects the hook to accept refs even
+# when we decide to skip the verification pass. Not draining can leave
+# git waiting on the hook-to-hook pipe.
+if [[ ! -t 0 ]]; then
+    cat >/dev/null || true
+fi
+
+if [[ "${AIT_SKIP_NATIVE_VERIFY:-0}" == "1" ]]; then
+    log "SKIP: AIT_SKIP_NATIVE_VERIFY=1 set — push will proceed."
+    log "      If this skip is used to bypass a kernel-rejection, the HEAD"
+    log "      commit message MUST carry a '## Why' justification citing the"
+    log "      tracking issue (#3608)."
+    exit 0
+fi
+
+if [[ "${AIT_PRE_PUSH_NATIVE_VERIFY:-0}" != "1" ]]; then
+    log "OFF by default (per #3608 performance gate)."
+    log "To enable this pre-push check locally: AIT_PRE_PUSH_NATIVE_VERIFY=1 git push ..."
+    log "CI should call: .githooks/pre-push-native-verify < /dev/null (or set the env var)"
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+cd "$REPO_ROOT"
+
+NATIVE_DIR="${AIT_NATIVE_VERIFY_DIR:-${TMPDIR:-/tmp}/clean-native-verify}"
+mkdir -p "$NATIVE_DIR"
+
+# Sanitize any stale shard artifacts so the build starts from a known state.
+# Only inside our own scratch dir.
+case "$NATIVE_DIR" in
+/tmp/* | /private/tmp/* | "$HOME"/* | "${TMPDIR%/}"*)
+    find "$NATIVE_DIR" -mindepth 1 -delete 2>/dev/null || true
+    ;;
+*)
+    warn "NATIVE_DIR=$NATIVE_DIR is outside /tmp — skipping sanitize"
+    ;;
+esac
+
+TIMEOUT="${AIT_NATIVE_VERIFY_TIMEOUT_SEC:-600}"
+# shellcheck disable=SC2206  # word-split on purpose for cargo args.
+CARGO_EXTRA_ARGS=(${AIT_NATIVE_VERIFY_CARGO_ARGS:-})
+
+have_timeout_cmd() {
+    command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1
+}
+
+run_with_timeout() {
+    local sec="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --preserve-status -- "$sec" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout --preserve-status -- "$sec" "$@"
+    else
+        "$@"
+    fi
+}
+
+if ! have_timeout_cmd; then
+    warn "no 'timeout'/'gtimeout' available — commands will run unbounded (install coreutils for enforcement)"
+fi
+
+# --- build-native -------------------------------------------------------------
+log "building clean-native shard into $NATIVE_DIR"
+if ! run_with_timeout "$TIMEOUT" \
+    cargo run --locked -p clean-mathverse --bin mathverse_shard --release \
+    "${CARGO_EXTRA_ARGS[@]}" \
+    -- build-native "$NATIVE_DIR"; then
+    err "build-native FAILED (#3608 hook blocks push)"
+    err "To bypass after reviewing: AIT_SKIP_NATIVE_VERIFY=1 git push ... (requires ## Why in HEAD commit)"
+    exit 1
+fi
+
+# --- verify-kernel --native ---------------------------------------------------
+log "running kernel re-verification over $NATIVE_DIR"
+if ! run_with_timeout "$TIMEOUT" \
+    cargo run --locked -p clean-mathverse --bin mathverse_shard --release \
+    "${CARGO_EXTRA_ARGS[@]}" \
+    -- verify-kernel --native "$NATIVE_DIR"; then
+    err "verify-kernel --native FAILED (MASQUERADE regression suspected — #3608)"
+    err "To bypass after reviewing: AIT_SKIP_NATIVE_VERIFY=1 git push ... (requires ## Why in HEAD commit)"
+    exit 1
+fi
+
+log "OK: native shard kernel-verified."
+exit 0

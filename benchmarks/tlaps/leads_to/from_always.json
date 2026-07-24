@@ -1,0 +1,25 @@
+{
+  "id": "leads_to/from_always",
+  "module": "LeadsToFromAlwaysTest",
+  "line": null,
+
+  "declares": [
+    {"type": "constant", "name": "P", "arity": 0},
+    {"type": "constant", "name": "Q", "arity": 0}
+  ],
+
+  "hypotheses": [
+    {
+      "name": "h_always",
+      "formula": {"always": {"implies": ["P", "Q"]}}
+    }
+  ],
+
+  "goal": {"leads_to": ["P", "Q"]},
+
+  "tactic_hint": "temporal",
+  "expected_result": true,
+  "difficulty": "easy",
+  "source": "synthetic",
+  "tags": ["temporal", "leads_to", "always"]
+}

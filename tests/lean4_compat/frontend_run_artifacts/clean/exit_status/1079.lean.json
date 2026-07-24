@@ -1,0 +1,23 @@
+{
+  "schema_version": "clean-frontend-exit-status-artifact-v1",
+  "kind": "frontend_exit_status",
+  "engine": "clean",
+  "filename": "1079.lean",
+  "source_sha256": "sha256:93a6df1469b104aef1d2075f429749ac34faf514f1ea13d9d1585d78ec36b8ed",
+  "command": [
+    "timeout",
+    "5",
+    "./target/debug/clean",
+    "check",
+    "--verbose",
+    "tests/lean4_compat/lean4_tests/1079.lean"
+  ],
+  "exit_code": 1,
+  "status": "failure",
+  "engine_version": "clean 1.1.0",
+  "observed_process_status": "exited",
+  "observed_elapsed_seconds": 0.134,
+  "observed_stdout": "Read 508 bytes from \"tests/lean4_compat/lean4_tests/1079.lean\"\nParsed 2 declarations in 634.375\u00b5s\nwarning: declaration 'bad'' uses explicit sorry\n  \u2717 bad' (explicit sorry)\nChecked 2 declarations in 116.169542ms\n  0 passed, 2 failed\n\nErrors:\n  \u2717 elaboration error: TacticFailed(InvalidTarget { tactic: \"cases\", detail: \"Alternative `isFalse` has not been provided\" })\n  \u2717 bad': declaration uses explicit sorry\n",
+  "observed_stderr": "Error: check failed\n",
+  "artifact_note": "Generated bounded clean frontend run evidence; this is not replacement-readiness evidence."
+}

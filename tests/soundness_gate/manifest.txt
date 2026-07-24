@@ -1,0 +1,17 @@
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+# Kernel Soundness Gate Corpus Manifest
+# Format: <relative-path>
+# Paths under accept/ must be accepted by both clean and Lean 4.
+# Paths under reject/ must be rejected by both clean and Lean 4.
+# Issue: #2134
+
+accept/basic_identity_const.lean
+accept/pi_let_beta.lean
+accept/nat_succ_type.lean
+reject/ill_typed_app.lean
+reject/type_mismatch_def.lean
+reject/type_mismatch_theorem.lean
+reject/sort_universe_error.lean

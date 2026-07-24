@@ -1,0 +1,1018 @@
+### Fin
+kind: inductive
+levels: []
+type: (n : Nat) → Type
+numParams: 1
+numIndices: 0
+ctors: [Fin.mk]
+
+### Fin.mk
+kind: constructor
+levels: []
+type: {n : Nat} → (val : Nat) → (isLt : @LT.lt.{0} Nat instLTNat val n) → Fin n
+induct: Fin
+cidx: 0
+numParams: 1
+numFields: 2
+
+### Fin.val
+kind: def
+levels: []
+type: {n : Nat} → (self : Fin n) → Nat
+value: fun (n : Nat) (self : Fin n) => self.1
+projection: ctor=Fin.mk numParams=1 i=0
+
+### Fin.isLt
+kind: theorem
+levels: []
+type: ∀ {n : Nat} (self : Fin n), @LT.lt.{0} Nat instLTNat (@Fin.val n self) n
+projection: ctor=Fin.mk numParams=1 i=1
+
+### Pow
+kind: inductive
+levels: [u, v]
+type: (α : Type u) → (β : Type v) → Type (max u v)
+numParams: 2
+numIndices: 0
+ctors: [Pow.mk]
+
+### NatPow
+kind: inductive
+levels: [u]
+type: (α : Type u) → Type u
+numParams: 1
+numIndices: 0
+ctors: [NatPow.mk]
+
+### instPowNat
+kind: def
+levels: [u_1]
+type: {α : Type u_1} → [NatPow.{u_1} α] → Pow.{u_1, 0} α Nat
+value: fun {α : Type u_1} [inst : NatPow.{u_1} α] =>
+  @Pow.mk.{u_1, 0} α Nat fun (a : α) (n : Nat) => @NatPow.pow.{u_1} α inst a n
+
+### instNatPowNat
+kind: def
+levels: []
+type: NatPow.{0} Nat
+value: @NatPow.mk.{0} Nat Nat.pow
+
+### instHPow
+kind: def
+levels: [u_1, u_2]
+type: {α : Type u_1} → {β : Type u_2} → [Pow.{u_1, u_2} α β] → HPow.{u_1, u_2, u_1} α β α
+value: fun {α : Type u_1} {β : Type u_2} [inst : Pow.{u_1, u_2} α β] =>
+  @HPow.mk.{u_1, u_2, u_1} α β α fun (a : α) (b : β) => @Pow.pow.{u_1, u_2} α β inst a b
+
+### HPow
+kind: inductive
+levels: [u, v, w]
+type: (α : Type u) → (β : Type v) → (γ : outParam.{w + 2} (Type w)) → Type (max (max u v) w)
+numParams: 3
+numIndices: 0
+ctors: [HPow.mk]
+
+### instOfNatNat
+kind: def
+levels: []
+type: (n : Nat) → OfNat.{0} Nat n
+value: fun (n : Nat) => @OfNat.mk.{0} Nat n n
+
+### BitVec
+kind: inductive
+levels: []
+type: (w : Nat) → Type
+numParams: 1
+numIndices: 0
+ctors: [BitVec.ofFin]
+
+### BitVec.ofFin
+kind: constructor
+levels: []
+type: {w : Nat} →
+  (toFin :
+      Fin
+        (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+          (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)) →
+    BitVec w
+induct: BitVec
+cidx: 0
+numParams: 1
+numFields: 1
+
+### BitVec.toFin
+kind: def
+levels: []
+type: {w : Nat} →
+  (self : BitVec w) →
+    Fin
+      (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+        (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)
+value: fun (w : Nat) (self : BitVec w) => self.1
+projection: ctor=BitVec.ofFin numParams=1 i=0
+
+### BitVec.ofNat
+kind: def
+levels: []
+type: (n i : Nat) → BitVec n
+value: fun (n i : Nat) =>
+  @BitVec.ofFin n
+    (Fin.Internal.ofNat
+      (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+        (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) n)
+      (BitVec.ofNat._proof_1 n) i)
+
+### BitVec.ofNatLT
+kind: def
+levels: []
+type: {w : Nat} →
+  (i : Nat) →
+    (p :
+        @LT.lt.{0} Nat instLTNat i
+          (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+            (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)) →
+      BitVec w
+value: fun {w : Nat} (i : Nat)
+    (p :
+      @LT.lt.{0} Nat instLTNat i
+        (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+          (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)) =>
+  @BitVec.ofFin w
+    (@Fin.mk
+      (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+        (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)
+      i p)
+
+### BitVec.toNat
+kind: def
+levels: []
+type: {w : Nat} → (x : BitVec w) → Nat
+value: fun {w : Nat} (x : BitVec w) =>
+  @Fin.val
+    (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+      (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)
+    (@BitVec.toFin w x)
+
+### BitVec.decEq
+kind: def
+levels: []
+type: {w : Nat} → (x y : BitVec w) → Decidable (@Eq.{1} (BitVec w) x y)
+value: fun {w : Nat} (x y : BitVec w) =>
+  @BitVec.decEq.match_1.{1} w (fun (x y : BitVec w) => Decidable (@Eq.{1} (BitVec w) x y)) x y
+    fun
+      (n m :
+        Fin
+          (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+            (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)) =>
+    @dite.{1} (Decidable (@Eq.{1} (BitVec w) (@BitVec.ofFin w n) (@BitVec.ofFin w m)))
+      (@Eq.{1}
+        (Fin
+          (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+            (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w))
+        n m)
+      (instDecidableEqFin
+        (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+          (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w)
+        n m)
+      (fun
+          (h :
+            @Eq.{1}
+              (Fin
+                (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+                  (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w))
+              n m) =>
+        @Decidable.isTrue (@Eq.{1} (BitVec w) (@BitVec.ofFin w n) (@BitVec.ofFin w m)) (@BitVec.decEq._proof_1 w n m h))
+      fun
+        (h :
+          Not
+            (@Eq.{1}
+              (Fin
+                (@HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+                  (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) w))
+              n m)) =>
+      @Decidable.isFalse (@Eq.{1} (BitVec w) (@BitVec.ofFin w n) (@BitVec.ofFin w m)) (@BitVec.decEq._proof_2 w n m h)
+
+### UInt8
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [UInt8.ofBitVec]
+
+### UInt8.ofBitVec
+kind: constructor
+levels: []
+type: (toBitVec : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))) → UInt8
+induct: UInt8
+cidx: 0
+numParams: 0
+numFields: 1
+
+### UInt8.toBitVec
+kind: def
+levels: []
+type: (self : UInt8) → BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))
+value: fun (self : UInt8) => self.1
+projection: ctor=UInt8.ofBitVec numParams=0 i=0
+
+### UInt8.size
+kind: def
+levels: []
+type: Nat
+value: @OfNat.ofNat.{0} Nat (nat_lit 256) (instOfNatNat (nat_lit 256))
+
+### UInt8.ofNat
+kind: def
+levels: []
+type: (n : Nat) → UInt8
+value: fun (n : Nat) => UInt8.ofBitVec (BitVec.ofNat (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8))) n)
+
+### UInt8.ofNatLT
+kind: def
+levels: []
+type: (n : Nat) → (h : @LT.lt.{0} Nat instLTNat n UInt8.size) → UInt8
+value: fun (n : Nat) (h : @LT.lt.{0} Nat instLTNat n UInt8.size) =>
+  UInt8.ofBitVec (@BitVec.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8))) n h)
+
+### UInt8.toNat
+kind: def
+levels: []
+type: (n : UInt8) → Nat
+value: fun (n : UInt8) => @BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8))) (UInt8.toBitVec n)
+
+### UInt8.decEq
+kind: def
+levels: []
+type: (a b : UInt8) → Decidable (@Eq.{1} UInt8 a b)
+value: fun (a b : UInt8) =>
+  UInt8.decEq.match_1.{1} (fun (a b : UInt8) => Decidable (@Eq.{1} UInt8 a b)) a b
+    fun (n m : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))) =>
+    @dite.{1} (Decidable (@Eq.{1} UInt8 (UInt8.ofBitVec n) (UInt8.ofBitVec m)))
+      (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))) n m)
+      (@instDecidableEqBitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8))) n m)
+      (fun (h : @Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))) n m) =>
+        @Decidable.isTrue (@Eq.{1} UInt8 (UInt8.ofBitVec n) (UInt8.ofBitVec m)) (UInt8.decEq._proof_1 n m h))
+      fun (h : Not (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))) n m)) =>
+      @Decidable.isFalse (@Eq.{1} UInt8 (UInt8.ofBitVec n) (UInt8.ofBitVec m)) (UInt8.decEq._proof_2 n m h)
+
+### UInt8.rec
+kind: recursor
+levels: [u]
+type: {motive : (t : UInt8) → Sort u} →
+  (ofBitVec :
+      (toBitVec : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8)))) →
+        motive (UInt8.ofBitVec toBitVec)) →
+    (t : UInt8) → motive t
+numParams: 0
+numIndices: 0
+numMotives: 1
+numMinors: 1
+k: false
+
+### UInt16
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [UInt16.ofBitVec]
+
+### UInt16.ofBitVec
+kind: constructor
+levels: []
+type: (toBitVec : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))) → UInt16
+induct: UInt16
+cidx: 0
+numParams: 0
+numFields: 1
+
+### UInt16.toBitVec
+kind: def
+levels: []
+type: (self : UInt16) → BitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))
+value: fun (self : UInt16) => self.1
+projection: ctor=UInt16.ofBitVec numParams=0 i=0
+
+### UInt16.size
+kind: def
+levels: []
+type: Nat
+value: @OfNat.ofNat.{0} Nat (nat_lit 65536) (instOfNatNat (nat_lit 65536))
+
+### UInt16.ofNat
+kind: def
+levels: []
+type: (n : Nat) → UInt16
+value: fun (n : Nat) => UInt16.ofBitVec (BitVec.ofNat (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16))) n)
+
+### UInt16.ofNatLT
+kind: def
+levels: []
+type: (n : Nat) → (h : @LT.lt.{0} Nat instLTNat n UInt16.size) → UInt16
+value: fun (n : Nat) (h : @LT.lt.{0} Nat instLTNat n UInt16.size) =>
+  UInt16.ofBitVec (@BitVec.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16))) n h)
+
+### UInt16.toNat
+kind: def
+levels: []
+type: (n : UInt16) → Nat
+value: fun (n : UInt16) => @BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16))) (UInt16.toBitVec n)
+
+### UInt16.decEq
+kind: def
+levels: []
+type: (a b : UInt16) → Decidable (@Eq.{1} UInt16 a b)
+value: fun (a b : UInt16) =>
+  UInt16.decEq.match_1.{1} (fun (a b : UInt16) => Decidable (@Eq.{1} UInt16 a b)) a b
+    fun (n m : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))) =>
+    @dite.{1} (Decidable (@Eq.{1} UInt16 (UInt16.ofBitVec n) (UInt16.ofBitVec m)))
+      (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))) n m)
+      (@instDecidableEqBitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16))) n m)
+      (fun (h : @Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))) n m) =>
+        @Decidable.isTrue (@Eq.{1} UInt16 (UInt16.ofBitVec n) (UInt16.ofBitVec m)) (UInt16.decEq._proof_1 n m h))
+      fun (h : Not (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))) n m)) =>
+      @Decidable.isFalse (@Eq.{1} UInt16 (UInt16.ofBitVec n) (UInt16.ofBitVec m)) (UInt16.decEq._proof_2 n m h)
+
+### UInt32
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [UInt32.ofBitVec]
+
+### UInt32.ofBitVec
+kind: constructor
+levels: []
+type: (toBitVec : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) → UInt32
+induct: UInt32
+cidx: 0
+numParams: 0
+numFields: 1
+
+### UInt32.toBitVec
+kind: def
+levels: []
+type: (self : UInt32) → BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))
+value: fun (self : UInt32) => self.1
+projection: ctor=UInt32.ofBitVec numParams=0 i=0
+
+### UInt32.size
+kind: def
+levels: []
+type: Nat
+value: @OfNat.ofNat.{0} Nat (nat_lit 4294967296) (instOfNatNat (nat_lit 4294967296))
+
+### UInt32.ofNat
+kind: def
+levels: []
+type: (n : Nat) → UInt32
+value: fun (n : Nat) => UInt32.ofBitVec (BitVec.ofNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) n)
+
+### UInt32.ofNatLT
+kind: def
+levels: []
+type: (n : Nat) → (h : @LT.lt.{0} Nat instLTNat n UInt32.size) → UInt32
+value: fun (n : Nat) (h : @LT.lt.{0} Nat instLTNat n UInt32.size) =>
+  UInt32.ofBitVec (@BitVec.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) n h)
+
+### UInt32.toNat
+kind: def
+levels: []
+type: (n : UInt32) → Nat
+value: fun (n : UInt32) => @BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec n)
+
+### UInt32.decEq
+kind: def
+levels: []
+type: (a b : UInt32) → Decidable (@Eq.{1} UInt32 a b)
+value: fun (a b : UInt32) =>
+  UInt32.decEq.match_1.{1} (fun (a b : UInt32) => Decidable (@Eq.{1} UInt32 a b)) a b
+    fun (n m : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) =>
+    @dite.{1} (Decidable (@Eq.{1} UInt32 (UInt32.ofBitVec n) (UInt32.ofBitVec m)))
+      (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) n m)
+      (@instDecidableEqBitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) n m)
+      (fun (h : @Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) n m) =>
+        @Decidable.isTrue (@Eq.{1} UInt32 (UInt32.ofBitVec n) (UInt32.ofBitVec m)) (UInt32.decEq._proof_1 n m h))
+      fun (h : Not (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) n m)) =>
+      @Decidable.isFalse (@Eq.{1} UInt32 (UInt32.ofBitVec n) (UInt32.ofBitVec m)) (UInt32.decEq._proof_2 n m h)
+
+### UInt32.isValidChar
+kind: def
+levels: []
+type: (n : UInt32) → Prop
+value: fun (n : UInt32) => Nat.isValidChar (UInt32.toNat n)
+
+### UInt32.lt
+kind: def
+levels: []
+type: (a b : UInt32) → Prop
+value: fun (a b : UInt32) =>
+  @LT.lt.{0} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))))
+    (@instLTBitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) (UInt32.toBitVec a)
+    (UInt32.toBitVec b)
+
+### UInt32.le
+kind: def
+levels: []
+type: (a b : UInt32) → Prop
+value: fun (a b : UInt32) =>
+  @LE.le.{0} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))))
+    (@instLEBitVec (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))) (UInt32.toBitVec a)
+    (UInt32.toBitVec b)
+
+### UInt32.decLt
+kind: def
+levels: []
+type: (a b : UInt32) → Decidable (@LT.lt.{0} UInt32 instLTUInt32 a b)
+value: fun (a b : UInt32) => UInt32.decLt._aux_1 a b
+
+### UInt32.decLe
+kind: def
+levels: []
+type: (a b : UInt32) → Decidable (@LE.le.{0} UInt32 instLEUInt32 a b)
+value: fun (a b : UInt32) =>
+  @dite.{1}
+    (Decidable
+      (@LE.le.{0} Nat instLENat
+        (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+        (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b))))
+    (@Eq.{1} Bool
+      (Nat.ble (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+        (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b)))
+      Bool.true)
+    (instDecidableEqBool
+      (Nat.ble (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+        (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b)))
+      Bool.true)
+    (fun
+        (h :
+          @Eq.{1} Bool
+            (Nat.ble (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+              (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b)))
+            Bool.true) =>
+      @Decidable.isTrue
+        (@LE.le.{0} Nat instLENat
+          (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+          (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b)))
+        (UInt32.decLe._proof_1 a b h))
+    fun
+      (h :
+        Not
+          (@Eq.{1} Bool
+            (Nat.ble (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+              (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b)))
+            Bool.true)) =>
+    @Decidable.isFalse
+      (@LE.le.{0} Nat instLENat
+        (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec a))
+        (@BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) (UInt32.toBitVec b)))
+      (UInt32.decLe._proof_2 a b h)
+
+### UInt64
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [UInt64.ofBitVec]
+
+### UInt64.ofBitVec
+kind: constructor
+levels: []
+type: (toBitVec : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))) → UInt64
+induct: UInt64
+cidx: 0
+numParams: 0
+numFields: 1
+
+### UInt64.toBitVec
+kind: def
+levels: []
+type: (self : UInt64) → BitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
+value: fun (self : UInt64) => self.1
+projection: ctor=UInt64.ofBitVec numParams=0 i=0
+
+### UInt64.size
+kind: def
+levels: []
+type: Nat
+value: @OfNat.ofNat.{0} Nat (nat_lit 18446744073709551616) (instOfNatNat (nat_lit 18446744073709551616))
+
+### UInt64.ofNat
+kind: def
+levels: []
+type: (n : Nat) → UInt64
+value: fun (n : Nat) => UInt64.ofBitVec (BitVec.ofNat (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))) n)
+
+### UInt64.ofNatLT
+kind: def
+levels: []
+type: (n : Nat) → (h : @LT.lt.{0} Nat instLTNat n UInt64.size) → UInt64
+value: fun (n : Nat) (h : @LT.lt.{0} Nat instLTNat n UInt64.size) =>
+  UInt64.ofBitVec (@BitVec.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))) n h)
+
+### UInt64.toNat
+kind: def
+levels: []
+type: (n : UInt64) → Nat
+value: fun (n : UInt64) => @BitVec.toNat (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))) (UInt64.toBitVec n)
+
+### UInt64.decEq
+kind: def
+levels: []
+type: (a b : UInt64) → Decidable (@Eq.{1} UInt64 a b)
+value: fun (a b : UInt64) =>
+  UInt64.decEq.match_1.{1} (fun (a b : UInt64) => Decidable (@Eq.{1} UInt64 a b)) a b
+    fun (n m : BitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))) =>
+    @dite.{1} (Decidable (@Eq.{1} UInt64 (UInt64.ofBitVec n) (UInt64.ofBitVec m)))
+      (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))) n m)
+      (@instDecidableEqBitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))) n m)
+      (fun (h : @Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))) n m) =>
+        @Decidable.isTrue (@Eq.{1} UInt64 (UInt64.ofBitVec n) (UInt64.ofBitVec m)) (UInt64.decEq._proof_1 n m h))
+      fun (h : Not (@Eq.{1} (BitVec (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))) n m)) =>
+      @Decidable.isFalse (@Eq.{1} UInt64 (UInt64.ofBitVec n) (UInt64.ofBitVec m)) (UInt64.decEq._proof_2 n m h)
+
+### USize
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [USize.ofBitVec]
+
+### USize.ofBitVec
+kind: constructor
+levels: []
+type: (toBitVec : BitVec System.Platform.numBits) → USize
+induct: USize
+cidx: 0
+numParams: 0
+numFields: 1
+
+### USize.toBitVec
+kind: def
+levels: []
+type: (self : USize) → BitVec System.Platform.numBits
+value: fun (self : USize) => self.1
+projection: ctor=USize.ofBitVec numParams=0 i=0
+
+### USize.size
+kind: def
+levels: []
+type: Nat
+value: @HPow.hPow.{0, 0, 0} Nat Nat Nat (@instHPow.{0, 0} Nat Nat (@instPowNat.{0} Nat instNatPowNat))
+  (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2))) System.Platform.numBits
+
+### USize.ofNat
+kind: def
+levels: []
+type: (n : Nat) → USize
+value: fun (n : Nat) => USize.ofBitVec (BitVec.ofNat System.Platform.numBits n)
+
+### USize.ofNatLT
+kind: def
+levels: []
+type: (n : Nat) → (h : @LT.lt.{0} Nat instLTNat n USize.size) → USize
+value: fun (n : Nat) (h : @LT.lt.{0} Nat instLTNat n USize.size) =>
+  USize.ofBitVec (@BitVec.ofNatLT System.Platform.numBits n h)
+
+### USize.toNat
+kind: def
+levels: []
+type: (n : USize) → Nat
+value: fun (n : USize) => @BitVec.toNat System.Platform.numBits (USize.toBitVec n)
+
+### USize.decEq
+kind: def
+levels: []
+type: (a b : USize) → Decidable (@Eq.{1} USize a b)
+value: fun (a b : USize) =>
+  USize.decEq.match_1.{1} (fun (a b : USize) => Decidable (@Eq.{1} USize a b)) a b
+    fun (n m : BitVec System.Platform.numBits) =>
+    @dite.{1} (Decidable (@Eq.{1} USize (USize.ofBitVec n) (USize.ofBitVec m)))
+      (@Eq.{1} (BitVec System.Platform.numBits) n m) (@instDecidableEqBitVec System.Platform.numBits n m)
+      (fun (h : @Eq.{1} (BitVec System.Platform.numBits) n m) =>
+        @Decidable.isTrue (@Eq.{1} USize (USize.ofBitVec n) (USize.ofBitVec m)) (USize.decEq._proof_1 n m h))
+      fun (h : Not (@Eq.{1} (BitVec System.Platform.numBits) n m)) =>
+      @Decidable.isFalse (@Eq.{1} USize (USize.ofBitVec n) (USize.ofBitVec m)) (USize.decEq._proof_2 n m h)
+
+### System.Platform.getNumBits
+kind: opaque
+levels: []
+type: Unit →
+  @Subtype.{1} Nat fun (n : Nat) =>
+    Or (@Eq.{1} Nat n (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))))
+      (@Eq.{1} Nat n (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+
+### System.Platform.numBits
+kind: def
+levels: []
+type: Nat
+value: @Subtype.val.{1} Nat
+  (fun (n : Nat) =>
+    Or (@Eq.{1} Nat n (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))))
+      (@Eq.{1} Nat n (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))))
+  (System.Platform.getNumBits Unit.unit)
+
+### Char
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [Char.mk]
+
+### Char.mk
+kind: constructor
+levels: []
+type: (val : UInt32) → (valid : UInt32.isValidChar val) → Char
+induct: Char
+cidx: 0
+numParams: 0
+numFields: 2
+
+### Char.val
+kind: def
+levels: []
+type: (self : Char) → UInt32
+value: fun (self : Char) => self.1
+projection: ctor=Char.mk numParams=0 i=0
+
+### Char.valid
+kind: theorem
+levels: []
+type: ∀ (self : Char), UInt32.isValidChar (Char.val self)
+projection: ctor=Char.mk numParams=0 i=1
+
+### Char.ofNat
+kind: def
+levels: []
+type: (n : Nat) → Char
+value: fun (n : Nat) =>
+  @dite.{1} Char (Nat.isValidChar n)
+    (@instDecidableOr (@LT.lt.{0} Nat instLTNat n (@OfNat.ofNat.{0} Nat (nat_lit 55296) (instOfNatNat (nat_lit 55296))))
+      (And (@LT.lt.{0} Nat instLTNat (@OfNat.ofNat.{0} Nat (nat_lit 57343) (instOfNatNat (nat_lit 57343))) n)
+        (@LT.lt.{0} Nat instLTNat n (@OfNat.ofNat.{0} Nat (nat_lit 1114112) (instOfNatNat (nat_lit 1114112)))))
+      (Nat.decLt n (@OfNat.ofNat.{0} Nat (nat_lit 55296) (instOfNatNat (nat_lit 55296))))
+      (@instDecidableAnd
+        (@LT.lt.{0} Nat instLTNat (@OfNat.ofNat.{0} Nat (nat_lit 57343) (instOfNatNat (nat_lit 57343))) n)
+        (@LT.lt.{0} Nat instLTNat n (@OfNat.ofNat.{0} Nat (nat_lit 1114112) (instOfNatNat (nat_lit 1114112))))
+        (Nat.decLt (@OfNat.ofNat.{0} Nat (nat_lit 57343) (instOfNatNat (nat_lit 57343))) n)
+        (Nat.decLt n (@OfNat.ofNat.{0} Nat (nat_lit 1114112) (instOfNatNat (nat_lit 1114112))))))
+    (fun (h : Nat.isValidChar n) => Char.ofNatAux n h) fun (x : Not (Nat.isValidChar n)) =>
+    Char.mk
+      (UInt32.ofBitVec
+        (@BitVec.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32)))
+          (@OfNat.ofNat.{0} Nat (nat_lit 0) (instOfNatNat (nat_lit 0))) Char.ofNat._proof_1))
+      Char.ofNat._proof_2
+
+### Char.ofNatAux
+kind: def
+levels: []
+type: (n : Nat) → (h : Nat.isValidChar n) → Char
+value: fun (n : Nat) (h : Nat.isValidChar n) =>
+  Char.mk
+    (UInt32.ofBitVec
+      (@BitVec.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))) n
+        (Char.ofNatAux._private_1 n h)))
+    h
+
+### Char.toNat
+kind: def
+levels: []
+type: (c : Char) → Nat
+value: fun (c : Char) => UInt32.toNat (Char.val c)
+
+### Char.utf8Size
+kind: def
+levels: []
+type: (c : Char) → Nat
+value: fun (c : Char) =>
+  have v : UInt32 := Char.val c;
+  @ite.{1} Nat
+    (@LE.le.{0} UInt32 instLEUInt32 v
+      (UInt32.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 127) (instOfNatNat (nat_lit 127))) Char.utf8Size._proof_1))
+    (UInt32.decLe v
+      (UInt32.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 127) (instOfNatNat (nat_lit 127))) Char.utf8Size._proof_1))
+    (@OfNat.ofNat.{0} Nat (nat_lit 1) (instOfNatNat (nat_lit 1)))
+    (@ite.{1} Nat
+      (@LE.le.{0} UInt32 instLEUInt32 v
+        (UInt32.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 2047) (instOfNatNat (nat_lit 2047))) Char.utf8Size._proof_2))
+      (UInt32.decLe v
+        (UInt32.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 2047) (instOfNatNat (nat_lit 2047))) Char.utf8Size._proof_2))
+      (@OfNat.ofNat.{0} Nat (nat_lit 2) (instOfNatNat (nat_lit 2)))
+      (@ite.{1} Nat
+        (@LE.le.{0} UInt32 instLEUInt32 v
+          (UInt32.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 65535) (instOfNatNat (nat_lit 65535))) Char.utf8Size._proof_3))
+        (UInt32.decLe v
+          (UInt32.ofNatLT (@OfNat.ofNat.{0} Nat (nat_lit 65535) (instOfNatNat (nat_lit 65535))) Char.utf8Size._proof_3))
+        (@OfNat.ofNat.{0} Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
+        (@OfNat.ofNat.{0} Nat (nat_lit 4) (instOfNatNat (nat_lit 4)))))
+
+### Char.rec
+kind: recursor
+levels: [u]
+type: {motive : (t : Char) → Sort u} →
+  (mk : (val : UInt32) → (valid : UInt32.isValidChar val) → motive (Char.mk val valid)) → (t : Char) → motive t
+numParams: 0
+numIndices: 0
+numMotives: 1
+numMinors: 1
+k: false
+
+### Nat.isValidChar
+kind: def
+levels: []
+type: (n : Nat) → Prop
+value: fun (n : Nat) =>
+  Or (@LT.lt.{0} Nat instLTNat n (@OfNat.ofNat.{0} Nat (nat_lit 55296) (instOfNatNat (nat_lit 55296))))
+    (And (@LT.lt.{0} Nat instLTNat (@OfNat.ofNat.{0} Nat (nat_lit 57343) (instOfNatNat (nat_lit 57343))) n)
+      (@LT.lt.{0} Nat instLTNat n (@OfNat.ofNat.{0} Nat (nat_lit 1114112) (instOfNatNat (nat_lit 1114112)))))
+
+### instDecidableEqChar
+kind: def
+levels: []
+type: DecidableEq.{1} Char
+value: fun (c d : Char) =>
+  instDecidableEqChar.match_1.{1} c d
+    (fun (x : Decidable (@Eq.{1} UInt32 (Char.val c) (Char.val d))) => Decidable (@Eq.{1} Char c d))
+    (@decEq.{1} UInt32 instDecidableEqUInt32 (Char.val c) (Char.val d))
+    (fun (h : @Eq.{1} UInt32 (Char.val c) (Char.val d)) => @Decidable.isTrue (@Eq.{1} Char c d) (@Char.ext c d h))
+    fun (h : Not (@Eq.{1} UInt32 (Char.val c) (Char.val d))) =>
+    @Decidable.isFalse (@Eq.{1} Char c d) (@Char.ne_of_val_ne c d h)
+
+### ByteArray
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [ByteArray.mk]
+
+### ByteArray.mk
+kind: constructor
+levels: []
+type: (data : Array.{0} UInt8) → ByteArray
+induct: ByteArray
+cidx: 0
+numParams: 0
+numFields: 1
+
+### ByteArray.data
+kind: def
+levels: []
+type: (self : ByteArray) → Array.{0} UInt8
+value: fun (self : ByteArray) => self.1
+projection: ctor=ByteArray.mk numParams=0 i=0
+
+### ByteArray.IsValidUTF8
+kind: inductive
+levels: []
+type: (b : ByteArray) → Prop
+numParams: 1
+numIndices: 0
+ctors: [ByteArray.IsValidUTF8.intro]
+
+### ByteArray.IsValidUTF8.intro
+kind: constructor
+levels: []
+type: ∀ {b : ByteArray} (m : List.{0} Char) (hm : @Eq.{1} ByteArray b (List.utf8Encode m)), ByteArray.IsValidUTF8 b
+induct: ByteArray.IsValidUTF8
+cidx: 0
+numParams: 1
+numFields: 2
+
+### List.toByteArray
+kind: def
+levels: []
+type: (bs : List.{0} UInt8) → ByteArray
+value: fun (bs : List.{0} UInt8) => List.toByteArray.loop bs ByteArray.empty
+
+### List.flatMap
+kind: def
+levels: [u, v]
+type: {α : Type u} → {β : Type v} → (b : α → List.{v} β) → (as : List.{u} α) → List.{v} β
+value: fun {α : Type u} {β : Type v} (b : α → List.{v} β) (as : List.{u} α) =>
+  @List.flatten.{v} β (@List.map.{u, v} α (List.{v} β) b as)
+
+### String
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [String.ofByteArray]
+
+### String.ofByteArray
+kind: constructor
+levels: []
+type: (toByteArray : ByteArray) → (isValidUTF8 : ByteArray.IsValidUTF8 toByteArray) → String
+induct: String
+cidx: 0
+numParams: 0
+numFields: 2
+
+### String.toByteArray
+kind: def
+levels: []
+type: (self : String) → ByteArray
+value: fun (self : String) => self.1
+projection: ctor=String.ofByteArray numParams=0 i=0
+
+### String.isValidUTF8
+kind: theorem
+levels: []
+type: ∀ (self : String), ByteArray.IsValidUTF8 (String.toByteArray self)
+projection: ctor=String.ofByteArray numParams=0 i=1
+
+### String.utf8EncodeChar
+kind: def
+levels: []
+type: (c : Char) → List.{0} UInt8
+value: fun (c : Char) =>
+  have v : Nat := UInt32.toNat (Char.val c);
+  @ite.{1} (List.{0} UInt8)
+    (@LE.le.{0} Nat instLENat v (@OfNat.ofNat.{0} Nat (nat_lit 127) (instOfNatNat (nat_lit 127))))
+    (Nat.decLe v (@OfNat.ofNat.{0} Nat (nat_lit 127) (instOfNatNat (nat_lit 127))))
+    (@List.cons.{0} UInt8 (UInt8.ofNat v) (@List.nil.{0} UInt8))
+    (@ite.{1} (List.{0} UInt8)
+      (@LE.le.{0} Nat instLENat v (@OfNat.ofNat.{0} Nat (nat_lit 2047) (instOfNatNat (nat_lit 2047))))
+      (Nat.decLe v (@OfNat.ofNat.{0} Nat (nat_lit 2047) (instOfNatNat (nat_lit 2047))))
+      (@List.cons.{0} UInt8
+        (UInt8.ofNat
+          (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+            (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod)
+              (@HDiv.hDiv.{0, 0, 0} Nat Nat Nat (@instHDiv.{0} Nat Nat.instDiv) v
+                (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+              (@OfNat.ofNat.{0} Nat (nat_lit 32) (instOfNatNat (nat_lit 32))))
+            (@OfNat.ofNat.{0} Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))))
+        (@List.cons.{0} UInt8
+          (UInt8.ofNat
+            (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+              (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod) v
+                (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+              (@OfNat.ofNat.{0} Nat (nat_lit 128) (instOfNatNat (nat_lit 128)))))
+          (@List.nil.{0} UInt8)))
+      (@ite.{1} (List.{0} UInt8)
+        (@LE.le.{0} Nat instLENat v (@OfNat.ofNat.{0} Nat (nat_lit 65535) (instOfNatNat (nat_lit 65535))))
+        (Nat.decLe v (@OfNat.ofNat.{0} Nat (nat_lit 65535) (instOfNatNat (nat_lit 65535))))
+        (@List.cons.{0} UInt8
+          (UInt8.ofNat
+            (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+              (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod)
+                (@HDiv.hDiv.{0, 0, 0} Nat Nat Nat (@instHDiv.{0} Nat Nat.instDiv) v
+                  (@OfNat.ofNat.{0} Nat (nat_lit 4096) (instOfNatNat (nat_lit 4096))))
+                (@OfNat.ofNat.{0} Nat (nat_lit 16) (instOfNatNat (nat_lit 16))))
+              (@OfNat.ofNat.{0} Nat (nat_lit 224) (instOfNatNat (nat_lit 224)))))
+          (@List.cons.{0} UInt8
+            (UInt8.ofNat
+              (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+                (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod)
+                  (@HDiv.hDiv.{0, 0, 0} Nat Nat Nat (@instHDiv.{0} Nat Nat.instDiv) v
+                    (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                  (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                (@OfNat.ofNat.{0} Nat (nat_lit 128) (instOfNatNat (nat_lit 128)))))
+            (@List.cons.{0} UInt8
+              (UInt8.ofNat
+                (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+                  (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod) v
+                    (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                  (@OfNat.ofNat.{0} Nat (nat_lit 128) (instOfNatNat (nat_lit 128)))))
+              (@List.nil.{0} UInt8))))
+        (@List.cons.{0} UInt8
+          (UInt8.ofNat
+            (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+              (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod)
+                (@HDiv.hDiv.{0, 0, 0} Nat Nat Nat (@instHDiv.{0} Nat Nat.instDiv) v
+                  (@OfNat.ofNat.{0} Nat (nat_lit 262144) (instOfNatNat (nat_lit 262144))))
+                (@OfNat.ofNat.{0} Nat (nat_lit 8) (instOfNatNat (nat_lit 8))))
+              (@OfNat.ofNat.{0} Nat (nat_lit 240) (instOfNatNat (nat_lit 240)))))
+          (@List.cons.{0} UInt8
+            (UInt8.ofNat
+              (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+                (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod)
+                  (@HDiv.hDiv.{0, 0, 0} Nat Nat Nat (@instHDiv.{0} Nat Nat.instDiv) v
+                    (@OfNat.ofNat.{0} Nat (nat_lit 4096) (instOfNatNat (nat_lit 4096))))
+                  (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                (@OfNat.ofNat.{0} Nat (nat_lit 128) (instOfNatNat (nat_lit 128)))))
+            (@List.cons.{0} UInt8
+              (UInt8.ofNat
+                (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+                  (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod)
+                    (@HDiv.hDiv.{0, 0, 0} Nat Nat Nat (@instHDiv.{0} Nat Nat.instDiv) v
+                      (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                    (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                  (@OfNat.ofNat.{0} Nat (nat_lit 128) (instOfNatNat (nat_lit 128)))))
+              (@List.cons.{0} UInt8
+                (UInt8.ofNat
+                  (@HAdd.hAdd.{0, 0, 0} Nat Nat Nat (@instHAdd.{0} Nat instAddNat)
+                    (@HMod.hMod.{0, 0, 0} Nat Nat Nat (@instHMod.{0} Nat Nat.instMod) v
+                      (@OfNat.ofNat.{0} Nat (nat_lit 64) (instOfNatNat (nat_lit 64))))
+                    (@OfNat.ofNat.{0} Nat (nat_lit 128) (instOfNatNat (nat_lit 128)))))
+                (@List.nil.{0} UInt8)))))))
+
+### List.utf8Encode
+kind: def
+levels: []
+type: (l : List.{0} Char) → ByteArray
+value: fun (l : List.{0} Char) => List.toByteArray (@List.flatMap.{0, 0} Char UInt8 String.utf8EncodeChar l)
+
+### String.ofList
+kind: def
+levels: []
+type: (data : List.{0} Char) → String
+value: fun (data : List.{0} Char) => String.ofByteArray (List.utf8Encode data) (String.ofList._proof_1 data)
+
+### String.mk
+kind: def
+levels: []
+type: (data : List.{0} Char) → String
+value: fun (data : List.{0} Char) => String.ofByteArray (List.utf8Encode data) (String.mk._proof_1 data)
+
+### String.data
+kind: def
+levels: []
+type: (b : String) → List.{0} Char
+value: fun (b : String) => @Array.toList.{0} Char (String.Internal.toArray b)
+
+### String.decEq
+kind: def
+levels: []
+type: (s₁ s₂ : String) → Decidable (@Eq.{1} String s₁ s₂)
+value: fun (s₁ s₂ : String) =>
+  String.decEq.match_3.{1} (fun (s₁ s₂ : String) => Decidable (@Eq.{1} String s₁ s₂)) s₁ s₂
+    fun (s₁ : List.{0} UInt8) (isValidUTF8 : ByteArray.IsValidUTF8 (ByteArray.mk (@Array.mk.{0} UInt8 s₁)))
+      (s₂ : List.{0} UInt8) (isValidUTF8_1 : ByteArray.IsValidUTF8 (ByteArray.mk (@Array.mk.{0} UInt8 s₂))) =>
+    @dite.{1}
+      (Decidable
+        (@Eq.{1} String (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 s₁)) isValidUTF8)
+          (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 s₂)) isValidUTF8_1)))
+      (@Eq.{1} (List.{0} UInt8) s₁ s₂) (@instDecidableEqList.{0} UInt8 instDecidableEqUInt8 s₁ s₂)
+      (fun (h : @Eq.{1} (List.{0} UInt8) s₁ s₂) =>
+        String.decEq.match_1.{1}
+          (fun (s₁ s₂ : List.{0} UInt8) (h : @Eq.{1} (List.{0} UInt8) s₁ s₂)
+              (isValidUTF8 : ByteArray.IsValidUTF8 (ByteArray.mk (@Array.mk.{0} UInt8 s₁)))
+              (isValidUTF8_2 : ByteArray.IsValidUTF8 (ByteArray.mk (@Array.mk.{0} UInt8 s₂))) =>
+            Decidable
+              (@Eq.{1} String (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 s₁)) isValidUTF8)
+                (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 s₂)) isValidUTF8_2)))
+          s₁ s₂ h isValidUTF8 isValidUTF8_1
+          fun (a : List.{0} UInt8)
+            (isValidUTF8 isValidUTF8_2 : ByteArray.IsValidUTF8 (ByteArray.mk (@Array.mk.{0} UInt8 a))) =>
+          @Decidable.isTrue
+            (@Eq.{1} String (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 a)) isValidUTF8)
+              (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 a)) isValidUTF8_2))
+            (String.decEq._proof_1 a isValidUTF8))
+      fun (h : Not (@Eq.{1} (List.{0} UInt8) s₁ s₂)) =>
+      @Decidable.isFalse
+        (@Eq.{1} String (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 s₁)) isValidUTF8)
+          (String.ofByteArray (ByteArray.mk (@Array.mk.{0} UInt8 s₂)) isValidUTF8_1))
+        (String.decEq._proof_2 s₁ isValidUTF8 s₂ isValidUTF8_1 h)
+
+### String.rec
+kind: recursor
+levels: [u]
+type: {motive : (t : String) → Sort u} →
+  (ofByteArray :
+      (toByteArray : ByteArray) →
+        (isValidUTF8 : ByteArray.IsValidUTF8 toByteArray) → motive (String.ofByteArray toByteArray isValidUTF8)) →
+    (t : String) → motive t
+numParams: 0
+numIndices: 0
+numMotives: 1
+numMinors: 1
+k: false
+
+### instDecidableEqString
+kind: def
+levels: []
+type: DecidableEq.{1} String
+value: String.decEq
+
+### Substring.Raw
+kind: inductive
+levels: []
+type: Type
+numParams: 0
+numIndices: 0
+ctors: [Substring.Raw.mk]
+
+### Array
+kind: inductive
+levels: [u]
+type: (α : Type u) → Type u
+numParams: 1
+numIndices: 0
+ctors: [Array.mk]
+
+### Array.mk
+kind: constructor
+levels: [u]
+type: {α : Type u} → (toList : List.{u} α) → Array.{u} α
+induct: Array
+cidx: 0
+numParams: 1
+numFields: 1
+

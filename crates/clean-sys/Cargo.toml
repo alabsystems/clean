@@ -1,0 +1,25 @@
+[package]
+name = "clean-sys"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "C FFI bindings for Clean kernel"
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+clean-kernel.workspace = true
+clean-olean.workspace = true
+
+[features]
+ffi-tests = []
+
+[build-dependencies]
+cbindgen = "0.29"

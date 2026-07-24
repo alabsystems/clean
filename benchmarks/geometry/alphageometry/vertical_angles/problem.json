@@ -1,0 +1,32 @@
+{
+  "id": "vertical_angles",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "O": {"type": "point"}
+  },
+  "constraints": [
+    {"type": "collinear", "points": ["A", "O", "C"]},
+    {"type": "collinear", "points": ["B", "O", "D"]},
+    {"type": "not_equal", "a": "A", "b": "O"},
+    {"type": "not_equal", "a": "O", "b": "C"},
+    {"type": "not_equal", "a": "B", "b": "O"},
+    {"type": "not_equal", "a": "O", "b": "D"},
+    {"type": "between", "point": "O", "endpoints": ["A", "C"]},
+    {"type": "between", "point": "O", "endpoints": ["B", "D"]}
+  ],
+  "goal": {
+    "type": "congruent_angles",
+    "angle1": {"points": ["A", "O", "B"]},
+    "angle2": {"points": ["C", "O", "D"]}
+  },
+  "metadata": {
+    "source": "Basic geometry",
+    "difficulty": 2,
+    "tags": ["vertical_angles", "congruent", "lines_intersecting"],
+    "known_solvable": true,
+    "statement": "Vertical angles formed by two intersecting lines are congruent."
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "parallelogram_diagonals",
+  "objects": {
+    "A": {"type": "point"},
+    "B": {"type": "point"},
+    "C": {"type": "point"},
+    "D": {"type": "point"},
+    "M": {"type": "point", "definition": {"intersection": {"line1": {"through": ["A", "C"]}, "line2": {"through": ["B", "D"]}}}}
+  },
+  "constraints": [
+    {"type": "parallel", "line1": {"through": ["A", "B"]}, "line2": {"through": ["D", "C"]}},
+    {"type": "parallel", "line1": {"through": ["A", "D"]}, "line2": {"through": ["B", "C"]}},
+    {"type": "not_equal", "a": "A", "b": "B"},
+    {"type": "not_equal", "a": "B", "b": "C"},
+    {"type": "not_equal", "a": "C", "b": "D"},
+    {"type": "not_equal", "a": "D", "b": "A"}
+  ],
+  "goal": {
+    "type": "congruent_segments",
+    "seg1": ["A", "M"],
+    "seg2": ["M", "C"]
+  },
+  "metadata": {
+    "source": "Parallelogram properties",
+    "difficulty": 3,
+    "tags": ["parallelogram", "diagonal", "bisect", "midpoint"],
+    "known_solvable": true,
+    "statement": "The diagonals of a parallelogram bisect each other."
+  }
+}

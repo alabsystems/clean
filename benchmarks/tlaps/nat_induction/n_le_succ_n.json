@@ -1,0 +1,21 @@
+{
+  "id": "nat_induction/n_le_succ_n",
+  "module": "NLeSuccNTest",
+  "line": null,
+
+  "declares": [],
+
+  "hypotheses": [],
+
+  "goal": {
+    "forall_in": ["n", "Nat", {
+      "le": ["n", {"add": ["n", 1]}]
+    }]
+  },
+
+  "tactic_hint": "induction",
+  "expected_result": true,
+  "difficulty": "trivial",
+  "source": "synthetic",
+  "tags": ["nat_induction", "arithmetic", "comparison"]
+}

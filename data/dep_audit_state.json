@@ -1,0 +1,92 @@
+{
+  "note": "Per-crate supply-chain AUDIT state (paragon axis 1: 'every third-party dependency verified'). This is the per-crate human/imported attestation layer that complements the cargo-deny GATE recorded in data/dep_boundary_state.json. cargo-deny checks advisories/licenses/bans/sources over the whole graph; cargo-vet adds per-crate audit attestation: each third-party crate-version is either (a) covered by a trusted imported audit registry (Mozilla/Google/Bytecode Alliance/Embark/ISRG/Zcash), (b) audited locally in supply-chain/audits.toml, or (c) carried as an exemption (the unaudited baseline snapshotted by `cargo vet init`). Goal is a MONOTONIC tracker: the audited fraction only rises (exemptions only shrink) as more crates are covered by imports or locally audited. ENFORCEMENT: a SOFT/informational `cargo vet` step in scripts/local_gate.sh (FULL mode) prints coverage % and the unaudited count as a tracked metric — it is intentionally NOT a hard fail-closed gate while exemptions remain, so it does not block every push.",
+  "tool": "cargo-vet",
+  "tool_version": "0.10.2",
+  "checked_on": "2026-06-30",
+  "supply_chain_dir": "supply-chain/ (config.toml + audits.toml + imports.lock — audit attestations only, ~70KB; NOT vendored crate source)",
+  "scope_note": "First-party code is OUT of scope for third-party accounting: cargo-vet treats the 27 clean workspace crates and the ../ay path-dep stack (69 path packages incl ../ay) as first-party/exempt-by-source. The audit accounting below covers ONLY the crates.io registry third-party crates.",
+  "vet_status": "Vetting Succeeded (exemptions cover the unaudited remainder; cargo vet exits 0)",
+  "coverage_package_versions": {
+    "comment": "cargo-vet's authoritative count is by crate-VERSION over the default-target resolved graph (this is what the gate reports).",
+    "total": 384,
+    "fully_audited_via_import_or_local": 85,
+    "partially_audited": 3,
+    "exemption_only_unaudited": 296,
+    "audited_fraction_pct": 22.9,
+    "audited_fraction_full_only_pct": 22.1
+  },
+  "coverage_by_crate_name": {
+    "comment": "Deduplicated by crate NAME across versions (a coarser but more intuitive headline).",
+    "registry_crate_names_total": 338,
+    "audited_via_trusted_import": 69,
+    "exemption_only_unaudited": 269,
+    "audited_fraction_pct": 20.4
+  },
+  "graph_breakdown": {
+    "total_packages": 432,
+    "workspace_members_first_party": 27,
+    "path_deps_first_party_incl_ay": 69,
+    "registry_third_party": 363,
+    "git_third_party": 0,
+    "registry_distinct_names": 338
+  },
+  "trusted_imports": {
+    "comment": "Standard, widely-used cargo-vet audit registries pulled into supply-chain/imports.lock. These are the 'verified by reputable third parties' layer. 257 imported audit records + 7 trusted publishers were resolved against our graph.",
+    "registries": [
+      { "name": "mozilla",           "url": "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml" },
+      { "name": "google",            "url": "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml" },
+      { "name": "bytecode-alliance", "url": "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml" },
+      { "name": "embark-studios",    "url": "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml" },
+      { "name": "isrg",              "url": "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml" },
+      { "name": "zcash",             "url": "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml" }
+    ],
+    "imported_audit_records": 257,
+    "trusted_publishers": 7
+  },
+  "audited_via_import_crate_names": [
+    "alloca", "allocator-api2", "anes", "arrayref", "base64", "beef", "bit-set", "bit-vec",
+    "bumpalo", "cast", "cfg-if", "cfg_aliases", "ciborium", "ciborium-io", "ciborium-ll",
+    "criterion-plot", "crunchy", "document-features", "either", "equivalent", "errno",
+    "fd-lock", "fnv", "foldhash", "form_urlencoded", "glob", "heck", "idna", "lazy_static",
+    "nu-ansi-term", "num-integer", "num-rational", "num-traits", "objc2-core-foundation",
+    "objc2-encode", "objc2-foundation", "oorandom", "page_size", "percent-encoding",
+    "proc-macro2", "quick-error", "rand", "rand_chacha", "rand_core", "rand_xorshift",
+    "rayon-core", "rustc_version", "rustversion", "serde", "serde_core", "serde_derive",
+    "sha1", "sharded-slab", "smallvec", "strsim", "synstructure", "thread_local",
+    "tinytemplate", "tracing-log", "unarray", "unicode-segmentation", "unicode-width",
+    "utf8_iter", "utf8parse", "valuable", "wait-timeout", "wasip2", "windows-link",
+    "wit-bindgen"
+  ],
+  "highest_risk_unaudited": {
+    "comment": "These are exemption-only (NOT covered by any trusted import) and carry the largest native-C/FFI or unsafe surface — the priority targets for the next local audit pass.",
+    "native_c_ffi": [
+      { "crate": "zstd-sys",    "why": "C zstd bindings (build.rs compiles vendored C)" },
+      { "crate": "psm",         "why": "assembly/portable-stack-manipulation, unsafe stack switching" },
+      { "crate": "libc",        "why": "raw FFI to the system libc; huge unsafe surface" },
+      { "crate": "getrandom",   "why": "FFI to OS entropy syscalls; security-critical" },
+      { "crate": "cpufeatures", "why": "runtime CPU feature detection via asm/FFI" }
+    ],
+    "large_unsafe_surface": [
+      { "crate": "zerocopy",  "why": "pervasive unsafe transmute/zero-copy parsing" },
+      { "crate": "hashbrown", "why": "core hashmap with raw-pointer unsafe internals" },
+      { "crate": "memchr",    "why": "SIMD byte search with unsafe intrinsics" },
+      { "crate": "ring",      "why": "crypto primitives mixing Rust/asm/C; security-critical" }
+    ]
+  },
+  "vendoring_status": {
+    "summary": "cargo-vet records audit ATTESTATIONS only (small supply-chain/ dir). It does NOT vendor crate source. The VENDORING half of axis 1 is now implemented as tooling + a release artifact (NOT committed to git), resolving the prior 'deferred' decision.",
+    "implemented": "A `cargo vendor --versioned-dirs vendor/` tree (385 crates: 384 crates.io + 1 git carcara, ~522.6MB source -> ~63MB tar.zst) is produced as an OFFLINE-REPRODUCIBLE, TAMPER-EVIDENT artifact. Following the repo's release-artifact convention (like .mathverse shards / mathverse-library-v*.tar.zst), the vendor/ tree is GITIGNORED and published as vendor-sources-v*.tar.zst, NOT committed. See docs/SUPPLY_CHAIN_VENDORING.md.",
+    "tamper_evidence": "data/vendor_manifest.json pins every vendored crate by name+version+checksum. crates.io crates use the registry sha256 (asserted equal to Cargo.lock's `checksum =` at generation time); the git crate uses a deterministic sha256 over cargo's per-file checksum map. Regenerate with scripts/gen_vendor_manifest.py and diff to detect source drift.",
+    "offline_wiring": "OPT-IN via .cargo/config.offline.toml (NEVER the default .cargo/config.toml — that would force vendored resolution and break checkouts lacking the gitignored tree). Invoked via `cargo --config .cargo/config.offline.toml --offline ...` or scripts/build_offline.sh. Verified: default online build unchanged; offline build resolves + compiles clean-kernel from vendor/.",
+    "package_verify": "scripts/package_vendor.sh {package,verify} tar.zst's the tree with a sha256 sidecar and a re-extract+re-checksum verify step, mirroring crates/clean-mathverse/src/release.rs's package/verify pattern."
+  },
+  "enforcement": {
+    "gate": "scripts/local_gate.sh — FULL mode only, SOFT/informational (warn mode, never fail-closed while exemptions remain)",
+    "ratchet_contract": "audited fraction monotonic-up / exemption count monotonic-down. Regenerate after any dep-graph change or new local audit; re-run `cargo vet` + the by-name accounting and update this file. A future hard-gate flip is possible once exemptions reach 0."
+  },
+  "follow_ups": [
+    "Locally audit the 9 highest-risk unaudited crates (5 native-C/FFI + 4 large-unsafe) in supply-chain/audits.toml to shrink the exemption set where no trusted import exists.",
+    "Re-import the trusted registries periodically (cargo vet import --update) to pick up newly-published audits and shrink exemptions for free.",
+    "Vendoring DONE (release-artifact convention): vendor/ gitignored, published as vendor-sources-v*.tar.zst, tamper-evidence in data/vendor_manifest.json. Regenerate the vendor tree + manifest on any Cargo.lock change (cargo vendor --versioned-dirs vendor/ && python3 scripts/gen_vendor_manifest.py); see docs/SUPPLY_CHAIN_VENDORING.md."
+  ]
+}

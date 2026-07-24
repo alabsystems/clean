@@ -1,0 +1,97 @@
+# Phase 1 Lean4 Compatibility Gate Manifest
+# Format: <filename>,<level>
+# Levels:
+#   elab       - must parse, elaborate, and type-check all declarations
+#   parse_only - must parse successfully (may need imports/tactics we don't support)
+#
+# Source corpus: tests/lean4_compat/lean4_tests/ (Lean v4.27.0)
+# Gate: AC6 for #1611 Phase 1 closure
+# Issue: #1686
+#
+# Excluded from gate (intentional parse-error / fuzz tests):
+#   297.lean, 301.lean, 302.lean, 331.lean, 1576.lean, 1690.lean,
+#   1705.lean, 1707.lean, 1760.lean, 1971.lean, 2006.lean
+
+# --- elab: self-contained files using only prelude/kernel types ---
+220.lean,elab
+223.lean,elab
+236.lean,elab
+243.lean,elab
+248.lean,elab
+255.lean,elab
+276.lean,elab
+309.lean,elab
+348.lean,elab
+1011.lean,elab
+1057.lean,elab
+1079.lean,elab
+1112.lean,elab
+1358.lean,elab
+1367.lean,elab
+1571.lean,elab
+1616.lean,elab
+1673.lean,elab
+1918.lean,elab
+
+# --- parse_only: requires imports, tactics, or metaprogramming ---
+217.lean,parse_only
+242.lean,parse_only
+247.lean,parse_only
+277a.lean,parse_only
+283.lean,parse_only
+307.lean,parse_only
+346.lean,parse_only
+361.lean,parse_only
+389.lean,parse_only
+1007.lean,parse_only
+1021.lean,parse_only
+1027.lean,parse_only
+1038.lean,parse_only
+1039.lean,parse_only
+1062.lean,parse_only
+1074b.lean,parse_only
+1098.lean,parse_only
+1102.lean,parse_only
+1113.lean,parse_only
+1206.lean,parse_only
+1235.lean,parse_only
+1240.lean,parse_only
+1275.lean,parse_only
+1279.lean,parse_only
+1279_simplified.lean,parse_only
+1292.lean,parse_only
+1298.lean,parse_only
+1301.lean,parse_only
+1321.lean,parse_only
+1363.lean,parse_only
+1371.lean,parse_only
+1377.lean,parse_only
+1433.lean,parse_only
+1569.lean,parse_only
+1606.lean,parse_only
+1668.lean,parse_only
+1681.lean,parse_only
+1682.lean,parse_only
+1719.lean,parse_only
+1763.lean,parse_only
+1779.lean,parse_only
+1781.lean,parse_only
+1804.lean,parse_only
+1825.lean,parse_only
+1845.lean,parse_only
+1856.lean,parse_only
+1878.lean,parse_only
+1891.lean,parse_only
+2005.lean,parse_only
+2045.lean,parse_only
+2077.lean,parse_only
+2115.lean,parse_only
+2125.lean,parse_only
+2178.lean,parse_only
+2273.lean,parse_only
+2361.lean,parse_only
+2505.lean,parse_only
+2514.lean,parse_only
+2634.lean,parse_only
+3057.lean,parse_only
+3140.lean,parse_only

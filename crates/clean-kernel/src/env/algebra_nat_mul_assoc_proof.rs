@@ -94,6 +94,7 @@ struct NatMulAssocConsts {
     nat_add: Expr,
     nat_mul: Expr,
     nat_zero: Expr,
+    #[cfg(test)]
     nat_succ: Expr,
     nat_rec: Expr,
     eq_const: Expr,
@@ -112,6 +113,7 @@ impl NatMulAssocConsts {
             nat_add: Expr::const_(Name::from_string("Nat.add"), vec![]),
             nat_mul: Expr::const_(Name::from_string("Nat.mul"), vec![]),
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
+            #[cfg(test)]
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             // Nat.rec.{0} — Prop-valued motive.
             nat_rec: Expr::const_(Name::from_string("Nat.rec"), vec![Level::zero()]),

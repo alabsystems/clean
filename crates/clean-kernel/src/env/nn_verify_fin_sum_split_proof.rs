@@ -55,6 +55,7 @@ struct C {
     fin_sum_congr: Expr,
     fin_sum_succ: Expr,
     nat_rec: Expr,
+    #[cfg(test)]
     eq_nat: Expr,
     eq_rat_c: Expr,
     eq_refl_nat: Expr,
@@ -85,6 +86,7 @@ impl C {
             fin_sum_congr: Expr::const_(Name::from_string("Fin.sum_congr"), vec![]),
             fin_sum_succ: Expr::const_(Name::from_string("Fin.sum_succ"), vec![]),
             nat_rec: Expr::const_(Name::from_string("Nat.rec"), vec![Level::zero()]),
+            #[cfg(test)]
             eq_nat: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_rat_c: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_refl_nat: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),

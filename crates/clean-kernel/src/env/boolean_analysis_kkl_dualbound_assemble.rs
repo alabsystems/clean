@@ -91,6 +91,7 @@ use crate::name::Name;
 /// Cached atoms for the conditional dual-bound reduction.
 struct AssembleConsts {
     o: OrderConsts,
+    #[cfg(test)]
     nat: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
@@ -108,6 +109,7 @@ impl AssembleConsts {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
             o: OrderConsts::new(),
+            #[cfg(test)]
             nat: k("Nat"),
             nat_zero: k("Nat.zero"),
             nat_succ: k("Nat.succ"),

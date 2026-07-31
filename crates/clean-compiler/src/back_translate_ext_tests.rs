@@ -2,16 +2,13 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-// 3.14 here is an arbitrary test value, not an approximation of PI.
-#![allow(clippy::approx_constant)]
-
 //! Tests for extended IR back-translation module.
 //!
 //! Part of #3083.
 
 use super::back_translate_ext::*;
 use crate::ir::*;
-use clean_kernel::{Expr, ExprKind, Level, Name};
+use clean_kernel::{Expr, ExprKind, Name};
 
 fn nm(s: &str) -> Name {
     s.parse().expect("valid name")
@@ -81,6 +78,15 @@ fn test_registry_register_and_lookup_fn() {
     r.register_fn("Nat.add", nm("Nat.add"));
     assert_eq!(r.fn_name("Nat.add"), Some(&nm("Nat.add")));
     assert!(r.fn_name("missing").is_none());
+}
+
+#[test]
+fn test_translator_registry_mut_updates_registry() {
+    let mut translator = BackTranslator::new(NameRegistry::new());
+    translator
+        .registry_mut()
+        .register_var(VarId(7), nm("seven"));
+    assert_eq!(translator.registry().var_name(VarId(7)), nm("seven"));
 }
 
 // === BackTranslateStats tests ===
@@ -200,7 +206,7 @@ fn test_translate_literal_uint64() {
 #[test]
 fn test_translate_literal_float_is_partial() {
     let mut t = BackTranslator::new(NameRegistry::new());
-    let _ = t.translate_literal(&IRLiteral::Float64(3.14));
+    let _ = t.translate_literal(&IRLiteral::Float64(1.25));
     assert_eq!(t.stats().partial_reconstructions, 1);
 }
 

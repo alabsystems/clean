@@ -80,6 +80,7 @@ pub(crate) mod dir_names {
     pub static DIR_HOM_APP: LazyLock<Name> = LazyLock::new(|| Name::from_string("Dir.homApp"));
     // Segal layer (the 2-simplex filler + its degeneracy).
     pub static DIR_HOM2: LazyLock<Name> = LazyLock::new(|| Name::from_string("Dir.Hom2"));
+    #[cfg(test)]
     pub static DIR_DEGEN2: LazyLock<Name> = LazyLock::new(|| Name::from_string("Dir.degen2"));
 }
 
@@ -99,6 +100,7 @@ pub(crate) fn dir_i1() -> Expr {
 }
 
 /// The order proposition `x ≤ y` (`Dir.le x y : Type`).
+#[cfg(test)]
 pub(crate) fn dir_le(x: Expr, y: Expr) -> Expr {
     Expr::apps(
         Expr::const_(dir_names::DIR_LE.clone(), Vec::<Level>::new()),
@@ -123,6 +125,7 @@ pub(crate) fn dir_hom_lam(lvl: Level, a: Expr, f: Expr) -> Expr {
 }
 
 /// The hom elimination / application `homApp A x y p i : A`.
+#[cfg(test)]
 pub(crate) fn dir_hom_app(lvl: Level, a: Expr, x: Expr, y: Expr, p: Expr, i: Expr) -> Expr {
     Expr::apps(
         Expr::const_(dir_names::DIR_HOM_APP.clone(), vec![lvl]),
@@ -140,6 +143,7 @@ pub(crate) fn dir_hom_app(lvl: Level, a: Expr, x: Expr, y: Expr, p: Expr, i: Exp
 /// binder. Because directed-mode terms are locally-nameless (binders opened to
 /// `FVar`s before reaching here), `x` carries no de Bruijn reference to the new
 /// binder, so no shifting is required.
+#[cfg(test)]
 pub(crate) fn dir_id_arr(lvl: Level, a: Expr, x: Expr) -> Expr {
     let const_x = Expr::lam(BinderInfo::Default, dir_interval(), x);
     dir_hom_lam(lvl, a, const_x)
@@ -183,6 +187,7 @@ pub(crate) fn dir_hom2(
 /// Sound: degeneracies exist in every simplicial type (the `σ₀` map), so this
 /// triangle is genuinely inhabited — like `homLam`, an introduction with a
 /// model-justified inhabitant, not a contractibility claim.
+#[cfg(test)]
 pub(crate) fn dir_degen2(lvl: Level, a: Expr, y: Expr, z: Expr, g: Expr) -> Expr {
     Expr::apps(
         Expr::const_(dir_names::DIR_DEGEN2.clone(), vec![lvl]),
@@ -199,6 +204,7 @@ pub(crate) fn dir_degen2(lvl: Level, a: Expr, y: Expr, z: Expr, g: Expr) -> Expr
 /// i.e. a composite edge `h` *together with* a 2-simplex filling the triangle
 /// `f, g, h`. Built with the cubical `Sigma` from the 2LTT bridge. `a x y z f g`
 /// are valid in the current context; `lvl` is the universe of `A`.
+#[cfg(test)]
 pub(crate) fn dir_composite_type(
     lvl: Level,
     a: &Expr,
@@ -242,6 +248,7 @@ pub(crate) fn dir_composite_type(
 /// a Segal type the composite is unique up to a contractible choice, the directed
 /// analogue of "composition exists and is essentially unique". `a` (= A) is valid
 /// in the current context; `lvl` is the universe of `A`.
+#[cfg(test)]
 pub(crate) fn dir_is_segal(lvl: Level, a: &Expr) -> Expr {
     use crate::tc::reduction::kan::is_contr_type;
     // Telescope Π x. Π y. Π z. Π f. Π g. isContr(compositeType …), de Bruijn
@@ -300,6 +307,7 @@ pub(crate) fn dir_is_segal(lvl: Level, a: &Expr) -> Expr {
 /// `seg x y z f g` (the applied contractibility witness) and `a x y z f g` are
 /// valid in the current context; `lvl` is the universe of `A`.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn dir_comp(
     lvl: Level,
     a: &Expr,
@@ -347,6 +355,7 @@ pub(crate) fn dir_comp(
 /// the concrete case needs the `Δ²` extension / inner-horn uniqueness — roadmap.
 /// `a` (= A), `y`, `z`, `g` are valid in the current context; `lvl` is `A`'s
 /// universe.
+#[cfg(test)]
 pub(crate) fn dir_degen_composite_witness(
     lvl: Level,
     a: &Expr,

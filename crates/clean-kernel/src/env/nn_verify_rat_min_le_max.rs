@@ -90,6 +90,7 @@ impl Environment {
     }
 
     /// Check whether the canonical `Rat.min_le_max` has been registered.
+    #[cfg(test)]
     pub(crate) fn has_rat_min_le_max(&self) -> bool {
         self.rat_min_le_max_init
     }

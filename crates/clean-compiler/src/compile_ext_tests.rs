@@ -7,7 +7,7 @@
 //! Part of #3083.
 
 use super::compile_ext::*;
-use crate::compile::{CompileConfig, OptLevel};
+use crate::compile::OptLevel;
 use crate::lcnf::{Code, Decl, DeclValue, Param};
 use clean_kernel::{Environment, FVarId, Name};
 use std::collections::HashMap;
@@ -118,6 +118,7 @@ fn test_profile_data_is_hot_returns_true_for_hot_decl() {
         },
     );
     assert!(profile.is_hot(&name));
+    assert_eq!(profile.decl_profiles[&name].call_count, 10_000);
 }
 
 #[test]
@@ -280,6 +281,7 @@ fn test_compile_context_new_starts_at_lcnf() {
     assert_eq!(ctx.current_stage, CompileStage::Lcnf);
     assert!(ctx.diagnostics.is_empty());
     assert_eq!(ctx.stats.decls_compiled, 0);
+    assert_eq!(ctx.config.backend, Backend::C);
 }
 
 #[test]
@@ -600,6 +602,7 @@ fn test_compile_ext_passes_run_includes_backend() {
             .any(|p| p == "backend:c"),
         "passes_run should include backend:c"
     );
+    assert!(result.ext_diagnostics.is_empty());
 }
 
 #[test]
@@ -652,7 +655,7 @@ fn test_compile_ext_all_error_input_with_recovery() {
     // a result with 0 compiled and recovered errors instead of a hard failure.
     // We use an extern decl with an unknown symbol to trigger an error.
     let env = default_env();
-    let bad_decl = crate::lcnf::Decl::extern_decl(
+    let bad_decl = Decl::extern_decl(
         Name::from_string("bad_fn"),
         vec![],
         clean_kernel::Expr::const_str("Unit"),
@@ -679,7 +682,7 @@ fn test_compile_ext_all_error_input_with_recovery() {
 #[test]
 fn test_compile_ext_no_error_recovery_propagates_error() {
     let env = default_env();
-    let bad_decl = crate::lcnf::Decl::extern_decl(
+    let bad_decl = Decl::extern_decl(
         Name::from_string("bad_fn2"),
         vec![],
         clean_kernel::Expr::const_str("Unit"),

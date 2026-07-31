@@ -78,6 +78,7 @@ struct H1Consts {
     inst_le_rat: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
+    #[cfg(test)]
     nat_lt: Expr,
     nat_rec0: Expr,
     not_succ_le_zero: Expr,
@@ -114,6 +115,7 @@ impl H1Consts {
             inst_le_rat: k("instLERat"),
             nat_zero: k("Nat.zero"),
             nat_succ: k("Nat.succ"),
+            #[cfg(test)]
             nat_lt: k("Nat.lt"),
             nat_rec0: Expr::const_(Name::from_string("Nat.rec"), vec![l0.clone()]),
             not_succ_le_zero: k("Nat.not_succ_le_zero"),

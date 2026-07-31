@@ -30,7 +30,7 @@
 //!   params    : BVar(ni_t+M+N+1) ..
 //! ```
 
-use crate::inductive::{count_pi, pi_domains_with_info, return_type, AdmitError};
+use crate::inductive::{count_pi, pi_domains_with_info, AdmitError};
 use crate::level::Level;
 use crate::mutual::{gather_block_ctor_infos, BlockCtorInfo, MutualBlock};
 use crate::name::Name;
@@ -145,7 +145,7 @@ impl BlockCx<'_> {
 // Recursor type: params -> motives(N) -> minors(M) -> indices_t -> major_t -> C.
 // ---------------------------------------------------------------------------
 
-fn build_mutual_recursor_type(cx: &BlockCx, target_idx: usize) -> Result<Term, String> {
+fn build_mutual_recursor_type(cx: &BlockCx<'_>, target_idx: usize) -> Result<Term, String> {
     let np = cx.num_params();
     let nt = cx.num_types();
     let nm = cx.num_minors();
@@ -255,7 +255,7 @@ fn build_mutual_recursor_type(cx: &BlockCx, target_idx: usize) -> Result<Term, S
 
 /// Motive type for block type `j`: `(indices_j) -> (T_j params indices) -> Sort u`.
 /// Params are bound outside the motive entirely.
-fn build_mutual_motive_type(cx: &BlockCx, j: usize) -> Result<Term, String> {
+fn build_mutual_motive_type(cx: &BlockCx<'_>, j: usize) -> Result<Term, String> {
     let np = cx.num_params();
     let d = &cx.block.decls[j];
     let ni = cx.num_indices_of(j);

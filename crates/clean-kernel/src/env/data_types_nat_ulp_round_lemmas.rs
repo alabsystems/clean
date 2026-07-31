@@ -20,7 +20,7 @@
 //! EMPTY for each.
 //!
 //! This is a hand-translation of the validated Lean module
-//! (Lean namespace `UlpUniv`; validated against the Lean 4 development). The def
+//! (`scratchpad/univ_out/universal_bound.lean`, namespace `UlpUniv`). The def
 //! `roundHalfEvenMod` is promoted to the public `Nat.roundHalfEvenMod`; the
 //! supporting lemmas register under the private `Nat.ulpRound.` namespace. The
 //! whole development sits on top of `Nat.div_add_mod` / `Nat.mod_lt`
@@ -189,6 +189,7 @@ impl Ulp {
         Expr::apps(self.eq_symm.clone(), [self.nat.clone(), a, b, h])
     }
     /// `@Eq.symm.{1} Bool a b h : @Eq Bool b a`
+    #[cfg(test)]
     fn symm_bool(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.bool.clone(), a, b, h])
     }

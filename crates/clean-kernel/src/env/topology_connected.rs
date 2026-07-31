@@ -375,6 +375,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_connected_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_connected(&self) -> bool {
         self.topology_connected_init
     }

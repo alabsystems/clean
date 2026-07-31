@@ -22,12 +22,18 @@
 //!   Cook, Coullard & Turan (1987), "On the Complexity of Cutting-Plane
 //!     Proofs".
 
+#[cfg(test)]
 use super::pb_pigeonhole::PBPigeonholeConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: PB soundness
@@ -37,6 +43,7 @@ impl Environment {
     ///
     /// Encodes: the constraint derived by p is valid (holds for all 0/1
     /// assignments satisfying the axiom constraints).
+    #[cfg(test)]
     pub(super) fn register_pb_sound_helper(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -59,6 +66,7 @@ impl Environment {
     /// division/rounding, saturation) preserves validity of pseudo-Boolean
     /// constraints over 0/1 variables. The saturation rule is sound because
     /// for x in {0,1}, if a*x >= b and a > b, then b*x >= b holds too.
+    #[cfg(test)]
     pub(super) fn register_pb_sound(&mut self, c: &PBPigeonholeConsts) -> Result<(), EnvError> {
         let thm_name = "ProofTheory.pb_sound";
         if self.get_const(&Name::from_string(thm_name)).is_some() {
@@ -88,6 +96,7 @@ impl Environment {
     /// Encodes: there exists a PB proof of PHP^n_{n+1} of size polynomial
     /// in n. The key insight is that the saturation rule allows efficient
     /// manipulation of counting arguments that resolution cannot express.
+    #[cfg(test)]
     pub(super) fn register_pb_php_polynomial_helper(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -111,6 +120,7 @@ impl Environment {
     /// by summing the at-least-one constraints for all pigeons (giving
     /// sum >= n+1), then using saturation and the at-most-one constraints
     /// to derive sum <= n, yielding a contradiction in O(n^3) steps.
+    #[cfg(test)]
     pub(super) fn register_pb_php_polynomial(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -145,6 +155,7 @@ impl Environment {
     ///
     /// Encodes: any tree-like resolution refutation of PHP^n_{n+1}
     /// has size 2^{Mathverse(n)}. This is Haken's 1985 result.
+    #[cfg(test)]
     pub(super) fn register_resolution_php_exponential_helper(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -170,6 +181,7 @@ impl Environment {
     /// tree must query Mathverse(n) variables on some root-to-leaf path,
     /// and each query reduces the number of remaining consistent
     /// assignments by at most a constant factor.
+    #[cfg(test)]
     pub(super) fn register_resolution_php_exponential(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -206,6 +218,7 @@ impl Environment {
     /// between PB and resolution -- PB has polynomial-size proofs of PHP
     /// while resolution requires exponential-size proofs. This is a direct
     /// corollary of Theorems 2 and 3.
+    #[cfg(test)]
     pub(super) fn register_pb_resolution_separation_helper(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -228,6 +241,7 @@ impl Environment {
     /// PHP^n_{n+1} have size O(n^3) while resolution proofs require
     /// 2^{Mathverse(n)}. This is a direct combination of pb_php_polynomial
     /// (Cook 1987) and resolution_php_exponential (Haken 1985).
+    #[cfg(test)]
     pub(super) fn register_pb_resolution_separation(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -258,6 +272,7 @@ impl Environment {
     /// into a PB proof. CP addition/multiplication/division map directly
     /// to PB addition/multiplication/division; the saturation rule is
     /// strictly additional power.
+    #[cfg(test)]
     pub(super) fn register_pb_simulates_cp_helper(
         &mut self,
         c: &PBPigeonholeConsts,
@@ -282,6 +297,7 @@ impl Environment {
     /// multiplication, division/rounding) is a valid PB step, so any CP
     /// proof is trivially a PB proof of the same size. The saturation
     /// rule gives PB strictly more power for certain families (like PHP).
+    #[cfg(test)]
     pub(super) fn register_pb_simulates_cp(
         &mut self,
         c: &PBPigeonholeConsts,

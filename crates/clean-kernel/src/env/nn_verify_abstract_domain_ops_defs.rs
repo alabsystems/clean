@@ -19,8 +19,11 @@
 //!
 //! Part of #3261.
 
+#[cfg(test)]
 use super::nn_verify_abstract_domain::AbstractDomainConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -38,6 +41,7 @@ use crate::expr::{BinderInfo, Expr};
 ///
 /// For IBP, this reduces to `IntervalBounds.contains d b x` where
 /// the abstract element is an IntervalBounds.
+#[cfg(test)]
 pub(super) fn build_ad_contains_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -70,6 +74,7 @@ pub(super) fn build_ad_contains_type(c: &AbstractDomainConsts) -> Expr {
 /// (m n : Nat) -> NNMat m n -> NNVec m -> abstract_domain n ->
 ///   (Fin n -> Rat) -> Prop
 /// ```
+#[cfg(test)]
 pub(super) fn build_ad_sound_linear_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());
@@ -101,6 +106,7 @@ pub(super) fn build_ad_sound_linear_type(c: &AbstractDomainConsts) -> Expr {
 /// Soundness through ReLU activation. Asserts that if x is in the
 /// abstract element a, then relu(x) is in the abstract image of a
 /// under the ReLU transformer. Generalizes T81.
+#[cfg(test)]
 pub(super) fn build_ad_sound_relu_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -124,6 +130,7 @@ pub(super) fn build_ad_sound_relu_type(c: &AbstractDomainConsts) -> Expr {
 /// Soundness through composition of linear + ReLU. Asserts that
 /// if x is in abstract element a, then relu(W*x + b) is in
 /// the abstract image. Generalizes T82.
+#[cfg(test)]
 pub(super) fn build_ad_sound_compose_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());
@@ -157,6 +164,7 @@ pub(super) fn build_ad_sound_compose_type(c: &AbstractDomainConsts) -> Expr {
 /// This means D1's membership is more restrictive — every element
 /// certified by D1 is also certified by D2, but D1 may reject
 /// elements that D2 accepts (tighter bounds).
+#[cfg(test)]
 pub(super) fn build_ad_tighter_than_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     // contains_type = (d : Nat) -> abstract_domain d -> (Fin d -> Rat) -> Prop
@@ -198,6 +206,7 @@ pub(super) fn build_ad_tighter_than_type(c: &AbstractDomainConsts) -> Expr {
 /// element that represents IBP (interval bound propagation).
 /// This is the canonical embedding of IntervalBounds into the
 /// abstract domain framework.
+#[cfg(test)]
 pub(super) fn build_ad_ibp_instance_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -217,6 +226,7 @@ pub(super) fn build_ad_ibp_instance_type(c: &AbstractDomainConsts) -> Expr {
 /// This is the same type as T80 (ibp_linear_sound), expressed as an
 /// instance proof for the abstract domain framework. The axiom-backed
 /// proof witnesses that IBP satisfies sound_linear.
+#[cfg(test)]
 pub(super) fn build_ad_ibp_sound_linear_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());
@@ -259,6 +269,7 @@ pub(super) fn build_ad_ibp_sound_linear_type(c: &AbstractDomainConsts) -> Expr {
 /// ```
 ///
 /// Same type as T81, expressed as an instance proof.
+#[cfg(test)]
 pub(super) fn build_ad_ibp_sound_relu_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -292,6 +303,7 @@ pub(super) fn build_ad_ibp_sound_relu_type(c: &AbstractDomainConsts) -> Expr {
 /// ```
 ///
 /// Same type as T82, expressed as an instance proof.
+#[cfg(test)]
 pub(super) fn build_ad_ibp_sound_compose_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());

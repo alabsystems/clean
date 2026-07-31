@@ -27,13 +27,19 @@
 //!
 //! Part of #3257.
 
+#[cfg(test)]
 use super::nn_verify_certified_training_defs as defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for certified training formalization.
+#[cfg(test)]
 pub(super) struct CertTrainConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -55,7 +61,9 @@ pub(super) struct CertTrainConsts {
     pub(super) is_differentiable: Expr,
 }
 
+#[cfg(test)]
 impl CertTrainConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -95,6 +103,7 @@ impl CertTrainConsts {
     }
 
     /// Build `LE.le @Rat instLERat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(
             self.le_le.clone(),
@@ -103,6 +112,7 @@ impl CertTrainConsts {
     }
 
     /// Build `LT.lt @Rat instLTRat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_lt(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(
             self.lt_lt.clone(),
@@ -111,21 +121,25 @@ impl CertTrainConsts {
     }
 
     /// Build `GE.ge @Rat instLERat lhs rhs` (i.e. `LE.le rhs lhs`).
+    #[cfg(test)]
     pub(super) fn rat_ge(&self, lhs: Expr, rhs: Expr) -> Expr {
         self.rat_le(rhs, lhs)
     }
 
     /// Build `NNVerify.NNVec n`.
+    #[cfg(test)]
     pub(super) fn vec_of(&self, n: Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n)
     }
 
     /// Build `NNVerify.IntervalBounds n`.
+    #[cfg(test)]
     pub(super) fn ib_of(&self, n: Expr) -> Expr {
         Expr::app(self.ib.clone(), n)
     }
 
     /// Function type `NNVec n_in -> NNVec n_out`.
+    #[cfg(test)]
     pub(super) fn network_ty(&self, n_in: &Expr, n_out: &Expr) -> Expr {
         Expr::pi(
             BinderInfo::Default,
@@ -135,6 +149,7 @@ impl CertTrainConsts {
     }
 
     /// Loss function type: `NNVec n_out -> NNVec n_out -> Rat`.
+    #[cfg(test)]
     pub(super) fn loss_fn_ty(&self, n_out: &Expr) -> Expr {
         Expr::pi(
             BinderInfo::Default,
@@ -152,6 +167,7 @@ impl CertTrainConsts {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Initialize certified training (differentiable IBP) declarations.
     ///
@@ -161,7 +177,7 @@ impl Environment {
     /// - `init_rat_ord()` for Rat ordering
     /// - `init_eq()` for equality
     /// - `init_and()` for conjunction
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_certified_training(&mut self) -> Result<(), EnvError> {
         if self.nn_verify_certified_training_init {
             return Ok(());
@@ -204,7 +220,7 @@ impl Environment {
 
     // -- Auxiliary definitions ------------------------------------------------
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_standard_loss(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.standard_loss"),
@@ -213,7 +229,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_worst_case_loss(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.worst_case_loss"),
@@ -222,7 +238,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_is_differentiable(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.is_differentiable"),
@@ -231,7 +247,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_ibp_bounds(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.ibp_bounds"),
@@ -242,7 +258,7 @@ impl Environment {
 
     // -- Main definitions ----------------------------------------------------
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_ibp_loss(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.ibp_loss"),
@@ -251,7 +267,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_certified_radius(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.certified_radius"),
@@ -260,7 +276,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_training_objective(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.training_objective"),
@@ -269,7 +285,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_bound_tightness(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.CertTrain.bound_tightness"),
@@ -280,7 +296,7 @@ impl Environment {
 
     // -- Theorems (axiom-backed with proof wrappers) -------------------------
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_ibp_loss_upper_bound(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         let thm_type = defs::build_ibp_loss_upper_bound_type(c);
         self.add_decl(Declaration::Axiom {
@@ -300,7 +316,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_certified_radius_sound(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         let thm_type = defs::build_certified_radius_sound_type(c);
         self.add_decl(Declaration::Axiom {
@@ -320,7 +336,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_training_convergence_bound(
         &mut self,
         c: &CertTrainConsts,
@@ -343,7 +359,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_ibp_loss_differentiable(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         let thm_type = defs::build_ibp_loss_differentiable_type(c);
         self.add_decl(Declaration::Axiom {
@@ -363,7 +379,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_certified_training_sound(
         &mut self,
         c: &CertTrainConsts,

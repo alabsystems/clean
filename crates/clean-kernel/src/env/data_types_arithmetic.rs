@@ -817,6 +817,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_int_arith` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_int_arith(&self) -> bool {
         self.int_arith_init
     }
@@ -842,6 +843,7 @@ impl Environment {
     /// ENSURES: On success, `self.int_sign_abs_init == true`
     /// ENSURES: On success, required dependencies (`int_arith`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_sign_abs(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`, residual-to-zero
         // campaign 2026-07-03): the Clean-native Int arithmetic cluster is
@@ -1023,6 +1025,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_int_sign_abs` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_int_sign_abs(&self) -> bool {
         self.int_sign_abs_init
     }

@@ -8,6 +8,7 @@
 /// The `Fin.sum_pow4` conclusion type
 /// `∀ (n : Nat) (f : Fin n → Rat),
 ///    (Σf·Σf)·(Σf·Σf) = Σ_{j1}Σ_{j3}Σ_{j2}Σ_{j4} (f j1·f j2)·(f j3·f j4)`.
+#[cfg(test)]
 fn build_sum_pow4_type(c: &Pow4Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -27,12 +28,14 @@ fn build_sum_pow4_type(c: &Pow4Consts) -> Expr {
 /// `Σ_{j1} (fun j1 => Σ_{j3} (fun j3 => Σ_{j2} (fun j2 => Σ_{j4} (fun j4 =>
 ///   (f j1·f j2)·(f j3·f j4)))))` — the final quadruple-sum RHS, in the
 /// `j1,j3,j2,j4` order that the three `Fin.sum_mul_sum` applications produce.
+#[cfg(test)]
 fn build_quad_rhs(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f: &Expr) -> Expr {
     c.sum(n, build_quad_j1_fn(c, parent, n, f))
 }
 
 /// `fun (j1 : Fin n) => Σ_{j3} Σ_{j2} Σ_{j4} (f j1·f j2)·(f j3·f j4)` — the outer
 /// RHS integrand.
+#[cfg(test)]
 fn build_quad_j1_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f: &Expr) -> Expr {
     let mut j1b = EnvDeclBuilder::child_of(parent);
     let fin_n = c.fin_of(n);
@@ -43,6 +46,7 @@ fn build_quad_j1_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f: &Expr)
 }
 
 /// `fun (j3 : Fin n) => Σ_{j2} Σ_{j4} (f j1·f j2)·(f j3·f j4)` at fixed `fj1 := f j1`.
+#[cfg(test)]
 fn build_quad_j3(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, fj1: &Expr, f: &Expr) -> Expr {
     let mut j3b = EnvDeclBuilder::child_of(parent);
     let fin_n = c.fin_of(n);
@@ -53,6 +57,7 @@ fn build_quad_j3(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, fj1: &Expr, 
 }
 
 /// `fun (j2 : Fin n) => Σ_{j4} (f j1·f j2)·(f j3·f j4)` at fixed `fj1,fj3`.
+#[cfg(test)]
 fn build_quad_j2(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -70,6 +75,7 @@ fn build_quad_j2(
 }
 
 /// Proof of `Fin.sum_pow4`.
+#[cfg(test)]
 fn build_sum_pow4_value(c: &Pow4Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -130,12 +136,14 @@ fn build_sum_pow4_value(c: &Pow4Consts) -> Expr {
 
 /// `Fin.sum n (fun j1 => Fin.sum n (fun j3 => Rat.mul (h j1) (h j3)))` — the
 /// `Fin.sum_mul_sum n n h h` RHS (`D·D` expanded).
+#[cfg(test)]
 fn build_hh_double(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, h: &Expr) -> Expr {
     c.sum(n, build_hh_double_fn(c, parent, n, h))
 }
 
 /// `fun (j1 : Fin n) => Fin.sum n (fun j3 => Rat.mul (h j1) (h j3))` — the
 /// `D·D` outer integrand.
+#[cfg(test)]
 fn build_hh_double_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, h: &Expr) -> Expr {
     let mut j1b = EnvDeclBuilder::child_of(parent);
     let fin_n = c.fin_of(n);
@@ -153,6 +161,7 @@ fn build_hh_double_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, h: &Exp
 /// Leg C proof : `Fin.sum n (fun j1 => Σ_{j3} h j1·h j3) = build_quad_rhs`.
 /// `Fin.sum_congr` over `j1` of (`Fin.sum_congr` over `j3` of the per-(j1,j3)
 /// `Fin.sum_mul_sum` expansion `h j1·h j3 = Σ_{j2}Σ_{j4} (f j1·f j2)·(f j3·f j4)`).
+#[cfg(test)]
 fn build_leg_c(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f: &Expr, h: &Expr) -> Expr {
     let fin_n = c.fin_of(n);
 

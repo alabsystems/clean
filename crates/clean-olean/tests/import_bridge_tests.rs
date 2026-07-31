@@ -14,14 +14,12 @@ use clean_kernel::env::{ConstantInfo, Environment, TrustedEnvExt};
 use clean_kernel::expr::{Expr, ExprKind};
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
-use clean_olean::{default_search_paths, load_module_with_deps, load_olean_file, OleanExporter};
+use clean_olean::{load_module_with_deps, load_olean_file, pinned_lean_lib_path, OleanExporter};
 use std::path::PathBuf;
 use tempfile::tempdir;
 
 fn get_lean_lib_path() -> Option<PathBuf> {
-    default_search_paths()
-        .into_iter()
-        .find(|p| p.join("Init/Prelude.olean").exists())
+    pinned_lean_lib_path()
 }
 
 /// Gate this file's integration tests behind `CLEAN_OLEAN_INTEGRATION=1`.
@@ -30,7 +28,7 @@ fn get_lean_lib_path() -> Option<PathBuf> {
 /// inductive-flag differences that reflect Lean version drift rather than
 /// real bugs in the import pipeline. Opt in via the env var when running
 /// the dedicated integration lane.
-fn require_olean_lean() -> Option<std::path::PathBuf> {
+fn require_olean_lean() -> Option<PathBuf> {
     if std::env::var_os("CLEAN_OLEAN_INTEGRATION").is_none() {
         eprintln!(
             "TRACE: olean integration test skipped \u{2014} set \

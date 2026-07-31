@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -823,7 +823,7 @@ impl Specification {
             &["KExpr.rec", "Eq.cong"],
         ))?;
 
-        self.add_definition(Self::derived_eq_lemma(
+        self.add_definition_if_absent(Self::derived_eq_lemma(
             "kexpr_bvar_inj",
             "forall (i : Nat) (j : Nat), Eq KExpr (KExpr.bvar i) (KExpr.bvar j) -> Eq Nat i j",
             concat!(

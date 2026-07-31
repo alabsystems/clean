@@ -19,13 +19,19 @@
 //! Reference: Lean 4 aesop tactic (Limperg & From, 2023),
 //!            AND-OR tree search (Nilsson, 1980).
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all verified proof search declarations.
+#[cfg(test)]
 pub(super) struct VerifiedProofSearchConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -40,7 +46,9 @@ pub(super) struct VerifiedProofSearchConsts {
     pub(super) search_result: Expr,
 }
 
+#[cfg(test)]
 impl VerifiedProofSearchConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -71,6 +79,7 @@ impl VerifiedProofSearchConsts {
 }
 
 /// Register an axiom with idempotency check.
+#[cfg(test)]
 fn add_proof_search_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvError> {
     if env.get_const(&Name::from_string(name)).is_some() {
         return Ok(());
@@ -82,11 +91,12 @@ fn add_proof_search_axiom(env: &mut Environment, name: &str, type_: Expr) -> Res
     })
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize verified proof search declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_verified_proof_search(&mut self) -> Result<(), EnvError> {
         if self.verified_proof_search_init {
             return Ok(());
@@ -120,7 +130,7 @@ impl Environment {
     // Types
     // ====================================================================
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_proof_search_types(
         &mut self,
         c: &VerifiedProofSearchConsts,
@@ -275,7 +285,7 @@ impl Environment {
     // Operations
     // ====================================================================
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_proof_search_operations(
         &mut self,
         c: &VerifiedProofSearchConsts,
@@ -333,7 +343,7 @@ impl Environment {
     // Predicates
     // ====================================================================
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_proof_search_predicates(
         &mut self,
         c: &VerifiedProofSearchConsts,

@@ -11,7 +11,7 @@ use tree_sitter::Node;
 
 impl CParser {
     /// Parse compound statement (block)
-    pub(super) fn parse_compound_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    pub(super) fn parse_compound_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut stmts = Vec::new();
 
         for i in 0..node.child_count() {
@@ -31,7 +31,7 @@ impl CParser {
     }
 
     /// Parse a statement
-    pub(super) fn parse_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    pub(super) fn parse_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         match node.kind() {
             "compound_statement" => self.parse_compound_stmt(node, source),
             "expression_statement" => {
@@ -94,7 +94,7 @@ impl CParser {
     ///
     /// Returns `Ok(None)` when `node` is an ordinary call expression (so the
     /// caller falls back to treating it as a normal expression statement).
-    fn try_parse_static_assert(&self, node: Node, source: &str) -> ParseResult<Option<CStmt>> {
+    fn try_parse_static_assert(&self, node: Node<'_>, source: &str) -> ParseResult<Option<CStmt>> {
         if node.kind() != "call_expression" {
             return Ok(None);
         }
@@ -127,7 +127,7 @@ impl CParser {
     ///
     /// Accepts both the C11 two-argument form `(const-expr, "message")` and
     /// the C23 single-argument form `(const-expr)`.
-    fn build_static_assert(&self, arg_list: Node, source: &str) -> ParseResult<CStmt> {
+    fn build_static_assert(&self, arg_list: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut cond: Option<CExpr> = None;
         let mut message: Option<String> = None;
 
@@ -158,7 +158,7 @@ impl CParser {
     /// Parse a dedicated `static_assert(ion)_declaration` grammar node (C23
     /// and some grammar variants). The condition is the first non-keyword
     /// expression child; the optional message is a string literal.
-    fn parse_static_assert_decl(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_static_assert_decl(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut cond: Option<CExpr> = None;
         let mut message: Option<String> = None;
 
@@ -189,7 +189,7 @@ impl CParser {
     }
 
     /// Parse declaration statement
-    fn parse_declaration(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_declaration(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut ty = CType::Void;
         let mut storage = StorageClass::Auto;
         let mut decls = Vec::new();
@@ -247,7 +247,7 @@ impl CParser {
     /// Parse init_declarator
     fn parse_init_declarator(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
         base_ty: CType,
         storage: StorageClass,
@@ -301,7 +301,7 @@ impl CParser {
     /// Parse initializer list
     pub(super) fn parse_initializer_list(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
     ) -> ParseResult<Initializer> {
         let mut items = Vec::new();
@@ -339,7 +339,7 @@ impl CParser {
     ///   '='
     ///   <value: expression or initializer_list>
     /// ```
-    fn parse_initializer_pair(&self, node: Node, source: &str) -> ParseResult<Initializer> {
+    fn parse_initializer_pair(&self, node: Node<'_>, source: &str) -> ParseResult<Initializer> {
         let mut designators = Vec::new();
         let mut value: Option<Initializer> = None;
 
@@ -415,7 +415,7 @@ impl CParser {
     }
 
     /// Parse if statement
-    fn parse_if_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_if_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut cond = None;
         let mut then_branch = None;
         let mut else_branch = None;
@@ -448,7 +448,7 @@ impl CParser {
     }
 
     /// Parse while statement
-    fn parse_while_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_while_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut cond = None;
         let mut body = None;
 
@@ -475,7 +475,7 @@ impl CParser {
     }
 
     /// Parse for statement
-    fn parse_for_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_for_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut init = None;
         let mut cond = None;
         let mut update = None;
@@ -524,7 +524,7 @@ impl CParser {
     }
 
     /// Parse do-while statement
-    fn parse_do_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_do_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut body = None;
         let mut cond = None;
 
@@ -551,7 +551,7 @@ impl CParser {
     }
 
     /// Parse return statement
-    fn parse_return_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_return_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
                 if child.kind() != "return" && child.kind() != ";" {
@@ -564,7 +564,7 @@ impl CParser {
     }
 
     /// Parse goto statement
-    fn parse_goto_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_goto_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
                 // tree-sitter-c uses "statement_identifier" for goto labels
@@ -580,7 +580,7 @@ impl CParser {
     }
 
     /// Parse labeled statement
-    fn parse_labeled_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_labeled_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut label = String::new();
         let mut stmt = None;
 
@@ -606,7 +606,7 @@ impl CParser {
     }
 
     /// Parse switch statement
-    fn parse_switch_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_switch_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut cond = None;
         let mut body = None;
 
@@ -633,7 +633,7 @@ impl CParser {
     }
 
     /// Parse switch body (convert case labels to Case statements)
-    fn parse_switch_body(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_switch_body(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut stmts = Vec::new();
 
         for i in 0..node.child_count() {
@@ -658,7 +658,7 @@ impl CParser {
     }
 
     /// Parse case statement
-    fn parse_case_stmt(&self, node: Node, source: &str) -> ParseResult<CStmt> {
+    fn parse_case_stmt(&self, node: Node<'_>, source: &str) -> ParseResult<CStmt> {
         let mut label = crate::stmt::CaseLabel::Default;
         let mut body_stmts = Vec::new();
         let mut after_colon = false;
@@ -706,7 +706,7 @@ impl CParser {
 /// surrounding double quotes stripped. Prefers the dedicated `string_content`
 /// child when present (tree-sitter-c shape), falling back to trimming quotes
 /// from the raw node text.
-fn static_assert_string_literal(node: Node, source: &str) -> String {
+fn static_assert_string_literal(node: Node<'_>, source: &str) -> String {
     for i in 0..node.child_count() {
         if let Some(child) = node.child_at(i) {
             if child.kind() == "string_content" {

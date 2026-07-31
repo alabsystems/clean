@@ -30,8 +30,11 @@
 //!
 //! Part of #3189.
 
+#[cfg(test)]
 use super::abstract_interpretation::AbstractInterpConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -43,6 +46,7 @@ use crate::expr::{BinderInfo, Expr};
 ///
 /// Lattice join operation on abstract states. Given two abstract elements,
 /// returns their least upper bound in the abstract domain ordering.
+#[cfg(test)]
 pub(super) fn build_join_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -62,6 +66,7 @@ pub(super) fn build_join_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Lattice meet operation on abstract states. Given two abstract elements,
 /// returns their greatest lower bound in the abstract domain ordering.
+#[cfg(test)]
 pub(super) fn build_meet_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -80,6 +85,7 @@ pub(super) fn build_meet_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Bottom element of the abstract lattice. Represents the least abstract
 /// state, typically the empty or unreachable state.
+#[cfg(test)]
 pub(super) fn build_bot_type(c: &AbstractInterpConsts) -> Expr {
     c.abstract_state.clone()
 }
@@ -88,6 +94,7 @@ pub(super) fn build_bot_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Top element of the abstract lattice. Represents the greatest abstract
 /// state, typically complete uncertainty.
+#[cfg(test)]
 pub(super) fn build_top_type(c: &AbstractInterpConsts) -> Expr {
     c.abstract_state.clone()
 }
@@ -101,6 +108,7 @@ pub(super) fn build_top_type(c: &AbstractInterpConsts) -> Expr {
 /// and a concretization map `gamma`, both modeled as endofunctions on the
 /// shared `AbstractState` carrier, and returns the proposition that they form
 /// a sound adjoint pair.
+#[cfg(test)]
 pub(super) fn build_galois_connection_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(
@@ -125,6 +133,7 @@ pub(super) fn build_galois_connection_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Interval-domain join operation. Computes the least upper bound of two
 /// interval abstract states.
+#[cfg(test)]
 pub(super) fn build_interval_join_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -144,6 +153,7 @@ pub(super) fn build_interval_join_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Interval-domain meet operation. Computes the greatest lower bound of two
 /// interval abstract states.
+#[cfg(test)]
 pub(super) fn build_interval_meet_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -161,6 +171,7 @@ pub(super) fn build_interval_meet_type(c: &AbstractInterpConsts) -> Expr {
 /// `AbstractInterp.Framework.interval_bot : AbstractState`
 ///
 /// Bottom element for the interval abstract domain.
+#[cfg(test)]
 pub(super) fn build_interval_bot_type(c: &AbstractInterpConsts) -> Expr {
     c.abstract_state.clone()
 }
@@ -168,6 +179,7 @@ pub(super) fn build_interval_bot_type(c: &AbstractInterpConsts) -> Expr {
 /// `AbstractInterp.Framework.interval_top : AbstractState`
 ///
 /// Top element for the interval abstract domain.
+#[cfg(test)]
 pub(super) fn build_interval_top_type(c: &AbstractInterpConsts) -> Expr {
     c.abstract_state.clone()
 }
@@ -177,6 +189,7 @@ pub(super) fn build_interval_top_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Interval-domain widening operator. Accelerates fixpoint computation by
 /// extrapolating ascending chains in the interval lattice.
+#[cfg(test)]
 pub(super) fn build_interval_widening_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -206,6 +219,7 @@ pub(super) fn build_interval_widening_type(c: &AbstractInterpConsts) -> Expr {
 /// The adjunction law for the simplified Galois connection interface. If a
 /// concrete-side state `c` is below `gamma a`, then abstracting `c` with
 /// `alpha` stays below `a`.
+#[cfg(test)]
 pub(super) fn build_galois_adjunction_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(
@@ -242,6 +256,7 @@ pub(super) fn build_galois_adjunction_type(c: &AbstractInterpConsts) -> Expr {
 /// Simplified interval-to-zonotope Galois interface. Encodes that the
 /// zonotope view refines or over-approximates the interval view through
 /// the abstraction/concretization maps `alpha_iz` and `gamma_iz`.
+#[cfg(test)]
 pub(super) fn build_interval_zonotope_galois_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(
@@ -270,6 +285,7 @@ pub(super) fn build_interval_zonotope_galois_type(c: &AbstractInterpConsts) -> E
 /// ```
 ///
 /// Join is an upper bound for its left argument in the abstract lattice.
+#[cfg(test)]
 pub(super) fn build_join_upper_bound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let join_ty = Expr::pi(
@@ -301,6 +317,7 @@ pub(super) fn build_join_upper_bound_type(c: &AbstractInterpConsts) -> Expr {
 /// ```
 ///
 /// Meet is a lower bound for its left argument in the abstract lattice.
+#[cfg(test)]
 pub(super) fn build_meet_lower_bound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let meet_ty = Expr::pi(
@@ -331,6 +348,7 @@ pub(super) fn build_meet_lower_bound_type(c: &AbstractInterpConsts) -> Expr {
 /// ```
 ///
 /// Bottom is the least element of the abstract lattice.
+#[cfg(test)]
 pub(super) fn build_bot_least_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (bot_id, bot) = b.fresh_local(c.abstract_state.clone());
@@ -349,6 +367,7 @@ pub(super) fn build_bot_least_type(c: &AbstractInterpConsts) -> Expr {
 /// ```
 ///
 /// Top is the greatest element of the abstract lattice.
+#[cfg(test)]
 pub(super) fn build_top_greatest_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (top_id, top) = b.fresh_local(c.abstract_state.clone());
@@ -375,6 +394,7 @@ pub(super) fn build_top_greatest_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Soundness interface for Galois connections. If `alpha` and `gamma` satisfy
 /// the Galois-connection predicate, the adjunction law holds.
+#[cfg(test)]
 pub(super) fn build_galois_connection_sound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(

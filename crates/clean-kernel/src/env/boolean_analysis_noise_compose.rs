@@ -222,6 +222,7 @@ impl ComposeConsts {
             [rho.clone(), n.clone(), x.clone(), y.clone()],
         )
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }

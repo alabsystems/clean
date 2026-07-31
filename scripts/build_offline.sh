@@ -17,10 +17,11 @@
 # used as-is; otherwise `build` is assumed and all args are passed through.
 #
 # PREREQUISITE: the vendor/ tree must exist. It is GITIGNORED (released as an
-# artifact, not committed). Populate it with:
-#   cargo vendor --versioned-dirs vendor/
-# or fetch + extract the released archive (scripts/package_vendor.sh get/verify;
-# see docs/SUPPLY_CHAIN_VENDORING.md).
+# artifact, not committed). Internal AY/NY repositories must remain subrepos
+# and are rejected by the preflight below. Fetch + extract a compatible
+# released archive (scripts/package_vendor.sh verify; see
+# docs/SUPPLY_CHAIN_VENDORING.md). The historical artifact predates AY's Git
+# migration; do not regenerate it with raw `cargo vendor`.
 
 set -euo pipefail
 
@@ -34,11 +35,36 @@ OFFLINE_CONFIG=".cargo/config.offline.toml"
 
 if [[ ! -d vendor ]]; then
   echo "error: vendor/ tree not found at ${REPO_ROOT}/vendor" >&2
-  echo "       generate it with:  cargo vendor --versioned-dirs vendor/" >&2
-  echo "       or fetch the released vendor-sources-v*.tar.zst artifact" >&2
+  echo "       fetch the compatible vendor-sources-v*.tar.zst artifact" >&2
   echo "       (see scripts/package_vendor.sh and docs/SUPPLY_CHAIN_VENDORING.md)." >&2
   exit 1
 fi
+
+# Fail before Cargo if this tree contains an internal repository or does not
+# exactly match the committed external-source manifest and current Cargo.lock.
+# This prevents an ambient/raw `cargo vendor` run from turning AY or NY into a
+# vendored dependency.
+VENDOR_PREFLIGHT_TMP="$(mktemp)"
+trap 'rm -f "${VENDOR_PREFLIGHT_TMP:-}"' EXIT
+python3 scripts/gen_vendor_manifest.py vendor "${VENDOR_PREFLIGHT_TMP}"
+python3 - data/vendor_manifest.json "${VENDOR_PREFLIGHT_TMP}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    expected = json.load(handle)
+with open(sys.argv[2], encoding="utf-8") as handle:
+    actual = json.load(handle)
+
+for field in ("cargo_lock_sha256", "summary", "crates"):
+    if expected.get(field) != actual.get(field):
+        print(
+            f"error: vendor provenance field {field!r} is stale or mismatched; "
+            "refresh only through a third-party-only staging flow",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+PY
 
 # Default to `build` when no cargo subcommand is given.
 SUBCMD="build"

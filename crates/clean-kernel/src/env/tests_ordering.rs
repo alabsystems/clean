@@ -4871,6 +4871,70 @@ fn test_init_ofnat_nat() {
     assert_const(&env, "instOfNatNat");
 }
 
+/// `instOfNatNat` must carry Lean's real INSTANCE priority (1000), so it
+/// outranks `Zero.toOfNat0` (which `Init/Data/Zero.lean:17` declares at
+/// `(priority := 300)`) when both are candidates for `OfNat Nat 0`.
+///
+/// Regression: this was hand-registered at 100 — Lean's `low`, misread off the
+/// `@[default_instance 100]` attribute, which orders literal-type DEFAULTING and
+/// not `synthInstance` candidates. Priority dominates candidate ordering, so
+/// `(0 : Nat)` elaborated to `Zero.toOfNat0` while every imported statement of
+/// the same fact (`Nat.add_zero` and friends) uses `instOfNatNat 0`. Both are
+/// definitionally equal, so nothing was rejected — but `simp only [Nat.add_zero]`
+/// could not match its own imported lemma, because syntactic matching sees the
+/// two shapes as different.
+///
+/// Ground truth: the shipped `Init/Prelude.olean` serializes `instOfNatNat` into
+/// `Lean.Meta.instanceExtension` with `priority: 1000`. The `.olean` import
+/// cannot repair a wrong value here — `register_real_instance_entries`
+/// (`clean-olean/src/import/load_register.rs`) skips any name already in the
+/// registry, and this prelude registration always runs first — so the constant
+/// below is the only thing that decides the order.
+#[test]
+fn test_init_ofnat_nat_instance_priority_outranks_zero_to_ofnat0() {
+    let mut env = Environment::new();
+    env.init_ofnat_nat().unwrap();
+
+    let ofnat = Name::from_string("OfNat");
+    let inst_of_nat_nat = Name::from_string("instOfNatNat");
+
+    let priority = env
+        .get_class_instances(&ofnat)
+        .iter()
+        .find(|i| i.name == inst_of_nat_nat)
+        .map(|i| i.priority)
+        .expect("instOfNatNat must be registered as an OfNat instance");
+    assert_eq!(
+        priority, 1000,
+        "instOfNatNat must use Lean's unannotated-instance default priority \
+         (1000, as serialized in Init/Prelude.olean), not `low` (100)"
+    );
+
+    // The order that actually matters: register `Zero.toOfNat0` at Lean's 300
+    // exactly as the `.olean` import does, then check the bucket ranks
+    // `instOfNatNat` first. At priority 100 this bucket came out inverted.
+    let zero_to_ofnat0 = Name::from_string("Zero.toOfNat0");
+    env.register_instance(KernelInstanceInfo {
+        name: zero_to_ofnat0.clone(),
+        class_name: ofnat.clone(),
+        priority: 300,
+        type_: None,
+        value: None,
+    });
+
+    let order: Vec<Name> = env
+        .get_class_instances(&ofnat)
+        .iter()
+        .map(|i| i.name.clone())
+        .filter(|n| *n == inst_of_nat_nat || *n == zero_to_ofnat0)
+        .collect();
+    assert_eq!(
+        order,
+        vec![inst_of_nat_nat, zero_to_ofnat0],
+        "instOfNatNat must be tried before Zero.toOfNat0 for an `OfNat Nat _` goal"
+    );
+}
+
 #[test]
 fn test_ofnat_type_check() {
     use crate::tc::TypeChecker;

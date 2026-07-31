@@ -360,14 +360,14 @@ fn test_is_geq() {
 fn test_normalize() {
     // imax(u, 0) normalizes to 0
     let u = Level::param(Name::from_string("u"));
-    let i = Level::IMax(Arc::new(u.clone()), Arc::new(Level::zero()));
+    let i = Level::IMax(level_arc(u.clone()), level_arc(Level::zero()));
     // After simplification in imax(), this is already Zero
     // But if we construct it manually:
     let normalized = i.normalize();
     assert!(normalized.is_zero());
 
     // max(0, u) normalizes to u
-    let m = Level::Max(Arc::new(Level::zero()), Arc::new(u.clone()));
+    let m = Level::Max(level_arc(Level::zero()), level_arc(u.clone()));
     let normalized = m.normalize();
     assert_eq!(normalized, u);
 }
@@ -484,20 +484,26 @@ fn test_is_zero_logic() {
     // Kill mutant: is_zero max case && to ||
 
     // max(0, 0) IS zero
-    let max_00 = Level::Max(Arc::new(Level::Zero), Arc::new(Level::Zero));
+    let max_00 = Level::Max(level_arc(Level::Zero), level_arc(Level::Zero));
     assert!(max_00.is_zero());
 
     // max(1, 0) is NOT zero (one side is nonzero)
-    let max_10 = Level::Max(Arc::new(Level::succ(Level::zero())), Arc::new(Level::Zero));
+    let max_10 = Level::Max(
+        level_arc(Level::succ(Level::zero())),
+        level_arc(Level::Zero),
+    );
     assert!(!max_10.is_zero());
 
     // max(0, 1) is NOT zero (one side is nonzero)
-    let max_01 = Level::Max(Arc::new(Level::Zero), Arc::new(Level::succ(Level::zero())));
+    let max_01 = Level::Max(
+        level_arc(Level::Zero),
+        level_arc(Level::succ(Level::zero())),
+    );
     assert!(!max_01.is_zero());
 
     // max(1, 1) is NOT zero
     let one = Level::succ(Level::zero());
-    let max_11 = Level::Max(Arc::new(one.clone()), Arc::new(one));
+    let max_11 = Level::Max(level_arc(one.clone()), level_arc(one));
     assert!(!max_11.is_zero());
 }
 
@@ -968,10 +974,10 @@ fn test_identity_substitute_preserves_raw_param_free_subtrees() {
     let u_name = Name::from_string("u");
     let u = Level::param(u_name.clone());
     let raw_param_free = Level::Max(
-        Arc::new(Level::succ(Level::zero())),
-        Arc::new(Level::zero().add_offset(3)),
+        level_arc(Level::succ(Level::zero())),
+        level_arc(Level::zero().add_offset(3)),
     );
-    let mixed = Level::Max(Arc::new(u.clone()), Arc::new(raw_param_free.clone()));
+    let mixed = Level::Max(level_arc(u.clone()), level_arc(raw_param_free.clone()));
 
     let subst = vec![(u_name.clone(), u.clone())];
     assert_eq!(
@@ -1263,8 +1269,8 @@ fn test_normalize_max_commutativity() {
     let v = Level::param(Name::from_string("v"));
 
     // Construct without smart constructor to avoid is_geq-based simplification
-    let max_uv = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
-    let max_vu = Level::Max(Arc::new(v.clone()), Arc::new(u.clone()));
+    let max_uv = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
+    let max_vu = Level::Max(level_arc(v.clone()), level_arc(u.clone()));
 
     assert!(
         Level::is_def_eq(&max_uv, &max_vu),
@@ -1281,12 +1287,12 @@ fn test_normalize_max_associativity() {
     let w = Level::param(Name::from_string("w"));
 
     // max(u, max(v, w))
-    let inner_vw = Level::Max(Arc::new(v.clone()), Arc::new(w.clone()));
-    let lhs = Level::Max(Arc::new(u.clone()), Arc::new(inner_vw));
+    let inner_vw = Level::Max(level_arc(v.clone()), level_arc(w.clone()));
+    let lhs = Level::Max(level_arc(u.clone()), level_arc(inner_vw));
 
     // max(max(u, v), w)
-    let inner_uv = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
-    let rhs = Level::Max(Arc::new(inner_uv), Arc::new(w.clone()));
+    let inner_uv = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
+    let rhs = Level::Max(level_arc(inner_uv), level_arc(w.clone()));
 
     assert!(
         Level::is_def_eq(&lhs, &rhs),
@@ -1300,7 +1306,7 @@ fn test_normalize_max_dedup_and_subsume() {
     let u = Level::param(Name::from_string("u"));
 
     // max(u, succ(u)) should normalize to succ(u) (u subsumed by succ(u))
-    let max_u_su = Level::Max(Arc::new(u.clone()), Arc::new(Level::succ(u.clone())));
+    let max_u_su = Level::Max(level_arc(u.clone()), level_arc(Level::succ(u.clone())));
     let normed = max_u_su.normalize();
     assert_eq!(
         normed,
@@ -1309,7 +1315,7 @@ fn test_normalize_max_dedup_and_subsume() {
     );
 
     // max(succ(u), u) should also normalize to succ(u)
-    let max_su_u = Level::Max(Arc::new(Level::succ(u.clone())), Arc::new(u.clone()));
+    let max_su_u = Level::Max(level_arc(Level::succ(u.clone())), level_arc(u.clone()));
     let normed2 = max_su_u.normalize();
     assert_eq!(
         normed2,
@@ -1323,14 +1329,14 @@ fn test_normalize_max_dedup_and_subsume() {
 fn test_normalize_succ_distributes_into_max() {
     let u = Level::param(Name::from_string("u"));
     let v = Level::param(Name::from_string("v"));
-    let max_uv = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
-    let succ_max = Level::Succ(Arc::new(max_uv));
+    let max_uv = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
+    let succ_max = Level::Succ(level_arc(max_uv));
 
     let normed = succ_max.normalize();
     // Should be max(succ(u), succ(v))
     let expected = Level::Max(
-        Arc::new(Level::succ(u.clone())),
-        Arc::new(Level::succ(v.clone())),
+        level_arc(Level::succ(u.clone())),
+        level_arc(Level::succ(v.clone())),
     );
     assert_eq!(
         normed, expected,
@@ -1346,7 +1352,7 @@ fn test_normalize_explicit_subsumption() {
     let two = Level::succ(Level::succ(Level::zero()));
     let u3 = u.add_offset(3); // succ^3(u)
 
-    let max_2_u3 = Level::Max(Arc::new(two), Arc::new(u3.clone()));
+    let max_2_u3 = Level::Max(level_arc(two), level_arc(u3.clone()));
     let normed = max_2_u3.normalize();
 
     // 2 is explicit with offset 2, u+3 has offset 3 >= 2, so 2 is subsumed
@@ -1368,7 +1374,7 @@ fn test_is_geq_imax_param_unconditional() {
     let v = Level::param(Name::from_string("v"));
 
     // imax(v, u) >= u should be true: imax(a, b) >= l iff b >= l
-    let imax_vu = Level::IMax(Arc::new(v.clone()), Arc::new(u.clone()));
+    let imax_vu = Level::IMax(level_arc(v.clone()), level_arc(u.clone()));
     assert!(
         Level::is_geq(&imax_vu, &u),
         "is_geq(imax(v, u), u) must be true (Lean 4 parity)"
@@ -1383,20 +1389,20 @@ fn test_is_geq_imax_on_right_unconditional() {
     let w = Level::param(Name::from_string("w"));
 
     // u >= imax(u, u) should be true
-    let imax_uu = Level::IMax(Arc::new(u.clone()), Arc::new(u.clone()));
+    let imax_uu = Level::IMax(level_arc(u.clone()), level_arc(u.clone()));
     assert!(Level::is_geq(&u, &imax_uu), "u >= imax(u, u) must be true");
 
     // max(u, v) >= imax(u, v) should be true:
     // need max(u,v) >= u && max(u,v) >= v
     let max_uv = Level::max(u.clone(), v.clone());
-    let imax_uv = Level::IMax(Arc::new(u.clone()), Arc::new(v.clone()));
+    let imax_uv = Level::IMax(level_arc(u.clone()), level_arc(v.clone()));
     assert!(
         Level::is_geq(&max_uv, &imax_uv),
         "max(u, v) >= imax(u, v) must be true"
     );
 
     // u >= imax(v, w) should be false (u can't be >= v and >= w for independent params)
-    let imax_vw = Level::IMax(Arc::new(v.clone()), Arc::new(w.clone()));
+    let imax_vw = Level::IMax(level_arc(v.clone()), level_arc(w.clone()));
     assert!(
         !Level::is_geq(&u, &imax_vw),
         "u >= imax(v, w) should be false for independent params"
@@ -1410,7 +1416,7 @@ fn test_is_geq_imax_on_left_unconditional() {
     let v = Level::param(Name::from_string("v"));
 
     // imax(u, v) >= v should be true (b >= l where b=v, l=v)
-    let imax_uv = Level::IMax(Arc::new(u.clone()), Arc::new(v.clone()));
+    let imax_uv = Level::IMax(level_arc(u.clone()), level_arc(v.clone()));
     assert!(Level::is_geq(&imax_uv, &v), "imax(u, v) >= v must be true");
 
     // imax(u, v) >= u should be false (b >= l where b=v, l=u — independent params)
@@ -1420,7 +1426,7 @@ fn test_is_geq_imax_on_left_unconditional() {
     );
 
     // imax(u, succ(v)) >= v should be true (b=succ(v) >= v)
-    let imax_u_sv = Level::IMax(Arc::new(u.clone()), Arc::new(Level::succ(v.clone())));
+    let imax_u_sv = Level::IMax(level_arc(u.clone()), level_arc(Level::succ(v.clone())));
     assert!(
         Level::is_geq(&imax_u_sv, &v),
         "imax(u, succ(v)) >= v must be true"
@@ -1435,8 +1441,8 @@ fn test_is_geq_normalizes_inputs() {
 
     // max(v, u) (unnormalized: v first) >= max(u, v) (u first)
     // After normalization, both should have the same canonical form
-    let max_vu = Level::Max(Arc::new(v.clone()), Arc::new(u.clone()));
-    let max_uv = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
+    let max_vu = Level::Max(level_arc(v.clone()), level_arc(u.clone()));
+    let max_uv = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
     assert!(
         Level::is_geq(&max_vu, &max_uv),
         "is_geq(max(v,u), max(u,v)) must be true after normalization"
@@ -1600,8 +1606,8 @@ fn test_is_geq_succ_of_imax_geq_imax() {
     let a = Level::param(Name::from_string("a"));
     let b = Level::param(Name::from_string("b"));
 
-    let imax_ab = Level::IMax(Arc::new(a.clone()), Arc::new(b.clone()));
-    let succ_imax = Level::Succ(Arc::new(imax_ab.clone()));
+    let imax_ab = Level::IMax(level_arc(a.clone()), level_arc(b.clone()));
+    let succ_imax = Level::Succ(level_arc(imax_ab.clone()));
 
     // succ(imax(a, b)) >= imax(a, b) should be true
     assert!(
@@ -1616,8 +1622,8 @@ fn test_is_geq_succ2_of_imax_geq_imax() {
     let a = Level::param(Name::from_string("a"));
     let b = Level::param(Name::from_string("b"));
 
-    let imax_ab = Level::IMax(Arc::new(a.clone()), Arc::new(b.clone()));
-    let succ2_imax = Level::Succ(Arc::new(Level::Succ(Arc::new(imax_ab.clone()))));
+    let imax_ab = Level::IMax(level_arc(a.clone()), level_arc(b.clone()));
+    let succ2_imax = Level::Succ(level_arc(Level::Succ(level_arc(imax_ab.clone()))));
 
     assert!(
         Level::is_geq(&succ2_imax, &imax_ab),
@@ -1632,7 +1638,7 @@ fn test_is_geq_imax_reflexive() {
     let b = Level::param(Name::from_string("b"));
 
     // When a and b are distinct params, imax(a, b) doesn't simplify
-    let imax_ab = Level::IMax(Arc::new(a.clone()), Arc::new(b.clone()));
+    let imax_ab = Level::IMax(level_arc(a.clone()), level_arc(b.clone()));
 
     assert!(
         Level::is_geq(&imax_ab, &imax_ab),
@@ -1652,7 +1658,7 @@ fn test_normalize_explicit_not_subsumed() {
 
     // max(5, succ^2(u)) — the explicit 5 should NOT be subsumed because
     // succ^2(u) has offset 2 < 5.
-    let level = Level::Max(Arc::new(five.clone()), Arc::new(succ2_u.clone()));
+    let level = Level::Max(level_arc(five.clone()), level_arc(succ2_u.clone()));
     let normalized = level.normalize();
 
     // Both should be preserved in the result.
@@ -1694,7 +1700,7 @@ fn build_deep_max(depth: usize) -> Level {
     let u = Level::param(Name::from_string("u"));
     let mut level = u.clone();
     for _ in 0..depth {
-        level = Level::Max(Arc::new(level), Arc::new(u.clone()));
+        level = Level::Max(level_arc(level), level_arc(u.clone()));
     }
     level
 }
@@ -1704,7 +1710,7 @@ fn build_deep_imax(depth: usize) -> Level {
     let u = Level::param(Name::from_string("u"));
     let mut level = u.clone();
     for _ in 0..depth {
-        level = Level::IMax(Arc::new(level), Arc::new(u.clone()));
+        level = Level::IMax(level_arc(level), level_arc(u.clone()));
     }
     level
 }
@@ -1799,15 +1805,15 @@ fn test_is_def_eq_repeated_normalization_overhead() {
 
     // lhs: succ(max(u, max(v, w))) — needs flatten + sort + distribute
     // rhs: max(succ(u), max(succ(v), succ(w))) — already normalized form
-    let lhs = Level::Succ(Arc::new(Level::Max(
-        Arc::new(u.clone()),
-        Arc::new(Level::Max(Arc::new(v.clone()), Arc::new(w.clone()))),
+    let lhs = Level::Succ(level_arc(Level::Max(
+        level_arc(u.clone()),
+        level_arc(Level::Max(level_arc(v.clone()), level_arc(w.clone()))),
     )));
     let rhs = Level::Max(
-        Arc::new(Level::succ(u.clone())),
-        Arc::new(Level::Max(
-            Arc::new(Level::succ(v.clone())),
-            Arc::new(Level::succ(w.clone())),
+        level_arc(Level::succ(u.clone())),
+        level_arc(Level::Max(
+            level_arc(Level::succ(v.clone())),
+            level_arc(Level::succ(w.clone())),
         )),
     );
 
@@ -1850,7 +1856,7 @@ fn test_normalize_max_wide_tree_linear_scaling() {
         let mut level = Level::param(Name::from_string("u0"));
         for i in 1..n {
             let param = Level::param(Name::from_string(&format!("u{i}")));
-            level = Level::Max(Arc::new(level), Arc::new(param));
+            level = Level::Max(level_arc(level), level_arc(param));
         }
         level
     }
@@ -2008,10 +2014,10 @@ fn test_structural_eq_implies_def_eq() {
 
     // Compound: unnormalized Max that is structurally identical
     let compound = Level::Max(
-        Arc::new(Level::param(Name::from_string("u"))),
-        Arc::new(Level::Max(
-            Arc::new(Level::param(Name::from_string("v"))),
-            Arc::new(Level::param(Name::from_string("w"))),
+        level_arc(Level::param(Name::from_string("u"))),
+        level_arc(Level::Max(
+            level_arc(Level::param(Name::from_string("v"))),
+            level_arc(Level::param(Name::from_string("w"))),
         )),
     );
     let compound_clone = compound.clone();
@@ -2048,30 +2054,30 @@ fn test_normalize_idempotent_all_variants() {
         // Param
         u.clone(),
         // Simple Max
-        Level::Max(Arc::new(u.clone()), Arc::new(v.clone())),
+        Level::Max(level_arc(u.clone()), level_arc(v.clone())),
         // Nested Max (needs flatten + sort)
         Level::Max(
-            Arc::new(u.clone()),
-            Arc::new(Level::Max(Arc::new(v.clone()), Arc::new(w.clone()))),
+            level_arc(u.clone()),
+            level_arc(Level::Max(level_arc(v.clone()), level_arc(w.clone()))),
         ),
         // Succ(Max) — needs distribute
-        Level::Succ(Arc::new(Level::Max(
-            Arc::new(u.clone()),
-            Arc::new(v.clone()),
+        Level::Succ(level_arc(Level::Max(
+            level_arc(u.clone()),
+            level_arc(v.clone()),
         ))),
         // IMax that reduces to zero: imax(u, 0) = 0
-        Level::IMax(Arc::new(u.clone()), Arc::new(Level::zero())),
+        Level::IMax(level_arc(u.clone()), level_arc(Level::zero())),
         // IMax that reduces to Max: imax(u, succ(v))
-        Level::IMax(Arc::new(u.clone()), Arc::new(Level::succ(v.clone()))),
+        Level::IMax(level_arc(u.clone()), level_arc(Level::succ(v.clone()))),
         // IMax with both params (stays IMax in normalized form)
-        Level::IMax(Arc::new(u.clone()), Arc::new(v.clone())),
+        Level::IMax(level_arc(u.clone()), level_arc(v.clone())),
         // Deep: Succ(Succ(Max(IMax(u, v), w)))
-        Level::Succ(Arc::new(Level::Succ(Arc::new(Level::Max(
-            Arc::new(Level::IMax(Arc::new(u.clone()), Arc::new(v.clone()))),
-            Arc::new(w.clone()),
+        Level::Succ(level_arc(Level::Succ(level_arc(Level::Max(
+            level_arc(Level::IMax(level_arc(u.clone()), level_arc(v.clone()))),
+            level_arc(w.clone()),
         ))))),
         // Max with concrete + param: max(2, u)
-        Level::Max(Arc::new(Level::zero().add_offset(2)), Arc::new(u.clone())),
+        Level::Max(level_arc(Level::zero().add_offset(2)), level_arc(u.clone())),
     ];
 
     for (i, level) in cases.iter().enumerate() {
@@ -2105,8 +2111,8 @@ fn test_no_params_substitute_is_identity() {
         Level::succ(Level::zero()),
         Level::zero().add_offset(10),
         Level::Max(
-            Arc::new(Level::succ(Level::zero())),
-            Arc::new(Level::zero().add_offset(3)),
+            level_arc(Level::succ(Level::zero())),
+            level_arc(Level::zero().add_offset(3)),
         ),
     ];
 
@@ -2134,8 +2140,8 @@ fn test_def_eq_levels_share_normal_form() {
 
     // max(u, v) and max(v, u) should normalize to same form
     // (normalization sorts args)
-    let max_uv = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
-    let max_vu = Level::Max(Arc::new(v.clone()), Arc::new(u.clone()));
+    let max_uv = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
+    let max_vu = Level::Max(level_arc(v.clone()), level_arc(u.clone()));
     assert_eq!(
         max_uv.normalize(),
         max_vu.normalize(),
@@ -2143,13 +2149,13 @@ fn test_def_eq_levels_share_normal_form() {
     );
 
     // succ(max(u, v)) and max(succ(u), succ(v)) should normalize identically
-    let succ_max = Level::Succ(Arc::new(Level::Max(
-        Arc::new(u.clone()),
-        Arc::new(v.clone()),
+    let succ_max = Level::Succ(level_arc(Level::Max(
+        level_arc(u.clone()),
+        level_arc(v.clone()),
     )));
     let max_succs = Level::Max(
-        Arc::new(Level::succ(u.clone())),
-        Arc::new(Level::succ(v.clone())),
+        level_arc(Level::succ(u.clone())),
+        level_arc(Level::succ(v.clone())),
     );
     assert_eq!(
         succ_max.normalize(),
@@ -2158,7 +2164,7 @@ fn test_def_eq_levels_share_normal_form() {
     );
 
     // max(u, u) should normalize to just u
-    let max_uu = Level::Max(Arc::new(u.clone()), Arc::new(u.clone()));
+    let max_uu = Level::Max(level_arc(u.clone()), level_arc(u.clone()));
     assert_eq!(
         max_uu.normalize(),
         u.normalize(),
@@ -2166,7 +2172,7 @@ fn test_def_eq_levels_share_normal_form() {
     );
 
     // max(0, u) normalizes to u
-    let max_0u = Level::Max(Arc::new(Level::zero()), Arc::new(u.clone()));
+    let max_0u = Level::Max(level_arc(Level::zero()), level_arc(u.clone()));
     assert_eq!(
         max_0u.normalize(),
         u.normalize(),
@@ -2174,8 +2180,8 @@ fn test_def_eq_levels_share_normal_form() {
     );
 
     // imax(u, succ(v)) == max(u, succ(v))
-    let imax_u_sv = Level::IMax(Arc::new(u.clone()), Arc::new(Level::succ(v.clone())));
-    let max_u_sv = Level::Max(Arc::new(u.clone()), Arc::new(Level::succ(v.clone())));
+    let imax_u_sv = Level::IMax(level_arc(u.clone()), level_arc(Level::succ(v.clone())));
+    let max_u_sv = Level::Max(level_arc(u.clone()), level_arc(Level::succ(v.clone())));
     assert_eq!(
         imax_u_sv.normalize(),
         max_u_sv.normalize(),
@@ -2206,7 +2212,7 @@ fn test_max_constructor_is_geq_renormalization() {
     let max_result = Level::max(norm_u.clone(), norm_v.clone());
 
     // The result must be def-eq to max(u, v)
-    let max_raw = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
+    let max_raw = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
     assert!(
         Level::is_def_eq(&max_result, &max_raw),
         "max() on normalized inputs must be def-eq to max() on raw inputs"
@@ -2242,7 +2248,7 @@ fn test_is_geq_max_memoization_prevents_exponential_blowup() {
         let mut level = Level::succ(Level::zero()); // base = 1
         for i in (0..n).rev() {
             let param = Level::param(Name::from_string(&format!("p{i}")));
-            level = Level::Max(Arc::new(param), Arc::new(level));
+            level = Level::Max(level_arc(param), level_arc(level));
         }
         level
     }
@@ -2293,10 +2299,10 @@ fn test_is_geq_max_shared_subtree_correctness() {
     // shared = max(u, v)
     let u = Level::param(Name::from_string("u"));
     let v = Level::param(Name::from_string("v"));
-    let shared = Level::Max(Arc::new(u.clone()), Arc::new(v.clone()));
+    let shared = Level::Max(level_arc(u.clone()), level_arc(v.clone()));
 
     // diamond = max(shared, shared) — both arms are identical
-    let diamond = Level::Max(Arc::new(shared.clone()), Arc::new(shared.clone()));
+    let diamond = Level::Max(level_arc(shared.clone()), level_arc(shared.clone()));
 
     // diamond >= u should be true (max(max(u,v), max(u,v)) >= u)
     assert!(
@@ -2317,7 +2323,7 @@ fn test_is_geq_max_shared_subtree_correctness() {
     );
 
     // Deeper: triple nesting with shared structure
-    let triple = Level::Max(Arc::new(diamond.clone()), Arc::new(shared.clone()));
+    let triple = Level::Max(level_arc(diamond.clone()), level_arc(shared.clone()));
     assert!(
         Level::is_geq(&triple, &u),
         "triple-nested max with shared subtree >= u should be true"

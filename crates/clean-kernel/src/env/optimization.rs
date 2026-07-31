@@ -13,11 +13,16 @@
 //! - Dynamic programming (Bellman, optimal control)
 //! - Game theory (Nash equilibrium, minimax)
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Optimization module
     ///
@@ -49,6 +54,7 @@ impl Environment {
     /// ENSURES: On success, `self.optimization_init == true`
     /// ENSURES: On success, required dependencies (`eq`, `nat`, `int`, `rat`, `list`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_optimization(&mut self) -> Result<(), EnvError> {
         if self.optimization_init {
             return Ok(());
@@ -457,6 +463,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_optimization` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_optimization(&self) -> bool {
         self.optimization_init
     }

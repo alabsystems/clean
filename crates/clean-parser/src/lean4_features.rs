@@ -129,6 +129,28 @@ mod binders {
     }
 
     #[test]
+    fn strict_implicit_binder_in_declaration_position() {
+        // `⦃x : T⦄` in DECLARATION position. Term position (the control below)
+        // always worked; declaration position fell through to error recovery,
+        // so `def f ⦃a : Type⦄ ...` produced a raw declaration. Mathlib uses the
+        // declaration spelling widely.
+        assert!(check(
+            "⦃a : Type⦄",
+            parse_decl("def f ⦃a : Type⦄ (x : a) : a := x")
+        ));
+        // Multiple names inside one binder group.
+        assert!(check(
+            "⦃a b : Type⦄",
+            parse_decl("def h ⦃a b : Type⦄ (x : a) (y : b) : a := x")
+        ));
+        // Control: the term-position form must keep working.
+        assert!(check(
+            "⦃a : Type⦄",
+            parse_expr("fun ⦃a : Type⦄ (x : a) => x")
+        ));
+    }
+
+    #[test]
     fn anonymous_binder() {
         assert!(check("(_ : Nat)", parse_expr("fun (_ : Nat) => 0")));
     }

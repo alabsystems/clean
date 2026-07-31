@@ -12,11 +12,16 @@
 //! - Spectral theory: eigenvalues, spectrum, functional calculus
 //! - Operator algebras: C*-algebras, von Neumann algebras
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize FunctionalAnalysis module
     ///
@@ -46,6 +51,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.functional_analysis_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_functional_analysis(&mut self) -> Result<(), EnvError> {
         if self.functional_analysis_init {
             return Ok(());
@@ -359,6 +365,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.functional_analysis_init == true`
+    #[cfg(test)]
     pub(crate) fn has_functional_analysis(&self) -> bool {
         self.functional_analysis_init
     }

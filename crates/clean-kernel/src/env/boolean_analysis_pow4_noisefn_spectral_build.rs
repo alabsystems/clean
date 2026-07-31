@@ -13,6 +13,7 @@
 // empty admitted-axiom closure.
 
 /// Atoms for the `Rat.mul8_regroup` algebra leaf (pure `Rat`).
+#[cfg(test)]
 struct Mul8Consts {
     rat: Expr,
     rat_mul: Expr,
@@ -22,7 +23,9 @@ struct Mul8Consts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl Mul8Consts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         Self {
@@ -34,16 +37,20 @@ impl Mul8Consts {
             congr_arg: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1]),
         }
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
     /// `congrArg Rat Rat from to g h : g from = g to`.
+    #[cfg(test)]
     fn congr(&self, from: Expr, to: Expr, g: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -51,10 +58,12 @@ impl Mul8Consts {
         )
     }
     /// `Rat.mul_mul_mul_comm a b c d : (a·b)·(c·d) = (a·c)·(b·d)`.
+    #[cfg(test)]
     fn mmmc(&self, a: Expr, b: Expr, cc: Expr, d: Expr) -> Expr {
         Expr::apps(self.rat_mmmc.clone(), [a, b, cc, d])
     }
     /// `fun (z : Rat) => z · right`.
+    #[cfg(test)]
     fn mul_right_motive(&self, parent: &EnvDeclBuilder, right: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = b.fresh_local(self.rat.clone());
@@ -62,6 +71,7 @@ impl Mul8Consts {
         b.finish_child(b.mk_lam(z_id, BinderInfo::Default, self.rat.clone(), body))
     }
     /// `fun (z : Rat) => left · z`.
+    #[cfg(test)]
     fn mul_left_motive(&self, parent: &EnvDeclBuilder, left: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = b.fresh_local(self.rat.clone());
@@ -70,6 +80,7 @@ impl Mul8Consts {
     }
 }
 
+#[cfg(test)]
 fn build_mul8_regroup_type(c: &Mul8Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (w1_id, w1) = b.fresh_local(c.rat.clone());
@@ -102,6 +113,7 @@ fn build_mul8_regroup_type(c: &Mul8Consts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_mul8_regroup_value(c: &Mul8Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (w1_id, w1) = b.fresh_local(c.rat.clone());
@@ -185,6 +197,7 @@ fn build_mul8_regroup_value(c: &Mul8Consts) -> Expr {
 /// 2-fold machinery lives in a sibling private module; we re-declare the atoms
 /// we need — chi / weight / `g`==`A` carrier / subsetSum primitives — plus the
 /// density/noiseFn atoms).
+#[cfg(test)]
 struct Pow4SpectralConsts {
     nat: Expr,
     rat: Expr,
@@ -214,7 +227,9 @@ struct Pow4SpectralConsts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -256,52 +271,66 @@ impl Pow4SpectralConsts {
         }
     }
 
+    #[cfg(test)]
     fn rat_ty(&self) -> Expr {
         self.rat.clone()
     }
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn f_type(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn ssum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two.clone(), n.clone()])
     }
+    #[cfg(test)]
     fn fin_pow(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), self.pow2(n))
     }
+    #[cfg(test)]
     fn sum_pow(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [self.pow2(n), g])
     }
+    #[cfg(test)]
     fn decode(&self, n: &Expr, k: &Expr) -> Expr {
         Expr::apps(self.hc_decode.clone(), [n.clone(), k.clone()])
     }
+    #[cfg(test)]
     fn noise_fn(&self, rho: &Expr, n: &Expr, f: &Expr, jx: &Expr) -> Expr {
         Expr::apps(
             self.noise_fn.clone(),
             [rho.clone(), n.clone(), f.clone(), jx.clone()],
         )
     }
+    #[cfg(test)]
     fn density(&self, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         Expr::apps(
             self.noise_density.clone(),
             [rho.clone(), n.clone(), x.clone(), y.clone()],
         )
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
     /// `pow4 z := (z·z)·(z·z)` — the `pow4_of` shape used by the fourfold.
+    #[cfg(test)]
     fn pow4(&self, z: &Expr) -> Expr {
         let sq = self.mul(z.clone(), z.clone());
         self.mul(sq.clone(), sq)
@@ -309,17 +338,21 @@ impl Pow4SpectralConsts {
 
     // ── chi / weight / A carrier (mirrors SpectralConsts, self-contained) ──────
 
+    #[cfg(test)]
     fn chi_(&self, n: &Expr, s: &Expr, x: &Expr) -> Expr {
         Expr::apps(self.chi.clone(), [n.clone(), s.clone(), x.clone()])
     }
+    #[cfg(test)]
     fn pow(&self, rho: &Expr, k: &Expr) -> Expr {
         Expr::apps(self.pow_nat.clone(), [rho.clone(), k.clone()])
     }
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
     /// `indNat b = @Bool.rec.{1} (fun _ => Nat) 0 1 b` — per-bit popcount summand,
     /// byte-for-byte `SpectralConsts::ind_nat`.
+    #[cfg(test)]
     fn ind_nat(&self, s_i: Expr) -> Expr {
         let nat_one = Expr::app(self.nat_succ.clone(), self.nat_zero.clone());
         let nat_motive = Expr::lam(BinderInfo::Default, self.bool_.clone(), self.nat.clone());
@@ -335,6 +368,7 @@ impl Pow4SpectralConsts {
     /// `pc n S = Fin.sumNat n (fun i => indNat (S i))` — popcount `|S|`,
     /// byte-for-byte `SpectralConsts::popcount` (so `weight` is def-eq to the
     /// `noiseDensityW` weight).
+    #[cfg(test)]
     fn popcount(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -344,11 +378,13 @@ impl Pow4SpectralConsts {
         Expr::apps(self.fin_sum_nat.clone(), [n.clone(), pc_fn])
     }
     /// `w S = ρ^{pc n S}` — the per-subset ρ-weight.
+    #[cfg(test)]
     fn weight(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, s: &Expr) -> Expr {
         self.pow(rho, &self.popcount(parent, n, s))
     }
     /// `A F S = subsetSum n (fun y => F y · χ_S y)` — the un-normalized Fourier
     /// coefficient (the `g`/A carrier of `noise_spectral_core` with `a := F`).
+    #[cfg(test)]
     fn a_coeff(&self, parent: &EnvDeclBuilder, n: &Expr, f: &Expr, s: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -360,10 +396,12 @@ impl Pow4SpectralConsts {
 
     // ── equality / congruence combinators (self-contained) ─────────────────────
 
+    #[cfg(test)]
     fn symm(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), a, b, h])
     }
     /// `congrArg Rat Rat a b g h : g a = g b` from `h : a = b`.
+    #[cfg(test)]
     fn congr(&self, a: Expr, b: Expr, g: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -371,6 +409,7 @@ impl Pow4SpectralConsts {
         )
     }
     /// `subsetSum_congr n G H h : subsetSum n G = subsetSum n H`.
+    #[cfg(test)]
     fn ss_congr(&self, n: &Expr, g: &Expr, h: &Expr, hyp: Expr) -> Expr {
         Expr::apps(
             self.subset_sum_congr.clone(),
@@ -378,6 +417,7 @@ impl Pow4SpectralConsts {
         )
     }
     /// `subsetSum_smul n c f : subsetSum n (fun S => c·f S) = c·subsetSum n f`.
+    #[cfg(test)]
     fn ss_smul(&self, n: &Expr, cc: &Expr, f: &Expr) -> Expr {
         Expr::apps(
             self.subset_sum_smul.clone(),
@@ -385,10 +425,12 @@ impl Pow4SpectralConsts {
         )
     }
     /// `subsetSum_swap n f : Σ_S Σ_x f S x = Σ_x Σ_S f S x`.
+    #[cfg(test)]
     fn ss_swap(&self, n: &Expr, f: &Expr) -> Expr {
         Expr::apps(self.subset_sum_swap.clone(), [n.clone(), f.clone()])
     }
     /// `congrArg (fun z => left·z) h : left·a = left·b`.
+    #[cfg(test)]
     fn mul_left_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -405,11 +447,13 @@ impl Pow4SpectralConsts {
         };
         self.congr(a, b, g, h)
     }
+    #[cfg(test)]
     fn trans3(&self, a: Expr, b: Expr, cc: Expr, d: Expr, h1: Expr, h2: Expr, h3: Expr) -> Expr {
         let t1 = self.trans(a.clone(), b.clone(), cc.clone(), h1, h2);
         self.trans(a, cc, d, t1, h3)
     }
     /// `Rat.mul_mul_mul_comm a b c d : (a·b)·(c·d) = (a·c)·(b·d)`.
+    #[cfg(test)]
     fn mmmc(&self, a: Expr, b: Expr, cc: Expr, d: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.mul_mul_mul_comm"), vec![]),
@@ -417,6 +461,7 @@ impl Pow4SpectralConsts {
         )
     }
     /// `Rat.mul_comm a b : a·b = b·a`.
+    #[cfg(test)]
     fn mul_comm(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.mul_comm"), vec![]),
@@ -424,6 +469,7 @@ impl Pow4SpectralConsts {
         )
     }
     /// `Rat.mul_assoc a b c : (a·b)·c = a·(b·c)`.
+    #[cfg(test)]
     fn mul_assoc(&self, a: Expr, b: Expr, cc: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.mul_assoc"), vec![]),
@@ -431,6 +477,7 @@ impl Pow4SpectralConsts {
         )
     }
     /// `p·(w·q) = w·(p·q)` (assoc + comm + assoc), the `SpectralConsts::mul_left_comm`.
+    #[cfg(test)]
     fn mul_left_comm(&self, parent: &EnvDeclBuilder, p: &Expr, w: &Expr, q: &Expr) -> Expr {
         let p_wq = self.mul(p.clone(), self.mul(w.clone(), q.clone()));
         let pw_q = self.mul(self.mul(p.clone(), w.clone()), q.clone());
@@ -462,6 +509,7 @@ impl Pow4SpectralConsts {
     /// — the `noiseFn` integrand with the OUTER coordinate as an explicit
     /// `HCPoint n` value `x` (rather than `decode jx`). At `x := decode jx` this
     /// is byte-for-byte `Pow4NoiseConsts::gx`.
+    #[cfg(test)]
     fn gxd(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, x: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_p = self.fin_pow(n);
@@ -476,6 +524,7 @@ impl Pow4SpectralConsts {
     /// The innermost quartic quad-sum over a fixed integrand `g : Fin (2^n) → Rat`,
     /// in the `(j1,j3,j2,j4)` order / `(g j1·g j2)·(g j3·g j4)` grouping that the
     /// `Fin.sum_pow4` RHS produces. Byte-for-byte `build_quad_rhs(&base,...,g)`.
+    #[cfg(test)]
     fn quad_rhs(&self, parent: &EnvDeclBuilder, n: &Expr, g: &Expr) -> Expr {
         let pow2n = self.pow2(n);
         build_quad_rhs(&Pow4Consts::new(), parent, &pow2n, g)
@@ -483,6 +532,7 @@ impl Pow4SpectralConsts {
 
     /// `fun (x : HCPoint n) => quad_rhs (gxd x)` — the `subsetSum`-x integrand of
     /// the bridged fourfold RHS.
+    #[cfg(test)]
     fn bridge_x_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -494,6 +544,7 @@ impl Pow4SpectralConsts {
 
     /// `fun (jx : Fin (2^n)) => pow4 (noiseFn ρ n F jx)` — the 4th-moment LHS
     /// integrand (matches `build_lhs_jx_fn`).
+    #[cfg(test)]
     fn lhs_jx_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_p = self.fin_pow(n);
@@ -509,6 +560,7 @@ impl Pow4SpectralConsts {
 ///    = subsetSum n (fun x => Σ_{j1,j3,j2,j4} (gxd x j1·gxd x j2)·(gxd x j3·gxd x j4))`.
 /// Bridges the outer `Fin.sum (2^n)` of the `pow4_noisefn_fourfold` RHS into
 /// `subsetSum n`. RHS is def-eq to the fourfold RHS (`subsetSum` reducible).
+#[cfg(test)]
 fn build_subsetsum_x_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -536,6 +588,7 @@ fn build_subsetsum_x_type(c: &Pow4SpectralConsts) -> Expr {
 // ════════════════════════════════════════════════════════════════════════════
 
 /// `fun (j2 : Fin n) => f1 a · f2 j2` — inner pair integrand at fixed `f1a := f1 a`.
+#[cfg(test)]
 fn prod4_pair_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f1a: &Expr, f2: &Expr) -> Expr {
     let mut b = EnvDeclBuilder::child_of(parent);
     let fin_n = c.fin_of(n);
@@ -546,6 +599,7 @@ fn prod4_pair_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f1a: &Expr, 
 
 /// `h12 := fun (j1 : Fin n) => Σ_{j2} f1 j1·f2 j2` — the `Fin.sum_mul_sum n n f1 f2`
 /// RHS integrand.
+#[cfg(test)]
 fn prod4_h_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f1: &Expr, f2: &Expr) -> Expr {
     let mut b = EnvDeclBuilder::child_of(parent);
     let fin_n = c.fin_of(n);
@@ -557,6 +611,7 @@ fn prod4_h_fn(c: &Pow4Consts, parent: &EnvDeclBuilder, n: &Expr, f1: &Expr, f2: 
 
 /// `fun (j4 : Fin n) => (f1 j1·f2 j2)·(f3 j3·f4 j4)` at fixed `left := f1 j1·f2 j2`,
 /// `f3j3 := f3 j3`.
+#[cfg(test)]
 fn prod4_inner_j4_fn(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -574,6 +629,7 @@ fn prod4_inner_j4_fn(
 }
 
 /// `fun (j2 : Fin n) => Σ_{j4} (f1 j1·f2 j2)·(f3 j3·f4 j4)` at fixed `f1j1,f3j3`.
+#[cfg(test)]
 fn prod4_j2_fn(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -592,6 +648,7 @@ fn prod4_j2_fn(
 }
 
 /// `fun (j3 : Fin n) => Σ_{j2}Σ_{j4} (f1 j1·f2 j2)·(f3 j3·f4 j4)` at fixed `f1j1`.
+#[cfg(test)]
 fn prod4_j3_fn(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -610,6 +667,7 @@ fn prod4_j3_fn(
 }
 
 /// `fun (j1 : Fin n) => Σ_{j3}Σ_{j2}Σ_{j4} (f1 j1·f2 j2)·(f3 j3·f4 j4)`.
+#[cfg(test)]
 fn prod4_j1_fn(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -628,6 +686,7 @@ fn prod4_j1_fn(
 }
 
 /// The full quad RHS `Σ_{j1}Σ_{j3}Σ_{j2}Σ_{j4} (f1 j1·f2 j2)·(f3 j3·f4 j4)`.
+#[cfg(test)]
 fn prod4_quad_rhs(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -641,6 +700,7 @@ fn prod4_quad_rhs(
 }
 
 /// `Fin.sum_prod4` conclusion type.
+#[cfg(test)]
 fn build_prod4_type(c: &Pow4Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -667,6 +727,7 @@ fn build_prod4_type(c: &Pow4Consts) -> Expr {
 }
 
 /// `Fin.sum_prod4` proof — the `build_sum_pow4_value` skeleton with 4 distinct fns.
+#[cfg(test)]
 fn build_prod4_value(c: &Pow4Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -734,6 +795,7 @@ fn build_prod4_value(c: &Pow4Consts) -> Expr {
 }
 
 /// `Σ_{j1} (fun j1 => Σ_{j3} h12 j1·h34 j3)` — the `D12·D34` expansion.
+#[cfg(test)]
 fn prod4_hh_double(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -745,6 +807,7 @@ fn prod4_hh_double(
 }
 
 /// `fun (j1 : Fin n) => Σ_{j3} h12 j1·h34 j3`.
+#[cfg(test)]
 fn prod4_hh_double_fn(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -767,6 +830,7 @@ fn prod4_hh_double_fn(
 
 /// Leg C for `Fin.sum_prod4`.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn build_prod4_leg_c(
     c: &Pow4Consts,
     parent: &EnvDeclBuilder,
@@ -825,8 +889,10 @@ fn build_prod4_leg_c(
 // decode bridge). The S-pullout engine for the four spectral subset indices.
 // ════════════════════════════════════════════════════════════════════════════
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// `fun (j : Fin (2^n)) => P (hcDecode n j)` — the subsetSum↔Fin.sum bridge.
+    #[cfg(test)]
     fn decoded_fn(&self, parent: &EnvDeclBuilder, n: &Expr, p: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_p = self.fin_pow(n);
@@ -837,6 +903,7 @@ impl Pow4SpectralConsts {
 }
 
 /// `subsetSum_prod4` type — four `Pk : HCPoint n → Rat`.
+#[cfg(test)]
 fn build_ss_prod4_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -865,6 +932,7 @@ fn build_ss_prod4_type(c: &Pow4SpectralConsts) -> Expr {
 /// `Σ_S1 Σ_S2 Σ_S3 Σ_S4 (P1 S1·P2 S2)·(P3 S3·P4 S4)` — note the `(S1,S3,S2,S4)`
 /// NESTING (outer→inner) to MATCH `Fin.sum_prod4`'s `(j1,j3,j2,j4)` order, so the
 /// proof is a direct decode-bridge of `Fin.sum_prod4`.
+#[cfg(test)]
 fn ss_prod4_quad_rhs(
     c: &Pow4SpectralConsts,
     parent: &EnvDeclBuilder,
@@ -877,6 +945,7 @@ fn ss_prod4_quad_rhs(
     c.ssum(n, ss_prod4_s1_fn(c, parent, n, p1, p2, p3, p4))
 }
 
+#[cfg(test)]
 fn ss_prod4_s1_fn(
     c: &Pow4SpectralConsts,
     parent: &EnvDeclBuilder,
@@ -894,6 +963,7 @@ fn ss_prod4_s1_fn(
     b.finish_child(b.mk_lam(s1_id, BinderInfo::Default, hcp, c.ssum(n, inner)))
 }
 
+#[cfg(test)]
 fn ss_prod4_s3_fn(
     c: &Pow4SpectralConsts,
     parent: &EnvDeclBuilder,
@@ -911,6 +981,7 @@ fn ss_prod4_s3_fn(
     b.finish_child(b.mk_lam(s3_id, BinderInfo::Default, hcp, c.ssum(n, inner)))
 }
 
+#[cfg(test)]
 fn ss_prod4_s2_fn(
     c: &Pow4SpectralConsts,
     parent: &EnvDeclBuilder,
@@ -928,6 +999,7 @@ fn ss_prod4_s2_fn(
     b.finish_child(b.mk_lam(s2_id, BinderInfo::Default, hcp, c.ssum(n, inner)))
 }
 
+#[cfg(test)]
 fn ss_prod4_s4_fn(
     c: &Pow4SpectralConsts,
     parent: &EnvDeclBuilder,
@@ -948,6 +1020,7 @@ fn ss_prod4_s4_fn(
 /// LHS δ-unfolds: `subsetSum n Pk ≡ Fin.sum (2^n)(Pk∘dec)`. RHS δ-unfolds to the
 /// matching `Fin.sum_prod4` quad (the inner `(P1 S1·P2 S2)·(P3 S3·P4 S4)` with
 /// `Sk := dec jk`). Def-eq bridge.
+#[cfg(test)]
 fn build_ss_prod4_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -977,7 +1050,9 @@ fn build_ss_prod4_value(c: &Pow4SpectralConsts) -> Expr {
 /// — the `gxd` integrand with its `noiseDensityW` δ-unfolded to the explicit
 /// `subsetSum` form. Def-eq to `gxd x` (`noiseDensityW` reducible), so the
 /// quad-sum over `gxu` is def-eq to the quad-sum over `gxd`.
+#[cfg(test)]
 impl Pow4SpectralConsts {
+    #[cfg(test)]
     fn gxu(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, x: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_p = self.fin_pow(n);
@@ -999,6 +1074,7 @@ impl Pow4SpectralConsts {
     }
 
     /// `fun (x : HCPoint n) => quad_rhs (gxu x)` — the density-unfolded x-integrand.
+    #[cfg(test)]
     fn unfold_x_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -1013,6 +1089,7 @@ impl Pow4SpectralConsts {
 /// same LHS as L1, RHS the density-UNFOLDED form
 /// `subsetSum n (fun x => Σ_{j1,j3,j2,j4} (gxu x j1·gxu x j2)·(gxu x j3·gxu x j4))`.
 /// `gxu` δ-unfolds each `noiseDensityW` to `Σ_S ρ^|S|·(χ_S x·χ_S y)`; def-eq to L1.
+#[cfg(test)]
 fn build_density_unfold_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1032,6 +1109,7 @@ fn build_density_unfold_type(c: &Pow4SpectralConsts) -> Expr {
 /// L2 value — `pow4_noisefn_subsetsum_x ρ n F` directly: its stated RHS (gxd form)
 /// is def-eq to the gxu form (`noiseDensityW` reducible), so the L1 proof checks
 /// against the L2 type without an extra trans leg.
+#[cfg(test)]
 fn build_density_unfold_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1056,6 +1134,7 @@ fn build_density_unfold_value(c: &Pow4SpectralConsts) -> Expr {
 /// `gxd (decode jx) ≡ gx jx`), so the second leg is `Eq.refl` (here the bridged
 /// RHS itself, which `Eq.trans` accepts because the middle term unifies up to
 /// def-eq).
+#[cfg(test)]
 fn build_subsetsum_x_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1097,8 +1176,10 @@ fn build_subsetsum_x_value(c: &Pow4SpectralConsts) -> Expr {
 // `W(x,y) = subsetSum n (fun S => ρ^|S|·(χ_S x·χ_S y))` (noiseDensityW unfolded).
 // ════════════════════════════════════════════════════════════════════════════
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// `W(x,y) = subsetSum n (fun S => ρ^|S|·(χ_S x·χ_S y))` — the unfolded density.
+    #[cfg(test)]
     fn wxy(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         let mut sb = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -1110,6 +1191,7 @@ impl Pow4SpectralConsts {
     }
     /// `l_int x = fun (y : HCPoint n) => F y · W(x,y)` — the L-form integrand.
     /// `subsetSum n (l_int x) ≡ Σ_jy gxu x jy` (subsetSum reducible).
+    #[cfg(test)]
     fn l_int_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, x: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -1118,6 +1200,7 @@ impl Pow4SpectralConsts {
         b.finish_child(b.mk_lam(y_id, BinderInfo::Default, hcp, body))
     }
     /// `t_term S x = (ρ^|S|·χ_S x)·A F S` — the M-form per-S integrand body.
+    #[cfg(test)]
     fn t_term(
         &self,
         parent: &EnvDeclBuilder,
@@ -1133,6 +1216,7 @@ impl Pow4SpectralConsts {
         self.mul(wcx, a_s)
     }
     /// `m_fn x = fun (S : HCPoint n) => t_term S x` — the M-form S-integrand.
+    #[cfg(test)]
     fn m_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, x: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -1141,12 +1225,14 @@ impl Pow4SpectralConsts {
         b.finish_child(b.mk_lam(s_id, BinderInfo::Default, hcp, body))
     }
     /// `M x = subsetSum n (m_fn x)`.
+    #[cfg(test)]
     fn m_form(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, x: &Expr) -> Expr {
         self.ssum(n, self.m_fn(parent, rho, n, f, x))
     }
 
     /// Per-x bridge proof `L x = M x`.
     /// L x = subsetSum n (fun y => F y·W(x,y)); M x = subsetSum n (fun S => (w_S·χ_Sx)·A S).
+    #[cfg(test)]
     fn l_eq_m(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, x: &Expr) -> Expr {
         let hcp = self.hcpoint_of(n);
 
@@ -1317,6 +1403,7 @@ impl Pow4SpectralConsts {
     ///   • mul_left_comm Fy w (cx·cy)  : Fy·(w·(cx·cy)) = w·(Fy·(cx·cy));
     ///   • congr (w·) (mul_left_comm Fy cx cy) : w·(Fy·(cx·cy)) = w·(cx·(Fy·cy));
     ///   • symm (mul_assoc w cx (Fy·cy)) : w·(cx·(Fy·cy)) = (w·cx)·(Fy·cy).
+    #[cfg(test)]
     fn regroup_sy(
         &self,
         parent: &EnvDeclBuilder,
@@ -1358,6 +1445,7 @@ impl Pow4SpectralConsts {
     }
 
     /// `congrArg (fun z => pow4 z) h : pow4 a = pow4 b` from `h : a = b`.
+    #[cfg(test)]
     fn pow4_congr(&self, parent: &EnvDeclBuilder, a: Expr, b: Expr, h: Expr) -> Expr {
         let g = {
             let mut bb = EnvDeclBuilder::child_of(parent);
@@ -1370,6 +1458,7 @@ impl Pow4SpectralConsts {
 
     /// `fun (jy : Fin (2^n)) => gxu x jy` — alias used as the four identical
     /// `Fin.sum_prod4` legs (same function ⇒ folds to `pow4(Σ gxu x)`).
+    #[cfg(test)]
     fn fin_sum_prod4_app(
         &self,
         parent: &EnvDeclBuilder,
@@ -1387,6 +1476,7 @@ impl Pow4SpectralConsts {
 
 /// Probe — `fold` : `∀ ρ n F x, quad_rhs(gxu x) = pow4 (subsetSum n (l_int x))`
 /// via `Eq.symm (Fin.sum_prod4 …)`. Isolates the L5 fold leg.
+#[cfg(test)]
 fn build_fold_probe_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1408,6 +1498,7 @@ fn build_fold_probe_type(c: &Pow4SpectralConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_fold_probe_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1434,6 +1525,7 @@ fn build_fold_probe_value(c: &Pow4SpectralConsts) -> Expr {
 /// Probe — `gsum_eq_l` : `∀ ρ n F x, Fin.sum (2^n)(gxu x) = subsetSum n (l_int x)`,
 /// proven by `Eq.refl` (confirms the subsetSum↔Fin.sum + β def-eq the L5 fold
 /// relies on).
+#[cfg(test)]
 fn build_gsum_eq_l_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1454,6 +1546,7 @@ fn build_gsum_eq_l_type(c: &Pow4SpectralConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_gsum_eq_l_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1479,6 +1572,7 @@ fn build_gsum_eq_l_value(c: &Pow4SpectralConsts) -> Expr {
 
 /// Probe type — `pow4_noisefn_l_eq_m` : `∀ ρ n F (x : HCPoint n), L x = M x`.
 /// Standalone harness for the per-x bridge `l_eq_m`.
+#[cfg(test)]
 fn build_l_eq_m_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1498,6 +1592,7 @@ fn build_l_eq_m_type(c: &Pow4SpectralConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_l_eq_m_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1517,6 +1612,7 @@ fn build_l_eq_m_value(c: &Pow4SpectralConsts) -> Expr {
 /// L5 type — `pow4_noisefn_M_form`:
 /// `Σ_jx pow4(noiseFn ρ n F jx) = subsetSum n (fun x => pow4 (M x))`,
 /// `M x = subsetSum n (fun S => (ρ^|S|·χ_S x)·A F S)`, `A F S = subsetSum n (fun y => F y·χ_S y)`.
+#[cfg(test)]
 fn build_m_form_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1535,6 +1631,7 @@ fn build_m_form_type(c: &Pow4SpectralConsts) -> Expr {
 }
 
 /// `fun (x : HCPoint n) => pow4 (M x)` — the L5 RHS x-integrand.
+#[cfg(test)]
 fn m_form_x_fn(
     c: &Pow4SpectralConsts,
     parent: &EnvDeclBuilder,
@@ -1551,6 +1648,7 @@ fn m_form_x_fn(
 }
 
 /// L5 value — `Eq.trans (density_unfold ρ n F) (ss_congr over x of fold+bridge)`.
+#[cfg(test)]
 fn build_m_form_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1631,12 +1729,15 @@ fn build_m_form_value(c: &Pow4SpectralConsts) -> Expr {
 // canonicalization to (S1,S2,S3,S4) is deferred to the downstream consumer).
 // ════════════════════════════════════════════════════════════════════════════
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// `wk = ρ^|Sk|`, weight at a given subset value `s`.
+    #[cfg(test)]
     fn w_of(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, s: &Expr) -> Expr {
         self.weight(parent, rho, n, s)
     }
     /// `T S x = (ρ^|S|·χ_S x)·A F S` — the M-form term (= `t_term`).
+    #[cfg(test)]
     fn t_of(
         &self,
         parent: &EnvDeclBuilder,
@@ -1649,6 +1750,7 @@ impl Pow4SpectralConsts {
         self.t_term(parent, rho, n, f, s, x)
     }
     /// `Σ_x (T1·T2)·(T3·T4)` at fixed S1..S4 — the per-quad inner x-sum (E2 body).
+    #[cfg(test)]
     fn xsum_tt(
         &self,
         parent: &EnvDeclBuilder,
@@ -1673,6 +1775,7 @@ impl Pow4SpectralConsts {
     }
     /// `Σ_x (χ_S1 x·χ_S2 x)·(χ_S3 x·χ_S4 x)` — the §2.1 explicit inner character
     /// correlation (kept un-collapsed).
+    #[cfg(test)]
     fn xsum_chi4(
         &self,
         parent: &EnvDeclBuilder,
@@ -1695,6 +1798,7 @@ impl Pow4SpectralConsts {
     }
     /// The §2.1 per-(S1,S2,S3,S4) RHS body:
     /// `((w1·w2)·(w3·w4)) · (((A1·A2)·(A3·A4)) · Σ_x (χ1·χ2)·(χ3·χ4))`.
+    #[cfg(test)]
     fn spectral_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -1722,6 +1826,7 @@ impl Pow4SpectralConsts {
 }
 
 /// Which inner body to place at the bottom of the 4-deep S-nesting.
+#[cfg(test)]
 enum SBody {
     /// E1 body: `(T1·T2)·(T3·T4)` at a FIXED outer `x` (carried in the variant).
     TtAtX(Expr),
@@ -1731,8 +1836,10 @@ enum SBody {
     Spectral,
 }
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// `(T1·T2)·(T3·T4)` at fixed `x`, Tk = t_term Sk x.
+    #[cfg(test)]
     fn tt_at_x(
         &self,
         parent: &EnvDeclBuilder,
@@ -1751,6 +1858,7 @@ impl Pow4SpectralConsts {
         let t4 = self.t_of(parent, rho, n, f, s4, x);
         self.mul(self.mul(t1, t2), self.mul(t3, t4))
     }
+    #[cfg(test)]
     fn s_inner(
         &self,
         parent: &EnvDeclBuilder,
@@ -1772,6 +1880,7 @@ impl Pow4SpectralConsts {
     /// `fun S2 => <inner>` (deepest binder; nesting order has S2 innermost-but-one,
     /// S4 innermost — matching (S1,S3,S2,S4)).
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn s4_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -1790,6 +1899,7 @@ impl Pow4SpectralConsts {
         b.finish_child(b.mk_lam(s4_id, BinderInfo::Default, hcp, inner))
     }
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn s2_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -1806,6 +1916,7 @@ impl Pow4SpectralConsts {
         let inner = self.s4_fn(&b, rho, n, f, s1, &s2, s3, body);
         b.finish_child(b.mk_lam(s2_id, BinderInfo::Default, hcp, self.ssum(n, inner)))
     }
+    #[cfg(test)]
     fn s3_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -1821,6 +1932,7 @@ impl Pow4SpectralConsts {
         let inner = self.s2_fn(&b, rho, n, f, s1, &s3, body);
         b.finish_child(b.mk_lam(s3_id, BinderInfo::Default, hcp, self.ssum(n, inner)))
     }
+    #[cfg(test)]
     fn s1_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, body: &SBody) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -1829,6 +1941,7 @@ impl Pow4SpectralConsts {
         b.finish_child(b.mk_lam(s1_id, BinderInfo::Default, hcp, self.ssum(n, inner)))
     }
     /// `Σ_S1 Σ_S3 Σ_S2 Σ_S4 <body>` — the 4-deep S nesting.
+    #[cfg(test)]
     fn s_nest(
         &self,
         parent: &EnvDeclBuilder,
@@ -1844,6 +1957,7 @@ impl Pow4SpectralConsts {
     /// peel-order S-nest (after the `|fixed|` already-bound S's) with `TtAtX`
     /// at the bottom. For `fixed = []` this is byte-identical to
     /// `s_nest(TtAtX(x))` (so `a_at([])` matches the E1 RHS).
+    #[cfg(test)]
     fn remaining_s_then_tt(
         &self,
         parent: &EnvDeclBuilder,
@@ -1871,10 +1985,12 @@ impl Pow4SpectralConsts {
     }
 }
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// E1 = `subsetSum n (fun x => Σ_S1Σ_S3Σ_S2Σ_S4 (T1·T2)·(T3·T4))` — Σ_x outer,
     /// the four S-sums inner (Tk at fixed x). The `subsetSum_prod4` expansion of
     /// `pow4(M x)` summed over x.
+    #[cfg(test)]
     fn e1_x_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         let mut xb = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -1883,6 +1999,7 @@ impl Pow4SpectralConsts {
         let inner = self.s_nest(&xb, rho, n, f, &body);
         xb.finish_child(xb.mk_lam(x_id, BinderInfo::Default, hcp, inner))
     }
+    #[cfg(test)]
     fn e1(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         self.ssum(n, self.e1_x_fn(parent, rho, n, f))
     }
@@ -1890,6 +2007,7 @@ impl Pow4SpectralConsts {
     /// leg E0→E1 : `subsetSum_congr` over x of `subsetSum_prod4 n (m_fn x)⁴`.
     ///   subsetSum_prod4 n P P P P : (ΣP·ΣP)·(ΣP·ΣP) = Σ_S1Σ_S3Σ_S2Σ_S4 (P S1·P S2)·(P S3·P S4)
     ///   with P = m_fn x ; LHS = pow4(M x), RHS = TtAtX nesting (m_fn x S ≡ t_term S x).
+    #[cfg(test)]
     fn leg_e0_e1(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         // before x-integrand : fun x => pow4(M x) (= m_form_x_fn body).
         let before = {
@@ -1916,6 +2034,7 @@ impl Pow4SpectralConsts {
 
 /// Partial top type — `pow4_noisefn_spectral_e1` (E0→E1 committed milestone):
 /// `Σ_jx pow4(noiseFn ρ n F jx) = subsetSum n (fun x => Σ_S1Σ_S3Σ_S2Σ_S4 (T1·T2)·(T3·T4))`.
+#[cfg(test)]
 fn build_spectral_e1_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1932,6 +2051,7 @@ fn build_spectral_e1_type(c: &Pow4SpectralConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_spectral_e1_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -1969,8 +2089,10 @@ fn build_spectral_e1_value(c: &Pow4SpectralConsts) -> Expr {
 // and the swap, so the kernel sees identical term trees.
 // ════════════════════════════════════════════════════════════════════════════
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// `A(fixed)` : `Σ_x [remaining_s_then_tt(fixed, x)]` (x just inside `fixed`).
+    #[cfg(test)]
     fn a_at(
         &self,
         parent: &EnvDeclBuilder,
@@ -1989,6 +2111,7 @@ impl Pow4SpectralConsts {
     /// `B(fixed)` : `Σ_{s_next} … Σ_{s_last} [Σ_x TT(x)]` — x fully pulled to the
     /// bottom of the remaining S-nest. (= the s_nest tail with `xsum_tt` at base,
     /// over the remaining peel-order indices.)
+    #[cfg(test)]
     fn b_at(
         &self,
         parent: &EnvDeclBuilder,
@@ -2015,6 +2138,7 @@ impl Pow4SpectralConsts {
     }
 
     /// Proof `A(fixed) = B(fixed)`.
+    #[cfg(test)]
     fn fubini_pull(
         &self,
         parent: &EnvDeclBuilder,
@@ -2102,6 +2226,7 @@ impl Pow4SpectralConsts {
 
 /// Probe — `pow4_noisefn_spectral_e2` : `Σ_jx pow4(noiseFn) = E2`
 /// (E2 = Σ_S1Σ_S3Σ_S2Σ_S4 Σ_x (T1·T2)·(T3·T4)). Chains E1 then the Fubini pull.
+#[cfg(test)]
 fn build_spectral_e2_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -2118,6 +2243,7 @@ fn build_spectral_e2_type(c: &Pow4SpectralConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_spectral_e2_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -2155,7 +2281,9 @@ fn build_spectral_e2_value(c: &Pow4SpectralConsts) -> Expr {
 //   • mul_assoc: (wblk·ablk)·Σχ = wblk·(ablk·Σχ) = spectral_body.
 // ════════════════════════════════════════════════════════════════════════════
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
+    #[cfg(test)]
     fn mul8(
         &self,
         w1: Expr,
@@ -2173,6 +2301,7 @@ impl Pow4SpectralConsts {
         )
     }
     /// `Uk = wk·Ak` — the x-independent part of `Tk`.
+    #[cfg(test)]
     fn u_of(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, s: &Expr) -> Expr {
         let w = self.weight(parent, rho, n, s);
         let a = self.a_coeff(parent, n, f, s);
@@ -2181,6 +2310,7 @@ impl Pow4SpectralConsts {
     /// per-x `Tk = (wk·χk)·Ak = Uk·χk`  (assoc + comm + assoc = mul_left_comm-style).
     ///   (wk·χk)·Ak =[assoc] wk·(χk·Ak) =[congr wk·(comm χk Ak)] wk·(Ak·χk)
     ///             =[symm assoc] (wk·Ak)·χk.
+    #[cfg(test)]
     fn t_to_uchi(
         &self,
         parent: &EnvDeclBuilder,
@@ -2220,6 +2350,7 @@ impl Pow4SpectralConsts {
     /// per-x : `(T1·T2)·(T3·T4) = Ublk·((χ1·χ2)·(χ3·χ4))`.
     ///   • congr each Tk → Uk·χk under the (·)·(·)·(·)·(·) shape (4 congr legs);
     ///   • mul8_regroup U1 U2 U3 U4 χ1 χ2 χ3 χ4.
+    #[cfg(test)]
     fn perx_tt_to_ublk(
         &self,
         parent: &EnvDeclBuilder,
@@ -2315,6 +2446,7 @@ impl Pow4SpectralConsts {
     }
 
     /// Build `fun (z : Rat) => body(z)` via a Rust closure (single-hole motive).
+    #[cfg(test)]
     fn hole_motive<G: Fn(Expr) -> Expr>(&self, parent: &EnvDeclBuilder, g: G) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = b.fresh_local(self.rat.clone());
@@ -2323,16 +2455,18 @@ impl Pow4SpectralConsts {
     }
 }
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// `fun (x : HCPoint n) => Ublk·((χ1·χ2)·(χ3·χ4))` — the smul integrand for the
     /// per-quad x-sum (Ublk constant in x).
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn ublk_chi4_fn(
         &self,
         parent: &EnvDeclBuilder,
-        rho: &Expr,
+        _rho: &Expr,
         n: &Expr,
-        f: &Expr,
+        _f: &Expr,
         s1: &Expr,
         s2: &Expr,
         s3: &Expr,
@@ -2351,6 +2485,7 @@ impl Pow4SpectralConsts {
         xb.finish_child(xb.mk_lam(x_id, BinderInfo::Default, hcp, body))
     }
     /// `fun (x : HCPoint n) => (χ1·χ2)·(χ3·χ4)` — the bare χ4 integrand.
+    #[cfg(test)]
     fn chi4_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -2372,6 +2507,7 @@ impl Pow4SpectralConsts {
     }
     /// `fun (x : HCPoint n) => (T1·T2)·(T3·T4)` — the E2 per-quad x-integrand.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn tt_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -2392,6 +2528,7 @@ impl Pow4SpectralConsts {
 
     /// Per-quad regroup proof `Σ_x (T1·T2)·(T3·T4) = spectral_body`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn perquad_regroup(
         &self,
         parent: &EnvDeclBuilder,
@@ -2472,10 +2609,12 @@ impl Pow4SpectralConsts {
     }
 }
 
+#[cfg(test)]
 impl Pow4SpectralConsts {
     /// E2→E3 leg: `ss_congr` 4-deep over (S1,S3,S2,S4) of `perquad_regroup`
     /// (`Σ_x TT = spectral_body`), turning E2 = s_nest(XsumTt) into
     /// E3 = s_nest(Spectral). `svals` carries the bound S-values in peel order.
+    #[cfg(test)]
     fn leg_e2_e3(
         &self,
         parent: &EnvDeclBuilder,
@@ -2506,6 +2645,7 @@ impl Pow4SpectralConsts {
 
     /// `fun s => <remaining s_nest tail with `body` at the bottom>` — the
     /// integrand of the level-`|svals|` `subsetSum` in the (S1,S3,S2,S4) nesting.
+    #[cfg(test)]
     fn s_tail_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -2524,6 +2664,7 @@ impl Pow4SpectralConsts {
         sb.finish_child(sb.mk_lam(s_id, BinderInfo::Default, hcp, inner))
     }
     /// The body at depth `|sv|`: if all 4 bound, emit `body`; else `Σ_s' tail`.
+    #[cfg(test)]
     fn s_tail_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -2542,6 +2683,7 @@ impl Pow4SpectralConsts {
 }
 
 /// §2.1 top type — `pow4_noisefn_spectral` (Form A).
+#[cfg(test)]
 fn build_spectral_type(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -2558,6 +2700,7 @@ fn build_spectral_type(c: &Pow4SpectralConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_spectral_value(c: &Pow4SpectralConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());

@@ -46,6 +46,7 @@ struct DiagConsts {
     rat: Expr,
     bool_: Expr,
     bool_false: Expr,
+    #[cfg(test)]
     bool_xor: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
@@ -81,7 +82,9 @@ struct DiagConsts {
     nat_eq_of_beq: Expr,
     natcast_ne_zero: Expr,
     one_le_two_pow: Expr,
+    #[cfg(test)]
     quad_ortho: Expr,
+    #[cfg(test)]
     false_c: Expr,
     false_elim: Expr,
     or_c: Expr,
@@ -106,6 +109,7 @@ impl DiagConsts {
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
             bool_: Expr::const_(Name::from_string("Bool"), vec![]),
             bool_false: Expr::const_(Name::from_string("Bool.false"), vec![]),
+            #[cfg(test)]
             bool_xor: Expr::const_(Name::from_string("Bool.xor"), vec![]),
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
@@ -159,10 +163,12 @@ impl DiagConsts {
             nat_eq_of_beq: Expr::const_(Name::from_string("Nat.eq_of_beq_eq_true"), vec![]),
             natcast_ne_zero: Expr::const_(Name::from_string("Rat.natCast_ne_zero_of_pos"), vec![]),
             one_le_two_pow: Expr::const_(Name::from_string("Nat.one_le_two_pow"), vec![]),
+            #[cfg(test)]
             quad_ortho: Expr::const_(
                 Name::from_string("BoolAnalysis.subsetSum_chi_quad_orthogonality"),
                 vec![],
             ),
+            #[cfg(test)]
             false_c: Expr::const_(Name::from_string("False"), vec![]),
             false_elim: Expr::const_(Name::from_string("False.elim"), vec![l0.clone()]),
             or_c: Expr::const_(Name::from_string("Or"), vec![]),
@@ -297,15 +303,18 @@ impl DiagConsts {
     fn empty_ind(&self, n: &Expr, u: &Expr) -> Expr {
         self.ind_of(self.beq0(self.ss_nat(n, u)))
     }
+    #[cfg(test)]
     fn xor(&self, a: Expr, bb: Expr) -> Expr {
         Expr::apps(self.bool_xor.clone(), [a, bb])
     }
+    #[cfg(test)]
     fn eq_nat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nat.clone(), l, r])
     }
     fn eq_bool(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq0.clone(), [self.bool_.clone(), l, r])
     }
+    #[cfg(test)]
     fn trans_nat(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.nat.clone(), a, b, cc, h1, h2])
     }
@@ -1029,6 +1038,7 @@ impl Environment {
 impl DiagConsts {
     /// `fun (i : Fin n) => Bool.xor (S i) (T i)` — `S Δ T` (matches the
     /// `subsetSum_chi_quad_orthogonality` symm_diff spelling exactly).
+    #[cfg(test)]
     fn symm_diff_fn(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr, t: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -1042,6 +1052,7 @@ impl DiagConsts {
 
     /// `(S1 Δ S2) Δ (S3 Δ S4)` as an `HCPoint n` — the 4-fold symmetric
     /// difference `symmDiff4`, byte-identical to the fold's RHS subset.
+    #[cfg(test)]
     fn symm_diff4(
         &self,
         parent: &EnvDeclBuilder,
@@ -1058,6 +1069,7 @@ impl DiagConsts {
 
     /// `fun (x : HCPoint n) => (χ_{S1}·χ_{S2})·(χ_{S3}·χ_{S4})` — the 4-fold
     /// product integrand (matches `subsetSum_chi_quad_orthogonality`'s LHS).
+    #[cfg(test)]
     fn quad_product_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -1081,6 +1093,7 @@ impl DiagConsts {
 /// `∀ (n : Nat) (S1 S2 S3 S4 : HCPoint n),
 ///   subsetSum n (fun x => (χ_{S1}·χ_{S2})·(χ_{S3}·χ_{S4}))
 ///     = cube n · ind (Nat.beq (setSizeNat n ((S1 Δ S2) Δ (S3 Δ S4))) 0)`.
+#[cfg(test)]
 fn quad_diag_type(c: &DiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -1103,6 +1116,7 @@ fn quad_diag_type(c: &DiagConsts) -> Expr {
     b.finish(r)
 }
 
+#[cfg(test)]
 fn quad_diag_value(c: &DiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -1156,6 +1170,7 @@ impl Environment {
     /// 4-fold symmetric-difference fold + diagonal-value evaluation that rung 1 of
     /// the roadmap names "THE HARD CRUX". Constructive, empty admitted-axiom
     /// closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_subset_sum_chi_quad_diag(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.subsetSum_chi_quad_diag");
         if self.get_const(&name).is_some() {

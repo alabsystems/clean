@@ -23,23 +23,28 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use super::analysis::{
-    self, AggregateReport, AnalysisError, ClassStats, VbsGapReport, WeakBy,
-    DEFAULT_TIMEOUT_BUDGET_MS,
+    self, AggregateReport, ClassStats, VbsGapReport, WeakBy, DEFAULT_TIMEOUT_BUDGET_MS,
 };
-use super::dataset::{self, DatasetError, ExportFilter};
-use super::index::{self, IndexError, SolverIndex, SummaryAccumulator};
+use super::dataset::{self, ExportFilter};
+use super::index::{self, SolverIndex, SummaryAccumulator};
 use super::record::{AttemptResult, SolverAttemptRecord};
 use super::store;
 use super::telemetry;
 
+/// Re-export the telemetry-analysis error type used by [`ServiceError`].
+pub use super::analysis::AnalysisError;
 /// Re-export the weak-area grouping axis for CLI callers.
 pub use super::analysis::WeakBy as WeakArea;
 /// Re-export aggregate / class / gap report types for CLI rendering.
 pub use super::analysis::{
     AggregateReport as StatsReport, ClassStats as ClassReport, VbsGapReport as GapReport,
 };
+/// Re-export the dataset-export error type used by [`ServiceError`].
+pub use super::dataset::DatasetError;
 /// Re-export the dataset export filter for CLI callers.
 pub use super::dataset::ExportFilter as DatasetFilter;
+/// Re-export the index error type used by [`ServiceError`].
+pub use super::index::IndexError;
 /// Re-export the loaded index type for CLI lookups.
 pub use super::index::SolverIndex as Index;
 

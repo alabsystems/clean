@@ -10,8 +10,10 @@
 //! - Subspace topologies
 //! - Product topologies
 
+#[cfg(test)]
 use crate::env::{EnvError, Environment};
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Topology.Quotient - quotient topology theory
     ///
@@ -73,6 +75,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_quotient_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_quotient(&mut self) -> Result<(), EnvError> {
         if self.topology_quotient_init {
             return Ok(());
@@ -105,6 +108,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_quotient_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_quotient(&self) -> bool {
         self.topology_quotient_init
     }
@@ -136,6 +140,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_subspace_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_subspace(&mut self) -> Result<(), EnvError> {
         if self.topology_subspace_init {
             return Ok(());
@@ -181,6 +186,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_subspace_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_subspace(&self) -> bool {
         self.topology_subspace_init
     }
@@ -215,6 +221,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_product_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_product(&mut self) -> Result<(), EnvError> {
         if self.topology_product_init {
             return Ok(());
@@ -258,6 +265,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_product_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_product(&self) -> bool {
         self.topology_product_init
     }

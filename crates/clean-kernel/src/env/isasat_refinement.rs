@@ -24,13 +24,19 @@
 //!   Fleury & Lammich (2020), "A Pragmatic Approach to CDCL for
 //!     IsaSAT," FMCAD 2020.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all IsaSAT refinement declarations.
+#[cfg(test)]
 pub(super) struct IsaSATConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -50,7 +56,9 @@ pub(super) struct IsaSATConsts {
     pub(super) concrete_state: Expr,
 }
 
+#[cfg(test)]
 impl IsaSATConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -67,10 +75,12 @@ impl IsaSATConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize IsaSAT refinement declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`.
+    #[cfg(test)]
     pub(crate) fn init_isasat_refinement(&mut self) -> Result<(), EnvError> {
         if self.isasat_refinement_init {
             return Ok(());
@@ -119,6 +129,7 @@ impl Environment {
 
     /// `CDCLState : Type` -- abstract CDCL state with trail, clause DB,
     /// and conflict.
+    #[cfg(test)]
     fn register_isasat_cdcl_state(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.CDCLState"))
@@ -134,6 +145,7 @@ impl Environment {
     }
 
     /// `Trail : Type` -- assignment trail with decision levels.
+    #[cfg(test)]
     fn register_isasat_trail(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self.get_const(&Name::from_string("IsaSAT.Trail")).is_some() {
             return Ok(());
@@ -146,6 +158,7 @@ impl Environment {
     }
 
     /// `ClauseDB : Type` -- clause database (set of clauses).
+    #[cfg(test)]
     fn register_isasat_clause_db(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.ClauseDB"))
@@ -161,6 +174,7 @@ impl Environment {
     }
 
     /// `Conflict : Type` -- conflict status (None or Some clause).
+    #[cfg(test)]
     fn register_isasat_conflict(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.Conflict"))
@@ -180,6 +194,7 @@ impl Environment {
     /// Registered as an opaque type with nullary constructor constants
     /// for `Propagate`, `Decide`, `Conflict`, `Learn`, `Forget`,
     /// `Restart`, and `Backtrack`.
+    #[cfg(test)]
     fn register_isasat_cdcl_transition(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.CDCLTransition"))
@@ -220,6 +235,7 @@ impl Environment {
     ///
     /// The abstract transition function: given a state and a transition
     /// kind, produce the next state.
+    #[cfg(test)]
     fn register_isasat_cdcl_step(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.cdcl_step"))
@@ -253,6 +269,7 @@ impl Environment {
     /// The abstract state invariant: trail is consistent, all assignments
     /// are justified by propagation or decision, and no falsified clause
     /// is undetected.
+    #[cfg(test)]
     fn register_isasat_cdcl_invariant(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.cdcl_invariant"))
@@ -283,6 +300,7 @@ impl Environment {
     /// `trail_consistent : Trail -> Prop`.
     ///
     /// No variable appears both positively and negatively on the trail.
+    #[cfg(test)]
     fn register_isasat_trail_consistent(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.trail_consistent"))
@@ -301,6 +319,7 @@ impl Environment {
     /// `all_propagated : CDCLState -> Prop`.
     ///
     /// All unit propagations have been exhaustively applied.
+    #[cfg(test)]
     fn register_isasat_all_propagated(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.all_propagated"))
@@ -319,6 +338,7 @@ impl Environment {
     /// `trail_of : CDCLState -> Trail`.
     ///
     /// Projects the assignment trail from an abstract CDCL state.
+    #[cfg(test)]
     fn register_isasat_trail_of(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.trail_of"))
@@ -340,6 +360,7 @@ impl Environment {
 
     /// `WatchList : Type` -- two-watched literal data structure for the
     /// concrete implementation.
+    #[cfg(test)]
     fn register_isasat_watch_list(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.WatchList"))
@@ -357,6 +378,7 @@ impl Environment {
     /// `ConcreteState : Type` -- concrete state carrying watch lists.
     ///
     /// Also registers the projection `ConcreteState.watch_list`.
+    #[cfg(test)]
     fn register_isasat_concrete_state(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.ConcreteState"))
@@ -387,6 +409,7 @@ impl Environment {
     ///
     /// The simulation relation between abstract and concrete states:
     /// the concrete state faithfully represents the abstract state.
+    #[cfg(test)]
     fn register_isasat_refinement_relation(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.refinement_relation"))
@@ -418,6 +441,7 @@ impl Environment {
     ///
     /// Abstraction function: extracts the abstract CDCL state from a
     /// concrete state by forgetting implementation details.
+    #[cfg(test)]
     fn register_isasat_abstract_of(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.abstract_of"))
@@ -440,6 +464,7 @@ impl Environment {
     /// `concrete_propagate : ConcreteState -> ConcreteState`.
     ///
     /// The concrete propagation step using two-watched literals.
+    #[cfg(test)]
     fn register_isasat_concrete_propagate(&mut self, c: &IsaSATConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("IsaSAT.concrete_propagate"))

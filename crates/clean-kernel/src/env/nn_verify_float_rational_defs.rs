@@ -19,7 +19,9 @@
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::expr::ExprKind;
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
@@ -29,6 +31,7 @@ pub(crate) struct FRConsts {
     pub(crate) rat: Expr,
     pub(crate) float: Expr,
     pub(crate) prop: Expr,
+    #[cfg(test)]
     pub(crate) type0: Expr,
     pub(crate) rat_sub: Expr,
     pub(crate) rat_mul: Expr,
@@ -47,6 +50,7 @@ impl FRConsts {
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
             float: Expr::const_(Name::from_string("Float"), vec![]),
             prop: Expr::prop(),
+            #[cfg(test)]
             type0: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
             rat_sub: Expr::const_(Name::from_string("Rat.sub"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),

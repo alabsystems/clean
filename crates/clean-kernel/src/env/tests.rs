@@ -4279,7 +4279,7 @@ fn test_pempty_elim_distinct_universes_type_checks() {
     env.init_pempty().unwrap();
     let tc = TypeChecker::new(&env);
 
-    let mut lvl = |n: u32| {
+    let lvl = |n: u32| {
         let mut l = Level::zero();
         for _ in 0..n {
             l = Level::succ(l);
@@ -4298,11 +4298,17 @@ fn test_pempty_elim_distinct_universes_type_checks() {
     // the [C-univ, PEmpty-univ] ordering.
     if let ExprKind::Pi(_, _c, body) = &elim_type.kind {
         if let ExprKind::Pi(_, pempty_dom, _) = &body.kind {
-            let s = format!("{pempty_dom:?}");
-            assert!(
-                s.contains("Succ(Succ(Succ(Succ(Zero"),
-                "PEmpty arg must be at Sort 4 (Type 3), got: {s}"
-            );
+            match &pempty_dom.kind {
+                ExprKind::Const(name, levels) => {
+                    assert_eq!(name, &Name::from_string("PEmpty"));
+                    assert_eq!(
+                        levels.as_slice(),
+                        &[lvl(4)],
+                        "PEmpty argument must use universe 4 (Type 3)"
+                    );
+                }
+                other => panic!("expected PEmpty constant domain, got: {other:?}"),
+            }
         } else {
             panic!("expected inner Pi (PEmpty → C)");
         }

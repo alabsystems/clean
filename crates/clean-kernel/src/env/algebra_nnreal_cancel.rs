@@ -75,6 +75,7 @@ pub(crate) struct CancelConsts {
     exists_c: Expr,
     exists_intro: Expr,
     exists_elim: Expr,
+    #[cfg(test)]
     eq_rat: Expr,
     eq_trans: Expr,
     eq_symm: Expr,
@@ -115,6 +116,7 @@ impl CancelConsts {
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
@@ -867,7 +869,7 @@ fn descend_c_le(
 ///   `le_a_b := le_of_add_le_add_right a b c le_ac_bc`
 ///   `le_b_a := le_of_add_le_add_right b a c le_bc_ac`
 ///   `le_antisymm a b le_a_b le_b_a : a = b`.
-fn build_nnreal_add_right_cancel(c: &CancelConsts, nnreal: &Expr) -> Expr {
+fn build_nnreal_add_right_cancel(_c: &CancelConsts, nnreal: &Expr) -> Expr {
     let nnle = Expr::const_(Name::from_string("NNReal.le"), vec![]);
     let nnadd = Expr::const_(Name::from_string("NNReal.add"), vec![]);
     let le_refl = Expr::const_(Name::from_string("NNReal.le.refl"), vec![]);

@@ -38,7 +38,7 @@
 //! constructor head; proj *reduction* on a constructor is a separate whnf rule.
 
 use crate::budget::{Budget, BudgetError};
-use crate::infer::{infer, infer_in_context, InferError};
+use crate::infer::{infer_in_context, InferError};
 use crate::name::Name;
 use crate::rawexpr::BinderInfo;
 use crate::term::{Term, TermKind};

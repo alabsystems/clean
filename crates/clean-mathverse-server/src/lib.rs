@@ -9,8 +9,9 @@
 //! publisher + daily re-auditor) is Phase 2 and intentionally not in this crate.
 //!
 //! Build note: this crate depends on `clean-mathverse` with
-//! `default-features = false`, dropping `clean-auto` and its `../ay` /
-//! `../trust-ir` sibling path-deps — so it builds in a bare Docker context.
+//! `default-features = false`, dropping `clean-auto`, the AY solver graph, and
+//! the `../trust-ir` sibling path dependency — so it builds in a bare Docker
+//! context.
 
 pub mod api;
 pub mod corpus;

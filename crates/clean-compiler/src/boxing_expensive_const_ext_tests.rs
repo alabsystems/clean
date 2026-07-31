@@ -2,9 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-// 3.14 here is an arbitrary test value, not an approximation of PI.
-#![allow(clippy::approx_constant)]
-
 //! Tests for extended expensive constant boxing.
 
 use crate::boxing_expensive_const_ext::*;
@@ -79,7 +76,7 @@ fn test_classify_literal_u64() {
 
 #[test]
 fn test_classify_literal_float64() {
-    let expr = IRExpr::Lit(IRLiteral::Float64(3.14));
+    let expr = IRExpr::Lit(IRLiteral::Float64(1.25));
     assert_eq!(classify_constant(&expr), ConstantClass::Literal);
 }
 
@@ -543,8 +540,13 @@ fn test_impact_report_with_expensive_expr() {
     let decl = mk_decl("f", body);
     let report = generate_impact_report(&decl, &default_thresholds());
     assert_eq!(report.entries.len(), 1);
-    assert!(report.entries[0].cost >= default_thresholds().expensive_threshold);
-    assert_ne!(report.entries[0].decision, BoxingDecisionKind::LeaveInPlace);
+    let entry = &report.entries[0];
+    assert_eq!(entry.var, VarId(0));
+    assert_eq!(entry.class, ConstantClass::FunctionApp);
+    assert!(entry.cost >= default_thresholds().expensive_threshold);
+    assert_eq!(entry.occurrences, 1);
+    assert_ne!(entry.decision, BoxingDecisionKind::LeaveInPlace);
+    assert!(!entry.justification.is_empty());
 }
 
 #[test]

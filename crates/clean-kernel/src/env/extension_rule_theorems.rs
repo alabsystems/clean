@@ -24,12 +24,18 @@
 //! - Krajicek (1995), "Bounded Arithmetic, Propositional Logic and Complexity
 //!   Theory"
 
+#[cfg(test)]
 use super::extension_rule::ExtensionRuleConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Extension rule soundness
@@ -42,6 +48,7 @@ impl Environment {
     /// encoding x <-> defining_formula(ev) is also satisfiable (and
     /// vice versa). The extension variable does not change the set of
     /// satisfying assignments when projected back to original variables.
+    #[cfg(test)]
     pub(super) fn register_extension_rule_sound_helper(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -74,6 +81,7 @@ impl Environment {
     /// to its defining formula, so any satisfying assignment can be extended
     /// to include x, and any assignment satisfying the extended formula can
     /// be projected back by dropping x.
+    #[cfg(test)]
     pub(super) fn register_extension_rule_sound(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -111,6 +119,7 @@ impl Environment {
     ///
     /// Encodes: if f is a propositional tautology, then there exists an
     /// Extended Resolution proof of f with size polynomial in |f|.
+    #[cfg(test)]
     pub(super) fn register_extended_resolution_complete_helper(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -136,6 +145,7 @@ impl Environment {
     /// This follows from Cook's theorem (1975) showing that ER
     /// p-simulates Frege systems, combined with the completeness of
     /// Frege systems for propositional tautologies.
+    #[cfg(test)]
     pub(super) fn register_extended_resolution_complete(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -173,6 +183,7 @@ impl Environment {
     /// satisfiable if and only if f is satisfiable. Moreover, the
     /// transformation is linear in |f|: each subformula contributes a
     /// constant number of clauses of constant width.
+    #[cfg(test)]
     pub(super) fn register_tseitin_equisatisfiable_helper(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -199,6 +210,7 @@ impl Environment {
     ///
     /// This is the fundamental bridge between arbitrary propositional formulas
     /// and CNF, enabling SAT solvers to work on non-CNF inputs efficiently.
+    #[cfg(test)]
     pub(super) fn register_tseitin_equisatisfiable(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -237,6 +249,7 @@ impl Environment {
     /// principle): Haken (1985) shows Resolution requires 2^{Mathverse(n)} for
     /// PHP, while Cook (1975) shows ER has polynomial-size proofs via the
     /// counting argument with extension variables.
+    #[cfg(test)]
     pub(super) fn register_extension_exponential_speedup_helper(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -262,6 +275,7 @@ impl Environment {
     ///
     /// This demonstrates that the extension rule is not merely a convenience
     /// but a fundamentally more powerful proof mechanism.
+    #[cfg(test)]
     pub(super) fn register_extension_exponential_speedup(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -292,6 +306,7 @@ impl Environment {
     /// Encodes: Extended Resolution p-simulates Frege systems. For every
     /// Frege proof of a tautology, there is an Extended Resolution proof
     /// of at most polynomial blowup.
+    #[cfg(test)]
     pub(super) fn register_er_simulates_frege_helper(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -335,6 +350,7 @@ impl Environment {
     ///
     /// Reference: Cook (1975), "Feasibly constructive proofs and the
     ///            propositional calculus"
+    #[cfg(test)]
     pub(super) fn register_er_simulates_frege(
         &mut self,
         c: &ExtensionRuleConsts,

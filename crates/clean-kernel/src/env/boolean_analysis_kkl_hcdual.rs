@@ -1036,7 +1036,7 @@ impl Environment {
 
             // For a fixed concrete `av_c`, split on `b` and emit Eq.refl leaves.
             let inner_rec = |av_c: Expr, parent: &EnvDeclBuilder| -> Expr {
-                let mut d = EnvDeclBuilder::child_of(parent);
+                let d = EnvDeclBuilder::child_of(parent);
                 let motive_b = {
                     let mut e = EnvDeclBuilder::child_of(&d);
                     let (bp_id, bp) = e.fresh_local(bool_c.clone());

@@ -30,15 +30,20 @@
 //! Part of #3084 - IO/FFI/Native epic.
 
 pub(crate) mod analysis;
+#[cfg(test)]
 pub(crate) mod substitute;
 
+#[cfg(test)]
 use crate::ir::{IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
+#[cfg(test)]
 use clean_kernel::Name;
+#[cfg(test)]
 use std::collections::{HashMap, HashSet};
 
-pub(crate) use analysis::{
-    body_references_name, compute_call_counts, estimate_size, is_recursive, max_var_id,
-};
+pub(crate) use analysis::max_var_id;
+#[cfg(test)]
+pub(crate) use analysis::{body_references_name, compute_call_counts, estimate_size, is_recursive};
+#[cfg(test)]
 pub(crate) use substitute::{splice_inlined, substitute_args};
 
 // -----------------------------------------------------------------------
@@ -48,6 +53,7 @@ pub(crate) use substitute::{splice_inlined, substitute_args};
 /// Inline annotation for a declaration, corresponding to Lean 4's
 /// `@[inline]`, `@[always_inline]`, and `@[noinline]` attributes.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) enum InlineAttr {
     /// `@[inline]` -- hint to the inliner.
     Inline,
@@ -65,6 +71,7 @@ pub(crate) enum InlineAttr {
 
 /// Configuration for the IR inlining pass.
 #[derive(Clone, Debug)]
+#[cfg(test)]
 pub(crate) struct InlinePassConfig {
     /// Maximum IR node count for automatic inlining (default: 20).
     pub(crate) max_inline_size: usize,
@@ -76,6 +83,7 @@ pub(crate) struct InlinePassConfig {
     pub(crate) inline_once_used: bool,
 }
 
+#[cfg(test)]
 impl Default for InlinePassConfig {
     fn default() -> Self {
         Self {
@@ -93,6 +101,7 @@ impl Default for InlinePassConfig {
 
 /// The inlining decision for a particular function.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) enum InlineDecision {
     /// Inline unconditionally (`@[always_inline]`).
     Always,
@@ -110,6 +119,7 @@ pub(crate) enum InlineDecision {
 
 /// Statistics collected during an inlining pass.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) struct InlineStats {
     /// Number of call sites that were inlined.
     pub(crate) inlined_calls: usize,
@@ -126,6 +136,7 @@ pub(crate) struct InlineStats {
 // -----------------------------------------------------------------------
 
 /// Decide whether a function should be inlined at its call sites.
+#[cfg(test)]
 pub(crate) fn should_inline(
     decl: &IRDecl,
     attr: &InlineAttr,
@@ -158,6 +169,7 @@ pub(crate) fn should_inline(
 // -----------------------------------------------------------------------
 
 /// Traverse `body`, inlining eligible call sites. Returns `(new_body, changed)`.
+#[cfg(test)]
 pub(crate) fn inline_call_in_body(
     body: &IRBody,
     env: &HashMap<Name, IRDecl>,
@@ -419,6 +431,7 @@ pub(crate) fn inline_call_in_body(
 }
 
 /// Helper: recurse into `rest`, then wrap the result.
+#[cfg(test)]
 fn wrap_rest(
     rest: &IRBody,
     env: &HashMap<Name, IRDecl>,
@@ -444,6 +457,7 @@ fn wrap_rest(
 }
 
 /// Handle a VDecl whose value is Apply -- decide whether to inline.
+#[cfg(test)]
 fn try_inline_apply(
     var: VarId,
     ty: &IRType,
@@ -579,6 +593,7 @@ fn try_inline_apply(
 /// Builds a function environment, computes call counts, detects recursive
 /// functions, and inlines eligible call sites across all declaration bodies.
 #[must_use]
+#[cfg(test)]
 pub(crate) fn run_inline_pass(
     decls: &[IRDecl],
     attrs: &HashMap<Name, InlineAttr>,

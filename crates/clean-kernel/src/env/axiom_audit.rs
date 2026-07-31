@@ -871,6 +871,17 @@ fn canonical_choice_type(u: &Name) -> Expr {
     )
 }
 
+/// The two ambient axiom classes whose exact declarations are owned by the
+/// Clean kernel rather than by a downstream specification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CanonicalAmbientAxiomKind {
+    /// Lean-compatible logical foundations and quotient kernel primitives
+    /// admitted by the strict certification lane.
+    CertificationFoundation,
+    /// Explicit incomplete-proof or external-solver trust envelopes.
+    TrustMarker,
+}
+
 /// Return the exact canonical declaration signature for an axiom that the
 /// certification lane may admit.  The logical foundation is exactly
 /// `propext`, `Quot.sound`, and `Classical.choice`; the other four returned
@@ -890,16 +901,58 @@ fn canonical_certification_foundation(name: &Name) -> Option<(Vec<Name>, Expr)> 
     }
 }
 
-fn canonical_foundation_matches(info: &ConstantInfo) -> Result<(), String> {
+fn canonical_trust_marker(name: &Name) -> Option<(Vec<Name>, Expr)> {
+    let u = Name::from_string("u");
+    let sort_u = Expr::sort(Level::param(u.clone()));
+    let type_ = match name.to_string().as_str() {
+        "sorry" | "trustedArith" | "trustedAy" => {
+            Expr::pi(crate::expr::BinderInfo::Implicit, sort_u, Expr::bvar(0))
+        }
+        "sorryAx" => Expr::pi(
+            crate::expr::BinderInfo::Implicit,
+            sort_u,
+            Expr::pi(
+                crate::expr::BinderInfo::Default,
+                Expr::const_(Name::from_string("Bool"), vec![]),
+                Expr::bvar(1),
+            ),
+        ),
+        _ => return None,
+    };
+    Some((vec![u], type_))
+}
+
+/// Classify an exact kernel-owned ambient axiom name.
+///
+/// This is intentionally narrower than [`is_foundational_axiom`], whose
+/// historical proof-quality whitelist contains names that are definitions or
+/// theorems in a live environment.  Returning a kind here does not validate a
+/// declaration; callers that make a trust decision must use
+/// [`Environment::validate_canonical_ambient_axiom`].
+#[must_use]
+pub fn canonical_ambient_axiom_kind(name: &Name) -> Option<CanonicalAmbientAxiomKind> {
+    if canonical_certification_foundation(name).is_some() {
+        Some(CanonicalAmbientAxiomKind::CertificationFoundation)
+    } else if canonical_trust_marker(name).is_some() {
+        Some(CanonicalAmbientAxiomKind::TrustMarker)
+    } else {
+        None
+    }
+}
+
+fn canonical_signature_matches(
+    info: &ConstantInfo,
+    canonical: Option<(Vec<Name>, Expr)>,
+    class: &str,
+) -> Result<(), String> {
     if info.kind != ConstantKind::Axiom {
         return Err(format!("expected Axiom kind, found {:?}", info.kind));
     }
     if info.value.is_some() {
-        return Err("canonical foundation must not carry a value".to_string());
+        return Err(format!("canonical {class} must not carry a value"));
     }
-    let Some((canonical_params, canonical_type)) = canonical_certification_foundation(&info.name)
-    else {
-        return Err("name is not in the exact certification foundation".to_string());
+    let Some((canonical_params, canonical_type)) = canonical else {
+        return Err(format!("name is not an exact canonical {class}"));
     };
     if info.level_params.len() != canonical_params.len() {
         return Err(format!(
@@ -922,6 +975,18 @@ fn canonical_foundation_matches(info: &ConstantInfo) -> Result<(), String> {
         return Err("statement differs from the canonical kernel declaration".to_string());
     }
     Ok(())
+}
+
+fn canonical_foundation_matches(info: &ConstantInfo) -> Result<(), String> {
+    canonical_signature_matches(
+        info,
+        canonical_certification_foundation(&info.name),
+        "certification foundation",
+    )
+}
+
+fn canonical_trust_marker_matches(info: &ConstantInfo) -> Result<(), String> {
+    canonical_signature_matches(info, canonical_trust_marker(&info.name), "trust marker")
 }
 
 fn cycle_candidates(graph: &BTreeMap<Name, BTreeSet<Name>>) -> Vec<Name> {
@@ -963,6 +1028,72 @@ fn cycle_candidates(graph: &BTreeMap<Name, BTreeSet<Name>>) -> Vec<Name> {
 }
 
 impl Environment {
+    /// Validate one kernel-owned ambient axiom by its complete live payload.
+    ///
+    /// Acceptance requires all of the following:
+    ///
+    /// - the name is one of the exact certification foundations/quotient
+    ///   primitives or trust markers owned by the kernel;
+    /// - the live declaration is `Axiom`-kind, value-less, and has the exact
+    ///   canonical type and universe arity (universe parameter names may be
+    ///   alpha-renamed);
+    /// - the current payload earned [`DeclarationVerification::FullKernelCheck`];
+    /// - it is not unsafe, partial, or marked as needing recheck; and
+    /// - a fresh strict read-only declaration check accepts the live type.
+    ///
+    /// A broad name whitelist is therefore never sufficient authority for an
+    /// ambient classification.
+    ///
+    /// # Errors
+    /// Returns a precise error when the name is not kernel-owned, the live
+    /// declaration is absent/counterfeit, its provenance is insufficient, or
+    /// its strict declaration recheck fails.
+    pub fn validate_canonical_ambient_axiom(
+        &self,
+        name: &Name,
+    ) -> Result<CanonicalAmbientAxiomKind, String> {
+        let kind = canonical_ambient_axiom_kind(name)
+            .ok_or_else(|| "name is not a canonical ambient axiom".to_string())?;
+        let info = self
+            .get_const(name)
+            .ok_or_else(|| format!("canonical ambient axiom {name} is missing"))?;
+
+        match kind {
+            CanonicalAmbientAxiomKind::CertificationFoundation => {
+                canonical_foundation_matches(info)?;
+            }
+            CanonicalAmbientAxiomKind::TrustMarker => {
+                canonical_trust_marker_matches(info)?;
+            }
+        }
+
+        if self.declaration_verification(name) != Some(DeclarationVerification::FullKernelCheck) {
+            return Err(format!(
+                "canonical ambient axiom {name} lacks FullKernelCheck provenance"
+            ));
+        }
+        if self.is_unsafe(name) {
+            return Err(format!("canonical ambient axiom {name} is marked unsafe"));
+        }
+        if self.is_partial(name) {
+            return Err(format!("canonical ambient axiom {name} is marked partial"));
+        }
+        if self.constant_needs_recheck(name) {
+            return Err(format!(
+                "canonical ambient axiom {name} is marked as needing recheck"
+            ));
+        }
+
+        let declaration = Declaration::Axiom {
+            name: info.name.clone(),
+            level_params: info.level_params.clone(),
+            type_: info.type_.clone(),
+        };
+        self.check_decl_readonly_strict(&declaration)
+            .map_err(|error| format!("strict declaration recheck failed for {name}: {error}"))?;
+        Ok(kind)
+    }
+
     /// Strictly audit one concrete proof judgment for certification authority.
     ///
     /// Unlike the legacy `axiom_deps(name)` pattern, this starts directly from
@@ -1569,6 +1700,151 @@ mod certification_tests {
             canonical_foundation_matches(info)
                 .unwrap_or_else(|error| panic!("{name} is not canonical: {error}"));
         }
+    }
+
+    #[test]
+    fn canonical_ambient_validator_accepts_every_live_kernel_owned_axiom() {
+        let env = Environment::with_prelude();
+        for name in [
+            "propext",
+            "Classical.choice",
+            "Quot",
+            "Quot.mk",
+            "Quot.lift",
+            "Quot.ind",
+            "Quot.sound",
+        ] {
+            let name = Name::from_string(name);
+            assert_eq!(
+                env.validate_canonical_ambient_axiom(&name),
+                Ok(CanonicalAmbientAxiomKind::CertificationFoundation),
+                "{name} must validate as an exact certification foundation"
+            );
+        }
+        for name in ["sorry", "sorryAx", "trustedArith", "trustedAy"] {
+            let name = Name::from_string(name);
+            assert_eq!(
+                env.validate_canonical_ambient_axiom(&name),
+                Ok(CanonicalAmbientAxiomKind::TrustMarker),
+                "{name} must validate as an exact trust marker"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_ambient_validator_rejects_counterfeit_signature() {
+        let mut env = Environment::new();
+        let name = Name::from_string("propext");
+        env.add_decl(Declaration::Axiom {
+            name: name.clone(),
+            level_params: vec![],
+            type_: Expr::prop(),
+        })
+        .expect("well-formed counterfeit propext");
+
+        let error = env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("name alone must not authorize a counterfeit foundation");
+        assert!(
+            error.contains("statement differs"),
+            "counterfeit signature error must be explicit: {error}"
+        );
+    }
+
+    #[test]
+    fn canonical_ambient_validator_rejects_structural_provenance() {
+        let mut env = Environment::default();
+        let name = Name::from_string("sorry");
+        let (level_params, type_) =
+            canonical_trust_marker(&name).expect("canonical sorry signature");
+        env.add_decl_structural(Declaration::Axiom {
+            name: name.clone(),
+            level_params,
+            type_,
+        })
+        .expect("structural fixture");
+
+        let error = env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("structural provenance must not authorize an ambient axiom");
+        assert!(
+            error.contains("FullKernelCheck"),
+            "provenance error must be explicit: {error}"
+        );
+    }
+
+    #[test]
+    fn canonical_ambient_validator_rejects_value_bearing_axiom_payload() {
+        let mut env = Environment::new();
+        let name = Name::from_string("sorry");
+        env.constants.get_mut(&name).expect("live sorry").value = Some(Expr::prop());
+
+        let error = env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("an Axiom-kind constant carrying a value is corrupt");
+        assert!(
+            error.contains("must not carry a value"),
+            "value corruption must be explicit: {error}"
+        );
+    }
+
+    #[test]
+    fn canonical_ambient_validator_rejects_unsafe_partial_and_needs_recheck() {
+        let name = Name::from_string("sorry");
+
+        let mut unsafe_env = Environment::new();
+        unsafe_env.mark_unsafe(name.clone());
+        assert!(unsafe_env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("unsafe ambient axiom must fail")
+            .contains("marked unsafe"));
+
+        let mut partial_env = Environment::new();
+        partial_env.mark_partial(name.clone());
+        assert!(partial_env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("partial ambient axiom must fail")
+            .contains("marked partial"));
+
+        let mut imported_env = Environment::new();
+        assert!(imported_env.set_constant_origin(
+            name.clone(),
+            super::super::ConstantOrigin::olean_import(Some("counterfeit".to_string())),
+        ));
+        assert!(imported_env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("unrechecked imported ambient axiom must fail")
+            .contains("needing recheck"));
+    }
+
+    #[test]
+    fn canonical_ambient_validator_runs_fresh_strict_recheck() {
+        let mut env = Environment::default();
+        let name = Name::from_string("sorryAx");
+        let (level_params, type_) =
+            canonical_trust_marker(&name).expect("canonical sorryAx signature");
+        env.constants.insert(
+            name.clone(),
+            ConstantInfo {
+                name: name.clone(),
+                level_params,
+                type_,
+                value: None,
+                is_reducible: false,
+                reducibility: super::super::Reducibility::Regular(0),
+                kind: ConstantKind::Axiom,
+            },
+        );
+        env.declaration_verification
+            .insert(name.clone(), DeclarationVerification::FullKernelCheck);
+
+        let error = env
+            .validate_canonical_ambient_axiom(&name)
+            .expect_err("sorryAx without its Bool dependency must fail strict recheck");
+        assert!(
+            error.contains("strict declaration recheck failed"),
+            "strict recheck failure must be explicit: {error}"
+        );
     }
 
     #[test]

@@ -15,6 +15,7 @@ pub mod compress;
 mod compress_hash;
 pub mod decompress;
 pub mod dict;
+pub(crate) mod limits;
 pub mod lz4;
 pub mod streaming;
 pub mod types;
@@ -27,8 +28,8 @@ use super::ProofCert;
 
 // Re-export types
 pub use types::{
-    CertIdx, CompressedCert, CompressedCertNode, CompressedExpr, CompressedLevel, CompressionStats,
-    ExprIdx, LevelIdx,
+    CertIdx, CompressedCert, CompressedCertNode, CompressedCertSchema, CompressedExpr,
+    CompressedLevel, CompressionStats, ExprIdx, LevelIdx,
 };
 
 // Re-export compression/decompression core

@@ -14,6 +14,7 @@ impl ComposeConsts {
             [n.clone(), j.clone()],
         )
     }
+    #[cfg(test)]
     fn fin_sum(&self, m: &Expr, g: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Fin.sum"), vec![]),

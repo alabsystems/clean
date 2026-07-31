@@ -7,7 +7,9 @@
 //! shape no fragment claims — or any bound/λ subterm — becomes a first-class
 //! [`Unsupported`] verdict; nothing is guessed.
 
-use super::super::isabelle_pure::IsaTerm;
+use std::collections::HashSet;
+
+use super::super::isabelle_pure::{IsaTerm, IsaType};
 use super::fragments;
 use super::types::{LeanTerm, Unsupported};
 
@@ -33,7 +35,7 @@ pub fn peel_spine(t: &IsaTerm) -> (&IsaTerm, Vec<&IsaTerm>) {
 pub fn translate_term(t: &IsaTerm) -> Result<LeanTerm, Unsupported> {
     let (head, args) = peel_spine(t);
     match head {
-        IsaTerm::Const { n, .. } => match fragments::dispatch(n, &args) {
+        IsaTerm::Const { n, t } => match fragments::dispatch(n, t, &args) {
             Some(res) => res,
             None => Err(Unsupported::UnknownConst(n.clone())),
         },
@@ -65,6 +67,116 @@ pub fn translate_term(t: &IsaTerm) -> Result<LeanTerm, Unsupported> {
 #[must_use]
 pub fn clean_ident(n: &str) -> String {
     n.strip_prefix('?').unwrap_or(n).to_string()
+}
+
+/// Open an Isabelle `Abs` binder for rendering as a named Lean binder.
+///
+/// This is the object-term analogue of the translate lane's `IsaTerm::Abs`
+/// opening (`embed_term`): pick a **capture-safe** Lean name for the bound
+/// variable (from the Isabelle-suggested `n`, falling back / freshening so it
+/// avoids every name already free in `body`), then instantiate the innermost de
+/// Bruijn variable (`Bound 0` at the top of `body`) with a matching closed
+/// [`IsaTerm::Free`] and decrement the outer indices. Returns the chosen name,
+/// the domain type (verbatim, for an optional concrete annotation), and the
+/// opened body — which no longer references the opened binder as a loose `Bound`.
+///
+/// Capture-safety is exact: a nested binder that would shadow an outer one is
+/// renamed, because the outer binder has *already* been substituted to a `Free`
+/// in `body` and so appears in the avoided free-name set (`∀x. ∀x. P x x` →
+/// `∀ x, ∀ x_1, P x x_1`).
+#[must_use]
+pub(super) fn open_abs(n: &str, t: &IsaType, body: &IsaTerm) -> (String, IsaType, IsaTerm) {
+    let var = fresh_name(n, body);
+    let repl = IsaTerm::Free {
+        n: var.clone(),
+        t: t.clone(),
+    };
+    let opened = instantiate_bound(body, &repl, 0);
+    (var, t.clone(), opened)
+}
+
+/// A capture-safe Lean binder name derived from the Isabelle-suggested `n`,
+/// avoiding every name already free (`Free`/`Var`) in `body`. Freshens by
+/// appending `_1`, `_2`, … on a clash.
+#[must_use]
+pub(super) fn fresh_name(n: &str, body: &IsaTerm) -> String {
+    let mut used: HashSet<String> = HashSet::new();
+    free_names(body, &mut used);
+    let base = sanitize_ident(n);
+    if !used.contains(&base) {
+        return base;
+    }
+    let mut k = 1usize;
+    loop {
+        let cand = format!("{base}_{k}");
+        if !used.contains(&cand) {
+            return cand;
+        }
+        k += 1;
+    }
+}
+
+/// Collect the `Free`/`Var` names (via [`clean_ident`]) appearing anywhere in
+/// `term` — the set a freshly-opened binder name must avoid to stay capture-safe.
+/// `Bound` variables carry no name and are skipped; `Abs` bodies are still
+/// walked (an inner binder's free vars still constrain the outer fresh name).
+fn free_names(term: &IsaTerm, out: &mut HashSet<String>) {
+    match term {
+        IsaTerm::Free { n, .. } | IsaTerm::Var { n, .. } => {
+            out.insert(clean_ident(n));
+        }
+        IsaTerm::App { f, a } => {
+            free_names(f, out);
+            free_names(a, out);
+        }
+        IsaTerm::Abs { b, .. } => free_names(b, out),
+        IsaTerm::Const { .. } | IsaTerm::Bound { .. } => {}
+    }
+}
+
+/// Substitute the binder being opened — `Bound depth` — with the closed `repl`,
+/// and decrement every strictly-outer `Bound i` (`i > depth`) by one; inner
+/// binders (`i < depth`) are left untouched. `depth` increases by one under each
+/// `Abs`. Because `repl` is closed (a `Free`), it needs no shifting under inner
+/// binders.
+fn instantiate_bound(term: &IsaTerm, repl: &IsaTerm, depth: i64) -> IsaTerm {
+    match term {
+        IsaTerm::Bound { i } => {
+            if *i == depth {
+                repl.clone()
+            } else if *i > depth {
+                IsaTerm::Bound { i: i - 1 }
+            } else {
+                term.clone()
+            }
+        }
+        IsaTerm::App { f, a } => IsaTerm::App {
+            f: Box::new(instantiate_bound(f, repl, depth)),
+            a: Box::new(instantiate_bound(a, repl, depth)),
+        },
+        IsaTerm::Abs { n, t, b } => IsaTerm::Abs {
+            n: n.clone(),
+            t: t.clone(),
+            b: Box::new(instantiate_bound(b, repl, depth + 1)),
+        },
+        IsaTerm::Const { .. } | IsaTerm::Free { .. } | IsaTerm::Var { .. } => term.clone(),
+    }
+}
+
+/// Coerce an Isabelle-suggested binder name to a plausible Lean identifier,
+/// falling back to `x` for an empty or non-identifier name (a keyword collision
+/// is left to surface as a *loud* Lean parse error — never a silent mis-binding).
+fn sanitize_ident(n: &str) -> String {
+    let n = clean_ident(n);
+    let mut chars = n.chars();
+    let ok = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && n.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '\'');
+    if ok {
+        n
+    } else {
+        "x".to_string()
+    }
 }
 
 #[cfg(test)]

@@ -10,39 +10,7 @@
 
 use super::{Declaration, EnvError, Environment};
 use crate::expr::Expr;
-use crate::level::Level;
 use crate::name::Name;
-
-/// Shared universe parameter setup for handwritten `init_*` routines.
-#[derive(Clone, Debug)]
-pub(crate) struct InitLevelParam {
-    pub(crate) name: Name,
-    pub(crate) level: Level,
-}
-
-impl InitLevelParam {
-    pub(crate) fn new(name: &str) -> Self {
-        let name = Name::from_string(name);
-        let level = Level::param(name.clone());
-        Self { name, level }
-    }
-
-    pub(crate) fn sort(&self) -> Expr {
-        Expr::sort(self.level.clone())
-    }
-
-    pub(crate) fn type_(&self) -> Expr {
-        Expr::sort(Level::succ(self.level.clone()))
-    }
-}
-
-pub(crate) fn prop_expr() -> Expr {
-    Expr::sort(Level::zero())
-}
-
-pub(crate) fn type0_expr() -> Expr {
-    Expr::sort(Level::succ(Level::zero()))
-}
 
 impl Environment {
     /// Register a batch of declarations emitted by an init template builder.

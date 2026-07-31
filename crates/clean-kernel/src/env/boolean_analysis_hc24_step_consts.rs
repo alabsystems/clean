@@ -91,9 +91,11 @@ impl StepConsts {
     fn f_type(&self, n: &Expr) -> Expr {
         self.o.f_type(n)
     }
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         self.o.hcpoint_of(n)
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         self.o.eq_rat(l, r)
     }
@@ -257,6 +259,7 @@ impl StepConsts {
         )
     }
     /// `Rat.left_distrib a b c : a·(b+c) = a·b + a·c`.
+    #[cfg(test)]
     fn ldist(&self, a: &Expr, b: &Expr, cc: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.left_distrib"), vec![]),

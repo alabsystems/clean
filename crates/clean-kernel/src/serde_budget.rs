@@ -6,18 +6,19 @@
 //!
 //! Serde's data model does not expose a general recursion limit.  Carrier
 //! decoders can install this thread-local scope so the custom `Expr`, `Level`,
-//! and `Name` deserializers reject excessive recursion *while decoding*, before
-//! a huge successfully-built recursive value has to be dropped on the native
-//! thread stack.  No scope means existing trusted deserialization behavior is
-//! unchanged.
+//! `Name`, `ProofCert`, and `DefEqStep` deserializers reject excessive
+//! recursion *while decoding*, before a huge successfully-built recursive value
+//! has to be dropped on the native thread stack. No scope means existing
+//! trusted deserialization behavior is unchanged.
 
-use serde::de::Error as _;
 use std::cell::RefCell;
 
 /// Limits installed around one untrusted kernel-value decode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DecodeResourceLimits {
-    /// Aggregate number of recursive `Expr`, `Level`, and `Name` nodes.
+    /// Aggregate number of recursive kernel value nodes.
+    ///
+    /// This includes `Expr`, `Level`, `Name`, `ProofCert`, and `DefEqStep`.
     pub max_nodes: usize,
     /// Maximum active recursive depth across those node types.
     pub max_depth: usize,

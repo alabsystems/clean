@@ -213,7 +213,7 @@ impl<'a> BoxingContext<'a> {
     pub(crate) fn expensive_constant_boxing(
         var: VarId,
         var_type: &IRType,
-        ctx: &mut BoxingContext,
+        ctx: &mut BoxingContext<'_>,
     ) -> Option<IRExpr> {
         use crate::ir::{FnId, IRArg, IRBody};
 

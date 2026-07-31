@@ -4,10 +4,15 @@
 
 //! Compact and locally compact topological spaces
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Build the sequence of declarations for `Topology.Compact` and related axioms.
@@ -17,6 +22,7 @@ use crate::name::Name;
 ///
 /// Pass `include_metric_iff=true` to include the `Topology.metric_compact_iff`
 /// declaration (requires MetricSpace and Metric.Compact to be initialized).
+#[cfg(test)]
 pub(crate) fn topology_compact_decl_templates(include_metric_iff: bool) -> Vec<Declaration> {
     let mut decls = Vec::new();
 
@@ -427,6 +433,7 @@ pub(crate) fn topology_compact_decl_templates(include_metric_iff: bool) -> Vec<D
 ///
 /// Prerequisites: TopologicalSpace, Continuous, IsCompactSet, And, Exists, Iff must
 /// be present in the environment before adding these declarations.
+#[cfg(test)]
 pub(crate) fn topology_locally_compact_decl_templates() -> Vec<Declaration> {
     let mut decls = Vec::new();
 
@@ -638,6 +645,7 @@ pub(crate) fn topology_locally_compact_decl_templates() -> Vec<Declaration> {
     decls
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Topology.Compact for compact topological spaces.
     ///
@@ -654,6 +662,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_compact_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_compact(&mut self) -> Result<(), EnvError> {
         if self.topology_compact_init {
             return Ok(());
@@ -679,6 +688,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_compact_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_compact(&self) -> bool {
         self.topology_compact_init
     }
@@ -697,6 +707,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_locally_compact_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_locally_compact(&mut self) -> Result<(), EnvError> {
         if self.topology_locally_compact_init {
             return Ok(());
@@ -719,6 +730,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_locally_compact_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_locally_compact(&self) -> bool {
         self.topology_locally_compact_init
     }

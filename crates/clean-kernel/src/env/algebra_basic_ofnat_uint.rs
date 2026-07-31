@@ -96,6 +96,7 @@ impl Environment {
     }
 
     /// Check if OfNat UInt8 instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_ofnat_uint8(&self) -> bool {
         self.ofnat_uint8_inst_init
     }
@@ -171,6 +172,7 @@ impl Environment {
     }
 
     /// Check if OfNat UInt16 instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_ofnat_uint16(&self) -> bool {
         self.ofnat_uint16_inst_init
     }
@@ -246,6 +248,7 @@ impl Environment {
     }
 
     /// Check if OfNat UInt32 instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_ofnat_uint32(&self) -> bool {
         self.ofnat_uint32_inst_init
     }
@@ -321,6 +324,7 @@ impl Environment {
     }
 
     /// Check if OfNat UInt64 instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_ofnat_uint64(&self) -> bool {
         self.ofnat_uint64_inst_init
     }
@@ -405,6 +409,7 @@ impl Environment {
     }
 
     /// Check if OfNat USize instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_ofnat_usize(&self) -> bool {
         self.ofnat_usize_inst_init
     }

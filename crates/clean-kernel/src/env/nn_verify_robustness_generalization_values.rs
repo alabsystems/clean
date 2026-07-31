@@ -8,17 +8,24 @@
 //! that were upgraded from `Declaration::Axiom` to `Declaration::Opaque`.
 //! Split from `nn_verify_robustness_generalization.rs` for file-size compliance.
 
+#[cfg(test)]
 use super::nn_verify_robustness_generalization::RobustnessGenConsts;
+#[cfg(test)]
 use super::nn_verify_robustness_generalization_defs;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // -- Definitions (Opaque — Category A: definitions-masquerading-as-axioms) -
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_certified_robust(
         &mut self,
         c: &RobustnessGenConsts,
@@ -65,7 +72,7 @@ impl Environment {
     /// body is replaced with a real Lipschitz predicate (`forall x y, |f x
     /// - f y| <= L * |x - y|`) — blocked on Rat-inequality infrastructure
     ///   and NNVec norm formalization (Branch B, epic #3470).
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_lipschitz_local(
         &mut self,
         c: &RobustnessGenConsts,
@@ -97,7 +104,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_nat_to_rat(
         &mut self,
         c: &RobustnessGenConsts,
@@ -119,7 +126,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_sqrt(&mut self, c: &RobustnessGenConsts) -> Result<(), EnvError> {
         use nn_verify_robustness_generalization_defs as defs;
         let ty = defs::build_sqrt_type(c);
@@ -138,7 +145,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_ln(&mut self, c: &RobustnessGenConsts) -> Result<(), EnvError> {
         use nn_verify_robustness_generalization_defs as defs;
         let ty = defs::build_ln_type(c);
@@ -157,7 +164,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_rademacher_complexity(
         &mut self,
         c: &RobustnessGenConsts,
@@ -181,7 +188,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_generalization_gap(
         &mut self,
         c: &RobustnessGenConsts,
@@ -210,7 +217,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_rg_gen_bound(
         &mut self,
         c: &RobustnessGenConsts,

@@ -7,7 +7,7 @@
 //! Reference: Lean 4 type_checker.cpp:988-991 `reduce_native`
 
 use crate::env::Environment;
-use crate::expr::{BigNat, Expr, ExprKind, Literal};
+use crate::expr::{Expr, ExprKind, Literal};
 use crate::name::Name;
 use std::sync::LazyLock;
 
@@ -39,11 +39,8 @@ mod names {
         LazyLock::new(|| Name::from_string("String.length"));
     pub(crate) static STRING_PUSH: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("String.push"));
-    pub(crate) static STRING_MK: LazyLock<Name> = LazyLock::new(|| Name::from_string("String.mk"));
     pub(crate) static STRING_BEQ: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("String.beq"));
-    pub(crate) static STRING_INTERCALATE: LazyLock<Name> =
-        LazyLock::new(|| Name::from_string("String.intercalate"));
     pub(crate) static STRING_IS_EMPTY: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("String.isEmpty"));
     pub(crate) static STRING_UTF8_BYTE_SIZE: LazyLock<Name> =
@@ -73,17 +70,6 @@ mod decidable_names {
 fn get_nat_val(e: &Expr) -> Option<u64> {
     match e.kind() {
         ExprKind::Lit(Literal::Nat(n)) => n.to_u64(),
-        _ => None,
-    }
-}
-
-/// Extract a BigNat reference from an expression.
-///
-/// Handles both `BigNat::Small` and `BigNat::Big` variants, enabling
-/// native reducers to operate on Nat values exceeding u64.
-fn get_bignat_val(e: &Expr) -> Option<&BigNat> {
-    match e.kind() {
-        ExprKind::Lit(Literal::Nat(n)) => Some(n),
         _ => None,
     }
 }

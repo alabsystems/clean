@@ -56,6 +56,7 @@ use crate::name::Name;
 struct IAConsts {
     nat: Expr,
     rat: Expr,
+    #[cfg(test)]
     prop: Expr,
     fin: Expr,
     le_le: Expr,
@@ -70,14 +71,19 @@ struct IAConsts {
     ib_width: Expr,
     nn_vec: Expr,
     rat_add: Expr,
+    #[cfg(test)]
     rat_sub: Expr,
     rat_neg: Expr,
     rat_mul: Expr,
+    #[cfg(test)]
     rat_abs: Expr,
+    #[cfg(test)]
     rat_div: Expr,
+    #[cfg(test)]
     le_trans: Expr,
     add_le_add: Expr,
     neg_le_neg: Expr,
+    #[cfg(test)]
     sub_le_sub: Expr,
 }
 
@@ -86,6 +92,7 @@ impl IAConsts {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             prop: Expr::sort(Level::zero()),
             fin: Expr::const_(Name::from_string("Fin"), vec![]),
             le_le: Expr::const_(Name::from_string("LE.le"), vec![Level::zero()]),
@@ -103,14 +110,19 @@ impl IAConsts {
             ib_width: Expr::const_(Name::from_string("NNVerify.IntervalBounds.width"), vec![]),
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
+            #[cfg(test)]
             rat_sub: Expr::const_(Name::from_string("Rat.sub"), vec![]),
             rat_neg: Expr::const_(Name::from_string("Rat.neg"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
+            #[cfg(test)]
             rat_abs: Expr::const_(Name::from_string("Rat.abs"), vec![]),
+            #[cfg(test)]
             rat_div: Expr::const_(Name::from_string("Rat.div"), vec![]),
+            #[cfg(test)]
             le_trans: Expr::const_(Name::from_string("Rat.le_trans"), vec![]),
             add_le_add: Expr::const_(Name::from_string("Rat.add_le_add"), vec![]),
             neg_le_neg: Expr::const_(Name::from_string("Rat.neg_le_neg"), vec![]),
+            #[cfg(test)]
             sub_le_sub: Expr::const_(Name::from_string("Rat.sub_le_sub"), vec![]),
         }
     }
@@ -189,6 +201,7 @@ impl IAConsts {
         )
     }
 
+    #[cfg(test)]
     fn le_trans_app(&self, a: Expr, b: Expr, cv: Expr, hab: Expr, hbc: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -220,6 +233,7 @@ impl IAConsts {
         Expr::app(self.rat_neg.clone(), a)
     }
 
+    #[cfg(test)]
     fn rat_sub_app(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_sub.clone(), a), b)
     }
@@ -228,10 +242,12 @@ impl IAConsts {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn rat_abs_app(&self, a: Expr) -> Expr {
         Expr::app(self.rat_abs.clone(), a)
     }
 
+    #[cfg(test)]
     fn rat_div_app(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_div.clone(), a), b)
     }
@@ -242,6 +258,7 @@ impl IAConsts {
     }
 
     /// `Rat.sub_le_sub a b c d hab hdc : a - d <= b - c`
+    #[cfg(test)]
     fn sub_le_sub_app(&self, a: Expr, b: Expr, cv: Expr, d: Expr, hab: Expr, hdc: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -774,7 +791,7 @@ impl Environment {
     ///
     /// Part of #3537.
     pub(crate) fn register_rat_add_le_add(&mut self) -> Result<(), EnvError> {
-        use super::nn_verify_ibp_linear::IbpLinearConsts;
+        use super::nn_verify_farkas_order::RatOrderConsts;
         use super::nn_verify_ibp_linear_add_le::build_add_le_add_proof;
 
         let name = Name::from_string("Rat.add_le_add");
@@ -820,8 +837,8 @@ impl Environment {
         // binder order (a1, b1, a2, b2, h1, h2) coincides with
         // (a, b, c, d, h1, h2) here, and the conclusion `(a1+a2) ≤ (b1+b2)`
         // coincides with `(a+c) ≤ (b+d)` under that renaming.
-        let ibp_consts = IbpLinearConsts::new();
-        let value = build_add_le_add_proof(&ibp_consts);
+        let order_consts = RatOrderConsts::new();
+        let value = build_add_le_add_proof(&order_consts);
         self.add_decl(Declaration::Theorem {
             name,
             level_params: vec![],

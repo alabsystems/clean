@@ -177,6 +177,7 @@ impl Environment {
     }
 
     /// Whether the coordinate-peel extension maps have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_peel(&self) -> bool {
         self.boolean_analysis_peel_init
     }

@@ -409,6 +409,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_metric_space_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_metric_space(&mut self) -> Result<(), EnvError> {
         if self.nat_metric_space_init {
             return Ok(());
@@ -442,6 +443,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_metric_space_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_metric_space(&self) -> bool {
         self.nat_metric_space_init
     }
@@ -458,6 +460,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_metric_space_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_metric_space(&mut self) -> Result<(), EnvError> {
         if self.int_metric_space_init {
             return Ok(());
@@ -491,6 +494,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_metric_space_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_metric_space(&self) -> bool {
         self.int_metric_space_init
     }
@@ -507,6 +511,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_metric_space_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_rat_metric_space(&mut self) -> Result<(), EnvError> {
         if self.rat_metric_space_init {
             return Ok(());
@@ -540,6 +545,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_metric_space_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_metric_space(&self) -> bool {
         self.rat_metric_space_init
     }

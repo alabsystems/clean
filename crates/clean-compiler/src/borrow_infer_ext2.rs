@@ -158,11 +158,13 @@ pub(crate) fn analyze_borrows_ext2(
         }
     }
 
-    // Resolve Unknown -> conservative fallback (Owned)
+    // Any object parameter still unknown after escape and inter-procedural
+    // propagation is read-only: consuming uses have already promoted it to
+    // `Owned`, so the remaining parameters are safe to borrow.
     for summary in summaries.values_mut() {
         for class in &mut summary.param_classes {
             if *class == BorrowClass::Unknown {
-                *class = BorrowClass::Owned;
+                *class = BorrowClass::Borrowed;
             }
         }
     }

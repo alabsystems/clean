@@ -36,16 +36,22 @@
 //!
 //! Part of #3189.
 
+#[cfg(test)]
 use super::abstract_interpretation_defs as defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for abstract interpretation formalization.
 ///
 /// Unlike NN-specific `AbstractDomainConsts`, these are program-analysis
 /// primitives parameterized by a lattice structure.
+#[cfg(test)]
 pub(super) struct AbstractInterpConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -62,7 +68,9 @@ pub(super) struct AbstractInterpConsts {
     pub(super) inst_le_abstract_state: Expr,
 }
 
+#[cfg(test)]
 impl AbstractInterpConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -92,6 +100,7 @@ impl AbstractInterpConsts {
     }
 
     /// Build `LE.le @AbstractState instLEAbstractState lhs rhs`.
+    #[cfg(test)]
     pub(super) fn state_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -110,12 +119,14 @@ impl AbstractInterpConsts {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Initialize abstract interpretation framework declarations.
     ///
     /// Depends on:
     /// - `init_eq()` for equality
     /// - `init_le()` for LE ordering class
+    #[cfg(test)]
     pub(crate) fn init_abstract_interpretation(&mut self) -> Result<(), EnvError> {
         if self.abstract_interpretation_init {
             return Ok(());
@@ -152,6 +163,7 @@ impl Environment {
     /// `AbstractInterp.AbstractState : Type`
     ///
     /// The type of abstract lattice elements. Programs map between these.
+    #[cfg(test)]
     fn register_ai_abstract_state(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("AbstractInterp.AbstractState"),
@@ -163,6 +175,7 @@ impl Environment {
     /// `AbstractInterp.instLEAbstractState : LE AbstractState`
     ///
     /// Ordering instance for the abstract lattice. Provides the partial order.
+    #[cfg(test)]
     fn register_ai_inst_le_abstract_state(
         &mut self,
         c: &AbstractInterpConsts,
@@ -178,6 +191,7 @@ impl Environment {
 
     // -- Definitions ---------------------------------------------------------
 
+    #[cfg(test)]
     fn register_ai_concrete_semantics(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("AbstractInterp.ConcreteSemantics"),
@@ -186,6 +200,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_abstract_semantics(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("AbstractInterp.AbstractSemantics"),
@@ -194,6 +209,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_widening(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("AbstractInterp.Widening"),
@@ -202,6 +218,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_narrowing(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("AbstractInterp.Narrowing"),
@@ -210,6 +227,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_fixpoint_iteration(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("AbstractInterp.fixpoint_iteration"),
@@ -220,6 +238,7 @@ impl Environment {
 
     // -- Theorems ------------------------------------------------------------
 
+    #[cfg(test)]
     fn register_ai_soundness(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         let thm_type = defs::build_soundness_type(c);
         self.add_decl(Declaration::Axiom {
@@ -236,6 +255,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_widening_termination(
         &mut self,
         c: &AbstractInterpConsts,
@@ -258,6 +278,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_narrowing_refines(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         let thm_type = defs::build_narrowing_refines_type(c);
         self.add_decl(Declaration::Axiom {
@@ -277,6 +298,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_fixpoint_sound(&mut self, c: &AbstractInterpConsts) -> Result<(), EnvError> {
         let thm_type = defs::build_fixpoint_sound_type(c);
         self.add_decl(Declaration::Axiom {
@@ -296,6 +318,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ai_domain_product_sound(
         &mut self,
         c: &AbstractInterpConsts,

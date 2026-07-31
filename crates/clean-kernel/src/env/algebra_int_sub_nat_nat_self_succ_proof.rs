@@ -40,13 +40,19 @@
 //! `env.axiom_deps("Int.subNatNat_self_succ")` is empty and
 //! `env.proof_quality("Int.subNatNat_self_succ") == ProofQuality::Constructive`.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[cfg(test)]
 struct IntSubNatNatSelfSuccConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -61,7 +67,9 @@ struct IntSubNatNatSelfSuccConsts {
     eq_trans: Expr,
 }
 
+#[cfg(test)]
 impl IntSubNatNatSelfSuccConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -86,24 +94,29 @@ impl IntSubNatNatSelfSuccConsts {
         }
     }
 
+    #[cfg(test)]
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn sub_nat_nat(&self, m: Expr, n: Expr) -> Expr {
         Expr::app(Expr::app(self.int_sub_nat_nat.clone(), m), n)
     }
 
+    #[cfg(test)]
     fn neg_succ_zero(&self) -> Expr {
         Expr::app(self.int_neg_succ.clone(), self.nat_zero.clone())
     }
 
+    #[cfg(test)]
     fn eq_int(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const.clone(), [self.int_type.clone(), lhs, rhs])
     }
 }
 
 /// Build `∀ b : Nat, Eq Int (Int.subNatNat b (Nat.succ b)) (Int.negSucc Nat.zero)`.
+#[cfg(test)]
 fn build_type(c: &IntSubNatNatSelfSuccConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat_type.clone());
@@ -116,6 +129,7 @@ fn build_type(c: &IntSubNatNatSelfSuccConsts) -> Expr {
 }
 
 /// Body: `λ (b : Nat) => @Nat.rec.{0} motive base step b`.
+#[cfg(test)]
 fn build_value(c: &IntSubNatNatSelfSuccConsts) -> Expr {
     let mut vb = EnvDeclBuilder::new();
     let (n_id, n) = vb.fresh_local(c.nat_type.clone());
@@ -172,6 +186,7 @@ fn build_value(c: &IntSubNatNatSelfSuccConsts) -> Expr {
     vb.finish(val_raw)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Int.subNatNat_self_succ` as a kernel-checked
     /// `Declaration::Theorem`.
@@ -190,6 +205,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Int.subNatNat_self_succ` is already
     ///          registered with any declaration kind, this call returns
     ///          `Ok(())` without modification.
+    #[cfg(test)]
     pub(crate) fn register_int_sub_nat_nat_self_succ_proof(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

@@ -488,6 +488,7 @@ impl Environment {
     }
 
     /// Check if C002 declarations have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verification_c002(&self) -> bool {
         self.nn_verification_c002_init
     }

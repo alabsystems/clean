@@ -96,6 +96,7 @@ struct PolyConsts {
     nnreal_mul: Expr,
     nnreal_add: Expr,
     nnreal_of_rat: Expr,
+    #[cfg(test)]
     rat: Expr,
     rat_mk: Expr,
     int_of_nat: Expr,
@@ -130,6 +131,7 @@ impl PolyConsts {
             nnreal_mul: k("NNReal.mul"),
             nnreal_add: k("NNReal.add"),
             nnreal_of_rat: k("NNReal.ofRat"),
+            #[cfg(test)]
             rat: k("Rat"),
             rat_mk: k("Rat.mk"),
             int_of_nat: k("Int.ofNat"),

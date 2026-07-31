@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(dead_code)]
-
 use super::model::{
     validate_fence_ordering, validate_ordering, validate_synchronizes_with, AtomicFence, AtomicOp,
     MemoryOrdering,

@@ -235,7 +235,7 @@ fn test_cache_off_by_default_then_opt_in_roundtrip() {
         );
 
         // Opt in: first decision is a MISS carrying a plan.
-        env.set(CACHE_DIR_ENV, &cache.path().to_string_lossy());
+        env.set(CACHE_DIR_ENV, cache.path());
         let plan = match decide(&modules, &search_paths, None) {
             CacheDecision::Miss(plan) => plan,
             _ => panic!("first decision with an empty cache must be a MISS"),

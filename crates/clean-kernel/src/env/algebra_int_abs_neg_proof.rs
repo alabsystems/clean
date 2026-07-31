@@ -77,13 +77,19 @@
 //! inductive machinery). Therefore `env.axiom_deps("Int.abs_neg")` is empty
 //! and `env.proof_quality("Int.abs_neg") == ProofQuality::Constructive`.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[cfg(test)]
 struct IntAbsNegConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -99,7 +105,9 @@ struct IntAbsNegConsts {
     eq_refl: Expr,
 }
 
+#[cfg(test)]
 impl IntAbsNegConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -119,41 +127,50 @@ impl IntAbsNegConsts {
         }
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
 
+    #[cfg(test)]
     fn neg(&self, x: Expr) -> Expr {
         Expr::app(self.int_neg.clone(), x)
     }
 
     /// `Int.abs (Int.neg x)`.
+    #[cfg(test)]
     fn abs_neg(&self, x: Expr) -> Expr {
         self.abs(self.neg(x))
     }
 
+    #[cfg(test)]
     fn of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_of_nat.clone(), n)
     }
 
+    #[cfg(test)]
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn eq_int(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const.clone(), [self.int_type.clone(), lhs, rhs])
     }
 
+    #[cfg(test)]
     fn refl_int(&self, t: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [self.int_type.clone(), t])
     }
 }
 
 /// Build `∀ a : Int, Eq Int (Int.abs (Int.neg a)) (Int.abs a)`.
+#[cfg(test)]
 fn build_type(c: &IntAbsNegConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -163,6 +180,7 @@ fn build_type(c: &IntAbsNegConsts) -> Expr {
 }
 
 /// Outer motive: `λ (x : Int) => Eq Int (Int.abs (Int.neg x)) (Int.abs x)`.
+#[cfg(test)]
 fn build_outer_motive(c: &IntAbsNegConsts, parent: &EnvDeclBuilder) -> Expr {
     let mut mb = EnvDeclBuilder::child_of(parent);
     let (x_id, x) = mb.fresh_local(c.int_type.clone());
@@ -173,6 +191,7 @@ fn build_outer_motive(c: &IntAbsNegConsts, parent: &EnvDeclBuilder) -> Expr {
 
 /// Outer `ofNat` case:
 /// `λ (n : Nat) => @Nat.rec.{0} inner_motive zero_case succ_case n`.
+#[cfg(test)]
 fn build_ofnat_case(c: &IntAbsNegConsts, parent: &EnvDeclBuilder) -> Expr {
     let mut ob = EnvDeclBuilder::child_of(parent);
     let (n_id, n) = ob.fresh_local(c.nat_type.clone());
@@ -213,6 +232,7 @@ fn build_ofnat_case(c: &IntAbsNegConsts, parent: &EnvDeclBuilder) -> Expr {
 /// and `Int.abs (negSucc n) ≡ ofNat (succ n)`, so the motive at `negSucc n`,
 /// `Eq Int (abs (neg (negSucc n))) (abs (negSucc n))`, is closed by reflexivity
 /// at `ofNat (succ n)`.
+#[cfg(test)]
 fn build_negsucc_case(c: &IntAbsNegConsts, parent: &EnvDeclBuilder) -> Expr {
     let mut nb = EnvDeclBuilder::child_of(parent);
     let (n_id, n) = nb.fresh_local(c.nat_type.clone());
@@ -222,6 +242,7 @@ fn build_negsucc_case(c: &IntAbsNegConsts, parent: &EnvDeclBuilder) -> Expr {
 }
 
 /// Body: `λ (a : Int) => @Int.rec.{0} outer_motive ofNat_case negSucc_case a`.
+#[cfg(test)]
 fn build_value(c: &IntAbsNegConsts) -> Expr {
     let mut vb = EnvDeclBuilder::new();
     let (va_id, va) = vb.fresh_local(c.int_type.clone());
@@ -233,6 +254,7 @@ fn build_value(c: &IntAbsNegConsts) -> Expr {
     vb.finish(val_raw)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Int.abs_neg` as a kernel-checked `Declaration::Theorem`.
     ///
@@ -251,6 +273,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Int.abs_neg` is already registered with
     ///          any declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_neg_proof(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

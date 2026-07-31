@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 
 use crate::spec::types::ProofStatus;
@@ -56,6 +56,7 @@ fn test_nat_add_zero_right_elaborates_in_isolation() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
 
         spec.add_inductive(
@@ -109,6 +110,7 @@ fn test_nat_sub_zero_left_elaborates_in_isolation() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
 
         spec.add_inductive(
@@ -208,6 +210,7 @@ fn test_nat_sub_succ_succ_elaborates_in_isolation() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
 
         spec.add_inductive(

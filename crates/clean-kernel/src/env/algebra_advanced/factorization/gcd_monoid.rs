@@ -5,7 +5,9 @@
 //! GcdMonoid typeclass and Nat instance.
 
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType};
+#[cfg(test)]
+use crate::env::Declaration;
+use crate::env::{Constructor, EnvError, Environment, InductiveDecl, InductiveType};
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
@@ -353,6 +355,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.gcd_monoid_init == true`
+    #[cfg(test)]
     pub(crate) fn has_gcd_monoid(&self) -> bool {
         self.gcd_monoid_init
     }
@@ -367,6 +370,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_gcd_monoid_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_gcd_monoid_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_gcd_monoid_inst_init {
             return Ok(());
@@ -486,6 +490,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_gcd_monoid_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_gcd_monoid_inst(&self) -> bool {
         self.nat_gcd_monoid_inst_init
     }

@@ -16,8 +16,8 @@ use crate::inductive::{
 use crate::{
     coq_import::{
         Binder, CaseBranch, CaseInfo, ConstantDecl, ConstantDeclKind, Constr, ConstructRef,
-        CoqBinderKind, CoqImportError, CoqImportResult, FixBody, GlobalDecl, InductiveRef,
-        MutualInductiveDecl, ProjectionRef,
+        CoqBinderKind, CoqImportError, CoqImportResult, FixBody, GlobalDecl, InductiveKind,
+        InductiveRef, MutualInductiveDecl, ProjectionRef,
     },
     BinderInfo, Declaration, Expr, LevelVec, Name,
 };
@@ -435,6 +435,21 @@ pub fn translate_inductive_decl(
     decl: &MutualInductiveDecl,
     context: &TranslationContext,
 ) -> CoqImportResult<KernelInductiveDecl> {
+    // Fail closed on CoInductive blocks: the kernel has no greatest-fixpoint
+    // primitive, so the only thing this lane could produce is the least-fixpoint
+    // reinterpretation — a different type (often empty) that would also receive
+    // an induction principle the coinductive must not have. The SerAPI lane
+    // (clean-mathverse alpha) handles coinductives via its own documented
+    // reconstruction; this lane rejects them rather than silently converting.
+    if decl.kind == InductiveKind::CoInductive {
+        let name = decl
+            .bodies
+            .first()
+            .map(|body| body.name.as_dotted())
+            .unwrap_or_else(|| "<empty block>".to_string());
+        return Err(CoqImportError::CoinductiveUnsupported { name });
+    }
+
     let mut translator = Translator::new(context);
     let shared_params = translator.translate_binder_prefix(&decl.params)?;
     let mut types = Vec::with_capacity(decl.bodies.len());

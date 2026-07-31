@@ -67,6 +67,7 @@ struct LevelLowerConsts {
     total_influence: Expr,
     subset_sum: Expr,
     nat_ble: Expr,
+    #[cfg(test)]
     nat_pow: Expr,
     nat_succ: Expr,
     nat_zero: Expr,
@@ -89,6 +90,7 @@ impl LevelLowerConsts {
             total_influence: Expr::const_(Name::from_string("BoolAnalysis.TotalInfluence"), vec![]),
             subset_sum: Expr::const_(Name::from_string("BoolAnalysis.subsetSum"), vec![]),
             nat_ble: Expr::const_(Name::from_string("Nat.ble"), vec![]),
+            #[cfg(test)]
             nat_pow: Expr::const_(Name::from_string("Nat.pow"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
@@ -138,6 +140,7 @@ impl LevelLowerConsts {
         Expr::apps(self.nat_ble.clone(), [k, m])
     }
     /// `Nat.pow 2 n`.
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         let one = Expr::app(self.nat_succ.clone(), self.nat_zero.clone());
         let two = Expr::app(self.nat_succ.clone(), one);

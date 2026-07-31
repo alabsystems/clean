@@ -10,11 +10,16 @@
 //! - Channel capacity and coding theorems
 //! - Source coding, rate-distortion, and multiuser information theory
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize InformationTheory module
     ///
@@ -37,6 +42,7 @@ impl Environment {
     /// ENSURES: On success, `self.information_theory_init == true`
     /// ENSURES: On success, required dependencies (`eq`, `nat`, `rat`, `measure_theory`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_information_theory(&mut self) -> Result<(), EnvError> {
         if self.information_theory_init {
             return Ok(());
@@ -167,6 +173,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_information_theory` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_information_theory(&self) -> bool {
         self.information_theory_init
     }

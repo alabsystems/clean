@@ -274,6 +274,23 @@ mod tests {
     fn test_shipped_example_spec_parses_and_validates() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../scripts/isabelle/lib3_backfill_chain.spec.json");
+        // `scripts/isabelle/` is WORKSTATION ORCHESTRATION, deliberately kept
+        // out of the public source snapshot (`publish/manifest.txt` excludes the
+        // whole directory; this spec hard-codes one operator's Isabelle install
+        // and `~/isabelle-work` corpus layout, which is meaningless off that
+        // machine). This case asserts a property of that unpublished operator
+        // artifact, so in a public checkout its input genuinely does not exist.
+        //
+        // Skip — deliberately and only for the absent-input case — rather than
+        // fail there. The parser and every validation rule stay fully covered by
+        // the inline-JSON cases in this module, which ship and run everywhere;
+        // what is skipped is exclusively the "our checked-in example is still
+        // shaped the way the driver expects" regression, which is only
+        // meaningful where that example exists. Any OTHER load error (present
+        // but malformed) still fails loudly through `expect` below.
+        if !path.exists() {
+            return;
+        }
         let spec = ChainSpec::load(&path).expect("shipped example spec loads");
         spec.validate().expect("shipped example spec is valid");
         // Interval is deliberately bundled into the ZP-Lib3c2 band so the driver

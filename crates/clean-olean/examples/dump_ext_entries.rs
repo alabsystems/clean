@@ -38,12 +38,7 @@ fn main() {
     }
 }
 
-fn dump_part(
-    level: clean_olean::OLeanLevel,
-    m: &clean_olean::ParsedModule,
-    filter: &str,
-    n: usize,
-) {
+fn dump_part(level: OLeanLevel, m: &clean_olean::ParsedModule, filter: &str, n: usize) {
     println!("\n#### part: {level} — extensions: {}", m.entries.len());
     for ext in &m.entries {
         let named = ext

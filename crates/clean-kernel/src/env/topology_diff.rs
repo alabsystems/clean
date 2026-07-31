@@ -76,6 +76,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_manifold_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_manifold(&self) -> bool {
         self.topology_manifold_init
     }
@@ -139,6 +140,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_lie_group_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_lie_group(&self) -> bool {
         self.topology_lie_group_init
     }
@@ -166,6 +168,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_principal_bundle_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_principal_bundle(&mut self) -> Result<(), EnvError> {
         if self.topology_principal_bundle_init {
             return Ok(());
@@ -198,6 +201,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_principal_bundle_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_principal_bundle(&self) -> bool {
         self.topology_principal_bundle_init
     }
@@ -221,6 +225,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_connection_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_connection(&mut self) -> Result<(), EnvError> {
         if self.topology_connection_init {
             return Ok(());
@@ -252,6 +257,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_connection_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_connection(&self) -> bool {
         self.topology_connection_init
     }
@@ -295,6 +301,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_symplectic_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_symplectic(&mut self) -> Result<(), EnvError> {
         if self.topology_symplectic_init {
             return Ok(());
@@ -327,6 +334,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_symplectic_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_symplectic(&self) -> bool {
         self.topology_symplectic_init
     }
@@ -365,6 +373,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_kahler_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_kahler(&mut self) -> Result<(), EnvError> {
         if self.topology_kahler_init {
             return Ok(());
@@ -398,6 +407,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_kahler_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_kahler(&self) -> bool {
         self.topology_kahler_init
     }
@@ -422,6 +432,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_spin_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_spin(&mut self) -> Result<(), EnvError> {
         if self.topology_spin_init {
             return Ok(());
@@ -456,6 +467,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_spin_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_spin(&self) -> bool {
         self.topology_spin_init
     }

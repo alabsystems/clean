@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(unsafe_op_in_unsafe_fn)]
-
 //! Closure application for clean objects.
 //!
 //! Implements the core closure dispatch: under-saturation (extend closure),
@@ -276,8 +274,11 @@ macro_rules! dispatch_call {
 /// `(*c).arity` elements, each a valid clean object.
 #[allow(clippy::missing_transmute_annotations)]
 unsafe fn call_closure(c: *mut LeanClosure, all_args: &[*mut LeanObj]) -> *mut LeanObj {
-    // SAFETY: Caller guarantees valid closure and correct arg count.
-    dispatch_call!(c, all_args, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe {
+        // SAFETY: Caller guarantees valid closure and correct arg count.
+        dispatch_call!(c, all_args, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
+    }
 }
 
 /// Create a new closure extending `c` with additional captured arguments.
@@ -288,25 +289,28 @@ unsafe fn call_closure(c: *mut LeanClosure, all_args: &[*mut LeanObj]) -> *mut L
 /// # Safety
 /// `c` must be a valid `LeanClosure`. `new_args` must all be valid clean objects.
 unsafe fn extend_closure(c: *mut LeanClosure, new_args: &[*mut LeanObj]) -> *mut LeanObj {
-    // SAFETY: Build combined args: existing captured (inc'd) + new (transferred).
-    let old_fixed = (*c).num_fixed as usize;
-    let new_fixed = old_fixed + new_args.len();
-    expect(
-        new_fixed <= MAX_CLOSURE_ARGS,
-        "extend_closure: captured args exceed MAX_CLOSURE_ARGS",
-    );
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe {
+        // SAFETY: Build combined args: existing captured (inc'd) + new (transferred).
+        let old_fixed = (*c).num_fixed as usize;
+        let new_fixed = old_fixed + new_args.len();
+        expect(
+            new_fixed <= MAX_CLOSURE_ARGS,
+            "extend_closure: captured args exceed MAX_CLOSURE_ARGS",
+        );
 
-    let mut all_fixed = Vec::with_capacity(new_fixed);
-    let old_args = closure_args_ptr(c);
-    for i in 0..old_fixed {
-        let arg = *old_args.add(i);
-        inc(arg);
-        all_fixed.push(arg);
+        let mut all_fixed = Vec::with_capacity(new_fixed);
+        let old_args = closure_args_ptr(c);
+        for i in 0..old_fixed {
+            let arg = *old_args.add(i);
+            inc(arg);
+            all_fixed.push(arg);
+        }
+        all_fixed.extend_from_slice(new_args);
+
+        // SAFETY: alloc_closure handles allocation and field writes.
+        alloc_closure((*c).func as *mut (), (*c).arity, &all_fixed)
     }
-    all_fixed.extend_from_slice(new_args);
-
-    // SAFETY: alloc_closure handles allocation and field writes.
-    alloc_closure((*c).func as *mut (), (*c).arity, &all_fixed)
 }
 
 /// Collect fixed + new args into a stack buffer, returns arity.
@@ -320,12 +324,15 @@ unsafe fn collect_args(
     n_new: usize,
     buf: &mut [*mut LeanObj; MAX_CLOSURE_ARGS],
 ) {
-    let num_fixed = (*c).num_fixed as usize;
-    let fixed_args = closure_args_ptr(c);
-    // SAFETY: fixed_args points to num_fixed valid pointers within the closure.
-    let fixed_slice = std::slice::from_raw_parts(fixed_args, num_fixed);
-    buf[..num_fixed].copy_from_slice(fixed_slice);
-    buf[num_fixed..num_fixed + n_new].copy_from_slice(&args[offset..offset + n_new]);
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe {
+        let num_fixed = (*c).num_fixed as usize;
+        let fixed_args = closure_args_ptr(c);
+        // SAFETY: fixed_args points to num_fixed valid pointers within the closure.
+        let fixed_slice = std::slice::from_raw_parts(fixed_args, num_fixed);
+        buf[..num_fixed].copy_from_slice(fixed_slice);
+        buf[num_fixed..num_fixed + n_new].copy_from_slice(&args[offset..offset + n_new]);
+    }
 }
 
 /// Apply `args` to closure `f`. Handles under-saturation, exact saturation,
@@ -337,39 +344,42 @@ unsafe fn collect_args(
 /// `f` must be a valid closure object. All `args` must be valid clean objects.
 #[must_use]
 pub unsafe fn apply_n(mut f: *mut LeanObj, args: &[*mut LeanObj]) -> *mut LeanObj {
-    // SAFETY: Loop invariant: `f` is a valid closure, args[offset..] are valid.
-    let mut offset = 0;
-    while offset < args.len() {
-        let c = f as *mut LeanClosure;
-        expect_obj_kind(
-            f,
-            crate::object_model::ObjKind::Closure,
-            "apply_n: pointer is not a closure",
-        );
-        let remaining = (*c).arity as usize - (*c).num_fixed as usize;
-        expect(
-            remaining > 0,
-            "apply_n: remaining closure arity must be > 0",
-        );
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe {
+        // SAFETY: Loop invariant: `f` is a valid closure, args[offset..] are valid.
+        let mut offset = 0;
+        while offset < args.len() {
+            let c = f as *mut LeanClosure;
+            expect_obj_kind(
+                f,
+                crate::object_model::ObjKind::Closure,
+                "apply_n: pointer is not a closure",
+            );
+            let remaining = (*c).arity as usize - (*c).num_fixed as usize;
+            expect(
+                remaining > 0,
+                "apply_n: remaining closure arity must be > 0",
+            );
 
-        let n = args.len() - offset;
-        if n < remaining {
-            let result = extend_closure(c, &args[offset..]);
+            let n = args.len() - offset;
+            if n < remaining {
+                let result = extend_closure(c, &args[offset..]);
+                dec(f);
+                return result;
+            }
+            let saturate_n = if n == remaining { n } else { remaining };
+            let mut all_args = [std::ptr::null_mut::<LeanObj>(); MAX_CLOSURE_ARGS];
+            collect_args(c, args, offset, saturate_n, &mut all_args);
+            let result = call_closure(c, &all_args[..(*c).arity as usize]);
             dec(f);
-            return result;
+            if n == remaining {
+                return result;
+            }
+            f = result;
+            offset += remaining;
         }
-        let saturate_n = if n == remaining { n } else { remaining };
-        let mut all_args = [std::ptr::null_mut::<LeanObj>(); MAX_CLOSURE_ARGS];
-        collect_args(c, args, offset, saturate_n, &mut all_args);
-        let result = call_closure(c, &all_args[..(*c).arity as usize]);
-        dec(f);
-        if n == remaining {
-            return result;
-        }
-        f = result;
-        offset += remaining;
+        f
     }
-    f
 }
 
 // -- Specialized apply_N wrappers ----------------------------------------
@@ -380,7 +390,8 @@ pub unsafe fn apply_n(mut f: *mut LeanObj, args: &[*mut LeanObj]) -> *mut LeanOb
 /// `f` must be a valid closure. `a1` must be a valid clean object.
 #[must_use]
 pub unsafe fn apply_1(f: *mut LeanObj, a1: *mut LeanObj) -> *mut LeanObj {
-    apply_n(f, &[a1])
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe { apply_n(f, &[a1]) }
 }
 
 /// Apply 2 arguments to a closure.
@@ -389,7 +400,8 @@ pub unsafe fn apply_1(f: *mut LeanObj, a1: *mut LeanObj) -> *mut LeanObj {
 /// `f` must be a valid closure. All args must be valid clean objects.
 #[must_use]
 pub unsafe fn apply_2(f: *mut LeanObj, a1: *mut LeanObj, a2: *mut LeanObj) -> *mut LeanObj {
-    apply_n(f, &[a1, a2])
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe { apply_n(f, &[a1, a2]) }
 }
 
 /// Apply 3 arguments to a closure.
@@ -403,7 +415,8 @@ pub unsafe fn apply_3(
     a2: *mut LeanObj,
     a3: *mut LeanObj,
 ) -> *mut LeanObj {
-    apply_n(f, &[a1, a2, a3])
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe { apply_n(f, &[a1, a2, a3]) }
 }
 
 /// Apply 4 arguments to a closure.
@@ -418,7 +431,8 @@ pub unsafe fn apply_4(
     a3: *mut LeanObj,
     a4: *mut LeanObj,
 ) -> *mut LeanObj {
-    apply_n(f, &[a1, a2, a3, a4])
+    // SAFETY: The caller provides a valid Lean closure whose arity and capture layout match the selected ABI call signature.
+    unsafe { apply_n(f, &[a1, a2, a3, a4]) }
 }
 
 // -- Tests ---------------------------------------------------------------

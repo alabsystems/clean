@@ -103,6 +103,7 @@ pub(super) struct ComposeConsts {
     pub(super) subset_sum_swap: Expr,
     pub(super) subset_sum_smul: Expr,
     pub(super) fin: Expr,
+    #[cfg(test)]
     pub(super) fin_sum: Expr,
     pub(super) fin_sum_congr: Expr,
     pub(super) eq1: Expr,

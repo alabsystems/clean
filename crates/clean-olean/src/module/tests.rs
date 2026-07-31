@@ -6,19 +6,7 @@ use super::*;
 use crate::region::{is_ptr, is_scalar, unbox_scalar, CompactedRegion};
 
 fn get_lean_lib_path() -> Option<std::path::PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let elan_path = std::path::PathBuf::from(home).join(".elan/toolchains");
-
-    if elan_path.exists() {
-        for entry in std::fs::read_dir(&elan_path).ok()? {
-            let entry = entry.ok()?;
-            let name = entry.file_name();
-            if name.to_string_lossy().contains("lean4") {
-                return Some(entry.path().join("lib/lean"));
-            }
-        }
-    }
-    None
+    crate::pinned_lean_lib_path()
 }
 
 #[test]
@@ -292,7 +280,7 @@ fn test_read_init_olean_many_imports() {
 }
 
 /// Describe a pointer value for diagnostic output.
-fn describe_field_ptr(region: &CompactedRegion, ptr: u64) -> String {
+fn describe_field_ptr(region: &CompactedRegion<'_>, ptr: u64) -> String {
     if is_scalar(ptr) {
         return format!("scalar({})", unbox_scalar(ptr));
     }
@@ -321,7 +309,7 @@ fn describe_field_ptr(region: &CompactedRegion, ptr: u64) -> String {
 }
 
 /// Print fields of an object for diagnostic output.
-fn print_fields(region: &CompactedRegion, offset: usize, count: usize, indent: &str) {
+fn print_fields(region: &CompactedRegion<'_>, offset: usize, count: usize, indent: &str) {
     for i in 0..count {
         let ptr = region.read_u64_at(offset + 8 + i * 8).unwrap();
         let desc = describe_field_ptr(region, ptr);
@@ -330,7 +318,7 @@ fn print_fields(region: &CompactedRegion, offset: usize, count: usize, indent: &
 }
 
 /// Print sort level details for type expression analysis.
-fn print_sort_level_details(region: &CompactedRegion, sort_offset: usize) {
+fn print_sort_level_details(region: &CompactedRegion<'_>, sort_offset: usize) {
     let sort_field_base = sort_offset + 8;
     let sort_scalar_base =
         sort_field_base + region.read_header_at(sort_offset).unwrap().other as usize * 8;

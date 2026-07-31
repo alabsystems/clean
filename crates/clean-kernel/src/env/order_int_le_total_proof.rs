@@ -229,6 +229,7 @@ impl IntLeTotalConsts {
 // ============================================================================
 
 /// `∀ m n : Nat, Or (NonNeg (subNatNat m n)) (NonNeg (subNatNat n m))`.
+#[cfg(test)]
 fn snn_total_type(c: &IntLeTotalConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat_type.clone());

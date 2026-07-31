@@ -198,6 +198,7 @@ impl IsCauchyMulConsts {
     fn rle(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_le.clone(), [a, b])
     }
+    #[cfg(test)]
     fn nonneg(&self, a: Expr) -> Expr {
         self.rle(self.rat_zero.clone(), a)
     }
@@ -304,6 +305,7 @@ impl IsCauchyMulConsts {
         pb.finish_child(pb.mk_lam(bb_id, BinderInfo::Default, self.nnrat.clone(), inner))
     }
     /// `∃ B, ∀ n, NNRat.le (f n) B` (the IsCauchy_bounded result type).
+    #[cfg(test)]
     fn bounded_exists(&self, parent: &EnvDeclBuilder, f: &Expr) -> Expr {
         Expr::apps(
             self.exists_c.clone(),
@@ -717,7 +719,7 @@ fn build_witness(
     parent: &EnvDeclBuilder,
     f: &Expr,
     g: &Expr,
-    prod: &Expr,
+    _prod: &Expr,
     eps: &Expr,
     delta: &Expr,
     bfr: &Expr,

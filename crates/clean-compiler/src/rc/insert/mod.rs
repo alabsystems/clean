@@ -269,7 +269,7 @@ pub fn insert_rc_in_code_standalone(code: &Code, borrow_map: &BorrowMap) -> Code
 }
 
 /// Insert RC operations into a Code block.
-fn insert_rc_in_code(code: &Code, live: &mut LiveVars, ctx: &mut RCContext) -> Code {
+fn insert_rc_in_code(code: &Code, live: &mut LiveVars, ctx: &mut RCContext<'_>) -> Code {
     match code {
         Code::Return(fvar) => insert_rc_return(*fvar, live, ctx),
         Code::Let(decl, body) => {
@@ -313,7 +313,7 @@ fn insert_rc_in_code(code: &Code, live: &mut LiveVars, ctx: &mut RCContext) -> C
 /// inc borrowed params that are being returned.
 ///
 /// Lean 4 ExplicitRC.lean line 615: `if isPossibleRef && isBorrowed then addInc`
-fn insert_rc_return(fvar: FVarId, live: &mut LiveVars, ctx: &mut RCContext) -> Code {
+fn insert_rc_return(fvar: FVarId, live: &mut LiveVars, ctx: &mut RCContext<'_>) -> Code {
     live.mark_live(fvar);
     let mut result = Code::Return(fvar);
 
@@ -353,7 +353,7 @@ fn insert_rc_fun(
     fun_decl: &FunDecl,
     body: &Code,
     live: &mut LiveVars,
-    ctx: &mut RCContext,
+    ctx: &mut RCContext<'_>,
 ) -> Code {
     for param in &fun_decl.params {
         ctx.register_type(param.fvar_id, &param.ty);
@@ -374,7 +374,7 @@ fn insert_rc_join_point(
     jp_decl: &FunDecl,
     body: &Code,
     live: &mut LiveVars,
-    ctx: &mut RCContext,
+    ctx: &mut RCContext<'_>,
 ) -> Code {
     for param in &jp_decl.params {
         ctx.register_type(param.fvar_id, &param.ty);
@@ -391,7 +391,7 @@ fn insert_rc_join_point(
 }
 
 /// Insert RC for cases expression: process each branch independently.
-fn insert_rc_cases(cases: &Cases, live: &mut LiveVars, ctx: &mut RCContext) -> Code {
+fn insert_rc_cases(cases: &Cases, live: &mut LiveVars, ctx: &mut RCContext<'_>) -> Code {
     let saved_live = live.clone();
     let mut branch_lives: Vec<HashSet<FVarId>> = Vec::new();
     let new_alts: Vec<Alt> = cases
@@ -417,7 +417,11 @@ fn insert_rc_cases(cases: &Cases, live: &mut LiveVars, ctx: &mut RCContext) -> C
 }
 
 /// Process a case alternative.
-fn process_case_alt(alt: &Alt, live: &mut LiveVars, ctx: &mut RCContext) -> (Alt, HashSet<FVarId>) {
+fn process_case_alt(
+    alt: &Alt,
+    live: &mut LiveVars,
+    ctx: &mut RCContext<'_>,
+) -> (Alt, HashSet<FVarId>) {
     match alt {
         Alt::Ctor {
             ctor_name,

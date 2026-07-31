@@ -14,7 +14,8 @@
 //! covering every first-order single-sorted inductive whose constructor
 //! arguments are all of the family type itself (Nat = [0,1], Bool = [0,0],
 //! binary trees = [0,2], arbitrary finite branching). Ports the guide-level,
-//! census-clean development `scratch/aristotle-sn-schema/SnSchema.lean`
+//! census-clean development `scratch/aristotle-harvest/aristotle-sn-indexed/
+//! aristotle-sn-indexed_aristotle/SnSchema.lean`
 //! (FRAGMENT-SCALING INCREMENT #5, `#print axioms ⊆ [propext, Quot.sound]`).
 //!
 //! The generic `RecEnv`/`RecMeta`/`RecRule`/`RecRules` machinery (`rec_env.rs`)
@@ -667,7 +668,7 @@ impl Specification {
         )?;
 
         // Step-relation congruence + transitivity helpers (clones of
-        // natrec.rs:346/373/378 with fam/sig/u params).
+        // natrec.rs:360/387/392 with fam/sig/u params).
         self.add_recursive_def(
             "def genSteps_trans (fam : Name) (sig : ListType Nat) (u : Level) (a : KExpr) (b : KExpr) (c : KExpr) (h1 : genSteps fam sig u a b) (h2 : genSteps fam sig u b c) : genSteps fam sig u a c := genSteps.rec fam sig u (fun (a0 : KExpr) (b0 : KExpr) (_ : genSteps fam sig u a0 b0) => genSteps fam sig u b0 c -> genSteps fam sig u a0 c) (fun (e : KExpr) => fun (hc : genSteps fam sig u e c) => hc) (fun (e : KExpr) (e2 : KExpr) (e3 : KExpr) (st : genStep fam sig u e e2) (_rest : genSteps fam sig u e2 e3) (ih : genSteps fam sig u e3 c -> genSteps fam sig u e2 c) => fun (hc : genSteps fam sig u e3 c) => genSteps.step fam sig u e e2 c st (ih hc)) a b h1 h2",
             "genSteps transitivity (genSteps.rec on h1). SnSchema B4c.",
@@ -679,6 +680,165 @@ impl Specification {
         self.add_recursive_def(
             "def genSteps_app_right (fam : Name) (sig : ListType Nat) (u : Level) (f : KExpr) (a : KExpr) (b : KExpr) (h : genSteps fam sig u a b) : genSteps fam sig u (KExpr.app f a) (KExpr.app f b) := genSteps.rec fam sig u (fun (a0 : KExpr) (b0 : KExpr) (_ : genSteps fam sig u a0 b0) => genSteps fam sig u (KExpr.app f a0) (KExpr.app f b0)) (fun (e : KExpr) => genSteps.refl fam sig u (KExpr.app f e)) (fun (e : KExpr) (e2 : KExpr) (e3 : KExpr) (st : genStep fam sig u e e2) (_rest : genSteps fam sig u e2 e3) (ih : genSteps fam sig u (KExpr.app f e2) (KExpr.app f e3)) => genSteps.step fam sig u (KExpr.app f e) (KExpr.app f e2) (KExpr.app f e3) (genStep_app_right fam sig u f e e2 st) ih) a b h",
             "genSteps congruence under app-right (genSteps.rec on h). SnSchema B4c.",
+        )?;
+
+        // ── INDEXED-INDUCTIVE OBJECT LAYER (Idx lane, tranche 1) ───────────
+        //
+        // Before this, the spec had only `ICtor` + its projections; the indexed
+        // recursor had no object layer at all, which is why the port draft
+        // listed redRecIdx as fully BLOCKED. This lands the layer: the recursor
+        // spine, rules, environment, contract and gates, each mirroring a named
+        // existing gen* declaration.
+        //
+        // Ported from the Aristotle guide
+        // scratch/aristotle-harvest/U-aristotle-idx-adequacy/.../IndexedAdequacy.lean
+        // (sorry-free, elaborates under the pinned toolchain).
+        //
+        // The trailing `*_nat*` declarations are spec-only rfl FIXTURES with no
+        // guide analogue: they pin the indexed constructions against the
+        // already-checked Nat ones at nIdx = 0, in the same style as
+        // genRecApp_nat / genREnv_nat / genRecRhs_nat_succ. iREnv_nat is the
+        // whole-assembly gate — it validates iREnv + iRecMeta + iRecRules +
+        // iRecRulesFrom + iRecRhs + iRecDoms + iFieldDoms + iRecRhsBody +
+        // iRecCallsB + iRecC simultaneously against natREnv.
+        self.add_recursive_def(
+            "def isigGet (isig : ListType ICtor) (j : Nat) : OptionType ICtor := ListType.rec ICtor (fun (_ : ListType ICtor) => Nat -> OptionType ICtor) (fun (j0 : Nat) => OptionType.none ICtor) (fun (d : ICtor) (rest : ListType ICtor) (ih : Nat -> OptionType ICtor) => fun (j0 : Nat) => Nat.rec (fun (_ : Nat) => OptionType ICtor) (OptionType.some ICtor d) (fun (j1 : Nat) (_ : OptionType ICtor) => ih j1) j0) isig j",
+            "isigGet: indexed-inductive object layer. Guide IndexedAdequacy.lean:461 (isigGet); spec shape mirror = sigGet at schema.rs:529.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecC (fam : Name) (isig : ListType ICtor) (u : Level) : KExpr := KExpr.const (iRecName fam isig) (ListType.cons Level u (ListType.nil Level))",
+            "iRecC: indexed-inductive object layer. Guide IndexedAdequacy.lean:499 (iRecC); spec shape mirror = genRecC at schema.rs:95; iRecName already exists at schema.rs:421.",
+        )?;
+
+        self.add_recursive_def(
+            "def instVec (iv : ListType KExpr) (args : ListType KExpr) : ListType KExpr := mapLT (fun (e : KExpr) => instIter e args) iv",
+            "instVec: indexed-inductive object layer. Guide IndexedAdequacy.lean:477 (instVec); mapLT schema.rs:346, instIter schema.rs:632. Guide's ofList/ofList_length (:467,:471) DROP OUT: spec ICtor already stores ListType KExpr, not Lean List.",
+        )?;
+
+        self.add_recursive_def(
+            "def iFieldDoms (fam : Name) (i : Nat) (recs : ListType (ListType KExpr)) : ListType KExpr := ListType.rec (ListType KExpr) (fun (_ : ListType (ListType KExpr)) => Nat -> ListType KExpr) (fun (i0 : Nat) => ListType.nil KExpr) (fun (iv : ListType KExpr) (rest : ListType (ListType KExpr)) (ih : Nat -> ListType KExpr) => fun (i0 : Nat) => ListType.cons KExpr (famAppI fam (mapLT (fun (e : KExpr) => lift_at e Nat.zero i0) iv)) (ih (Nat.add i0 (Nat.succ Nat.zero)))) recs i",
+            "iFieldDoms: indexed-inductive object layer. Guide IndexedAdequacy.lean:552 (iFieldDoms); the list-valued twin of the ALREADY-CHECKED iFieldTel at schema.rs:370 — same recursion, same i-threading, ListType.cons instead of KExpr.pi.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecDoms (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (d : ICtor) : ListType KExpr := ListType.cons KExpr (iMotiveTy iFam fam nIdx u) (list_append (iMinorTys iFam fam Nat.zero isig) (list_append (replicateLT (icP d) (famTypeC iFam)) (iFieldDoms fam Nat.zero (icRecs d))))",
+            "iRecDoms: indexed-inductive object layer. Guide IndexedAdequacy.lean:558 (iRecDoms); spec shape mirror = genRecDoms schema.rs:648. iMotiveTy :253, iMinorTys :399, replicateLT :644 (arg order n then x — matches guide).",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecCallsB (fam : Name) (isig : ListType ICtor) (u : Level) (p : Nat) (r : Nat) (k : Nat) (i : Nat) (recs : ListType (ListType KExpr)) : ListType KExpr := ListType.rec (ListType KExpr) (fun (_ : ListType (ListType KExpr)) => Nat -> ListType KExpr) (fun (i0 : Nat) => ListType.nil KExpr) (fun (iv : ListType KExpr) (rest : ListType (ListType KExpr)) (ih : Nat -> ListType KExpr) => fun (i0 : Nat) => ListType.cons KExpr (apply_spine (list_append (bvarSeq (Nat.add (Nat.add p r) k) (Nat.add k (Nat.succ Nat.zero))) (list_append (mapLT (fun (e : KExpr) => lift_at e Nat.zero r) iv) (ListType.cons KExpr (KExpr.bvar (Nat.sub (Nat.sub r (Nat.succ Nat.zero)) i0)) (ListType.nil KExpr)))) (iRecC fam isig u)) (ih (Nat.add i0 (Nat.succ Nat.zero)))) recs i",
+            "iRecCallsB: indexed-inductive object layer. Guide IndexedAdequacy.lean:566 (iRecCallsB). NO spec analogue — genRecRhsBody (schema.rs:361) inlines its rec-calls via mapLT. This is one of the two hard de Bruijn decls; gated by iRecRhsBody_nat_succ below.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRhsBody (fam : Name) (isig : ListType ICtor) (u : Level) (j : Nat) (d : ICtor) : KExpr := apply_spine (list_append (bvarSeq (Nat.sub (Nat.add (icP d) (recsLen (icRecs d))) (Nat.succ Nat.zero)) (Nat.add (icP d) (recsLen (icRecs d)))) (iRecCallsB fam isig u (icP d) (recsLen (icRecs d)) (iSigLength isig) Nat.zero (icRecs d))) (KExpr.bvar (Nat.add (Nat.add (icP d) (recsLen (icRecs d))) (Nat.sub (Nat.sub (iSigLength isig) (Nat.succ Nat.zero)) j)))",
+            "iRecRhsBody: indexed-inductive object layer. Guide IndexedAdequacy.lean:579 (iRecRhsBody); spec shape mirror = genRecRhsBody schema.rs:361. THE hardest de Bruijn in the tranche; hand-reduced against genRecRhsBody at p=0 and found term-identical (see blocking_gaps).",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRhs (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (j : Nat) (d : ICtor) : KExpr := lamTel (iRecDoms iFam fam nIdx isig u d) (iRecRhsBody fam isig u j d)",
+            "iRecRhs: indexed-inductive object layer. Guide IndexedAdequacy.lean:586 (iRecRhs). Guide authors DIRECTLY as lamTel (spec lamTel schema.rs:628), deliberately skipping the spec's genRecRhs/genRecRhs_eq_lamTel two-step (schema.rs:474 / :1053) — guide authoring kept.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecMeta (nIdx : Nat) (isig : ListType ICtor) : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (iSigLength isig) nIdx Bool.true",
+            "iRecMeta: indexed-inductive object layer. Guide IndexedAdequacy.lean:605 (iRecMeta); spec shape mirror = genRecMeta schema.rs:107. FIRST RecMeta in the spec with num_indices != 0 (genRecMeta/natRecMeta both pass Nat.zero).",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRulesFrom (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (j : Nat) (rest : ListType ICtor) : RecRules := ListType.rec ICtor (fun (_ : ListType ICtor) => Nat -> RecRules) (fun (j0 : Nat) => RecRules.nil) (fun (d : ICtor) (rest0 : ListType ICtor) (ih : Nat -> RecRules) => fun (j0 : Nat) => RecRules.cons (RecRule.mk (ctorName fam j0) (Nat.add (icP d) (recsLen (icRecs d))) (iRecRhs iFam fam nIdx isig u j0 d)) (ih (Nat.add j0 (Nat.succ Nat.zero)))) rest j",
+            "iRecRulesFrom: indexed-inductive object layer. Guide IndexedAdequacy.lean:591 (iRecRulesFrom); spec shape mirror = genRecRulesFrom schema.rs:480. RecRule.mk = (ctor_name, num_fields, rhs) per rec_env.rs:102; num_fields = p + r.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRules (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) : RecRules := iRecRulesFrom iFam fam nIdx isig u Nat.zero isig",
+            "iRecRules: indexed-inductive object layer. Guide IndexedAdequacy.lean:600 (iRecRules); spec shape mirror = genRecRules schema.rs:484.",
+        )?;
+
+        self.add_recursive_def(
+            "def iREnv (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) : RecEnv := RecEnv.addRec RecEnv.empty (iRecName fam isig) (iRecMeta nIdx isig) (iRecRules iFam fam nIdx isig u)",
+            "iREnv: indexed-inductive object layer. Guide IndexedAdequacy.lean:608 (iREnv); spec shape mirror = genREnv schema.rs:489; RecEnv.addRec arg order per rec_env.rs:134.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecApp (fam : Name) (isig : ListType ICtor) (u : Level) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) : KExpr := apply_spine (ListType.cons KExpr m (list_append ms (list_append ix (ListType.cons KExpr t (ListType.nil KExpr))))) (iRecC fam isig u)",
+            "iRecApp: indexed-inductive object layer. Guide IndexedAdequacy.lean:614 (iRecApp); spec shape mirror = genRecApp schema.rs:495 plus the index vector between minors and major.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecCallsInst (fam : Name) (isig : ListType ICtor) (u : Level) (m : KExpr) (ms : ListType KExpr) (avec : ListType KExpr) (recs : ListType (ListType KExpr)) (fields : ListType KExpr) : ListType KExpr := ListType.rec (ListType KExpr) (fun (_ : ListType (ListType KExpr)) => ListType KExpr -> ListType KExpr) (fun (fs : ListType KExpr) => ListType.nil KExpr) (fun (iv : ListType KExpr) (rest : ListType (ListType KExpr)) (ih : ListType KExpr -> ListType KExpr) => fun (fs : ListType KExpr) => ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) (ListType.nil KExpr) (fun (f : KExpr) (fs0 : ListType KExpr) (_ : ListType KExpr) => ListType.cons KExpr (iRecApp fam isig u m ms (instVec iv avec) f) (ih fs0)) fs) recs fields",
+            "iRecCallsInst: indexed-inductive object layer. Guide IndexedAdequacy.lean:621 (iRecCallsInst). Guide's 3 pattern clauses realized as nested ListType.rec (outer on recs returning ListType KExpr -> ListType KExpr, inner on fields): recs=nil -> nil regardless of fields (guide clauses 1+2); cons/nil -> nil (clause 1); cons/cons -> cons (clause 3).",
+        )?;
+
+        self.add_recursive_def(
+            "def iContractum (fam : Name) (isig : ListType ICtor) (u : Level) (m : KExpr) (mj : KExpr) (ms : ListType KExpr) (avec : ListType KExpr) (fields : ListType KExpr) (d : ICtor) : KExpr := apply_spine (list_append avec (list_append fields (iRecCallsInst fam isig u m ms avec (icRecs d) fields))) mj",
+            "iContractum: indexed-inductive object layer. Guide IndexedAdequacy.lean:631 (iContractum); spec shape mirror = genContractum schema.rs:541. Guide param order kept (m mj ms as fields d) with `as` renamed `avec`.",
+        )?;
+
+        self.add_inductive(
+            "inductive IGenRecContract (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) : KExpr -> KExpr -> Type\n| rule : forall (j : Nat) (d : ICtor) (m : KExpr) (mj : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (avec : ListType KExpr) (fields : ListType KExpr), Eq (OptionType ICtor) (isigGet isig j) (OptionType.some ICtor d) -> Eq Nat (list_length ms) (iSigLength isig) -> Eq (OptionType KExpr) (listGet ms j) (OptionType.some KExpr mj) -> Eq Nat (list_length ix) nIdx -> Eq Nat (list_length avec) (icP d) -> Eq Nat (list_length fields) (recsLen (icRecs d)) -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix (ctorApp fam j (list_append avec fields))) (iContractum fam isig u m mj ms avec fields d)",
+            "IGenRecContract: indexed-inductive object layer. Guide IndexedAdequacy.lean:640 (IGenRecContract); spec shape mirror = GenRecContract schema.rs:550 (Type-valued, Eq-hypothesis idiom instead of Prop =). listGet schema.rs:534, list_length iota_step.rs:101.",
+        )?;
+
+        self.add_inductive(
+            "inductive IGenFresh (fam : Name) (isig : ListType ICtor) : DefEnv -> Type\n| mk : forall (denv : DefEnv), Eq (OptionType KExpr) (defval_for denv fam) (OptionType.none KExpr) -> (forall (j : Nat), Lt j (iSigLength isig) -> Eq (OptionType KExpr) (defval_for denv (ctorName fam j)) (OptionType.none KExpr)) -> Eq (OptionType KExpr) (defval_for denv (iRecName fam isig)) (OptionType.none KExpr) -> IGenFresh fam isig denv",
+            "IGenFresh: indexed-inductive object layer. Guide IndexedAdequacy.lean:654 (IGenFresh); spec shape mirror = GenFresh schema.rs:556. Guide's `j < isig.length` becomes the spec idiom `Lt j (iSigLength isig)` (Lt: foundation_types.rs:646); defval_for: delta_step.rs:50.",
+        )?;
+
+        self.add_inductive(
+            "inductive IGenRecEnvOK (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) : RecEnv -> Type\n| mk : forall (renv : RecEnv), Eq (OptionType RecMeta) (recmeta_for renv (iRecName fam isig)) (OptionType.some RecMeta (iRecMeta nIdx isig)) -> (forall (j : Nat) (d : ICtor), Eq (OptionType ICtor) (isigGet isig j) (OptionType.some ICtor d) -> Eq (OptionType RecRule) (recrule_for renv (iRecName fam isig) (ctorName fam j)) (OptionType.some RecRule (RecRule.mk (ctorName fam j) (Nat.add (icP d) (recsLen (icRecs d))) (iRecRhs iFam fam nIdx isig u j d)))) -> IGenRecEnvOK iFam fam nIdx isig u renv",
+            "IGenRecEnvOK: indexed-inductive object layer. Guide IndexedAdequacy.lean:660 (IGenRecEnvOK); spec shape mirror = GenRecEnvOK schema.rs:562. recmeta_for rec_env.rs:238, recrule_for rec_env.rs:255.",
+        )?;
+
+        self.add_recursive_def(
+            "def idNatZero : ICtor := ICtor.mk Nat.zero (ListType.nil (ListType KExpr)) (ListType.nil KExpr)",
+            "idNatZero: indexed-inductive object layer. Guide No guide analogue — spec-only degeneracy fixture. Mirrors the sigNat=[0,1] convention of schema.rs:60 lifted to ICtor: p=0, no rec fields, empty target vector (nIdx=0).",
+        )?;
+
+        self.add_recursive_def(
+            "def idNatSucc : ICtor := ICtor.mk Nat.zero (ListType.cons (ListType KExpr) (ListType.nil KExpr) (ListType.nil (ListType KExpr))) (ListType.nil KExpr)",
+            "idNatSucc: indexed-inductive object layer. Guide No guide analogue — spec-only degeneracy fixture: p=0, ONE recursive field with an empty index vector, empty target vector. ICtor.mk arg order per schema.rs:269/:450.",
+        )?;
+
+        self.add_recursive_def(
+            "def isigNat : ListType ICtor := ListType.cons ICtor idNatZero (ListType.cons ICtor idNatSucc (ListType.nil ICtor))",
+            "isigNat: indexed-inductive object layer. Guide No guide analogue — spec-only. The nIdx=0 indexed re-encoding of sigNat (schema.rs:60); iSigLength isigNat reduces to 2, matching sigLength sigNat.",
+        )?;
+
+        self.add_recursive_def(
+            "def instVec_nat_id : Eq (ListType KExpr) (instVec (ListType.cons KExpr (KExpr.bvar (Nat.succ Nat.zero)) (ListType.cons KExpr (KExpr.bvar Nat.zero) (ListType.nil KExpr))) (ListType.cons KExpr natZeroC (ListType.cons KExpr natTypeC (ListType.nil KExpr)))) (ListType.cons KExpr natZeroC (ListType.cons KExpr natTypeC (ListType.nil KExpr))) := Eq.refl (ListType KExpr) (ListType.cons KExpr natZeroC (ListType.cons KExpr natTypeC (ListType.nil KExpr)))",
+            "instVec_nat_id: indexed-inductive object layer. Guide No guide analogue (guide validates instVec only via instVec_length :480, which needs LATE-stage mapLT_length). Spec-only rfl: instVec [bvar 1, bvar 0] [natZeroC, natTypeC] = [natZeroC, natTypeC] — validates instIter's arg ORDER and its list_length-rest DEPTH threading. Both values are KExpr.const (natrec.rs:69,:73) so lift_at reduces (expr_model.rs:92).",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecDoms_nat_succ (u : Level) : Eq (ListType KExpr) (iRecDoms natName natName Nat.zero isigNat u idNatSucc) (genRecDoms natName sigNat u (Nat.succ Nat.zero)) := Eq.refl (ListType KExpr) (genRecDoms natName sigNat u (Nat.succ Nat.zero))",
+            "iRecDoms_nat_succ: indexed-inductive object layer. Guide No guide analogue — spec-only rfl, the exact precedent-shape of iMotiveTy_deg (schema.rs:260) and genRecTy_nat (:224). Validates iRecDoms + iFieldDoms + (iMinorTys/iMinorTy degenerating to minorTys/minorTy).",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRhsBody_nat_zero (u : Level) : Eq KExpr (iRecRhsBody natName isigNat u Nat.zero idNatZero) (genRecRhsBody natName sigNat u Nat.zero Nat.zero) := Eq.refl KExpr (genRecRhsBody natName sigNat u Nat.zero Nat.zero)",
+            "iRecRhsBody_nat_zero: indexed-inductive object layer. Guide No guide analogue — spec-only rfl in the precedent class of genRecRhs_nat_zero (schema.rs:501). Both sides reduce to KExpr.bvar 1.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRhsBody_nat_succ (u : Level) : Eq KExpr (iRecRhsBody natName isigNat u (Nat.succ Nat.zero) idNatSucc) (genRecRhsBody natName sigNat u (Nat.succ Nat.zero) (Nat.succ Nat.zero)) := Eq.refl KExpr (genRecRhsBody natName sigNat u (Nat.succ Nat.zero) (Nat.succ Nat.zero))",
+            "iRecRhsBody_nat_succ: indexed-inductive object layer. Guide No guide analogue — spec-only rfl, the direct analogue of genRecRhs_nat_succ (schema.rs:505), which the file itself calls 'the HARDEST de Bruijn validation'. THIS IS THE TRANCHE GATE for iRecCallsB + iRecRhsBody.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecApp_nat (u : Level) (m : KExpr) (ms : ListType KExpr) (t : KExpr) : Eq KExpr (iRecApp natName isigNat u m ms (ListType.nil KExpr) t) (genRecApp natName sigNat u m ms t) := Eq.refl KExpr (genRecApp natName sigNat u m ms t)",
+            "iRecApp_nat: indexed-inductive object layer. Guide No guide analogue — spec-only rfl in the class of genRecApp_nat (schema.rs:517). Holds for ARBITRARY m/ms/t: list_append nil [t] reduces, and iRecC/genRecC heads both reduce to const (Name.str natName 2) [u].",
+        )?;
+
+        self.add_recursive_def(
+            "def iContractum_nat_succ (u : Level) (m : KExpr) (mj : KExpr) (ms : ListType KExpr) (f : KExpr) : Eq KExpr (iContractum natName isigNat u m mj ms (ListType.nil KExpr) (ListType.cons KExpr f (ListType.nil KExpr)) idNatSucc) (genContractum natName sigNat u m ms mj (ListType.cons KExpr f (ListType.nil KExpr))) := Eq.refl KExpr (genContractum natName sigNat u m ms mj (ListType.cons KExpr f (ListType.nil KExpr)))",
+            "iContractum_nat_succ: indexed-inductive object layer. Guide No guide analogue — spec-only rfl. Validates iRecCallsInst's LOCKSTEP recursion against genContractum's mapLT (schema.rs:541) at the one-rec-field instance. NOTE genContractum's arg order is (m ms mj fields), iContractum's is (m mj ms avec fields d).",
+        )?;
+
+        self.add_recursive_def(
+            "def iREnv_nat (u : Level) : Eq RecEnv (iREnv natName natName Nat.zero isigNat u) (natREnv u) := Eq.refl RecEnv (natREnv u)",
+            "iREnv_nat: indexed-inductive object layer. Guide No guide analogue — spec-only rfl, the analogue of genREnv_nat (schema.rs:513). WHOLE-ASSEMBLY gate: one decl validates iREnv + iRecMeta + iRecRules + iRecRulesFrom + iRecRhs + iRecDoms + iFieldDoms + iRecRhsBody + iRecCallsB + iRecC simultaneously against natREnv (natrec.rs:134).",
         )?;
 
         Ok(())
@@ -700,6 +860,7 @@ impl Specification {
             "def nat_eqb_refl (n : Nat) : Eq Bool (nat_eqb n n) Bool.true := Eq.cong Nat Bool (fun (s : Nat) => nat_is_zero (Nat.add s s)) (Nat.sub n n) Nat.zero (nat_sub_self n)",
             "nat_eqb n n = true (Eq.cong transport of nat_sub_self). SnSchema B4b (re-derived).",
         )?;
+
         self.add_recursive_def(
             "def name_eqb_refl (m : Name) : Eq Bool (name_eqb m m) Bool.true := Name.rec (fun (z : Name) => Eq Bool (name_eqb z z) Bool.true) (Eq.refl Bool Bool.true) (fun (p : Name) (k : Nat) (ih : Eq Bool (name_eqb p p) Bool.true) => Eq.trans Bool (name_eqb (Name.str p k) (Name.str p k)) (Bool.and Bool.true (nat_eqb k k)) Bool.true (Eq.cong Bool Bool (fun (bp : Bool) => Bool.and bp (nat_eqb k k)) (name_eqb p p) Bool.true ih) (nat_eqb_refl k)) m",
             "name_eqb m m = true (Name.rec induction + nat_eqb_refl). SnSchema B4b (re-derived).",
@@ -1136,9 +1297,15 @@ impl Specification {
         // bridged via nat_lt_b_succ_succ + listGet_cons_succ + Eq.trans/substType.
         // The standalone refl helpers above DO pass (direct conversion), so the peel
         // reductions are individually fine — the blocker is purely unification-side.
-        // Next-session strategy: root-cause the Discriminant 6-vs-3 (likely a
-        // stuck-recursor congruence gap in the elaborator), or reformulate lookup to
-        // avoid the nested Nat.rec inside listGet. See memory clean-snschema-rung-progress.
+        // UPDATE: the second strategy was taken. Lookup was reformulated ~70 lines
+        // below in this same stage as `lget` (ListType.rec on the LIST; the index is
+        // handled by nat_is_zero / Nat.pred / Bool.rec — no nested Nat.rec under a
+        // function motive), and the three lemmas landed there as lget_append_lt /
+        // lget_append_ge / bvarSeq_lget, all load-bearing: lget_append_ge in
+        // instIter_bvar_field, bvarSeq_lget in mapLT_instIter_fields, lget_append_lt
+        // in genRecRhs_instIter. The listGet-flavoured formulations stay unported and
+        // the Discriminant 6-vs-3 elaborator issue is still un-root-caused. See memory
+        // clean-snschema-rung-progress.
         self.add_recursive_def(
             "def nat_sub_pred_comm (top : Nat) : forall (j : Nat), Eq Nat (Nat.sub (Nat.pred top) j) (Nat.pred (Nat.sub top j)) := Nat.rec (fun (k : Nat) => Eq Nat (Nat.sub (Nat.pred top) k) (Nat.pred (Nat.sub top k))) (Eq.refl Nat (Nat.pred top)) (fun (j0 : Nat) (ih : Eq Nat (Nat.sub (Nat.pred top) j0) (Nat.pred (Nat.sub top j0))) => Eq.cong Nat Nat (fun (w : Nat) => Nat.pred w) (Nat.sub (Nat.pred top) j0) (Nat.pred (Nat.sub top j0)) ih)",
             "(pred top) - j = pred (top - j) (Nat.rec on j, no trailing major -> forall j; Nat.sub recurses on 2nd arg via pred). SnSchema B4c crux.",
@@ -1548,6 +1715,47 @@ impl Specification {
             "whnf_terminates_well_typed_idx: every closed well-typed term over iTEnv (indexed family/ctors-at-target-indices/indexed-recursor as typed consts) is whnf_acc (SN), modulo M : CandModel (iTEnv ...). One-line specialization of whnf_terminates_well_typed_dependent, mirroring whnf_terminates_well_typed_gen. THE indexed-family recursor SN theorem — fragment ladder top rung. SnSchema B7 COMPLETE.",
         )?;
 
+        // ── INDEXED ADEQUACY: env-OK tower + freshness + spine SN ──────────
+        //
+        // These live in the LATE add_snschema (not the objects stage) because
+        // they consume name_eqb_refl (:864), nat_eqb_self_add_succ_false (:908)
+        // and natFresh_red (natrec.rs, stage 79) — all registered AFTER
+        // add_dependent_sn_richmodel. Same constraint the mutual lane's
+        // mutREnv_ok tower has. Mirrors the genREnv_ok tower directly above.
+        self.add_recursive_def(
+            "def iREnv_meta_rec (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) : Eq (OptionType RecMeta) (recmeta_for (iREnv iFam fam nIdx isig u) (iRecName fam isig)) (OptionType.some RecMeta (iRecMeta nIdx isig)) := Eq.substType Bool (fun (b : Bool) => Eq (OptionType RecMeta) (opt_pick RecMeta b (iRecMeta nIdx isig) (OptionType.none RecMeta)) (OptionType.some RecMeta (iRecMeta nIdx isig))) Bool.true (name_eqb (iRecName fam isig) (iRecName fam isig)) (Eq.symm Bool (name_eqb (iRecName fam isig) (iRecName fam isig)) Bool.true (name_eqb_refl (iRecName fam isig))) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta (iRecMeta nIdx isig)))",
+            "iREnv_meta_rec: recmeta_for (iREnv ...) (iRecName fam isig) = some (iRecMeta nIdx isig), via name_eqb_refl through the opt_pick. The indexed analogue of genREnv_meta_rec. Indexed adequacy Phase 2.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRulesFrom_lookup (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (j0 : Nat) (rest : ListType ICtor) (j : Nat) (dd : ICtor) (hjd : Eq (OptionType ICtor) (isigGet rest j) (OptionType.some ICtor dd)) : Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u j0 rest) (ctorName fam (Nat.add j0 j))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add j0 j)) (Nat.add (icP dd) (recsLen (icRecs dd))) (iRecRhs iFam fam nIdx isig u (Nat.add j0 j) dd))) := ListType.rec ICtor (fun (rst : ListType ICtor) => forall (jb : Nat) (jo : Nat) (dv : ICtor), Eq (OptionType ICtor) (isigGet rst jo) (OptionType.some ICtor dv) -> Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u jb rst) (ctorName fam (Nat.add jb jo))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb jo)) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb jo) dv)))) (fun (jb : Nat) (jo : Nat) (dv : ICtor) (hh : Eq (OptionType ICtor) (isigGet (ListType.nil ICtor) jo) (OptionType.some ICtor dv)) => option_none_ne_some ICtor dv (Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u jb (ListType.nil ICtor)) (ctorName fam (Nat.add jb jo))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb jo)) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb jo) dv)))) hh) (fun (dh : ICtor) (rt : ListType ICtor) (ih : forall (jb : Nat) (jo : Nat) (dv : ICtor), Eq (OptionType ICtor) (isigGet rt jo) (OptionType.some ICtor dv) -> Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u jb rt) (ctorName fam (Nat.add jb jo))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb jo)) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb jo) dv)))) => fun (jb : Nat) (jo : Nat) (dv : ICtor) (hh : Eq (OptionType ICtor) (isigGet (ListType.cons ICtor dh rt) jo) (OptionType.some ICtor dv)) => Nat.rec (fun (jj : Nat) => Eq (OptionType ICtor) (isigGet (ListType.cons ICtor dh rt) jj) (OptionType.some ICtor dv) -> Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u jb (ListType.cons ICtor dh rt)) (ctorName fam (Nat.add jb jj))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb jj)) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb jj) dv)))) (fun (hz : Eq (OptionType ICtor) (isigGet (ListType.cons ICtor dh rt) Nat.zero) (OptionType.some ICtor dv)) => Eq.substType Bool (fun (bb : Bool) => Eq (OptionType RecRule) (opt_pick RecRule bb (RecRule.mk (ctorName fam jb) (Nat.add (icP dh) (recsLen (icRecs dh))) (iRecRhs iFam fam nIdx isig u jb dh)) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u (Nat.add jb (Nat.succ Nat.zero)) rt) (ctorName fam (Nat.add jb Nat.zero)))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb Nat.zero)) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb Nat.zero) dv)))) Bool.true (name_eqb (ctorName fam jb) (ctorName fam (Nat.add jb Nat.zero))) (Eq.symm Bool (name_eqb (ctorName fam jb) (ctorName fam (Nat.add jb Nat.zero))) Bool.true (name_eqb_refl (ctorName fam jb))) (Eq.cong ICtor (OptionType RecRule) (fun (dw : ICtor) => OptionType.some RecRule (RecRule.mk (ctorName fam jb) (Nat.add (icP dw) (recsLen (icRecs dw))) (iRecRhs iFam fam nIdx isig u jb dw))) dh dv (option_some_inj ICtor dh dv hz))) (fun (jp : Nat) (ihj : Eq (OptionType ICtor) (isigGet (ListType.cons ICtor dh rt) jp) (OptionType.some ICtor dv) -> Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u jb (ListType.cons ICtor dh rt)) (ctorName fam (Nat.add jb jp))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb jp)) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb jp) dv)))) => fun (hs : Eq (OptionType ICtor) (isigGet (ListType.cons ICtor dh rt) (Nat.succ jp)) (OptionType.some ICtor dv)) => Eq.substType Bool (fun (bb : Bool) => Eq (OptionType RecRule) (opt_pick RecRule bb (RecRule.mk (ctorName fam jb) (Nat.add (icP dh) (recsLen (icRecs dh))) (iRecRhs iFam fam nIdx isig u jb dh)) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u (Nat.add jb (Nat.succ Nat.zero)) rt) (ctorName fam (Nat.add jb (Nat.succ jp))))) (OptionType.some RecRule (RecRule.mk (ctorName fam (Nat.add jb (Nat.succ jp))) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u (Nat.add jb (Nat.succ jp)) dv)))) Bool.false (name_eqb (ctorName fam jb) (ctorName fam (Nat.add jb (Nat.succ jp)))) (Eq.symm Bool (name_eqb (ctorName fam jb) (ctorName fam (Nat.add jb (Nat.succ jp)))) Bool.false (Eq.trans Bool (name_eqb (ctorName fam jb) (ctorName fam (Nat.add jb (Nat.succ jp)))) (Bool.and Bool.true (nat_eqb jb (Nat.add jb (Nat.succ jp)))) Bool.false (Eq.cong Bool Bool (fun (bp : Bool) => Bool.and bp (nat_eqb jb (Nat.add jb (Nat.succ jp)))) (name_eqb fam fam) Bool.true (name_eqb_refl fam)) (nat_eqb_self_add_succ_false jb jp))) (Eq.substType Nat (fun (w : Nat) => Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u (Nat.add jb (Nat.succ Nat.zero)) rt) (ctorName fam w)) (OptionType.some RecRule (RecRule.mk (ctorName fam w) (Nat.add (icP dv) (recsLen (icRecs dv))) (iRecRhs iFam fam nIdx isig u w dv)))) (Nat.add (Nat.add jb (Nat.succ Nat.zero)) jp) (Nat.add jb (Nat.succ jp)) (nat_succ_add jb jp) (ih (Nat.add jb (Nat.succ Nat.zero)) jp dv hs))) jo hh) rest j0 j dd hjd",
+            "iRecRulesFrom_lookup: recrule lookup in the indexed signature-built rule list, by ListType.rec over the remaining ctors with an inner Nat.rec offset split. The indexed analogue of genRecRulesFrom_lookup. Indexed adequacy Phase 2.",
+        )?;
+
+        self.add_recursive_def(
+            "def iRecRules_lookup (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (j : Nat) (dd : ICtor) (hjd : Eq (OptionType ICtor) (isigGet isig j) (OptionType.some ICtor dd)) : Eq (OptionType RecRule) (recrule_for (iREnv iFam fam nIdx isig u) (iRecName fam isig) (ctorName fam j)) (OptionType.some RecRule (RecRule.mk (ctorName fam j) (Nat.add (icP dd) (recsLen (icRecs dd))) (iRecRhs iFam fam nIdx isig u j dd))) := Eq.substType Bool (fun (bb : Bool) => Eq (OptionType RecRule) (OptionType.rec RecRules (fun (_ : OptionType RecRules) => OptionType RecRule) (OptionType.none RecRule) (fun (rules : RecRules) => recrule_in_rules rules (ctorName fam j)) (opt_pick RecRules bb (iRecRules iFam fam nIdx isig u) (OptionType.none RecRules))) (OptionType.some RecRule (RecRule.mk (ctorName fam j) (Nat.add (icP dd) (recsLen (icRecs dd))) (iRecRhs iFam fam nIdx isig u j dd)))) Bool.true (name_eqb (iRecName fam isig) (iRecName fam isig)) (Eq.symm Bool (name_eqb (iRecName fam isig) (iRecName fam isig)) Bool.true (name_eqb_refl (iRecName fam isig))) (Eq.substType Nat (fun (w : Nat) => Eq (OptionType RecRule) (recrule_in_rules (iRecRulesFrom iFam fam nIdx isig u Nat.zero isig) (ctorName fam w)) (OptionType.some RecRule (RecRule.mk (ctorName fam w) (Nat.add (icP dd) (recsLen (icRecs dd))) (iRecRhs iFam fam nIdx isig u w dd)))) (Nat.add Nat.zero j) j (nat_zero_add j) (iRecRulesFrom_lookup iFam fam nIdx isig u Nat.zero isig j dd hjd))",
+            "iRecRules_lookup: recrule_for (iREnv ...) (iRecName fam isig) (ctorName fam j) resolves to ctor j's rule, composing the meta lookup with iRecRulesFrom_lookup. Indexed adequacy Phase 2.",
+        )?;
+
+        self.add_recursive_def(
+            "def iREnv_ok (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) : IGenRecEnvOK iFam fam nIdx isig u (iREnv iFam fam nIdx isig u) := IGenRecEnvOK.mk iFam fam nIdx isig u (iREnv iFam fam nIdx isig u) (iREnv_meta_rec iFam fam nIdx isig u) (fun (j : Nat) (dd : ICtor) (hjd : Eq (OptionType ICtor) (isigGet isig j) (OptionType.some ICtor dd)) => iRecRules_lookup iFam fam nIdx isig u j dd hjd)",
+            "iREnv_ok: IGenRecEnvOK iFam fam nIdx isig u (iREnv iFam fam nIdx isig u) -- the concrete env-OK witness for the indexed lane, assembled from the two lookups above. The indexed counterpart of genREnv_ok and mutREnv_ok. Indexed adequacy Phase 2.",
+        )?;
+
+        self.add_recursive_def(
+            "def natFresh_to_iGenFresh (denv : DefEnv) (hf : NatFresh denv) : IGenFresh natName isigNat denv := NatFresh.rec (fun (_ : NatFresh denv) => IGenFresh natName isigNat denv) (fun (h0 : Eq (OptionType KExpr) (defval_for denv natName) (OptionType.none KExpr)) (h1 : Eq (OptionType KExpr) (defval_for denv zeroName) (OptionType.none KExpr)) (h2 : Eq (OptionType KExpr) (defval_for denv succName) (OptionType.none KExpr)) (h3 : Eq (OptionType KExpr) (defval_for denv recName) (OptionType.none KExpr)) => IGenFresh.mk natName isigNat denv h0 (natFresh_ctor_field denv h1 h2) h3) hf",
+            "natFresh_to_iGenFresh: Converts a NatFresh pack into an IGenFresh pack at the Nat re-encoding isigNat -- the bridge letting the indexed lane reuse the concrete Nat freshness witness. Indexed adequacy Phase 2.",
+        )?;
+
+        self.add_recursive_def(
+            "def iFresh_red : IGenFresh natName isigNat (red_def the_red_env) := natFresh_to_iGenFresh (red_def the_red_env) natFresh_red",
+            "iFresh_red: IGenFresh natName isigNat (red_def the_red_env) -- indexed freshness at the REAL reduction env, via natFresh_to_iGenFresh. NOTE available only at the concrete Nat re-encoding, where the names are concrete constants; the abstract-isig statement is not provable, for the same reason mutFresh_red is not. Indexed adequacy Phase 2.",
+        )?;
+
+        self.add_recursive_def(
+            "def whnfAccAll_append (xs : ListType KExpr) (ys : ListType KExpr) (hx : WhnfAccAll xs) (hy : WhnfAccAll ys) : WhnfAccAll (list_append xs ys) := WhnfAccAll.rec (fun (l : ListType KExpr) (_ : WhnfAccAll l) => WhnfAccAll (list_append l ys)) hy (fun (x : KExpr) (rest : ListType KExpr) (hxa : whnf_acc x) (hr : WhnfAccAll rest) (ihr : WhnfAccAll (list_append rest ys)) => WhnfAccAll.cons x (list_append rest ys) hxa ihr) xs hx",
+            "whnfAccAll_append: WhnfAccAll (list_append xs ys) from WhnfAccAll xs and WhnfAccAll ys -- list-SN closure under append, needed where a ctor spine splits into params and fields. Indexed adequacy Phase 2.",
+        )?;
         Ok(())
     }
 }

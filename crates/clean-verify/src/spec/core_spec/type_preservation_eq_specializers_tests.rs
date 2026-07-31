@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Tests for TypePreservation Packet A — Pi/Sort/Lam Eq specializers (#464).

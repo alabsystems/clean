@@ -90,6 +90,7 @@ impl IeeeFormat {
     };
 
     /// IEEE-754 binary32 (`f32`): p = 24, emin = −126, bias = 127.
+    #[cfg(test)]
     pub(crate) const BINARY32: IeeeFormat = IeeeFormat {
         width: 32,
         mantissa_bits: 23,
@@ -408,6 +409,7 @@ fn emit_dyadic_rat(value: &DyadicValue) -> Expr {
 ///
 /// - `exp ≥ 0`: `num = num_mag << exp`, `den_exp = 0`.
 /// - `exp < 0`: `num = num_mag`,        `den_exp = −exp`.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(crate) fn dyadic_nonneg_fraction(value: &DyadicValue) -> (BigNat, u64) {
     if value.num_mag.is_zero() {
         return (BigNat::Small(0), 0);

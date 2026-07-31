@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Multi-step add_decl closure theorem for #461.

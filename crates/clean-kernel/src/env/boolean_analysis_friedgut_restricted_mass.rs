@@ -96,12 +96,14 @@ struct RestrictedMassConsts {
     mul_le_left: Expr,
     mul_assoc: Expr,
     mul_comm: Expr,
+    #[cfg(test)]
     l0: Level,
     l1: Level,
 }
 
 impl RestrictedMassConsts {
     fn new() -> Self {
+        #[cfg(test)]
         let l0 = Level::zero();
         let l1 = Level::succ(Level::zero());
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
@@ -139,6 +141,7 @@ impl RestrictedMassConsts {
             mul_le_left: k("Rat.mul_le_mul_of_nonneg_left"),
             mul_assoc: k("Rat.mul_assoc"),
             mul_comm: k("Rat.mul_comm"),
+            #[cfg(test)]
             l0,
             l1,
         }

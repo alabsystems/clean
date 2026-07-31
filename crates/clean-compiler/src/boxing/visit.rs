@@ -12,7 +12,7 @@ use super::boxed_version::mk_boxed_version;
 use super::cast::{box_args, cast_arg_if_needed, cast_args, cast_var_if_needed, wrap_with_prefix};
 use super::context::BoxingContext;
 
-pub fn try_correct_vdecl_type(ty: &IRType, value: &IRExpr, ctx: &BoxingContext) -> IRType {
+pub fn try_correct_vdecl_type(ty: &IRType, value: &IRExpr, ctx: &BoxingContext<'_>) -> IRType {
     match value {
         IRExpr::Apply { fn_id, .. } => ctx
             .get_decl(fn_id)
@@ -31,7 +31,7 @@ pub fn try_correct_vdecl_type(ty: &IRType, value: &IRExpr, ctx: &BoxingContext) 
     }
 }
 
-pub fn visit_body(body: &IRBody, ctx: &mut BoxingContext) -> IRBody {
+pub fn visit_body(body: &IRBody, ctx: &mut BoxingContext<'_>) -> IRBody {
     match body {
         IRBody::VDecl {
             var,
@@ -88,7 +88,7 @@ pub fn visit_body(body: &IRBody, ctx: &mut BoxingContext) -> IRBody {
 
 /// Handle IRBody variants that pass through the boxing pass unchanged
 /// (only recursing into their `rest` continuation).
-fn visit_body_passthrough(body: &IRBody, ctx: &mut BoxingContext) -> IRBody {
+fn visit_body_passthrough(body: &IRBody, ctx: &mut BoxingContext<'_>) -> IRBody {
     match body {
         // Inc/Dec are RC ops inserted at L5CNF (rc::insert), BEFORE the boxing
         // pass assigns final IRTypes. A Nat literal that the RC pass conservatively
@@ -189,7 +189,7 @@ fn visit_body_case(
     scrutinee: VarId,
     alts: &[IRAlt],
     default: &Option<Box<IRBody>>,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     let alts: Vec<_> = alts
         .iter()
@@ -214,7 +214,7 @@ fn visit_vdecl_apply(
     fn_id: &FnId,
     args: &[IRArg],
     rest: IRBody,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     let (cast_args_vec, prefix) = if let Some(decl) = ctx.get_decl(fn_id) {
         let param_tys: Vec<_> = decl.params.iter().map(|(_, t)| t.clone()).collect();
@@ -244,7 +244,7 @@ fn visit_vdecl_partial_apply(
     incoming_arity: u16,
     args: &[IRArg],
     rest: IRBody,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     let arity = ctx
         .get_decl(fn_id)
@@ -295,7 +295,7 @@ fn visit_vdecl_closure_apply(
     closure: &IRArg,
     args: &[IRArg],
     rest: IRBody,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     let all_args: Vec<IRArg> = std::iter::once(closure.clone())
         .chain(args.iter().cloned())
@@ -322,7 +322,7 @@ fn visit_vdecl_expr(
     ty: &IRType,
     value: &IRExpr,
     rest: IRBody,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     match value {
         IRExpr::Ctor { info, args } => {

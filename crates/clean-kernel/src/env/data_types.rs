@@ -92,6 +92,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_option` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_option(&self) -> bool {
         self.option_init
     }
@@ -193,6 +194,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_sum` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_sum(&self) -> bool {
         self.sum_init
     }
@@ -294,6 +296,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_psum` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_psum(&self) -> bool {
         self.psum_init
     }
@@ -489,6 +492,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_psigma` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_psigma(&self) -> bool {
         self.psigma_init
     }
@@ -581,6 +585,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_empty` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_empty(&self) -> bool {
         self.empty_init
     }
@@ -713,6 +718,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_pempty` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_pempty(&self) -> bool {
         self.pempty_init
     }

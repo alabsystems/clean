@@ -74,6 +74,7 @@ use super::boolean_analysis_order_toolkit::OrderConsts;
 use super::decl_builder::EnvDeclBuilder;
 use super::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
 use crate::name::Name;
 
@@ -94,6 +95,7 @@ struct HighDegreeConsts {
     nat_zero: Expr,
     nat_pow: Expr,
     nat_le: Expr,
+    #[cfg(test)]
     u1: Level,
 }
 
@@ -115,6 +117,7 @@ impl HighDegreeConsts {
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             nat_pow: Expr::const_(Name::from_string("Nat.pow"), vec![]),
             nat_le: Expr::const_(Name::from_string("Nat.le"), vec![]),
+            #[cfg(test)]
             u1: Level::succ(Level::zero()),
         }
     }

@@ -10,6 +10,7 @@ pub(super) struct NoiseFnSuccConsts {
     l1: Level,
     nat: Expr,
     rat: Expr,
+    #[cfg(test)]
     bool_: Expr,
     nat_succ: Expr,
     nat_pow: Expr,
@@ -57,6 +58,7 @@ impl NoiseFnSuccConsts {
             l1: l1.clone(),
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             bool_: Expr::const_(Name::from_string("Bool"), vec![]),
             nat_succ,
             nat_pow: Expr::const_(Name::from_string("Nat.pow"), vec![]),

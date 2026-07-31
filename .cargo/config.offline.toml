@@ -8,20 +8,23 @@
 # default would break every checkout that has not run `cargo vendor` first —
 # including all the parallel build sessions. Keep it strictly opt-in.
 #
-# USE IT EXPLICITLY, e.g.:
-#   cargo build  --config .cargo/config.offline.toml --offline
-#   cargo check  --config .cargo/config.offline.toml --offline -p clean-kernel
-# or via the wrapper: scripts/build_offline.sh [cargo args...]
+# HISTORICAL / CURRENTLY BLOCKED: this source map does not yet provision AY as
+# a separate first-party subrepo. Do not invoke it directly. The only supported
+# entry point is scripts/build_offline.sh, whose provenance preflight currently
+# rejects the historical artifact against the AY-Git lockfile.
 #
-# PREREQUISITE: the vendor/ tree must exist. Generate it with
-#   cargo vendor --versioned-dirs vendor/
-# or fetch + extract the released vendor-sources-v*.tar.zst artifact
+# PREREQUISITE: the vendor/ tree must exist and pass the third-party-only
+# provenance preflight in scripts/build_offline.sh. Do not run raw `cargo
+# vendor` after AY's Git migration: internal AY/NY repositories are subrepos,
+# never vendor data. Fetch + extract a compatible released
+# vendor-sources-v*.tar.zst artifact
 #   (see scripts/package_vendor.sh and docs/SUPPLY_CHAIN_VENDORING.md).
 #
 # The `directory` path below is relative to the workspace root (cargo's config
 # discovery walks up from the invocation cwd), so invoke cargo from the repo
-# root. Regenerate the source stanzas with `cargo vendor --versioned-dirs vendor/`
-# if the dependency graph changes (the git rev tracks Cargo.lock's carcara pin).
+# root. The current historical artifact predates AY's Git migration; a current
+# artifact requires a third-party-only staging flow and separate first-party
+# subrepo provisioning.
 
 [source.crates-io]
 replace-with = "vendored-sources"

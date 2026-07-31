@@ -185,7 +185,7 @@ fn rat_ty() -> Expr {
 
 /// Is `e` (the *domain* of a Pi binder) the type `Rat`? (A value binder, as
 /// opposed to a hypothesis binder whose domain is a Prop.)
-fn is_rat_value_binder(tc: &TypeChecker, e: &Expr) -> bool {
+fn is_rat_value_binder(tc: &TypeChecker<'_>, e: &Expr) -> bool {
     tc.is_def_eq(e, &rat_ty())
 }
 
@@ -201,7 +201,7 @@ fn is_rat_value_binder(tc: &TypeChecker, e: &Expr) -> bool {
 ///   `lhs`, `rhs` reduce to distinct closed `Rat.mk` constructors.
 /// - `Ne a b` ≡ `@Eq Rat a b → False` → provable iff the inner `Eq` is false,
 ///   false iff the inner `Eq` is provable.
-fn prop_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn prop_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     // `Ne` / negation: `Pi (_ : @Eq Rat a b) False` (non-dependent).
     if let ExprKind::Pi(_, dom, body) = p.kind() {
         if is_false_const(body) {
@@ -290,7 +290,7 @@ struct Telescope {
 /// *value* binder we have not yet bound — which holds for every axiom here, as
 /// hypotheses mention only already-bound `Rat` values. The number of `Rat`
 /// value binders bounds the witness search.
-fn telescope(tc: &TypeChecker, ty: &Expr) -> Telescope {
+fn telescope(tc: &TypeChecker<'_>, ty: &Expr) -> Telescope {
     let mut is_value = vec![];
     let mut cur = ty.clone();
     // Substitute each binder with a sentinel only to peek at the NEXT domain's
@@ -343,7 +343,7 @@ fn instantiate(tele: &Telescope, assignment: &[Expr]) -> (Vec<Expr>, Expr) {
 /// assignment of closed `Rat` witnesses to its value binders under which every
 /// hypothesis reduces to a PROVABLE closed prop and the conclusion reduces to a
 /// FALSE closed prop.
-fn is_refutable(tc: &TypeChecker, ty: &Expr) -> bool {
+fn is_refutable(tc: &TypeChecker<'_>, ty: &Expr) -> bool {
     let tele = telescope(tc, ty);
     let n_values = tele.is_value.iter().filter(|&&v| v).count();
     // Operators like `Rat.min : Rat → Rat → Rat` have no prop conclusion: their
@@ -798,7 +798,7 @@ fn rat_scalars() -> Vec<Expr> {
 /// Three-valued truth of a closed `contains B x` proposition for `d = 1`:
 /// reduce to `∀ i, And (Rat.le (B.lo i)(x i)) (Rat.le (x i)(B.hi i))`,
 /// instantiate at the single index, and AND the two `Rat.le` decisions.
-fn contains_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn contains_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     let w = tc.whnf(p);
     let body = match w.kind() {
         ExprKind::Pi(_, _, body) => (**body).clone(),
@@ -819,7 +819,7 @@ fn contains_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
 
 /// Generalized closed-prop truth over BOTH carriers: a `contains` prop, or a
 /// bare `Rat.le` / `Int.le` prop (delegating to the Rat-carrier `prop_truth`).
-fn interval_prop_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn interval_prop_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     if let Some((head, _)) = const_app(p) {
         if head == "NNVerify.IntervalBounds.contains" {
             return contains_truth(tc, p);
@@ -843,7 +843,7 @@ enum IvKind {
     Other,
 }
 
-fn interval_binder_kind(tc: &TypeChecker, dom: &Expr) -> IvKind {
+fn interval_binder_kind(tc: &TypeChecker<'_>, dom: &Expr) -> IvKind {
     if tc.is_def_eq(dom, &Expr::const_(Name::from_string("Nat"), vec![])) {
         return IvKind::Dim;
     }
@@ -875,7 +875,7 @@ fn interval_binder_kind(tc: &TypeChecker, dom: &Expr) -> IvKind {
 /// batteries, discharges `contains`-hypotheses that reduce to TRUE, and reports
 /// `true` iff some assignment leaves every hypothesis TRUE and the conclusion a
 /// FALSE closed prop.
-fn interval_is_refutable(tc: &TypeChecker, ty: &Expr) -> bool {
+fn interval_is_refutable(tc: &TypeChecker<'_>, ty: &Expr) -> bool {
     // Walk the leading binders, fixing `{d := 1}` and collecting the kinds of the
     // remaining value binders (Interval / Vec) in order. Hypotheses and the
     // conclusion are re-derived per assignment.
@@ -957,7 +957,7 @@ fn interval_is_refutable(tc: &TypeChecker, ty: &Expr) -> bool {
 /// value binder with the next `assignment` entry, hypothesis binders discharged
 /// with a sentinel; return `(hypotheses, conclusion)`.
 fn interval_instantiate(
-    tc: &TypeChecker,
+    tc: &TypeChecker<'_>,
     ty: &Expr,
     assignment: &[Expr],
     dim: &Expr,
@@ -1248,7 +1248,7 @@ fn fin_mk(n: u64, val: u64) -> Expr {
 /// `Int.le`; TRUE iff BOTH directions reduce to TRUE (antisymmetry on the
 /// quotient ⇒ genuine equality); `None` otherwise. Works on the WS-A quotient
 /// `Rat` where constructor `noConfusion` does not apply.
-fn rat_eq_truth_via_order(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> {
+fn rat_eq_truth_via_order(tc: &TypeChecker<'_>, a: &Expr, b: &Expr) -> Option<bool> {
     let le = |lhs: &Expr, rhs: &Expr| {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.le"), vec![]),
@@ -1267,7 +1267,7 @@ fn rat_eq_truth_via_order(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> 
 /// Decode a closed `Nat` to its value by reducing and matching `Nat.succ^k
 /// Nat.zero` for small `k` (covers the gate's `{0..7}` witness range plus the
 /// junk `val = n + 3`). Returns `None` for a non-literal / out-of-range nat.
-fn decode_nat(tc: &TypeChecker, e: &Expr) -> Option<u64> {
+fn decode_nat(tc: &TypeChecker<'_>, e: &Expr) -> Option<u64> {
     (0..=16u64).find(|&k| tc.is_def_eq(e, &fin_nat(k)))
 }
 
@@ -1279,7 +1279,7 @@ fn decode_nat(tc: &TypeChecker, e: &Expr) -> Option<u64> {
 ///   axiom that nonetheless carries a satisfiable in-range premise);
 /// - otherwise delegate to the Rat-carrier `prop_truth` (`Rat.le` / `Int.le`,
 ///   `None` on quotient-undecidable shapes).
-fn fin_prop_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn fin_prop_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     if let Some((head, args)) = const_app(p) {
         if head == "Eq" && args.len() == 3 {
             // args = [α, lhs, rhs]; only handle α = Rat.
@@ -1352,7 +1352,7 @@ fn fin_witnesses_for(n: u64) -> Vec<Expr> {
 /// Classify a leading-binder domain for the Fin telescope. The domain is
 /// inspected AFTER earlier binders have been instantiated by the caller, so a
 /// `Fin <bound>` domain already carries a concrete (closed) bound.
-fn fin_binder_kind(tc: &TypeChecker, dom: &Expr) -> FinKind {
+fn fin_binder_kind(tc: &TypeChecker<'_>, dom: &Expr) -> FinKind {
     if tc.is_def_eq(dom, &Expr::const_(Name::from_string("Nat"), vec![])) {
         return FinKind::Nat;
     }
@@ -1396,8 +1396,8 @@ fn type_mentions_fin(e: &Expr) -> bool {
 /// rationals. Hypothesis binders are discharged only when they reduce to a TRUE
 /// closed prop. The axiom is refutable iff some assignment makes every
 /// hypothesis TRUE while the conclusion reduces to a FALSE closed prop.
-fn fin_is_refutable(tc: &TypeChecker, ty: &Expr) -> bool {
-    fn go(tc: &TypeChecker, cur: &Expr, depth: usize) -> bool {
+fn fin_is_refutable(tc: &TypeChecker<'_>, ty: &Expr) -> bool {
+    fn go(tc: &TypeChecker<'_>, cur: &Expr, depth: usize) -> bool {
         // Guard against pathological binder depth (every Fin axiom here is ≤ 5).
         if depth > 8 {
             return false;

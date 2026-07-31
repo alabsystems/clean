@@ -153,6 +153,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_minmax_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_minmax(&self) -> bool {
         self.nat_minmax_init
     }
@@ -334,6 +335,7 @@ impl Environment {
     }
 
     /// Check if the Min/Max typeclasses have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_minmax_class(&self) -> bool {
         self.minmax_class_init
     }
@@ -424,6 +426,7 @@ impl Environment {
     }
 
     /// Check if the Min/Max Nat instances have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nat_minmax_inst(&self) -> bool {
         self.nat_minmax_inst_init
     }
@@ -907,6 +910,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_ord(&self) -> bool {
         self.ord_init
     }

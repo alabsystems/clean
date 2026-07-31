@@ -227,6 +227,7 @@ impl Rung2CoreConsts {
     }
 
     // ── Eq / nonneg plumbing ──────────────────────────────────────────────────
+    #[cfg(test)]
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),

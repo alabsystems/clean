@@ -29,13 +29,19 @@
 //!            Moskewicz et al. (2001), "Chaff";
 //!            Een & Sorensson (2003), "An extensible SAT-solver".
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all CDCL soundness declarations.
+#[cfg(test)]
 pub(super) struct CDCLSoundnessConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -51,7 +57,9 @@ pub(super) struct CDCLSoundnessConsts {
     pub(super) cdcl_state: Expr,
 }
 
+#[cfg(test)]
 impl CDCLSoundnessConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -71,6 +79,7 @@ impl CDCLSoundnessConsts {
 }
 
 /// Register an axiom with idempotency check.
+#[cfg(test)]
 fn add_cdcl_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvError> {
     if env.get_const(&Name::from_string(name)).is_some() {
         return Ok(());
@@ -82,11 +91,12 @@ fn add_cdcl_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), 
     })
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize CDCL soundness declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_cdcl_soundness(&mut self) -> Result<(), EnvError> {
         if self.cdcl_soundness_init {
             return Ok(());
@@ -131,12 +141,12 @@ impl Environment {
     // Types
     // ====================================================================
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_variable(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.Variable", c.type0.clone())
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_literal(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.Literal", c.type0.clone())?;
         add_cdcl_axiom(
@@ -151,7 +161,7 @@ impl Environment {
         )
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_clause(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.Clause", c.type0.clone())?;
         add_cdcl_axiom(
@@ -161,12 +171,12 @@ impl Environment {
         )
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_assignment(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.Assignment", c.type0.clone())
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_trail_entry(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.TrailEntry", c.type0.clone())?;
         add_cdcl_axiom(
@@ -185,7 +195,7 @@ impl Environment {
         )
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_trail(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.Trail", c.type0.clone())?;
         add_cdcl_axiom(
@@ -195,12 +205,12 @@ impl Environment {
         )
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_watch_list(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.WatchList", c.type0.clone())
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_state(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         add_cdcl_axiom(self, "CDCLSoundness.CDCLState", c.type0.clone())?;
         // Projections: assignment, trail, watches
@@ -250,7 +260,7 @@ impl Environment {
     // State transitions
     // ====================================================================
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_transitions(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         let state_to_state = Expr::pi(
             BinderInfo::Default,
@@ -300,7 +310,7 @@ impl Environment {
     /// This infrastructure enables proof terms that perform genuine case
     /// analysis on which CDCL transition was applied, rather than delegating
     /// to a monolithic proof axiom.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_transition_tag(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         // TransitionTag : Type 0
         add_cdcl_axiom(self, "CDCLSoundness.TransitionTag", c.type0.clone())?;
@@ -417,7 +427,7 @@ impl Environment {
     // Invariant predicates
     // ====================================================================
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_cdcl_invariants(&mut self, c: &CDCLSoundnessConsts) -> Result<(), EnvError> {
         let state_to_prop = Expr::pi(BinderInfo::Default, c.cdcl_state.clone(), c.prop.clone());
 

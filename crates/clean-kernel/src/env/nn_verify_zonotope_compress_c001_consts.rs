@@ -25,9 +25,11 @@ use crate::name::Name;
 pub(super) struct C001Consts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
+    #[cfg(test)]
     pub(super) rat_zero: Expr,
     pub(super) prop: Expr,
     pub(super) nn_vec: Expr,
+    #[cfg(test)]
     pub(super) ib: Expr,
     pub(super) zonotope: Expr,
     pub(super) zono_contains: Expr,
@@ -40,9 +42,11 @@ pub(super) struct C001Consts {
     pub(super) rat_add: Expr,
     pub(super) rat_mul: Expr,
     pub(super) rat_two: Expr,
+    #[cfg(test)]
     pub(super) eq: Expr,
     pub(super) eq_refl: Expr,
     pub(super) compress_sound: Expr,
+    #[cfg(test)]
     pub(super) compress_hull_exact: Expr,
     pub(super) tail_norm_sum: Expr,
 }
@@ -52,9 +56,11 @@ impl C001Consts {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             rat_zero: Expr::const_(Name::from_string("Rat.zero"), vec![]),
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
+            #[cfg(test)]
             ib: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
             zonotope: Expr::const_(Name::from_string("NNVerify.Zonotope"), vec![]),
             zono_contains: Expr::const_(Name::from_string("NNVerify.Zonotope.contains"), vec![]),
@@ -67,6 +73,7 @@ impl C001Consts {
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
             rat_two: Expr::const_(Name::from_string("Rat.two"), vec![]),
+            #[cfg(test)]
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
             eq_refl: Expr::const_(
                 Name::from_string("Eq.refl"),
@@ -76,6 +83,7 @@ impl C001Consts {
                 Name::from_string("NNVerify.Zonotope.compress_sound"),
                 vec![],
             ),
+            #[cfg(test)]
             compress_hull_exact: Expr::const_(
                 Name::from_string("NNVerify.Zonotope.compress_hull_exact"),
                 vec![],
@@ -84,6 +92,7 @@ impl C001Consts {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn ib_of(&self, n: &Expr) -> Expr {
         Expr::app(self.ib.clone(), n.clone())
     }
@@ -159,6 +168,7 @@ impl C001Consts {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 
+    #[cfg(test)]
     pub(super) fn eq_of(&self, alpha: Expr, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(Expr::app(Expr::app(self.eq.clone(), alpha), lhs), rhs)
     }

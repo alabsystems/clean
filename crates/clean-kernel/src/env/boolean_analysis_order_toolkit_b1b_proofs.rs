@@ -22,7 +22,7 @@ use crate::name::Name;
 // ---------------------------------------------------------------------------
 
 /// `Rat.lt a b` (stated; never reduced).
-fn rat_lt(c: &OrderConsts, a: Expr, b: Expr) -> Expr {
+fn rat_lt(_c: &OrderConsts, a: Expr, b: Expr) -> Expr {
     Expr::apps(Expr::const_(Name::from_string("Rat.lt"), vec![]), [a, b])
 }
 

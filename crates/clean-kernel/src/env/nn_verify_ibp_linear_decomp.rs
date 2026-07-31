@@ -52,6 +52,7 @@ pub(super) struct DecompConsts {
     /// `@Eq.symm.{1}`.
     pub(super) eq_symm: Expr,
     /// `@Eq.refl.{1}`.
+    #[cfg(test)]
     pub(super) eq_refl: Expr,
     pub(super) rat_zero_add: Expr,
     pub(super) rat_add_zero: Expr,
@@ -81,6 +82,7 @@ impl DecompConsts {
             bool_rec_prop: Expr::const_(Name::from_string("Bool.rec"), vec![Level::zero()]),
             rat_ble: Expr::const_(Name::from_string("Rat.ble"), vec![]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![t1.clone()]),
+            #[cfg(test)]
             eq_refl: Expr::const_(Name::from_string("Eq.refl"), vec![t1]),
             rat_zero_add: Expr::const_(Name::from_string("Rat.zero_add"), vec![]),
             rat_add_zero: Expr::const_(Name::from_string("Rat.add_zero"), vec![]),
@@ -135,6 +137,7 @@ impl DecompConsts {
     }
 
     /// `@Eq.refl.{1} Rat v`.
+    #[cfg(test)]
     fn refl_rat(&self, v: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [self.rat.clone(), v])
     }

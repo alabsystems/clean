@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use crate::expr::{Expr, ExprKind, ZFCSetExpr};
+use crate::expr::{stack_safe, Expr, ExprKind, ZFCSetExpr};
 use crate::name::Name;
 
 use super::super::{ProofCert, ZFCSetCertKind};
@@ -18,6 +18,10 @@ use super::state::CertBuilder;
 
 impl<'env> CertBuilder<'env> {
     pub(super) fn cert_to_expr(&self, cert: &ProofCert) -> Expr {
+        stack_safe(|| self.cert_to_expr_impl(cert))
+    }
+
+    fn cert_to_expr_impl(&self, cert: &ProofCert) -> Expr {
         match cert {
             ProofCert::Sort { level } => Expr::from_kind(ExprKind::Sort(level.clone())),
             ProofCert::BVar { idx, .. } => Expr::from_kind(ExprKind::BVar(*idx)),

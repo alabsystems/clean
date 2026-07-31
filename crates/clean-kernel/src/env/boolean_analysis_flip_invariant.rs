@@ -162,6 +162,7 @@ impl FlipInvConsts {
 // in the kernel today, so this is registered as the precise frontier statement
 // (NOT proven, NOT wired) — see the module docs.
 // ===========================================================================
+#[cfg(test)]
 fn reindex_involution_type(c: &FlipInvConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());
@@ -340,6 +341,7 @@ impl Environment {
     /// Returns the built type so callers can inspect / supply a proof. This
     /// function does NOT add a declaration — it is the single point that names
     /// the missing primitive's exact signature.
+    #[cfg(test)]
     pub(crate) fn flip_reindex_involution_signature(&self) -> Expr {
         let c = FlipInvConsts::new();
         reindex_involution_type(&c)

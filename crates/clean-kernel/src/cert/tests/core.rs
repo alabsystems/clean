@@ -726,6 +726,7 @@ fn test_expr_name_returns_meaningful_values() {
 fn test_invalid_decompress_index() {
     // Create a corrupted compressed cert with invalid indices
     let corrupted = CompressedCert {
+        schema: CompressedCertSchema::current(),
         exprs: vec![],
         levels: vec![],
         certs: vec![CompressedCertNode::BVar {

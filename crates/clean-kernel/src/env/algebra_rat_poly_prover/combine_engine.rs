@@ -9,7 +9,7 @@
 //! with a kernel proof of equality.
 
 use super::combine::TermPub as STerm;
-use super::{Monomial, RatPolyProver};
+use super::RatPolyProver;
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::expr::Expr;
 
@@ -81,7 +81,7 @@ impl RatPolyProver {
         let t_e = self.reify_term(t.coeff, &t.mono);
         if sorted.is_empty() {
             // t + 0 = t   [add_zero]
-            let lhs = self.add(t_e.clone(), self.zero());
+            let _lhs = self.add(t_e.clone(), self.zero());
             let h = Expr::app(self.add_zero.clone(), t_e.clone());
             return (vec![t.clone()], h);
         }
@@ -187,7 +187,7 @@ impl RatPolyProver {
         if rest.is_empty() {
             // sorted == [head] → reify = head_e. lhs = t + head_e.
             // t + head_e = head_e + t  [add_comm]  → [head, t]
-            let lhs = self.add(t_e.clone(), head_e.clone());
+            let _lhs = self.add(t_e.clone(), head_e.clone());
             let h = self.acomm(t_e.clone(), head_e.clone());
             let out = vec![head.clone(), t.clone()];
             // reify([head, t]) = head_e + t_e

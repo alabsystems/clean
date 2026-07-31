@@ -39,6 +39,7 @@ pub(super) struct ResComplexityConsts {
     /// ResComplexity.TreeResProof : Type
     pub(super) tree_res_proof: Expr,
     /// ResComplexity.PHP (n : Nat) : CNF
+    #[cfg(test)]
     pub(super) php: Expr,
 }
 
@@ -55,6 +56,7 @@ impl ResComplexityConsts {
             cnf: Expr::const_(Name::from_string("ResComplexity.CNF"), vec![]),
             assignment: Expr::const_(Name::from_string("ResComplexity.Assignment"), vec![]),
             tree_res_proof: Expr::const_(Name::from_string("ResComplexity.TreeResProof"), vec![]),
+            #[cfg(test)]
             php: Expr::const_(Name::from_string("ResComplexity.PHP"), vec![]),
         }
     }

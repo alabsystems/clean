@@ -98,6 +98,7 @@ impl Environment {
     }
 
     /// Check if Tier A `min_eq_max_zero_zero` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_rat_min_eq_max(&self) -> bool {
         self.nn_verify_tier_a_rat_min_eq_max_init
     }

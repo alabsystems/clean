@@ -12,15 +12,25 @@
 //! metadata (`natRecMeta`), the two rules (`natRecRules`), and the Nat recursor
 //! environment (`natREnv`) — the schematic `RecEnv` INSTANTIATED with Nat.
 //!
-//! Transcribed from `scratch/aristotle-sn-natrec/SnNatRec.lean` §4b (1029-1134),
-//! itself faithful to `clean-kernel/src/inductive/mod.rs` (Nat.rec). Const-level
+//! Transcribed from `scratch/aristotle-harvest/aristotle-sn-natrec2/aristotle-sn-natrec2_aristotle/SnNatRec2.lean`
+//! §4b (1029-1134). That file is the SUCCESSOR of the original `SnNatRec.lean`
+//! and is byte-identical to it through line 1640, so this cited span is
+//! unchanged — but it is NOT a superset: `SnNatRec2` completed the one `sorry`
+//! (`onePlusOne_whnfAcc`) while DROPPING 45 declarations, chiefly the
+//! parallel-substitution layer (`psubst_*`), the `betaSteps_*` congruences, and
+//! the `whnfAcc_*`/`whnfStep_lam_inv` inversion lemmas. Both files are in-tree;
+//! consult `aristotle-sn-natrec/.../SnNatRec.lean` for anything in that set.
+//! Faithful to `clean-kernel/src/inductive/mod.rs` (Nat.rec). Const-level
 //! instantiation is not modeled (documented base deviation): the development is
 //! parametric in a FIXED motive universe `u`. Census-neutral (all `def`s).
 //!
-//! Later batches: N1 = `NatRecContract` + `natRecContract_steps` (iota
-//! realization); N2 = `NatFresh`/`NatRecEnvOK` gates + the SN-model `redNatRec`
-//! field; N3 = `natRec_adequacy_numeral`; N4 = `whnf_terminates_well_typed_nat`
-//! + `onePlusOne_computes`. See `designs/2026-07-11-natrec-spec-port-plan.md`.
+//! Batches N1-N4 have SINCE LANDED: N1 = `NatRecContract` +
+//! `natRecContract_steps` (iota realization); N2 = the `NatFresh`/`NatRecEnvOK`
+//! gates (here) plus the SN-model Nat iota-closure law (`RedNatRec` /
+//! `redNatRec_holds` in `dependent_sn_richmodel.rs`, now DERIVED from the
+//! generic `redRecGen` CandModel field); N3 = `natRec_adequacy_numeral`;
+//! N4 = `whnf_terminates_well_typed_nat` + `onePlusOne_computes`.
+//! See `designs/2026-07-11-natrec-spec-port-plan.md`.
 
 use crate::spec::SpecError;
 use crate::spec::Specification;
@@ -500,7 +510,7 @@ impl Specification {
         )?;
 
         // ── B5(b): const_no_beta_reduces — a bare const admits NO beta_reduces step.
-        // 14-case beta_reduces.rec with a source-eq motive (mirror no_whnf_step_bvar's
+        // 15-case beta_reduces.rec with a source-eq motive (mirror no_whnf_step_bvar's
         // beta arm, bvar -> const): app/lam/pi/forall arms via const_ne_{app,lam,pi}
         // (forall_ is defeq pi) + Eq.symm; let arms via srb_const_ne_let + Eq.symm; the
         // iota arm via iota_reduces_to_step + iota_reduct_const_none (a bare const has
@@ -535,13 +545,13 @@ impl Specification {
             );
             self.add_recursive_def(
                 &body,
-                "const_no_beta_reduces: a bare const admits no beta_reduces step (all 14 beta_reduces ctors have app/lam/pi/forall/let sources ≠ const, or an iota over a const with no reduct). Nat.rec port B5(b).",
+                "const_no_beta_reduces: a bare const admits no beta_reduces step (all 15 beta_reduces ctors have app/lam/pi/forall/let/proj sources ≠ const, or an iota over a const with no reduct). Nat.rec port B5(b).",
             )?;
         }
 
         // ── B5(c): numeral_no_beta — a numeral admits no beta_reduces step.
         // IsNumeral induction: zero = const_no_beta_reduces (natZeroC is const zeroName);
-        // succ (app natSuccC n) = a 14-case beta_reduces.rec — app-source ctors use
+        // succ (app natSuccC n) = a 15-case beta_reduces.rec — app-source ctors use
         // app_inj + (const_no_beta on the head / IsNumeral IH on the arg), non-app
         // sources use lam_ne_app/pi_ne_app/let_ne_app, iota via iota_reduct=none (rfl).
         {

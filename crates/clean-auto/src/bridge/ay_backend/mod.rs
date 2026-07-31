@@ -69,9 +69,9 @@ pub use config::AyBackendConfig;
 pub use proof_backend::{AyProofBackend, AyProofQuality, AyProofResult, VerifyError};
 pub use proof_format::ProofProfile;
 pub use proof_reconstruct::certified_proof::{
-    certify_kernel_term, certify_reconstruction, deserialize_context, deserialize_term,
-    reconstruct_and_certify_ay_proof, serialize_context, serialize_term, CertifiedPayload,
-    NotCertified, ReducedContext, ReducedLocalDecl,
+    certify_kernel_term, deserialize_context, deserialize_term, reconstruct_and_certify_ay_proof,
+    serialize_context, serialize_term, CertifiedPayload, NotCertified, ReducedContext,
+    ReducedLocalDecl,
 };
 // Proof-carrying ay, MILESTONE 2 (BV multiplication): NATIVE kernel certification
 // of a bvmul UNSAT obligation via array-multiplier bit-blast reflection. Gated

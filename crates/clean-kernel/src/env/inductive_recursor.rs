@@ -1124,6 +1124,7 @@ impl Environment {
     /// Even.succ_odd's field type (Odd) should be detected as recursive.
     ///
     /// ENSURES: O(n) where n = expression nodes (uses HashSet for O(1) lookup)
+    #[cfg(test)]
     fn type_mentions_any_inductive_impl(
         &self,
         ty: &Expr,

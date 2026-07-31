@@ -36,6 +36,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.reflexive_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_reflexive(&mut self) -> Result<(), EnvError> {
         if self.reflexive_init {
             return Ok(());
@@ -183,6 +184,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.reflexive_init == true`
+    #[cfg(test)]
     pub(crate) fn has_reflexive(&self) -> bool {
         self.reflexive_init
     }
@@ -199,6 +201,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.antisymm_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_antisymm(&mut self) -> Result<(), EnvError> {
         if self.antisymm_init {
             return Ok(());
@@ -325,6 +328,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.antisymm_init == true`
+    #[cfg(test)]
     pub(crate) fn has_antisymm(&self) -> bool {
         self.antisymm_init
     }
@@ -497,6 +501,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.irrefl_init == true`
+    #[cfg(test)]
     pub(crate) fn has_irrefl(&self) -> bool {
         self.irrefl_init
     }
@@ -515,6 +520,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.asymm_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_asymm(&mut self) -> Result<(), EnvError> {
         if self.asymm_init {
             return Ok(());
@@ -680,6 +686,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.asymm_init == true`
+    #[cfg(test)]
     pub(crate) fn has_asymm(&self) -> bool {
         self.asymm_init
     }

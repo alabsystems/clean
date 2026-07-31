@@ -33,11 +33,16 @@ pub use public_api::*;
 pub use types::{CleanExternalClass, CleanObj, LeanObjPtr};
 
 // Re-export internal items for tests and kani harnesses (via super::*).
+#[cfg(any(test, kani))]
 pub(crate) use array::*;
+#[cfg(any(test, kani))]
 pub(crate) use closure::{
     alloc_closure, closure_apply, closure_arg, closure_arity, closure_func, closure_num_fixed,
 };
+#[cfg(any(test, kani))]
 pub(crate) use ctor_scalar::*;
 pub(crate) use refcount::*;
+#[cfg(any(test, kani))]
 pub(crate) use string_reset::*;
+#[cfg(any(test, kani))]
 pub(crate) use types::*;

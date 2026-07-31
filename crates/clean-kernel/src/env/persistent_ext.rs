@@ -204,6 +204,7 @@ impl ExtensionRegistry {
         self.descriptors.get(idx.index())
     }
 
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.descriptors.len()
     }
@@ -248,6 +249,7 @@ pub fn get_ext_idx(name: &Name) -> Option<ExtensionIdx> {
 }
 
 /// Get the number of registered extensions.
+#[cfg(test)]
 pub(crate) fn registered_ext_count() -> usize {
     let reg = global_registry()
         .lock()

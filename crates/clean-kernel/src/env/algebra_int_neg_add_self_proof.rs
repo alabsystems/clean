@@ -62,6 +62,7 @@ use crate::name::Name;
 struct IntNegAddSelfConsts {
     int_type: Expr,
     nat_type: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     nat_succ: Expr,
     int_add: Expr,
@@ -81,6 +82,7 @@ impl IntNegAddSelfConsts {
         Self {
             int_type: Expr::const_(Name::from_string("Int"), vec![]),
             nat_type: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             int_add: Expr::const_(Name::from_string("Int.add"), vec![]),

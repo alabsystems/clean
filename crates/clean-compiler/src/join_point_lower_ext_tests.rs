@@ -7,7 +7,7 @@
 //! Part of #3083 - Extensibility epic.
 
 use crate::ir::{
-    CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
+    CtorInfo, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
 };
 use crate::join_point_lower_ext::{
     analyze_jp_params, detect_join_points, eliminate_dead_join_points, fuse_join_points,
@@ -57,12 +57,6 @@ fn inc(v: u32, n: u32, rest: IRBody) -> IRBody {
     IRBody::Inc {
         var: var(v),
         n,
-        rest: Box::new(rest),
-    }
-}
-fn dec(v: u32, rest: IRBody) -> IRBody {
-    IRBody::Dec {
-        var: var(v),
         rest: Box::new(rest),
     }
 }
@@ -137,6 +131,7 @@ fn test_detect_recursive_join_point() {
     let info = detect_join_points(&body);
     assert_eq!(info.len(), 1);
     assert!(info[0].is_recursive);
+    assert_eq!(info[0].params, vec![(var(1), IRType::UInt64)]);
 }
 
 #[test]
@@ -377,7 +372,7 @@ fn test_eliminate_multiple_dead() {
 fn test_eliminate_dead_nested_in_case() {
     let jp_body = jdecl(0, vec![], ret_var(1), ret_var(2));
     let body = case(0, vec![alt(0, jp_body)], None);
-    let (result, count) = eliminate_dead_join_points(&body);
+    let (_result, count) = eliminate_dead_join_points(&body);
     assert_eq!(count, 1);
 }
 
@@ -496,6 +491,7 @@ fn test_run_inlines_then_eliminates() {
 fn test_run_decl() {
     let decl = mk_decl("foo", jdecl(0, vec![], ret_var(1), ret_var(2)));
     let config = JpExtConfig::default();
+    assert!(config.hoist_enabled);
     let (new_decl, stats) = run_join_point_ext_decl(&decl, &config);
     assert!(stats.join_points_eliminated >= 1);
     assert!(matches!(new_decl.body, IRBody::Ret(IRArg::Var(VarId(2)))));

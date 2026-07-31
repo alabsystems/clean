@@ -15,15 +15,12 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use clean_kernel::env::{Environment, TrustedEnvExt};
 use clean_kernel::name::Name;
 use clean_olean::{
-    default_search_paths, load_module_with_deps, load_module_with_deps_cached,
-    load_module_with_deps_parallel, load_olean_file, parse_module_file, ModuleCache,
-    ParsedExtensionEntry,
+    load_module_with_deps, load_module_with_deps_cached, load_module_with_deps_parallel,
+    load_olean_file, parse_module_file, pinned_lean_lib_path, ModuleCache, ParsedExtensionEntry,
 };
 
 fn get_lean_lib_path() -> Option<std::path::PathBuf> {
-    default_search_paths()
-        .into_iter()
-        .find(|p| p.join("Init/Prelude.olean").exists())
+    pinned_lean_lib_path()
 }
 
 /// Gate this file's integration tests behind `CLEAN_OLEAN_INTEGRATION=1`.

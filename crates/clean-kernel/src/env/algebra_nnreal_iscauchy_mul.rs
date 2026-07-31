@@ -60,7 +60,9 @@ pub(crate) struct IsCauchyMulConsts {
     rat_mul: Expr,
     rat_div: Expr,
     rat_lt: Expr,
+    #[cfg(test)]
     le_le: Expr,
+    #[cfg(test)]
     inst_le_rat: Expr,
     nat_le: Expr,
     // Lemmas.
@@ -88,6 +90,7 @@ pub(crate) struct IsCauchyMulConsts {
     exists_elim: Expr,
     exists_c: Expr,
     // Eq.{1} over Rat / NNRat.
+    #[cfg(test)]
     eq_rat: Expr,
     eq_symm: Expr,
     eq_trans: Expr,
@@ -116,7 +119,9 @@ impl IsCauchyMulConsts {
             rat_mul: k("Rat.mul"),
             rat_div: k("Rat.div"),
             rat_lt: k("Rat.lt"),
+            #[cfg(test)]
             le_le: Expr::const_(Name::from_string("LE.le"), vec![Level::zero()]),
+            #[cfg(test)]
             inst_le_rat: k("instLERat"),
             nat_le: k("Nat.le"),
             rat_half_pos: k("Rat.half_pos"),
@@ -141,6 +146,7 @@ impl IsCauchyMulConsts {
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![lvl1.clone()]),
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![lvl1.clone()]),
@@ -168,6 +174,7 @@ impl IsCauchyMulConsts {
         Expr::apps(self.rat_lt.clone(), [a, b])
     }
     /// Typeclass `LE.le Rat instLERat a b` (matches the order-toolkit `≤` form).
+    #[cfg(test)]
     fn le(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             self.le_le.clone(),
@@ -221,6 +228,7 @@ impl IsCauchyMulConsts {
         Expr::apps(self.and_intro.clone(), [p, q, hp, hq])
     }
     /// `@Eq Rat a b`.
+    #[cfg(test)]
     fn eq_rat_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq_rat.clone(), [self.rat.clone(), a, b])
     }

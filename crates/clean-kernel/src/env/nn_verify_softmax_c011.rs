@@ -331,6 +331,7 @@ impl Environment {
     }
 
     /// Check if C011 declarations have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_softmax_c011(&self) -> bool {
         self.nn_verify_softmax_c011_init
     }

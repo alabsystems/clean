@@ -12,11 +12,15 @@
 //!
 //! Part of #3260.
 
+#[cfg(test)]
 use crate::expr::{stack_safe, Expr, ExprKind};
+#[cfg(test)]
 use crate::name::Name;
+#[cfg(test)]
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) struct CertComplexityMetrics {
     pub(crate) term_size: usize,
     pub(crate) depth: usize,
@@ -24,6 +28,7 @@ pub(crate) struct CertComplexityMetrics {
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn cert_term_size(expr: &Expr) -> usize {
     fn cert_term_size_impl(expr: &Expr) -> usize {
         match expr.kind() {
@@ -80,6 +85,7 @@ pub(crate) fn cert_term_size(expr: &Expr) -> usize {
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn cert_depth(expr: &Expr) -> usize {
     fn cert_depth_impl(expr: &Expr) -> usize {
         match expr.kind() {
@@ -134,6 +140,7 @@ pub(crate) fn cert_depth(expr: &Expr) -> usize {
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn zfc_term_size(set_expr: &crate::expr::ZFCSetExpr) -> usize {
     fn zfc_term_size_impl(set_expr: &crate::expr::ZFCSetExpr) -> usize {
         match set_expr {
@@ -154,6 +161,7 @@ pub(crate) fn zfc_term_size(set_expr: &crate::expr::ZFCSetExpr) -> usize {
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn zfc_depth(set_expr: &crate::expr::ZFCSetExpr) -> usize {
     fn zfc_depth_impl(set_expr: &crate::expr::ZFCSetExpr) -> usize {
         match set_expr {
@@ -174,11 +182,13 @@ pub(crate) fn zfc_depth(set_expr: &crate::expr::ZFCSetExpr) -> usize {
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn cert_unique_constants(expr: &Expr) -> HashSet<Name> {
     expr.collect_constants()
 }
 
 #[must_use]
+#[cfg(test)]
 pub(crate) fn measure_cert_complexity(expr: &Expr) -> CertComplexityMetrics {
     let unique_constants = cert_unique_constants(expr);
     CertComplexityMetrics {

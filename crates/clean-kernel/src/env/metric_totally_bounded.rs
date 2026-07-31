@@ -9,18 +9,25 @@
 //!   bounded_of_totally_bounded, compact_iff_complete_totally_bounded,
 //!   totally_bounded_spec, totally_bounded_of_eps_net)
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Metric.TotallyBounded and related axioms.
     ///
     /// Adds: Metric.TotallyBounded, totally_bounded_of_compact,
     ///       bounded_of_totally_bounded, compact_iff_complete_totally_bounded,
     ///       totally_bounded_spec, totally_bounded_of_eps_net
+    #[cfg(test)]
     pub(crate) fn init_metric_totally_bounded(&mut self) -> Result<(), EnvError> {
         if self.metric_totally_bounded_init {
             return Ok(());
@@ -40,10 +47,12 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_metric_totally_bounded(&self) -> bool {
         self.metric_totally_bounded_init
     }
 
+    #[cfg(test)]
     fn add_metric_totally_bounded_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -65,6 +74,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_totally_bounded_of_compact(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -97,6 +107,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_bounded_of_totally_bounded(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -129,6 +140,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_compact_iff_complete_tb(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -166,6 +178,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_totally_bounded_spec(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -213,6 +226,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_totally_bounded_of_eps_net(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -262,6 +276,7 @@ impl Environment {
 }
 
 /// Build: ∀ ε : Rat, 0 < ε → ∀ x : α, ∃ c : α, dist x c < ε
+#[cfg(test)]
 fn build_eps_net_prop(
     b: &mut EnvDeclBuilder,
     alpha: &Expr,

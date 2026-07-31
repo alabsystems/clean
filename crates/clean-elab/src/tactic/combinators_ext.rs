@@ -37,7 +37,11 @@ use super::core::{TacticError, TacticResult};
 /// ```text
 /// eval_repeat1(intro_tactic, None, &mut ctx)  // at least one intro
 /// ```
-pub(crate) fn eval_repeat1(tac: TacticFn, max: Option<usize>, ctx: &mut TacticCtx) -> TacticResult {
+pub(crate) fn eval_repeat1(
+    tac: TacticFn,
+    max: Option<usize>,
+    ctx: &mut TacticCtx<'_>,
+) -> TacticResult {
     // First application must succeed
     let saved_goals = ctx.state.goals.clone();
     ctx.state.metas_mut().push_scope();
@@ -73,7 +77,7 @@ pub(crate) fn eval_repeat1(tac: TacticFn, max: Option<usize>, ctx: &mut TacticCt
 /// REQUIRES: `ctx.state` has a valid meta scope stack
 /// ENSURES: on `Ok`, both `tac1` and `tac2` succeeded
 /// ENSURES: on `Err`, state is restored to pre-call
-pub(crate) fn eval_seq(tac1: TacticFn, tac2: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
+pub(crate) fn eval_seq(tac1: TacticFn, tac2: TacticFn, ctx: &mut TacticCtx<'_>) -> TacticResult {
     let saved_goals = ctx.state.goals.clone();
     ctx.state.metas_mut().push_scope();
 
@@ -114,7 +118,11 @@ pub(crate) fn eval_seq(tac1: TacticFn, tac2: TacticFn, ctx: &mut TacticCtx) -> T
 ///   succeeded on every goal that `tac1` produced
 /// ENSURES: on `Err` from `tac1`, state is fully restored
 /// ENSURES: on `Err` from `tac2`, state is fully restored
-pub(crate) fn eval_and_then(tac1: TacticFn, tac2: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
+pub(crate) fn eval_and_then(
+    tac1: TacticFn,
+    tac2: TacticFn,
+    ctx: &mut TacticCtx<'_>,
+) -> TacticResult {
     let saved_goals = ctx.state.goals.clone();
     let original_count = ctx.state.goals.len();
     ctx.state.metas_mut().push_scope();
@@ -175,7 +183,7 @@ pub(crate) fn eval_and_then(tac1: TacticFn, tac2: TacticFn, ctx: &mut TacticCtx)
 ///   remaining goals (index 1..) are restored
 /// ENSURES: on `Err(NoGoals)`, no goals were available
 /// ENSURES: on `Err(UnsolvedGoals)`, remaining goals are still restored
-pub(crate) fn eval_focus_and_done(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
+pub(crate) fn eval_focus_and_done(tac: TacticFn, ctx: &mut TacticCtx<'_>) -> TacticResult {
     if ctx.state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -213,7 +221,7 @@ pub(crate) fn eval_focus_and_done(tac: TacticFn, ctx: &mut TacticCtx) -> TacticR
 ///
 /// REQUIRES: `ctx.state.goals` is non-empty (for non-zero `n`)
 /// ENSURES: goals are cyclically permuted left by `n` positions
-pub(crate) fn eval_rotate_left(n: usize, ctx: &mut TacticCtx) -> TacticResult {
+pub(crate) fn eval_rotate_left(n: usize, ctx: &mut TacticCtx<'_>) -> TacticResult {
     eval_rotate(n as isize, ctx)
 }
 
@@ -225,6 +233,6 @@ pub(crate) fn eval_rotate_left(n: usize, ctx: &mut TacticCtx) -> TacticResult {
 ///
 /// REQUIRES: `ctx.state.goals` is non-empty (for non-zero `n`)
 /// ENSURES: goals are cyclically permuted right by `n` positions
-pub(crate) fn eval_rotate_right(n: usize, ctx: &mut TacticCtx) -> TacticResult {
+pub(crate) fn eval_rotate_right(n: usize, ctx: &mut TacticCtx<'_>) -> TacticResult {
     eval_rotate(-(n as isize), ctx)
 }

@@ -82,6 +82,7 @@ struct C {
     add: Expr,
     rec0: Expr, // Nat.rec.{0} — Prop motive
     bool_ty: Expr,
+    #[cfg(test)]
     btrue: Expr,
     bfalse: Expr,
     div2: Expr,
@@ -112,6 +113,7 @@ impl C {
             add: Expr::const_(Name::from_string("Nat.add"), vec![]),
             rec0: Expr::const_(Name::from_string("Nat.rec"), vec![Level::zero()]),
             bool_ty: Expr::const_(Name::from_string("Bool"), vec![]),
+            #[cfg(test)]
             btrue: Expr::const_(Name::from_string("Bool.true"), vec![]),
             bfalse: Expr::const_(Name::from_string("Bool.false"), vec![]),
             div2: Expr::const_(Name::from_string("Nat.div2"), vec![]),
@@ -155,6 +157,7 @@ impl C {
     fn refl_bool(&self, a: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.bool_ty.clone(), a])
     }
+    #[cfg(test)]
     fn symm_nat(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm1.clone(), [self.nat.clone(), a, b, h])
     }
@@ -1012,8 +1015,8 @@ fn build_testbit_bitwise_aux_high(c: &C) -> (Expr, Expr) {
     let base = {
         let mut bb = EnvDeclBuilder::child_of(&vb);
         let (i_id, i) = bb.fresh_local(c.nat.clone());
-        let (m_id, m) = bb.fresh_local(c.nat.clone());
-        let (n_id, n) = bb.fresh_local(c.nat.clone());
+        let (m_id, _m) = bb.fresh_local(c.nat.clone());
+        let (n_id, _n) = bb.fresh_local(c.nat.clone());
         let h_ty = le(c.zero.clone(), i.clone());
         let (h_id, _h) = bb.fresh_local(h_ty.clone());
         // testBit_zero_eq_false i : testBit 0 i = false ; concl LHS ≡ testBit 0 i.
@@ -1303,7 +1306,7 @@ fn build_testbit_eq_false_of_ge(c: &C) -> (Expr, Expr) {
                 let (xp_id, xp) = sb.fresh_local(c.nat.clone());
                 let s = c.succ(xp.clone());
                 let mx_xp = {
-                    let mut mb = EnvDeclBuilder::child_of(&sb);
+                    let mb = EnvDeclBuilder::child_of(&sb);
                     let ih_xp = ih_quant(&xp, &mb);
                     let p_xp = p_of(&xp, &mb);
                     let mut bb = EnvDeclBuilder::child_of(&mb);

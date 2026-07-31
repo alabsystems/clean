@@ -432,7 +432,7 @@ fn neg_push_list(
 /// `-(term_of(t)) = term_of(neg t)`.
 fn neg_term(
     c: &CubeAmGmConstsRecovered,
-    parent: &EnvDeclBuilder,
+    _parent: &EnvDeclBuilder,
     t: &(Mono, i64),
     p: &Expr,
     q: &Expr,
@@ -459,7 +459,7 @@ impl CubeAmGmConstsRecovered {
         // WLOG i>0, j=-i : (i·M) + (-(i·M)) = 0  [add_neg_self], modulo term_with shapes.
         let ti = self.term_with(m, i);
         let tj = self.term_with(m, j);
-        let lhs = self.add(ti.clone(), tj.clone());
+        let _lhs = self.add(ti.clone(), tj.clone());
         if i > 0 {
             // ti = pos(i), tj = -(pos(i)). add_neg_self pos(i).
             let pos = self.term_with(m, i);

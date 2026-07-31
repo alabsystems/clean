@@ -329,6 +329,12 @@ impl Parser {
                 TokenKind::LParen => binders.extend(self.explicit_binders()?),
                 TokenKind::LBrace => binders.extend(self.implicit_binders()?),
                 TokenKind::LBracket => binders.extend(self.instance_binders()?),
+                // `⦃x : T⦄` — strict-implicit. The term-position binder loop
+                // (expr_binders.rs) has always accepted this; declaration
+                // position did not, so `def f ⦃a : Type⦄ ...` fell through to
+                // error recovery while the identical term-position spelling
+                // parsed. Mathlib uses declaration-position `⦃⦄` widely.
+                TokenKind::StrictLBrace => binders.extend(self.strict_implicit_binders()?),
                 // Bare identifier binders (without parentheses): `def foo x y := ...`
                 TokenKind::Ident(name) => {
                     // First check if current ident immediately precedes := : | where

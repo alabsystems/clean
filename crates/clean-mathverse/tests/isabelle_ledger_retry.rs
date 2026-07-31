@@ -88,22 +88,30 @@ fn build_dependent() -> String {
     serde_json::to_string(&d).expect("serialize dependent")
 }
 
+const TEST_ENV_VARS: &[&str] = &[
+    "ISA_SNAPSHOT_IN",
+    "ISA_SNAPSHOT_OUT",
+    "ISA_ELIDE_PROOFS",
+    "ISA_TRUSTED_LEDGER",
+    "ISA_RETRY_LEDGER",
+    "ISA_RETRY_SEED",
+    "ISA_WITHHOLD_DEF_CONSTS",
+    "ISA_RETRY_SKIP_REGISTRY_REFRESH",
+    "ISA_SNAPSHOT_SKIP_PREFIX_HASH",
+    "ISA_SNAPSHOT_ALLOW_MISMATCH",
+    "ISA_SNAPSHOT_EVERY",
+    "ISA_PROGRESS_EVERY",
+];
+
 fn clear_env() {
-    for v in [
-        "ISA_SNAPSHOT_IN",
-        "ISA_SNAPSHOT_OUT",
-        "ISA_ELIDE_PROOFS",
-        "ISA_TRUSTED_LEDGER",
-        "ISA_RETRY_LEDGER",
-        "ISA_RETRY_SEED",
-        "ISA_WITHHOLD_DEF_CONSTS",
-        "ISA_RETRY_SKIP_REGISTRY_REFRESH",
-        "ISA_SNAPSHOT_SKIP_PREFIX_HASH",
-        "ISA_SNAPSHOT_ALLOW_MISMATCH",
-        "ISA_SNAPSHOT_EVERY",
-        "ISA_PROGRESS_EVERY",
-    ] {
+    for &v in TEST_ENV_VARS {
         clean_mathverse::process_env::remove_persistent(v);
+    }
+}
+
+fn clear_scoped_env(env: &mut clean_mathverse::process_env::EnvEditor) {
+    for &v in TEST_ENV_VARS {
+        env.remove(v);
     }
 }
 
@@ -336,6 +344,10 @@ fn seeded_ledger_retry_attempts_only_seed_and_leaves_unseeded_untouched() {
     let _guard = ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    clean_mathverse::process_env::with_env_edits(seeded_ledger_retry_with_env);
+}
+
+fn seeded_ledger_retry_with_env(env: &mut clean_mathverse::process_env::EnvEditor) {
     let dir = std::env::temp_dir().join(format!("isa_seed_retry_{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("mk tmpdir");
     let corpus = dir.join("corpus.jsonl");
@@ -354,13 +366,13 @@ fn seeded_ledger_retry_attempts_only_seed_and_leaves_unseeded_untouched() {
     .expect("write seed file");
 
     // === OLD-ARM snapshot (HOL.If withheld): power_int ledgers, D tier-2. ===
-    clear_env();
-    std::env::set_var("ISA_TRUSTED_LEDGER", "1");
-    std::env::set_var("ISA_WITHHOLD_DEF_CONSTS", HOL_IF_DEF_CONST);
-    std::env::set_var("ISA_SNAPSHOT_OUT", &old_snap);
+    clear_scoped_env(env);
+    env.set("ISA_TRUSTED_LEDGER", "1");
+    env.set("ISA_WITHHOLD_DEF_CONSTS", HOL_IF_DEF_CONST);
+    env.set("ISA_SNAPSHOT_OUT", &old_snap);
     let mut w = ShardWriter::new();
     let old = import_proven_theorems_streaming(&corpus, &mut w).expect("old-arm grand");
-    clear_env();
+    clear_scoped_env(env);
     assert!(old_snap.exists(), "old-arm snapshot written");
     assert_eq!(old.kernel_verified, 1, "old: only K is KV");
     assert_eq!(old.ledger_size, 2, "old: Z and power_int both ledger");
@@ -369,15 +381,15 @@ fn seeded_ledger_retry_attempts_only_seed_and_leaves_unseeded_untouched() {
     // === SEEDED ledger retry (new arm) re-attempts ONLY power_int. ===
     for workers in [0usize, 4usize] {
         let new_snap = dir.join(format!("seeded_{workers}.snap"));
-        clear_env();
-        std::env::set_var("ISA_TRUSTED_LEDGER", "1");
-        std::env::set_var("ISA_RETRY_LEDGER", "1");
-        std::env::set_var("ISA_RETRY_SEED", &seed_file);
-        std::env::set_var("ISA_SNAPSHOT_OUT", &new_snap);
+        clear_scoped_env(env);
+        env.set("ISA_TRUSTED_LEDGER", "1");
+        env.set("ISA_RETRY_LEDGER", "1");
+        env.set("ISA_RETRY_SEED", &seed_file);
+        env.set("ISA_SNAPSHOT_OUT", &new_snap);
         let mut w = ShardWriter::new();
         let seeded = import_proven_theorems_retry(&corpus, &old_snap, &mut w, workers)
             .unwrap_or_else(|e| panic!("seeded ledger retry (workers={workers}) failed: {e}"));
-        clear_env();
+        clear_scoped_env(env);
 
         eprintln!(
             "SEEDED-RETRY(workers={workers}): KV={} tier2={} ledger={} names={:?} ledger_serials={:?}",

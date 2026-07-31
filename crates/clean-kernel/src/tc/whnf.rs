@@ -269,6 +269,7 @@ impl<'env> TypeChecker<'env> {
     /// Core WHNF implementation — full delta at Default transparency.
     ///
     /// Delegates to the shared `whnf_core_inner` with `WhnfMode::Full`.
+    #[cfg(test)]
     pub(super) fn whnf_core(&self, e: &Expr) -> Expr {
         self.whnf_core_inner(e, WhnfMode::Full)
     }

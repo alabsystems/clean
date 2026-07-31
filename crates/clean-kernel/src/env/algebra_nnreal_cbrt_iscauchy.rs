@@ -57,6 +57,7 @@ pub(crate) struct CbrtIsCauchyConsts {
     rat_zero: Expr,
     rat_add: Expr,
     rat_inv: Expr,
+    #[cfg(test)]
     rat_le: Expr,
     rat_lt: Expr,
     rat_ofnat: Expr,
@@ -94,6 +95,7 @@ impl CbrtIsCauchyConsts {
             rat_zero: k("Rat.zero"),
             rat_add: k("Rat.add"),
             rat_inv: k("Rat.inv"),
+            #[cfg(test)]
             rat_le: k("Rat.le"),
             rat_lt: k("Rat.lt"),
             rat_ofnat: k("Rat.ofNat"),
@@ -140,6 +142,7 @@ impl CbrtIsCauchyConsts {
     fn inv(&self, a: Expr) -> Expr {
         Expr::app(self.rat_inv.clone(), a)
     }
+    #[cfg(test)]
     fn le(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_le.clone(), [a, b])
     }

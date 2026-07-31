@@ -49,6 +49,7 @@ impl ComposeConsts {
         self.mul(w, chis)
     }
     /// `fun (S : HCPoint n) => densint_x(S,y)` — the `dens(ρ,x,y)` integrand fn.
+    #[cfg(test)]
     fn dens_int_fn(
         &self,
         parent: &EnvDeclBuilder,

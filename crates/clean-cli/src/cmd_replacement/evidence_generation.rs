@@ -92,6 +92,91 @@ pub(crate) fn proof_system_replay_parity_rows(
     Ok(rows)
 }
 
+/// Refuse to write launch evidence from a binary that is not built at HEAD.
+///
+/// This exists because it actually happened: a `cargo build --locked` failed
+/// (sibling `[patch]` path-dependency drift dirties `Cargo.lock`) while its
+/// nonzero exit was swallowed by a pipe, so `target/release/clean` stayed
+/// ELEVEN DAYS stale and was used to "measure HEAD". Every gate verdict it
+/// produced described code that was not in the tree, and nothing detected it.
+///
+/// `CLEAN_BUILD_GIT_SHA` is stamped by `build.rs`, which already re-runs when
+/// HEAD or the checked-out ref moves, so a binary built at another commit is
+/// distinguishable at runtime. Uncertainty fails closed: a missing stamp, an
+/// absent `git`, or an unreadable HEAD all refuse rather than assume fresh.
+///
+/// Tree dirtiness is deliberately NOT fatal here. This repository is routinely
+/// shared with a co-tenant whose uncommitted files would then block every gate
+/// run, and a gate that cannot be run in practice gets worked around instead of
+/// respected. Commit mismatch is the failure that actually produced bad
+/// measurements; dirtiness is reported by the caller-facing message.
+pub(crate) fn validate_binary_matches_head() -> Result<(), ReplacementError> {
+    build_provenance_verdict(
+        option_env!("CLEAN_BUILD_GIT_SHA"),
+        git_stdout(&["rev-parse", "HEAD"]).as_deref(),
+    )
+    .map_err(|message| ReplacementError::StaleTrustCoreArtifact { message })
+}
+
+/// The provenance decision, separated from how its two inputs are obtained.
+///
+/// Kept pure so it can be tested exhaustively: asserting on the real
+/// `validate_binary_matches_head` would be flaky, since the test binary's own
+/// stamp goes stale the moment HEAD moves after it was compiled.
+pub(crate) fn build_provenance_verdict(
+    built_at: Option<&str>,
+    head: Option<&str>,
+) -> Result<(), String> {
+    let Some(built_at) = built_at else {
+        return Err(
+            "this binary carries no CLEAN_BUILD_GIT_SHA stamp, so it cannot be shown \
+                    to match HEAD; rebuild with `cargo build -p clean --bin clean`"
+                .to_string(),
+        );
+    };
+    if built_at == "unknown" {
+        return Err(
+            "this binary was built without git provenance (CLEAN_BUILD_GIT_SHA=unknown); \
+             rebuild inside the git checkout before generating launch evidence"
+                .to_string(),
+        );
+    }
+    let Some(head) = head else {
+        return Err(
+            "cannot read `git rev-parse HEAD` to confirm this binary is current; \
+             launch evidence must be attributable to a commit"
+                .to_string(),
+        );
+    };
+    if built_at == head {
+        return Ok(());
+    }
+    Err(format!(
+        "this binary was built at {built_at} but HEAD is {head}; it would describe code \
+         that is not in the tree. Rebuild with `cargo build -p clean --bin clean` and \
+         re-run. (A stale binary once went undetected for 11 days.)"
+    ))
+}
+
+/// Run `git <args>`, returning trimmed stdout on a clean exit.
+fn git_stdout(args: &[&str]) -> Option<String> {
+    let repo_root = repo_artifact_path("Cargo.toml")
+        .parent()
+        .map(Path::to_path_buf)
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(&repo_root)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
 pub(crate) fn validate_source_artifacts(paths: &[&'static str]) -> Result<(), ReplacementError> {
     for path in paths {
         read_repo_artifact(path)?;
@@ -99,9 +184,111 @@ pub(crate) fn validate_source_artifacts(paths: &[&'static str]) -> Result<(), Re
     Ok(())
 }
 
+/// Runs one kernel-soundness lane and returns its combined stdout+stderr.
+///
+/// Injectable so tests can drive the lane-verdict logic without spawning a
+/// nested `cargo` (which would deadlock on the build lock).
+pub(crate) type KernelSoundnessLaneRunner<'a> =
+    &'a dyn Fn(&[&'static str]) -> Result<String, String>;
+
+/// Execute a lane command from the repository root, capturing both streams.
+///
+/// The elaborator soundness gate writes its `soundness_gate: PASS` marker to
+/// stderr, so stdout alone is not enough; this mirrors the `2>&1` redirection
+/// in `scripts/kernel_soundness_gate.sh`.
+pub(crate) fn run_kernel_soundness_lane_command(argv: &[&'static str]) -> Result<String, String> {
+    let Some((program, args)) = argv.split_first() else {
+        return Err("lane command is empty".to_string());
+    };
+    let repo_root = repo_artifact_path("Cargo.toml")
+        .parent()
+        .map(Path::to_path_buf)
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(&repo_root)
+        .output()
+        .map_err(|error| format!("failed to spawn `{}`: {error}", argv.join(" ")))?;
+    let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    if output.status.success() {
+        Ok(combined)
+    } else {
+        Err(format!(
+            "`{}` exited with {}: {combined}",
+            argv.join(" "),
+            output.status
+        ))
+    }
+}
+
+/// True when libtest output reports exactly `expected` tests, all passing.
+fn output_reports_passing_tests(output: &str, expected: u32) -> bool {
+    let singular = format!("running {expected} test");
+    let plural = format!("{singular}s");
+    let ran_expected = output
+        .lines()
+        .any(|line| line.trim_end() == singular || line.trim_end() == plural);
+    let all_passed = output.contains(&format!("test result: ok. {expected} passed; 0 failed"));
+    ran_expected && all_passed
+}
+
+/// Decide one lane's verdict by executing it. Fails closed on any mismatch.
+fn evaluate_kernel_soundness_lane(
+    lane: &KernelSoundnessLaneExpectation,
+    runner: KernelSoundnessLaneRunner<'_>,
+) -> Result<KernelSoundnessLaunchLaneEvidence, ReplacementError> {
+    let (matched_expected_count, matched_expected_output) = match lane.command {
+        // The preflight lane runs in-process; reaching here means
+        // `validate_kernel_differential_artifacts` already returned Ok.
+        None => (true, true),
+        Some(command) => {
+            let output =
+                runner(command).map_err(|message| ReplacementError::StaleTrustCoreArtifact {
+                    message: format!("kernel soundness lane `{}` failed: {message}", lane.id),
+                })?;
+            (
+                lane.expected_tests
+                    .is_none_or(|expected| output_reports_passing_tests(&output, expected)),
+                lane.expected_output
+                    .is_none_or(|expected| output.contains(expected)),
+            )
+        }
+    };
+
+    if !matched_expected_count || !matched_expected_output {
+        return Err(ReplacementError::StaleTrustCoreArtifact {
+            message: format!(
+                "kernel soundness lane `{}` ran but did not match its expectation \
+                 (matched_expected_count={matched_expected_count}, \
+                 matched_expected_output={matched_expected_output})",
+                lane.id
+            ),
+        });
+    }
+
+    Ok(KernelSoundnessLaunchLaneEvidence {
+        id: lane.id.to_string(),
+        expected_tests: lane.expected_tests,
+        expected_output: lane.expected_output.map(str::to_string),
+        matched_expected_count,
+        matched_expected_output,
+        status: "passed".to_string(),
+    })
+}
+
 pub(crate) fn generate_kernel_soundness_launch_evidence(
     generated_at: &str,
 ) -> Result<KernelSoundnessLaunchEvidenceArtifact, ReplacementError> {
+    generate_kernel_soundness_launch_evidence_with(generated_at, &run_kernel_soundness_lane_command)
+}
+
+pub(crate) fn generate_kernel_soundness_launch_evidence_with(
+    generated_at: &str,
+    runner: KernelSoundnessLaneRunner<'_>,
+) -> Result<KernelSoundnessLaunchEvidenceArtifact, ReplacementError> {
+    validate_binary_matches_head()?;
     let baseline = load_lean4_baseline()?;
     let expressions_source = read_repo_artifact(LEAN4_EXPRESSIONS_PATH)?;
     let expressions = active_expressions(&expressions_source);
@@ -116,6 +303,10 @@ pub(crate) fn generate_kernel_soundness_launch_evidence(
     ] {
         source_sha256.insert(path.to_string(), sha256_repo_artifact(path)?);
     }
+    source_sha256.insert(
+        TRUST_CORE_RUST_MODULE_TREE_KEY.to_string(),
+        sha256_repo_module_tree(TRUST_CORE_RUST_MODULE_DIR)?,
+    );
 
     let artifact = KernelSoundnessLaunchEvidenceArtifact {
         schema_version: KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_SCHEMA_VERSION.to_string(),
@@ -143,15 +334,8 @@ pub(crate) fn generate_kernel_soundness_launch_evidence(
         source_sha256,
         lanes: KERNEL_SOUNDNESS_EXPECTED_LANES
             .iter()
-            .map(|lane| KernelSoundnessLaunchLaneEvidence {
-                id: lane.id.to_string(),
-                expected_tests: lane.expected_tests,
-                expected_output: lane.expected_output.map(str::to_string),
-                matched_expected_count: true,
-                matched_expected_output: true,
-                status: "passed".to_string(),
-            })
-            .collect(),
+            .map(|lane| evaluate_kernel_soundness_lane(lane, runner))
+            .collect::<Result<Vec<_>, _>>()?,
     };
     validate_kernel_soundness_launch_evidence(
         &artifact,
@@ -166,6 +350,7 @@ pub(crate) fn generate_kernel_soundness_launch_evidence(
 pub(crate) fn generate_deny_sorry_launch_evidence(
     generated_at: &str,
 ) -> Result<DenySorryLaunchEvidenceArtifact, ReplacementError> {
+    validate_binary_matches_head()?;
     validate_sorry_bypass_lint()?;
     let ratchet = load_unchecked_decl_ratchet()?;
     validate_unchecked_decl_ratchet(&ratchet)?;
@@ -174,6 +359,10 @@ pub(crate) fn generate_deny_sorry_launch_evidence(
     for path in [TRUST_CORE_RUST_SOURCE_PATH, UNCHECKED_DECL_RATCHET_PATH] {
         source_sha256.insert(path.to_string(), sha256_repo_artifact(path)?);
     }
+    source_sha256.insert(
+        TRUST_CORE_RUST_MODULE_TREE_KEY.to_string(),
+        sha256_repo_module_tree(TRUST_CORE_RUST_MODULE_DIR)?,
+    );
 
     let artifact = DenySorryLaunchEvidenceArtifact {
         schema_version: DENY_SORRY_LAUNCH_EVIDENCE_SCHEMA_VERSION.to_string(),
@@ -258,65 +447,6 @@ pub(crate) fn write_generated_launch_evidence<T: Serialize>(
         writeln!(out, "{label}: passed")?;
     }
     Ok(())
-}
-
-pub(crate) fn validate_sorry_bypass_lint() -> Result<(), ReplacementError> {
-    let repo_root = repo_artifact_path("Cargo.toml")
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf();
-    let crates_root = repo_root.join("crates");
-    let mut findings = Vec::new();
-    for entry in WalkDir::new(&crates_root)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
-        if !entry.file_type().is_file()
-            || entry.path().extension().and_then(|ext| ext.to_str()) != Some("rs")
-        {
-            continue;
-        }
-        let relative_path = entry
-            .path()
-            .strip_prefix(&repo_root)
-            .unwrap_or(entry.path())
-            .to_string_lossy()
-            .replace('\\', "/");
-        if SORRY_BYPASS_ALLOWED_FILES.contains(&relative_path.as_str()) {
-            continue;
-        }
-        let source = fs::read_to_string(entry.path()).map_err(|error| {
-            ReplacementError::StaleTrustCoreArtifact {
-                message: format!("failed to read {relative_path} for sorry-bypass lint: {error}"),
-            }
-        })?;
-        for (line_index, line) in source.lines().enumerate() {
-            if line_has_sorry_bypass(line) {
-                findings.push(format!("{}:{}", relative_path, line_index + 1));
-            }
-        }
-    }
-    if findings.is_empty() {
-        Ok(())
-    } else {
-        Err(ReplacementError::StaleTrustCoreArtifact {
-            message: format!(
-                "Rust sorry-bypass lint found direct sorry construction outside allowlist: {}",
-                findings.join(", ")
-            ),
-        })
-    }
-}
-
-pub(crate) fn line_has_sorry_bypass(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    if trimmed.starts_with("//") || !trimmed.contains("\"sorry\"") {
-        return false;
-    }
-    trimmed.contains("mk_const_str")
-        || trimmed.contains("Expr::const_str(")
-        || trimmed.contains("Expr::const_str_levels(")
-        || (trimmed.contains("Expr::const_(") && trimmed.contains("Name::from_string"))
 }
 
 pub(crate) fn validate_axiom_audit_aggregates() -> Result<(), ReplacementError> {

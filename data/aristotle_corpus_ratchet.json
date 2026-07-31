@@ -1,0 +1,2708 @@
+{
+  "_notes": "Fail-closed ratchet for the Aristotle model-guide corpus. Regenerate with `python3 scripts/aristotle_corpus_gate.py --update` and stage this file in the same commit as the corpus change. vacuity_debt must only decrease.",
+  "composition_families": {
+    "confluence-3way": {
+      "inductive Tm::f11d3012008df2c6": [
+        "confluence-3way"
+      ]
+    },
+    "confluence-conv": {
+      "inductive Tm::f11d3012008df2c6": [
+        "confluence-conv"
+      ]
+    },
+    "confluence-nf-unique": {
+      "inductive Tm::f11d3012008df2c6": [
+        "confluence-nf-unique"
+      ]
+    },
+    "delta": {
+      "inductive Step::011da97aa9f8e1a6": [
+        "delta-progress"
+      ]
+    },
+    "dep": {
+      "def Confl::7ab53c8ed7228851": [
+        "dep-progress"
+      ],
+      "inductive HasType::2e1b99df98e628b4": [
+        "dep-progress"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "dep-progress"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "dep-progress"
+      ]
+    },
+    "dep-bidir-r4": {
+      "def Confl::7ab53c8ed7228851": [
+        "dep-bidir-r4"
+      ],
+      "inductive HasType::2e1b99df98e628b4": [
+        "dep-bidir-r4"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "dep-bidir-r4"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "dep-bidir-r4"
+      ]
+    },
+    "dep-lambda-pi-r3": {
+      "def Confl::7ab53c8ed7228851": [
+        "dep-lambda-pi-r3"
+      ],
+      "inductive HasType::2e1b99df98e628b4": [
+        "dep-lambda-pi-r3"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "dep-lambda-pi-r3"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "dep-lambda-pi-r3"
+      ]
+    },
+    "dependent": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-whnf-conversion"
+      ],
+      "inductive HasType::2e1b99df98e628b4": [
+        "dependent-whnf-conversion"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "dependent-whnf-conversion"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "dependent-whnf-conversion"
+      ]
+    },
+    "dependent-bool": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-bool",
+        "dependent-bool-cr",
+        "dependent-bool-whnf-conversion"
+      ],
+      "inductive HasType::484e601bcdc30734": [
+        "dependent-bool",
+        "dependent-bool-whnf-conversion"
+      ],
+      "inductive Step::65177c1f769c4e21": [
+        "dependent-bool",
+        "dependent-bool-cr",
+        "dependent-bool-whnf-conversion"
+      ],
+      "inductive Tm::88aa99d4c02e45b0": [
+        "dependent-bool",
+        "dependent-bool-cr",
+        "dependent-bool-whnf-conversion"
+      ]
+    },
+    "dependent-coproduct": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-coproduct-cr",
+        "dependent-coproduct-sr",
+        "dependent-coproduct-whnf-conversion"
+      ],
+      "inductive HasType::649876392635acf7": [
+        "dependent-coproduct-sr",
+        "dependent-coproduct-whnf-conversion"
+      ],
+      "inductive Step::c08f63af53b001e4": [
+        "dependent-coproduct-cr",
+        "dependent-coproduct-sr",
+        "dependent-coproduct-whnf-conversion"
+      ],
+      "inductive Tm::8d4abbb1eac1bf1c": [
+        "dependent-coproduct-cr",
+        "dependent-coproduct-sr",
+        "dependent-coproduct-whnf-conversion"
+      ]
+    },
+    "dependent-eta-conv": {
+      "def Confl::8435e31c06503e2f": [
+        "dependent-eta-conv-sr"
+      ],
+      "inductive HasType::2e1b99df98e628b4": [
+        "dependent-eta-conv-sr"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "dependent-eta-conv-sr"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "dependent-eta-conv-sr"
+      ]
+    },
+    "dependent-id-j": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-id-j-cr",
+        "dependent-id-j-sr",
+        "dependent-id-j-whnf-conversion"
+      ],
+      "inductive HasType::4491be207bf5f9bb": [
+        "dependent-id-j-sr",
+        "dependent-id-j-whnf-conversion"
+      ],
+      "inductive Step::698cffaab037c118": [
+        "dependent-id-j-cr",
+        "dependent-id-j-sr",
+        "dependent-id-j-whnf-conversion"
+      ],
+      "inductive Tm::3926931f6b33a0cd": [
+        "dependent-id-j-cr",
+        "dependent-id-j-sr",
+        "dependent-id-j-whnf-conversion"
+      ]
+    },
+    "dependent-nat": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-nat-cr",
+        "dependent-nat-whnf-conversion"
+      ],
+      "inductive HasType::fa88336b10910985": [
+        "dependent-nat-whnf-conversion"
+      ],
+      "inductive Step::1de29e3b66cfdea8": [
+        "dependent-nat-cr",
+        "dependent-nat-whnf-conversion"
+      ],
+      "inductive Tm::0dfbb8394cfbcfc1": [
+        "dependent-nat-cr",
+        "dependent-nat-whnf-conversion"
+      ]
+    },
+    "dependent-nat-rec": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-nat-rec-sr"
+      ],
+      "inductive HasType::fa88336b10910985": [
+        "dependent-nat-rec-sr"
+      ],
+      "inductive Step::1de29e3b66cfdea8": [
+        "dependent-nat-rec-sr"
+      ],
+      "inductive Tm::0dfbb8394cfbcfc1": [
+        "dependent-nat-rec-sr"
+      ]
+    },
+    "dependent-nf-unique": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-nf-unique"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "dependent-nf-unique"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "dependent-nf-unique"
+      ]
+    },
+    "dependent-sigma": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-sigma-cr",
+        "dependent-sigma-progress",
+        "dependent-sigma-sr",
+        "dependent-sigma-whnf-conversion"
+      ],
+      "inductive HasType::ff425a62ec599bf1": [
+        "dependent-sigma-progress",
+        "dependent-sigma-sr",
+        "dependent-sigma-whnf-conversion"
+      ],
+      "inductive Step::7bdffd47d9d52431": [
+        "dependent-sigma-cr",
+        "dependent-sigma-progress",
+        "dependent-sigma-sr",
+        "dependent-sigma-whnf-conversion"
+      ],
+      "inductive Tm::a70c12fee0daa57e": [
+        "dependent-sigma-cr",
+        "dependent-sigma-progress",
+        "dependent-sigma-sr",
+        "dependent-sigma-whnf-conversion"
+      ]
+    },
+    "dependent-unified-core": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-unified-core-cr",
+        "dependent-unified-core-sr",
+        "dependent-unified-core-whnf-conversion"
+      ],
+      "inductive HasType::58a0ba0debf5dc5b": [
+        "dependent-unified-core-sr",
+        "dependent-unified-core-whnf-conversion"
+      ],
+      "inductive Step::d32836d485867c4b": [
+        "dependent-unified-core-cr",
+        "dependent-unified-core-sr",
+        "dependent-unified-core-whnf-conversion"
+      ],
+      "inductive Tm::9ea8c60a73c9417d": [
+        "dependent-unified-core-cr",
+        "dependent-unified-core-sr",
+        "dependent-unified-core-whnf-conversion"
+      ]
+    },
+    "dependent-unified-full": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-unified-full-cr",
+        "dependent-unified-full-sr",
+        "dependent-unified-full-whnf-conversion"
+      ],
+      "inductive HasType::3126c1e177cd8196": [
+        "dependent-unified-full-sr",
+        "dependent-unified-full-whnf-conversion"
+      ],
+      "inductive Step::ca211a260dbe8ce5": [
+        "dependent-unified-full-cr",
+        "dependent-unified-full-sr",
+        "dependent-unified-full-whnf-conversion"
+      ],
+      "inductive Tm::b6c283bcddd96435": [
+        "dependent-unified-full-cr",
+        "dependent-unified-full-sr",
+        "dependent-unified-full-whnf-conversion"
+      ]
+    },
+    "dependent-wtype": {
+      "def Confl::7ab53c8ed7228851": [
+        "dependent-wtype-cr",
+        "dependent-wtype-sr",
+        "dependent-wtype-whnf-conversion"
+      ],
+      "inductive HasType::0526e4460aa329d8": [
+        "dependent-wtype-sr",
+        "dependent-wtype-whnf-conversion"
+      ],
+      "inductive Step::2a98ddb1fb1b9309": [
+        "dependent-wtype-cr",
+        "dependent-wtype-sr",
+        "dependent-wtype-whnf-conversion"
+      ],
+      "inductive Tm::704f5f027cea4eee": [
+        "dependent-wtype-cr",
+        "dependent-wtype-sr",
+        "dependent-wtype-whnf-conversion"
+      ]
+    },
+    "full": {
+      "inductive Step::d1c3983054113a82": [
+        "full-progress"
+      ]
+    },
+    "full-loop-iota": {
+      "inductive Step::d1c3983054113a82": [
+        "full-loop-iota"
+      ]
+    },
+    "full-loop-universal": {
+      "inductive Step::d1c3983054113a82": [
+        "full-loop-universal"
+      ]
+    },
+    "iota": {
+      "inductive Step::d99e3b741320655d": [
+        "iota-progress"
+      ]
+    },
+    "lambda": {
+      "def Confl::7ab53c8ed7228851": [
+        "lambda-cr"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "lambda-cr"
+      ],
+      "inductive Tm::01ff111b68096eaf": [
+        "lambda-cr"
+      ]
+    },
+    "let-delta": {
+      "inductive HasType::1cf68cc5060192ed": [
+        "let-delta-sr",
+        "let-delta-whnf-conversion"
+      ],
+      "inductive Step::b6a670725b138bd4": [
+        "let-delta-sr",
+        "let-delta-whnf-conversion"
+      ],
+      "inductive Tm::18a9be0bdb809ee2": [
+        "let-delta-sr",
+        "let-delta-whnf-conversion"
+      ]
+    },
+    "let-delta-decidable": {
+      "inductive HasType::1cf68cc5060192ed": [
+        "let-delta-decidable"
+      ],
+      "inductive Step::b6a670725b138bd4": [
+        "let-delta-decidable"
+      ],
+      "inductive Tm::a04ca6b740b14f8e": [
+        "let-delta-decidable"
+      ]
+    },
+    "let-delta-sn": {
+      "inductive HasType::1cf68cc5060192ed": [
+        "let-delta-sn"
+      ],
+      "inductive Step::b6a670725b138bd4": [
+        "let-delta-sn"
+      ],
+      "inductive Tm::18a9be0bdb809ee2": [
+        "let-delta-sn"
+      ]
+    },
+    "newman": {
+      "def Confl::d5e12ea924539170": [
+        "newman"
+      ]
+    },
+    "proof-irrelevance-r3": {
+      "inductive HasType::17d3be2a88a0c7ef": [
+        "proof-irrelevance-r3"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "proof-irrelevance-r3"
+      ],
+      "inductive Tm::686b2582ad35a8ae": [
+        "proof-irrelevance-r3"
+      ]
+    },
+    "quot-computation": {
+      "inductive HasType::d74d2960eab943b9": [
+        "quot-computation"
+      ],
+      "inductive Step::ff10321beb65b8b1": [
+        "quot-computation"
+      ],
+      "inductive Tm::f1042d918cf6fc93": [
+        "quot-computation"
+      ]
+    },
+    "stepfun-adequacy": {
+      "inductive Step::011da97aa9f8e1a6": [
+        "stepfun-adequacy"
+      ]
+    },
+    "stlc-betaeta-confluence": {
+      "def Confl::64e6bbf59634a12f": [
+        "stlc-betaeta-confluence"
+      ],
+      "inductive HasType::a2694274943e1228": [
+        "stlc-betaeta-confluence"
+      ],
+      "inductive Step::e16a31b995bc8edd": [
+        "stlc-betaeta-confluence"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "stlc-betaeta-confluence"
+      ]
+    },
+    "stlc-betaeta-decidable": {
+      "inductive HasType::a2694274943e1228": [
+        "stlc-betaeta-decidable"
+      ],
+      "inductive Tm::942a86f409fbcf3c": [
+        "stlc-betaeta-decidable"
+      ]
+    },
+    "stlc-confluence": {
+      "inductive Step::e16a31b995bc8edd": [
+        "stlc-confluence"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "stlc-confluence"
+      ]
+    },
+    "stlc-decide-defeq": {
+      "inductive HasType::a2694274943e1228": [
+        "stlc-decide-defeq"
+      ],
+      "inductive Step::e16a31b995bc8edd": [
+        "stlc-decide-defeq"
+      ],
+      "inductive Tm::942a86f409fbcf3c": [
+        "stlc-decide-defeq"
+      ]
+    },
+    "stlc-eta": {
+      "inductive HasType::a2694274943e1228": [
+        "stlc-eta-sr"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "stlc-eta-sr"
+      ]
+    },
+    "stlc-eta-postponement": {
+      "inductive HasType::a2694274943e1228": [
+        "stlc-eta-postponement"
+      ],
+      "inductive Step::e16a31b995bc8edd": [
+        "stlc-eta-postponement"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "stlc-eta-postponement"
+      ]
+    },
+    "stlc-products": {
+      "inductive Step::4f16364d46b05c97": [
+        "stlc-products-cr"
+      ],
+      "inductive Tm::b2a834dbc3689ec5": [
+        "stlc-products-cr"
+      ]
+    },
+    "stlc-products-decidable": {
+      "inductive HasType::e2dfa5739817692f": [
+        "stlc-products-decidable"
+      ],
+      "inductive Step::4f16364d46b05c97": [
+        "stlc-products-decidable"
+      ],
+      "inductive Tm::f9ebfd6fb94c5426": [
+        "stlc-products-decidable"
+      ]
+    },
+    "stlc-products-sn": {
+      "inductive HasType::e2dfa5739817692f": [
+        "stlc-products-sn"
+      ],
+      "inductive Step::4f16364d46b05c97": [
+        "stlc-products-sn"
+      ],
+      "inductive Tm::b2a834dbc3689ec5": [
+        "stlc-products-sn"
+      ]
+    },
+    "stlc-sn": {
+      "inductive HasType::a2694274943e1228": [
+        "stlc-sn"
+      ],
+      "inductive Step::e16a31b995bc8edd": [
+        "stlc-sn"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "stlc-sn"
+      ]
+    },
+    "stlc-sum-cr-conf": {
+      "inductive Step::e7b60c9518486b59": [
+        "stlc-sum-cr-conf"
+      ],
+      "inductive Tm::fda97c5c7d85b951": [
+        "stlc-sum-cr-conf"
+      ]
+    },
+    "stlc-sum-decidable": {
+      "inductive HasType::09be864dee1a133c": [
+        "stlc-sum-decidable"
+      ],
+      "inductive Step::e7b60c9518486b59": [
+        "stlc-sum-decidable"
+      ],
+      "inductive Tm::278cfc26a9105f96": [
+        "stlc-sum-decidable"
+      ]
+    },
+    "stlc-sum-sn": {
+      "inductive HasType::09be864dee1a133c": [
+        "stlc-sum-sn"
+      ],
+      "inductive Step::e7b60c9518486b59": [
+        "stlc-sum-sn"
+      ],
+      "inductive Tm::fda97c5c7d85b951": [
+        "stlc-sum-sn"
+      ]
+    },
+    "stlc-typecheck-decidable": {
+      "inductive HasType::a2694274943e1228": [
+        "stlc-typecheck-decidable"
+      ],
+      "inductive Tm::651ba98a3b0c3efe": [
+        "stlc-typecheck-decidable"
+      ]
+    },
+    "system-t": {
+      "inductive Tm::c2176a06f60f36a8": [
+        "system-t-cr"
+      ]
+    },
+    "system-t-eta": {
+      "inductive HasType::3e3aec623ce1cffc": [
+        "system-t-eta-sr"
+      ],
+      "inductive Tm::aa69339ee031a896": [
+        "system-t-eta-sr"
+      ]
+    },
+    "system-t-nf-unique": {
+      "inductive Tm::c2176a06f60f36a8": [
+        "system-t-nf-unique"
+      ]
+    },
+    "system-t-safety": {
+      "inductive HasType::3e3aec623ce1cffc": [
+        "system-t-safety"
+      ],
+      "inductive Step::8ef8261892e9736f": [
+        "system-t-safety"
+      ],
+      "inductive Tm::aa69339ee031a896": [
+        "system-t-safety"
+      ]
+    },
+    "system-t-typecheck-decidable": {
+      "inductive HasType::3e3aec623ce1cffc": [
+        "system-t-typecheck-decidable"
+      ],
+      "inductive Tm::9b7a7aaa265e92ca": [
+        "system-t-typecheck-decidable"
+      ]
+    },
+    "type-infer": {
+      "inductive HasType::a2694274943e1228": [
+        "type-infer"
+      ],
+      "inductive Tm::651ba98a3b0c3efe": [
+        "type-infer"
+      ]
+    },
+    "type-safety": {
+      "inductive HasType::a2694274943e1228": [
+        "type-safety"
+      ],
+      "inductive Step::e16a31b995bc8edd": [
+        "type-safety"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "type-safety"
+      ]
+    },
+    "univ-strat-sr-r3": {
+      "def Confl::7ab53c8ed7228851": [
+        "univ-strat-sr-r3"
+      ],
+      "inductive HasType::2f7c094a8e885839": [
+        "univ-strat-sr-r3"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "univ-strat-sr-r3"
+      ],
+      "inductive Tm::46f736b5a0617d50": [
+        "univ-strat-sr-r3"
+      ]
+    },
+    "whnf": {
+      "inductive HasType::a2694274943e1228": [
+        "whnf-conversion"
+      ],
+      "inductive Step::e16a31b995bc8edd": [
+        "whnf-conversion"
+      ],
+      "inductive Tm::057982820bcb9643": [
+        "whnf-conversion"
+      ]
+    },
+    "whnf-loop": {
+      "inductive Step::011da97aa9f8e1a6": [
+        "whnf-loop"
+      ]
+    }
+  },
+  "global_assumptions": {
+    "cr": {
+      "rungs": [
+        "dec-conv",
+        "dec-conv-exec",
+        "dep-bidir-r4",
+        "dep-lambda-pi-r3",
+        "dep-progress",
+        "dependent-bool",
+        "dependent-bool-whnf-conversion",
+        "dependent-coproduct-sr",
+        "dependent-coproduct-whnf-conversion",
+        "dependent-eta-conv-sr",
+        "dependent-id-j-sr",
+        "dependent-id-j-whnf-conversion",
+        "dependent-nat-rec-sr",
+        "dependent-nat-whnf-conversion",
+        "dependent-sigma-progress",
+        "dependent-sigma-sr",
+        "dependent-sigma-whnf-conversion",
+        "dependent-unified-core-sr",
+        "dependent-unified-core-whnf-conversion",
+        "dependent-unified-full-sr",
+        "dependent-unified-full-whnf-conversion",
+        "dependent-whnf-conversion",
+        "dependent-wtype-sr",
+        "dependent-wtype-whnf-conversion",
+        "let-delta-whnf-conversion",
+        "stlc-betaeta-decidable",
+        "stlc-decide-defeq",
+        "stlc-products-decidable",
+        "stlc-sum-decidable",
+        "univ-strat-sr-r3",
+        "whnf-conversion"
+      ],
+      "status": "DISCHARGED_BY_BYTE_IDENTICAL_SIBLING"
+    },
+    "decWH": {
+      "rungs": [
+        "dependent-bool-whnf-conversion",
+        "dependent-coproduct-whnf-conversion",
+        "dependent-id-j-whnf-conversion",
+        "dependent-nat-whnf-conversion",
+        "dependent-sigma-whnf-conversion",
+        "dependent-unified-core-whnf-conversion",
+        "dependent-unified-full-whnf-conversion",
+        "dependent-whnf-conversion",
+        "dependent-wtype-whnf-conversion",
+        "whnf-conversion"
+      ],
+      "status": "UNDISCHARGED"
+    },
+    "pinj": {
+      "rungs": [
+        "proof-irrelevance-r3"
+      ],
+      "status": "UNDISCHARGED"
+    },
+    "sn": {
+      "rungs": [
+        "dependent-bool-whnf-conversion",
+        "dependent-coproduct-whnf-conversion",
+        "dependent-id-j-whnf-conversion",
+        "dependent-nat-whnf-conversion",
+        "dependent-sigma-whnf-conversion",
+        "dependent-unified-core-whnf-conversion",
+        "dependent-unified-full-whnf-conversion",
+        "dependent-whnf-conversion",
+        "dependent-wtype-whnf-conversion",
+        "let-delta-whnf-conversion",
+        "newman",
+        "stlc-betaeta-decidable",
+        "stlc-decide-defeq",
+        "stlc-products-decidable",
+        "stlc-sum-decidable",
+        "whnf-conversion"
+      ],
+      "status": "UNDISCHARGED_AND_FALSE_UNDER_TYPE_IN_TYPE"
+    },
+    "whnf_conv": {
+      "rungs": [
+        "dep-bidir-r4"
+      ],
+      "status": "UNDISCHARGED_ORACLE"
+    },
+    "whnf_pi": {
+      "rungs": [
+        "dep-bidir-r4"
+      ],
+      "status": "UNDISCHARGED_ORACLE"
+    },
+    "whnf_reduces": {
+      "rungs": [
+        "dep-bidir-r4"
+      ],
+      "status": "UNDISCHARGED_ORACLE"
+    }
+  },
+  "hypothesis_names": [
+    "IH",
+    "acc",
+    "bsn",
+    "convb_complete",
+    "convb_sound",
+    "cr",
+    "cr1A",
+    "cr1B",
+    "cr2A",
+    "cr2B",
+    "cr3A",
+    "cr3B",
+    "decWH",
+    "esn",
+    "h",
+    "h'",
+    "h1",
+    "h2",
+    "hA",
+    "hA'",
+    "hA's",
+    "hAs",
+    "hB",
+    "hB'",
+    "hC",
+    "hEnv",
+    "hF",
+    "ha",
+    "hab",
+    "hac",
+    "hacc",
+    "hag",
+    "hb",
+    "hbc",
+    "hbody",
+    "hc",
+    "hcAA'",
+    "hcBB'",
+    "hconv",
+    "hd",
+    "he",
+    "hec",
+    "hf",
+    "hg",
+    "hinst",
+    "hinv",
+    "hkonst",
+    "hl",
+    "hm",
+    "hmap",
+    "hn",
+    "hns",
+    "hp",
+    "hprop",
+    "hq",
+    "hr",
+    "hs",
+    "hsa",
+    "hsb",
+    "hsf",
+    "hsg",
+    "hsound",
+    "ht",
+    "hv",
+    "hxy",
+    "hyz",
+    "hz",
+    "ih",
+    "lc",
+    "nm",
+    "pinj",
+    "pres",
+    "r",
+    "sn",
+    "wf",
+    "whnf_conv",
+    "whnf_pi",
+    "whnf_reduces"
+  ],
+  "rung_count": 79,
+  "rungs": {
+    "confluence-3way": {
+      "banned": {},
+      "blocks": {
+        "inductive Tm": "f11d3012008df2c6"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/confluence-3way/solution/project_aristotle/Confluence3Way.lean",
+      "hypotheses": [],
+      "lines": 399,
+      "theorems": 24,
+      "vacuity": {}
+    },
+    "confluence-conv": {
+      "banned": {},
+      "blocks": {
+        "inductive Tm": "f11d3012008df2c6"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/confluence-conv/solution/project_aristotle/ConfluenceConv.lean",
+      "hypotheses": [
+        "h"
+      ],
+      "lines": 449,
+      "theorems": 28,
+      "vacuity": {}
+    },
+    "confluence-nf-unique": {
+      "banned": {},
+      "blocks": {
+        "inductive Tm": "f11d3012008df2c6"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/confluence-nf-unique/solution/project_aristotle/ConfluenceNF.lean",
+      "hypotheses": [],
+      "lines": 424,
+      "theorems": 26,
+      "vacuity": {}
+    },
+    "dec-conv": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dec-conv/solution/DecConv.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hsound"
+      ],
+      "lines": 194,
+      "theorems": 16,
+      "vacuity": {}
+    },
+    "dec-conv-exec": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dec-conv-exec/solution/DecConvExec.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hacc",
+        "hsound"
+      ],
+      "lines": 286,
+      "theorems": 21,
+      "vacuity": {}
+    },
+    "delta-progress": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "011da97aa9f8e1a6"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/delta-progress/solution/delta-progress_aristotle/DeltaProgress.lean",
+      "hypotheses": [
+        "hns"
+      ],
+      "lines": 186,
+      "theorems": 1,
+      "vacuity": {}
+    },
+    "dep-bidir-r4": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "2e1b99df98e628b4",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dep-bidir-r4/solution/DepBidir.lean",
+      "hypotheses": [
+        "convb_complete",
+        "convb_sound",
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hA'",
+        "hB",
+        "ha",
+        "hb",
+        "hc",
+        "hf",
+        "hr",
+        "wf",
+        "whnf_conv",
+        "whnf_pi",
+        "whnf_reduces"
+      ],
+      "lines": 1435,
+      "theorems": 82,
+      "vacuity": {}
+    },
+    "dep-lambda-pi-r3": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "2e1b99df98e628b4",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dep-lambda-pi-r3/solution/DepLambdaPi.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "ha",
+        "hab",
+        "hb",
+        "hbc",
+        "hconv",
+        "hf",
+        "ht"
+      ],
+      "lines": 1034,
+      "theorems": 54,
+      "vacuity": {}
+    },
+    "dep-progress": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "2e1b99df98e628b4",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dep-progress/solution/DepProgress.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "ht",
+        "r"
+      ],
+      "lines": 255,
+      "theorems": 13,
+      "vacuity": {}
+    },
+    "dependent-bool": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "484e601bcdc30734",
+        "inductive Step": "65177c1f769c4e21",
+        "inductive Tm": "88aa99d4c02e45b0"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-bool/solution/DependentBool.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hab",
+        "hb",
+        "hbc",
+        "hconv",
+        "hf",
+        "ht",
+        "r"
+      ],
+      "lines": 1554,
+      "theorems": 78,
+      "vacuity": {}
+    },
+    "dependent-bool-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "65177c1f769c4e21",
+        "inductive Tm": "88aa99d4c02e45b0"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-bool-cr/solution/DependentBoolCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 599,
+      "theorems": 25,
+      "vacuity": {}
+    },
+    "dependent-bool-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "484e601bcdc30734",
+        "inductive Step": "65177c1f769c4e21",
+        "inductive Tm": "88aa99d4c02e45b0"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/DependentBoolWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "ht",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 2271,
+      "theorems": 115,
+      "vacuity": {}
+    },
+    "dependent-coproduct-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "c08f63af53b001e4",
+        "inductive Tm": "8d4abbb1eac1bf1c"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-cr/solution/DependentCoproductCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 690,
+      "theorems": 25,
+      "vacuity": {}
+    },
+    "dependent-coproduct-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "649876392635acf7",
+        "inductive Step": "c08f63af53b001e4",
+        "inductive Tm": "8d4abbb1eac1bf1c"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-sr/solution/DependentCoproductSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hab",
+        "hb",
+        "hbc",
+        "hconv",
+        "hf",
+        "hl",
+        "hr",
+        "hs",
+        "ht",
+        "r"
+      ],
+      "lines": 1950,
+      "theorems": 92,
+      "vacuity": {}
+    },
+    "dependent-coproduct-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "649876392635acf7",
+        "inductive Step": "c08f63af53b001e4",
+        "inductive Tm": "8d4abbb1eac1bf1c"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/DependentCoproductWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hl",
+        "hr",
+        "hs",
+        "ht",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 2765,
+      "theorems": 127,
+      "vacuity": {}
+    },
+    "dependent-eta-conv-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "8435e31c06503e2f",
+        "inductive HasType": "2e1b99df98e628b4",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-eta-conv-sr/solution/DependentEtaConvSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "hf",
+        "ht"
+      ],
+      "lines": 849,
+      "theorems": 31,
+      "vacuity": {}
+    },
+    "dependent-id-j-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "698cffaab037c118",
+        "inductive Tm": "3926931f6b33a0cd"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-cr/solution/DependentIdJCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 650,
+      "theorems": 25,
+      "vacuity": {}
+    },
+    "dependent-id-j-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "4491be207bf5f9bb",
+        "inductive Step": "698cffaab037c118",
+        "inductive Tm": "3926931f6b33a0cd"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-sr/solution/DependentIdJSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hb",
+        "hconv",
+        "hd",
+        "hf",
+        "hp",
+        "ht",
+        "r"
+      ],
+      "lines": 1864,
+      "theorems": 94,
+      "vacuity": {}
+    },
+    "dependent-id-j-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "4491be207bf5f9bb",
+        "inductive Step": "698cffaab037c118",
+        "inductive Tm": "3926931f6b33a0cd"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/DependentIdJWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "hd",
+        "he",
+        "hf",
+        "hp",
+        "ht",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 2523,
+      "theorems": 128,
+      "vacuity": {}
+    },
+    "dependent-nat-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "1de29e3b66cfdea8",
+        "inductive Tm": "0dfbb8394cfbcfc1"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-nat-cr/solution/DependentNatCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 658,
+      "theorems": 26,
+      "vacuity": {}
+    },
+    "dependent-nat-rec-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "fa88336b10910985",
+        "inductive Step": "1de29e3b66cfdea8",
+        "inductive Tm": "0dfbb8394cfbcfc1"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-nat-rec-sr/solution/DependentNatRecSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hb",
+        "hconv",
+        "hf",
+        "hn",
+        "hs",
+        "ht",
+        "hz",
+        "r"
+      ],
+      "lines": 1656,
+      "theorems": 86,
+      "vacuity": {}
+    },
+    "dependent-nat-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "fa88336b10910985",
+        "inductive Step": "1de29e3b66cfdea8",
+        "inductive Tm": "0dfbb8394cfbcfc1"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/DependentNatWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hn",
+        "hs",
+        "ht",
+        "hz",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 2362,
+      "theorems": 122,
+      "vacuity": {}
+    },
+    "dependent-nf-unique": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-nf-unique/solution/DependentNFUnique.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2"
+      ],
+      "lines": 112,
+      "theorems": 3,
+      "vacuity": {}
+    },
+    "dependent-sigma-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "7bdffd47d9d52431",
+        "inductive Tm": "a70c12fee0daa57e"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-cr/solution/DependentSigmaCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 645,
+      "theorems": 25,
+      "vacuity": {}
+    },
+    "dependent-sigma-progress": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "ff425a62ec599bf1",
+        "inductive Step": "7bdffd47d9d52431",
+        "inductive Tm": "a70c12fee0daa57e"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-progress/solution/DependentSigmaProgress.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "ht",
+        "r"
+      ],
+      "lines": 424,
+      "theorems": 21,
+      "vacuity": {}
+    },
+    "dependent-sigma-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "ff425a62ec599bf1",
+        "inductive Step": "7bdffd47d9d52431",
+        "inductive Tm": "a70c12fee0daa57e"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-sr/solution/DependentSigmaSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "ha",
+        "hab",
+        "hb",
+        "hbc",
+        "hconv",
+        "hf",
+        "ht",
+        "r"
+      ],
+      "lines": 1490,
+      "theorems": 72,
+      "vacuity": {}
+    },
+    "dependent-sigma-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "ff425a62ec599bf1",
+        "inductive Step": "7bdffd47d9d52431",
+        "inductive Tm": "a70c12fee0daa57e"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/DependentSigmaWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "ha",
+        "hab",
+        "hacc",
+        "hb",
+        "hbc",
+        "hconv",
+        "he",
+        "hf",
+        "ht",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 2481,
+      "theorems": 115,
+      "vacuity": {}
+    },
+    "dependent-unified-core-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "d32836d485867c4b",
+        "inductive Tm": "9ea8c60a73c9417d"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-cr/solution/DependentUnifiedCoreCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 1052,
+      "theorems": 26,
+      "vacuity": {}
+    },
+    "dependent-unified-core-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "58a0ba0debf5dc5b",
+        "inductive Step": "d32836d485867c4b",
+        "inductive Tm": "9ea8c60a73c9417d"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-sr/solution/DependentUnifiedCoreSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hb",
+        "hconv",
+        "hd",
+        "hf",
+        "hn",
+        "hp",
+        "hs",
+        "ht",
+        "hz",
+        "r"
+      ],
+      "lines": 2919,
+      "theorems": 136,
+      "vacuity": {}
+    },
+    "dependent-unified-core-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "58a0ba0debf5dc5b",
+        "inductive Step": "d32836d485867c4b",
+        "inductive Tm": "9ea8c60a73c9417d"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/DependentUnifiedCoreWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "hA",
+        "hA's",
+        "hAs",
+        "hB",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "hd",
+        "he",
+        "hf",
+        "hn",
+        "hp",
+        "hs",
+        "ht",
+        "hz",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 3991,
+      "theorems": 176,
+      "vacuity": {}
+    },
+    "dependent-unified-full-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "ca211a260dbe8ce5",
+        "inductive Tm": "b6c283bcddd96435"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-cr/solution/DependentUnifiedFullCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 1316,
+      "theorems": 26,
+      "vacuity": {}
+    },
+    "dependent-unified-full-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "3126c1e177cd8196",
+        "inductive Step": "ca211a260dbe8ce5",
+        "inductive Tm": "b6c283bcddd96435"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-sr/solution/DependentUnifiedFullSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA'",
+        "hA's",
+        "hAs",
+        "hB",
+        "hB'",
+        "hC",
+        "ha",
+        "hb",
+        "hcAA'",
+        "hcBB'",
+        "hconv",
+        "hd",
+        "hf",
+        "hg",
+        "hn",
+        "hp",
+        "hs",
+        "ht",
+        "hz",
+        "r"
+      ],
+      "lines": 4111,
+      "theorems": 171,
+      "vacuity": {}
+    },
+    "dependent-unified-full-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "3126c1e177cd8196",
+        "inductive Step": "ca211a260dbe8ce5",
+        "inductive Tm": "b6c283bcddd96435"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/DependentUnifiedFullWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "hA",
+        "hA'",
+        "hA's",
+        "hAs",
+        "hB",
+        "hB'",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hcAA'",
+        "hcBB'",
+        "hconv",
+        "hd",
+        "he",
+        "hf",
+        "hg",
+        "hn",
+        "hp",
+        "hs",
+        "ht",
+        "hz",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 5492,
+      "theorems": 218,
+      "vacuity": {}
+    },
+    "dependent-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "2e1b99df98e628b4",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/DependentWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hA'",
+        "hB",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 1572,
+      "theorems": 90,
+      "vacuity": {}
+    },
+    "dependent-wtype-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "2a98ddb1fb1b9309",
+        "inductive Tm": "704f5f027cea4eee"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-cr/solution/DependentWTypeCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 732,
+      "theorems": 26,
+      "vacuity": {}
+    },
+    "dependent-wtype-sr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "0526e4460aa329d8",
+        "inductive Step": "2a98ddb1fb1b9309",
+        "inductive Tm": "704f5f027cea4eee"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-sr/solution/DependentWTypeSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA'",
+        "hA's",
+        "hAs",
+        "hB",
+        "hB'",
+        "hC",
+        "ha",
+        "hb",
+        "hcAA'",
+        "hcBB'",
+        "hconv",
+        "hf",
+        "hg",
+        "hs",
+        "ht",
+        "r"
+      ],
+      "lines": 2230,
+      "theorems": 96,
+      "vacuity": {}
+    },
+    "dependent-wtype-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "0526e4460aa329d8",
+        "inductive Step": "2a98ddb1fb1b9309",
+        "inductive Tm": "704f5f027cea4eee"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/DependentWTypeWhnfConversion.lean",
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hA'",
+        "hA's",
+        "hAs",
+        "hB",
+        "hB'",
+        "hC",
+        "ha",
+        "hacc",
+        "hb",
+        "hcAA'",
+        "hcBB'",
+        "hconv",
+        "he",
+        "hf",
+        "hg",
+        "hs",
+        "ht",
+        "ih",
+        "r",
+        "sn"
+      ],
+      "lines": 3088,
+      "theorems": 148,
+      "vacuity": {}
+    },
+    "full-loop-iota": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "d1c3983054113a82"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/full-loop-iota/solution/full-loop-iota_aristotle/FullLoopIota.lean",
+      "hypotheses": [],
+      "lines": 509,
+      "theorems": 15,
+      "vacuity": {}
+    },
+    "full-loop-universal": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "d1c3983054113a82"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/full-loop-universal/solution/full-loop-universal_aristotle/FullLoopUniversal.lean",
+      "hypotheses": [],
+      "lines": 661,
+      "theorems": 13,
+      "vacuity": {}
+    },
+    "full-progress": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "d1c3983054113a82"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/full-progress/solution/full-progress_aristotle/FullProgress.lean",
+      "hypotheses": [
+        "hns"
+      ],
+      "lines": 292,
+      "theorems": 0,
+      "vacuity": {}
+    },
+    "iota-progress": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "d99e3b741320655d"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/iota-progress/solution/iota-progress_aristotle/IotaProgress.lean",
+      "hypotheses": [
+        "hns"
+      ],
+      "lines": 200,
+      "theorems": 1,
+      "vacuity": {}
+    },
+    "lambda-cr": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "01ff111b68096eaf"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/lambda-cr/solution/LambdaCR.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hF",
+        "hac"
+      ],
+      "lines": 439,
+      "theorems": 25,
+      "vacuity": {}
+    },
+    "let-delta-decidable": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "1cf68cc5060192ed",
+        "inductive Step": "b6a670725b138bd4",
+        "inductive Tm": "a04ca6b740b14f8e"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaDecidable.lean",
+      "hypotheses": [
+        "acc",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "ht"
+      ],
+      "lines": 638,
+      "theorems": 12,
+      "vacuity": {}
+    },
+    "let-delta-sn": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "1cf68cc5060192ed",
+        "inductive Step": "b6a670725b138bd4",
+        "inductive Tm": "18a9be0bdb809ee2"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaSN.lean",
+      "hypotheses": [
+        "h",
+        "hac",
+        "hg",
+        "hinst",
+        "hkonst"
+      ],
+      "lines": 950,
+      "theorems": 54,
+      "vacuity": {}
+    },
+    "let-delta-sr": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "1cf68cc5060192ed",
+        "inductive Step": "b6a670725b138bd4",
+        "inductive Tm": "18a9be0bdb809ee2"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaSR.lean",
+      "hypotheses": [
+        "h",
+        "ha",
+        "hb",
+        "ht"
+      ],
+      "lines": 580,
+      "theorems": 30,
+      "vacuity": {}
+    },
+    "let-delta-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "1cf68cc5060192ed",
+        "inductive Step": "b6a670725b138bd4",
+        "inductive Tm": "18a9be0bdb809ee2"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaWhnfConversion.lean",
+      "hypotheses": [
+        "IH",
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "hf",
+        "ht",
+        "sn"
+      ],
+      "lines": 884,
+      "theorems": 46,
+      "vacuity": {
+        "Classical.propDecidable": 1
+      }
+    },
+    "level-eq-decidable": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/level-eq-decidable/solution/LevelEqDecidable.lean",
+      "hypotheses": [
+        "h"
+      ],
+      "lines": 357,
+      "theorems": 16,
+      "vacuity": {
+        "Classical.propDecidable": 1,
+        "classical_decide": 1
+      }
+    },
+    "newman": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "d5e12ea924539170"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/newman/solution/Newman.lean",
+      "hypotheses": [
+        "ha",
+        "sn"
+      ],
+      "lines": 95,
+      "theorems": 6,
+      "vacuity": {}
+    },
+    "proof-irrelevance-r3": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "17d3be2a88a0c7ef",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "686b2582ad35a8ae"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/proof-irrelevance-r3/solution/ProofIrrelevance.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "ha",
+        "hc",
+        "hp",
+        "hprop",
+        "hq",
+        "ht",
+        "pinj"
+      ],
+      "lines": 928,
+      "theorems": 47,
+      "vacuity": {}
+    },
+    "quot-computation": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "d74d2960eab943b9",
+        "inductive Step": "ff10321beb65b8b1",
+        "inductive Tm": "f1042d918cf6fc93"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/quot-computation/solution/QuotComputation.lean",
+      "hypotheses": [
+        "h",
+        "ha",
+        "hb",
+        "ht"
+      ],
+      "lines": 663,
+      "theorems": 29,
+      "vacuity": {}
+    },
+    "spec-iota": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/spec-iota/solution/spec-iota_aristotle/SpecIota.lean",
+      "hypotheses": [],
+      "lines": 179,
+      "theorems": 3,
+      "vacuity": {}
+    },
+    "spec-loop-complete": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/spec-loop-complete/solution/spec-loop-complete_aristotle/SpecLoopComplete.lean",
+      "hypotheses": [],
+      "lines": 424,
+      "theorems": 8,
+      "vacuity": {}
+    },
+    "spec-red-classify": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/spec-red-classify/solution/project_aristotle/SpecRedClassify.lean",
+      "hypotheses": [
+        "hEnv",
+        "ha"
+      ],
+      "lines": 804,
+      "theorems": 21,
+      "vacuity": {}
+    },
+    "spec-red-loop": {
+      "banned": {},
+      "blocks": {},
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/spec-red-loop/solution/spec-red-loop_aristotle/SpecRedLoop.lean",
+      "hypotheses": [
+        "ha"
+      ],
+      "lines": 942,
+      "theorems": 30,
+      "vacuity": {}
+    },
+    "stepfun-adequacy": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "011da97aa9f8e1a6"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stepfun-adequacy/solution/stepfun-adequacy_aristotle/StepFunAdequacy.lean",
+      "hypotheses": [],
+      "lines": 170,
+      "theorems": 5,
+      "vacuity": {}
+    },
+    "stlc-betaeta-confluence": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "64e6bbf59634a12f",
+        "inductive HasType": "a2694274943e1228",
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-betaeta-confluence/solution/StlcBetaEtaConfluence.lean",
+      "hypotheses": [
+        "bsn",
+        "esn",
+        "h",
+        "hb",
+        "hec",
+        "lc",
+        "nm",
+        "pres"
+      ],
+      "lines": 740,
+      "theorems": 38,
+      "vacuity": {}
+    },
+    "stlc-betaeta-decidable": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Tm": "942a86f409fbcf3c"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-betaeta-decidable/solution/StlcBetaEtaDecidable.lean",
+      "hypotheses": [
+        "acc",
+        "cr",
+        "ha",
+        "hb",
+        "ht",
+        "sn"
+      ],
+      "lines": 607,
+      "theorems": 18,
+      "vacuity": {}
+    },
+    "stlc-confluence": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-confluence/solution/StlcConfluence.lean",
+      "hypotheses": [],
+      "lines": 458,
+      "theorems": 31,
+      "vacuity": {}
+    },
+    "stlc-decide-defeq": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "942a86f409fbcf3c"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-decide-defeq/solution/StlcDecideDefeq.lean",
+      "hypotheses": [
+        "acc",
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "ht",
+        "sn"
+      ],
+      "lines": 393,
+      "theorems": 11,
+      "vacuity": {}
+    },
+    "stlc-eta-postponement": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-eta-postponement/solution/StlcEtaPostponement.lean",
+      "hypotheses": [
+        "ht"
+      ],
+      "lines": 391,
+      "theorems": 21,
+      "vacuity": {}
+    },
+    "stlc-eta-sr": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-eta-sr/solution/StlcEtaSR.lean",
+      "hypotheses": [
+        "h",
+        "hb",
+        "ht",
+        "hv"
+      ],
+      "lines": 718,
+      "theorems": 33,
+      "vacuity": {}
+    },
+    "stlc-products-cr": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "4f16364d46b05c97",
+        "inductive Tm": "b2a834dbc3689ec5"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-products-cr/solution/StlcProductsCR.lean",
+      "hypotheses": [],
+      "lines": 606,
+      "theorems": 35,
+      "vacuity": {}
+    },
+    "stlc-products-decidable": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "e2dfa5739817692f",
+        "inductive Step": "4f16364d46b05c97",
+        "inductive Tm": "f9ebfd6fb94c5426"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-products-decidable/solution/StlcProductsDecidable.lean",
+      "hypotheses": [
+        "acc",
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "ht",
+        "sn"
+      ],
+      "lines": 454,
+      "theorems": 11,
+      "vacuity": {}
+    },
+    "stlc-products-sn": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "e2dfa5739817692f",
+        "inductive Step": "4f16364d46b05c97",
+        "inductive Tm": "b2a834dbc3689ec5"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-products-sn/solution/StlcProductsSN.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hag",
+        "hb",
+        "hinv",
+        "hmap"
+      ],
+      "lines": 1171,
+      "theorems": 62,
+      "vacuity": {}
+    },
+    "stlc-sn": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-sn/solution/StlcSN.lean",
+      "hypotheses": [
+        "cr1A",
+        "cr1B",
+        "cr2A",
+        "cr2B",
+        "cr3A",
+        "cr3B",
+        "h",
+        "ha",
+        "hb",
+        "hm",
+        "hsa"
+      ],
+      "lines": 676,
+      "theorems": 42,
+      "vacuity": {}
+    },
+    "stlc-sum-cr-conf": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "e7b60c9518486b59",
+        "inductive Tm": "fda97c5c7d85b951"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-sum-cr-conf/solution/StlcSumCR.lean",
+      "hypotheses": [],
+      "lines": 698,
+      "theorems": 42,
+      "vacuity": {}
+    },
+    "stlc-sum-decidable": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "09be864dee1a133c",
+        "inductive Step": "e7b60c9518486b59",
+        "inductive Tm": "278cfc26a9105f96"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-sum-decidable/solution/StlcSumDecidable.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "ht",
+        "sn"
+      ],
+      "lines": 490,
+      "theorems": 11,
+      "vacuity": {}
+    },
+    "stlc-sum-sn": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "09be864dee1a133c",
+        "inductive Step": "e7b60c9518486b59",
+        "inductive Tm": "fda97c5c7d85b951"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-sum-sn/solution/StlcSumSN.lean",
+      "hypotheses": [
+        "h",
+        "hbody",
+        "hf",
+        "hg",
+        "hmap",
+        "hsb",
+        "hsf",
+        "hsg"
+      ],
+      "lines": 786,
+      "theorems": 35,
+      "vacuity": {}
+    },
+    "stlc-typecheck-decidable": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Tm": "651ba98a3b0c3efe"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stlc-typecheck-decidable/solution/StlcTypecheckDecidable.lean",
+      "hypotheses": [
+        "h",
+        "h'"
+      ],
+      "lines": 144,
+      "theorems": 3,
+      "vacuity": {}
+    },
+    "system-t-cr": {
+      "banned": {},
+      "blocks": {
+        "inductive Tm": "c2176a06f60f36a8"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/system-t-cr/solution/SystemTCR.lean",
+      "hypotheses": [],
+      "lines": 598,
+      "theorems": 18,
+      "vacuity": {}
+    },
+    "system-t-eta-sr": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "3e3aec623ce1cffc",
+        "inductive Tm": "aa69339ee031a896"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/system-t-eta-sr/solution/SystemTEtaSR.lean",
+      "hypotheses": [
+        "h",
+        "hb",
+        "ht",
+        "hv"
+      ],
+      "lines": 1253,
+      "theorems": 38,
+      "vacuity": {}
+    },
+    "system-t-nf-unique": {
+      "banned": {},
+      "blocks": {
+        "inductive Tm": "c2176a06f60f36a8"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/system-t-nf-unique/solution/SystemTNFUnique.lean",
+      "hypotheses": [],
+      "lines": 112,
+      "theorems": 3,
+      "vacuity": {}
+    },
+    "system-t-safety": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "3e3aec623ce1cffc",
+        "inductive Step": "8ef8261892e9736f",
+        "inductive Tm": "aa69339ee031a896"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/system-t-safety/solution/SystemTSafety.lean",
+      "hypotheses": [
+        "ha",
+        "hb",
+        "ht"
+      ],
+      "lines": 307,
+      "theorems": 7,
+      "vacuity": {}
+    },
+    "system-t-typecheck-decidable": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "3e3aec623ce1cffc",
+        "inductive Tm": "9b7a7aaa265e92ca"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/system-t-typecheck-decidable/solution/SystemTTypecheckDecidable.lean",
+      "hypotheses": [
+        "h",
+        "h'"
+      ],
+      "lines": 206,
+      "theorems": 3,
+      "vacuity": {}
+    },
+    "type-infer": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Tm": "651ba98a3b0c3efe"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/type-infer/solution/project_aristotle/TypeInfer.lean",
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2"
+      ],
+      "lines": 97,
+      "theorems": 3,
+      "vacuity": {}
+    },
+    "type-safety": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/type-safety/solution/project_aristotle/TypeSafety.lean",
+      "hypotheses": [
+        "ha",
+        "hb",
+        "ht",
+        "hv"
+      ],
+      "lines": 282,
+      "theorems": 14,
+      "vacuity": {}
+    },
+    "univ-strat-sr-r3": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "2f7c094a8e885839",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "46f736b5a0617d50"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/univ-strat-sr-r3/solution/UnivStratSR.lean",
+      "hypotheses": [
+        "cr",
+        "h",
+        "hA",
+        "hA'",
+        "hB",
+        "ha",
+        "hab",
+        "hb",
+        "hbc",
+        "hconv",
+        "hf",
+        "ht",
+        "hxy",
+        "hyz"
+      ],
+      "lines": 993,
+      "theorems": 43,
+      "vacuity": {}
+    },
+    "whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a2694274943e1228",
+        "inductive Step": "e16a31b995bc8edd",
+        "inductive Tm": "057982820bcb9643"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/whnf-conversion/solution/WhnfConversion.lean",
+      "hypotheses": [
+        "IH",
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "ha",
+        "hb",
+        "hf",
+        "ht",
+        "sn"
+      ],
+      "lines": 763,
+      "theorems": 43,
+      "vacuity": {}
+    },
+    "whnf-loop": {
+      "banned": {},
+      "blocks": {
+        "inductive Step": "011da97aa9f8e1a6"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/whnf-loop/solution/whnf-loop_aristotle/WhnfLoop.lean",
+      "hypotheses": [
+        "hsound"
+      ],
+      "lines": 160,
+      "theorems": 5,
+      "vacuity": {}
+    }
+  },
+  "toolchain": "leanprover/lean4:v4.30.0-rc2",
+  "total_lines": 79526,
+  "total_theorems": 3519,
+  "undischarged_assumption_count": 6,
+  "vacuity_debt": 3
+}

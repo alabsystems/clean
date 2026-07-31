@@ -135,7 +135,7 @@ impl Environment {
         let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
         let nat_pow = Expr::const_(Name::from_string("Nat.pow"), vec![]);
         let fin = Expr::const_(Name::from_string("Fin"), vec![]);
-        let fin_sum = Expr::const_(Name::from_string("Fin.sum"), vec![]);
+        let _fin_sum = Expr::const_(Name::from_string("Fin.sum"), vec![]);
         let fin_sum_congr = Expr::const_(Name::from_string("Fin.sum_congr"), vec![]);
         let subset_sum = Expr::const_(Name::from_string("BoolAnalysis.subsetSum"), vec![]);
         let hc_decode = Expr::const_(Name::from_string("BoolAnalysis.hcDecode"), vec![]);

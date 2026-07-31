@@ -4,10 +4,15 @@
 
 //! Hausdorff (T2) separation axiom
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Build the sequence of declarations for Topology.Hausdorff and related axioms.
@@ -19,6 +24,7 @@ use crate::name::Name;
 ///
 /// This is a pure function with no side effects. Both the production init function
 /// and the test harness can call it to get the same declaration list.
+#[cfg(test)]
 pub(crate) fn topology_hausdorff_decl_templates(
     include_compact: bool,
     include_metric: bool,
@@ -423,6 +429,7 @@ pub(crate) fn topology_hausdorff_decl_templates(
     decls
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Topology.Hausdorff (T2 separation axiom)
     ///
@@ -442,6 +449,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_hausdorff_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_hausdorff(&mut self) -> Result<(), EnvError> {
         if self.topology_hausdorff_init {
             return Ok(());
@@ -472,6 +480,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_hausdorff_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_hausdorff(&self) -> bool {
         self.topology_hausdorff_init
     }

@@ -32,21 +32,30 @@ use crate::name::Name;
 /// Shared constants for C007 streaming certificate theorem construction.
 pub(super) struct C007Consts {
     pub(super) nat: Expr,
+    #[cfg(test)]
     pub(super) rat: Expr,
     pub(super) prop: Expr,
     pub(super) type0: Expr,
+    #[cfg(test)]
     pub(super) nn_vec: Expr,
     pub(super) ib: Expr,
+    #[cfg(test)]
     pub(super) ib_contains: Expr,
     pub(super) ib_subset: Expr,
+    #[cfg(test)]
     pub(super) le_le: Expr,
+    #[cfg(test)]
     pub(super) inst_le_rat: Expr,
     pub(super) le_nat: Expr,
     pub(super) inst_le_nat: Expr,
+    #[cfg(test)]
     pub(super) rat_add: Expr,
     pub(super) nat_add: Expr,
+    #[cfg(test)]
     pub(super) and: Expr,
+    #[cfg(test)]
     pub(super) eq: Expr,
+    #[cfg(test)]
     pub(super) eq_refl: Expr,
     // C007-specific symbols
     pub(super) bab_cert: Expr,
@@ -57,6 +66,7 @@ pub(super) struct C007Consts {
     pub(super) delta_cost: Expr,
     pub(super) disjoint_cover: Expr,
     // Helper axioms
+    #[cfg(test)]
     pub(super) merge_sound_helper: Expr,
     pub(super) restrict_refines_helper: Expr,
     pub(super) incremental_cost_helper: Expr,
@@ -66,24 +76,33 @@ impl C007Consts {
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             type0: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+            #[cfg(test)]
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             ib: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
+            #[cfg(test)]
             ib_contains: Expr::const_(
                 Name::from_string("NNVerify.IntervalBounds.contains"),
                 vec![],
             ),
             ib_subset: Expr::const_(Name::from_string("NNVerify.IntervalBounds.subset"), vec![]),
+            #[cfg(test)]
             le_le: Expr::const_(Name::from_string("LE.le"), vec![Level::zero()]),
+            #[cfg(test)]
             inst_le_rat: Expr::const_(Name::from_string("instLERat"), vec![]),
             le_nat: Expr::const_(Name::from_string("LE.le"), vec![Level::zero()]),
             inst_le_nat: Expr::const_(Name::from_string("instLENat"), vec![]),
+            #[cfg(test)]
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
             nat_add: Expr::const_(Name::from_string("Nat.add"), vec![]),
+            #[cfg(test)]
             and: Expr::const_(Name::from_string("And"), vec![]),
+            #[cfg(test)]
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+            #[cfg(test)]
             eq_refl: Expr::const_(
                 Name::from_string("Eq.refl"),
                 vec![Level::succ(Level::zero())],
@@ -95,6 +114,7 @@ impl C007Consts {
             cert_cost: Expr::const_(Name::from_string("NNVerify.C007.cert_cost"), vec![]),
             delta_cost: Expr::const_(Name::from_string("NNVerify.C007.delta_cost"), vec![]),
             disjoint_cover: Expr::const_(Name::from_string("NNVerify.C007.disjoint_cover"), vec![]),
+            #[cfg(test)]
             merge_sound_helper: Expr::const_(
                 Name::from_string("NNVerify.C007.merge_sound_helper"),
                 vec![],
@@ -110,6 +130,7 @@ impl C007Consts {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
@@ -123,6 +144,7 @@ impl C007Consts {
     }
 
     /// `IntervalBounds.contains @d B x`
+    #[cfg(test)]
     pub(super) fn contains(&self, d: &Expr, b: &Expr, x: &Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.ib_contains.clone(), d.clone()), b.clone()),
@@ -206,6 +228,7 @@ impl C007Consts {
         Expr::app(Expr::app(self.nat_add.clone(), a), b)
     }
 
+    #[cfg(test)]
     pub(super) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(

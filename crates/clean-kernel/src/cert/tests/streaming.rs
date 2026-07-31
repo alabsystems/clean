@@ -8,6 +8,38 @@ use crate::cert::*;
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 
+fn explicit_v1_stream_fixture(certs: &[ProofCert]) -> Vec<u8> {
+    use std::io::Write as _;
+
+    let mut payload = Vec::new();
+    for cert in certs {
+        let bytes =
+            bincode::serde::encode_to_vec(cert, bincode::config::standard()).expect("cert bytes");
+        payload
+            .write_all(&(bytes.len() as u32).to_le_bytes())
+            .unwrap();
+        payload.write_all(&bytes).unwrap();
+    }
+    let header = StreamingArchiveHeader {
+        magic: StreamingArchiveHeader::MAGIC,
+        version: 1,
+        algorithm: 1,
+        compression_level: 3,
+        uncompressed_size: payload.len() as u64,
+        cert_count: certs.len() as u64,
+    };
+    let header_bytes =
+        bincode::serde::encode_to_vec(&header, bincode::config::standard()).expect("header bytes");
+    let compressed = zstd::encode_all(payload.as_slice(), 3).expect("zstd fixture");
+    let mut fixture = Vec::new();
+    fixture
+        .write_all(&(header_bytes.len() as u32).to_le_bytes())
+        .unwrap();
+    fixture.write_all(&header_bytes).unwrap();
+    fixture.write_all(&compressed).unwrap();
+    fixture
+}
+
 #[test]
 fn test_streaming_header_new_zstd() {
     let header = StreamingArchiveHeader::new_zstd(3);
@@ -59,6 +91,36 @@ fn test_streaming_header_invalid_version() {
         matches!(err, StreamingError::InvalidFormat(_)),
         "expected InvalidFormat for bad version, got: {err:?}"
     );
+}
+
+#[test]
+fn test_explicit_streaming_v1_fixture_remains_compatible() {
+    let certs = vec![ProofCert::Sort {
+        level: Level::zero(),
+    }];
+    let fixture = explicit_v1_stream_fixture(&certs);
+    let mut reader =
+        StreamingCertReader::new(std::io::Cursor::new(fixture)).expect("read v1 header");
+    assert_eq!(reader.read_all().expect("read v1 fixture"), certs);
+}
+
+#[test]
+fn test_streaming_rejects_legacy_version_zero() {
+    use std::io::Write as _;
+
+    let mut header = StreamingArchiveHeader::new_zstd(3);
+    header.version = 0;
+    let header_bytes = bincode::serde::encode_to_vec(&header, bincode::config::standard()).unwrap();
+    let mut fixture = Vec::new();
+    fixture
+        .write_all(&(header_bytes.len() as u32).to_le_bytes())
+        .unwrap();
+    fixture.write_all(&header_bytes).unwrap();
+    assert!(matches!(
+        StreamingCertReader::new(std::io::Cursor::new(fixture)),
+        Err(StreamingError::InvalidFormat(message))
+            if message.contains("Unsupported version")
+    ));
 }
 
 #[test]
@@ -140,6 +202,46 @@ fn test_streaming_write_read_multiple_certs() {
     let read_certs = reader.read_all().expect("read all failed");
     assert_eq!(read_certs.len(), 3);
     assert_eq!(read_certs, certs);
+}
+
+#[test]
+fn test_partial_stream_consumer_can_drain_and_validate_terminal_boundary() {
+    let certs = vec![
+        ProofCert::Sort {
+            level: Level::zero(),
+        },
+        ProofCert::Sort {
+            level: Level::succ(Level::zero()),
+        },
+    ];
+    let fixture = explicit_v1_stream_fixture(&certs);
+    let mut reader =
+        StreamingCertReader::new(std::io::Cursor::new(fixture)).expect("stream reader");
+    assert_eq!(reader.read_cert().unwrap(), Some(certs[0].clone()));
+    reader.finish().expect("drain and validate");
+    assert_eq!(reader.certs_read(), 2);
+}
+
+#[test]
+fn test_streaming_rejects_trailing_bytes_and_concatenated_frames() {
+    let certs = vec![ProofCert::Sort {
+        level: Level::zero(),
+    }];
+    let base = explicit_v1_stream_fixture(&certs);
+    for suffix in [
+        vec![0x42],
+        zstd::encode_all(&b"second frame"[..], 3).expect("second frame"),
+    ] {
+        let mut bad = base.clone();
+        bad.extend(suffix);
+        let mut reader =
+            StreamingCertReader::new(std::io::Cursor::new(bad)).expect("stream header");
+        assert!(matches!(
+            reader.read_all(),
+            Err(StreamingError::InvalidFormat(message))
+                if message.contains("trailing bytes")
+        ));
+    }
 }
 
 #[test]

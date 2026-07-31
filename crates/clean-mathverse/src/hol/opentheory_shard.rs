@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn test_lower_kernel_level_succ() {
         let mut writer = ShardWriter::new();
-        let level = Level::Succ(std::sync::Arc::new(Level::Zero));
+        let level = Level::succ(Level::Zero);
         let idx = lower_kernel_level(&level, &mut writer);
         assert!(idx < u32::MAX);
     }

@@ -62,6 +62,7 @@ struct IntSubNatNatZeroLeftConsts {
     int_type: Expr,
     nat_type: Expr,
     nat_zero: Expr,
+    #[cfg(test)]
     nat_succ: Expr,
     nat_rec: Expr,
     int_of_nat: Expr,
@@ -79,6 +80,7 @@ impl IntSubNatNatZeroLeftConsts {
             int_type: Expr::const_(Name::from_string("Int"), vec![]),
             nat_type: Expr::const_(Name::from_string("Nat"), vec![]),
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
+            #[cfg(test)]
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             nat_rec: Expr::const_(Name::from_string("Nat.rec"), vec![Level::zero()]),
             int_of_nat: Expr::const_(Name::from_string("Int.ofNat"), vec![]),
@@ -105,6 +107,7 @@ impl IntSubNatNatZeroLeftConsts {
         Expr::app(Expr::app(self.int_sub_nat_nat.clone(), m), n)
     }
 
+    #[cfg(test)]
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }

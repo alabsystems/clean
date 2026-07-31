@@ -1039,7 +1039,7 @@ impl Environment {
         let value = {
             let mut b = EnvDeclBuilder::new();
             let (hid, holds) = b.fresh_local(holds_ty());
-            let (hcid, hcons) = b.fresh_local(cons_pred(&holds));
+            let (hcid, _hcons) = b.fresh_local(cons_pred(&holds));
             let (heid, hexcl) = b.fresh_local(excl_pred(&holds));
             let (dbid, db) = b.fresh_local(trie_ty());
             let hall_ty = all_sat_trie(holds.clone(), db.clone());

@@ -63,6 +63,10 @@ const RECURSORS: &[&str] = &["Bool.rec", "Nat.rec"];
 /// (a stuck native op left un-reduced, a `*.rec` recursor we don't model, an
 /// unfoldable definition) is "stuck on an unmodelable construct".
 fn stuck_head(e: &MicroExpr) -> Option<String> {
+    stack_safe(|| stuck_head_impl(e))
+}
+
+fn stuck_head_impl(e: &MicroExpr) -> Option<String> {
     match e {
         MicroExpr::Lit(_) => None,
         MicroExpr::Const(name) => {
@@ -290,7 +294,25 @@ impl<'env> MicroChecker<'env> {
         self.context.len()
     }
 
-    /// Implementation of certificate verification (called via stacker::maybe_grow)
+    /// Re-enter the stack guard for every recursive certificate descent.
+    ///
+    /// The public entry points guard their first call, but a single
+    /// `stacker::maybe_grow` segment is finite. Deep Pi/Lam/App/Let
+    /// certificates must therefore cross this boundary again at each child;
+    /// recursing straight into `verify_impl` eventually exhausts the grown
+    /// segment on an ordinary Rust test-thread stack.
+    #[inline(always)]
+    fn verify_recurse(
+        &mut self,
+        cert: &MicroCert,
+        expr: &MicroExpr,
+    ) -> Result<MicroExpr, MicroError> {
+        stack_safe(|| self.verify_impl(cert, expr))
+    }
+
+    /// Implementation of certificate verification.
+    ///
+    /// Every recursive edge goes through [`Self::verify_recurse`].
     fn verify_impl(&mut self, cert: &MicroCert, expr: &MicroExpr) -> Result<MicroExpr, MicroError> {
         match (cert, expr) {
             // Sort rule: Sort(l) : Sort(succ(l))
@@ -366,7 +388,7 @@ impl<'env> MicroChecker<'env> {
                 },
                 MicroExpr::App(f, a),
             ) => {
-                let fn_ty = self.verify_impl(fn_cert, f)?;
+                let fn_ty = self.verify_recurse(fn_cert, f)?;
                 let fn_ty_whnf = self.whnf_impl(&fn_ty)?;
 
                 let (expected_arg_ty, body_ty) = match &fn_ty_whnf {
@@ -374,7 +396,7 @@ impl<'env> MicroChecker<'env> {
                     _ => return Err(MicroError::ExpectedPi(fn_ty_whnf)),
                 };
 
-                let arg_ty = self.verify_impl(arg_cert, a)?;
+                let arg_ty = self.verify_recurse(arg_cert, a)?;
 
                 if !self.def_eq_impl(&arg_ty, expected_arg_ty)? {
                     return Err(MicroError::TypeMismatch {
@@ -404,14 +426,14 @@ impl<'env> MicroChecker<'env> {
                 },
                 MicroExpr::Lam(arg_ty, body),
             ) => {
-                let arg_sort = self.verify_impl(arg_ty_cert, arg_ty)?;
+                let arg_sort = self.verify_recurse(arg_ty_cert, arg_ty)?;
                 let arg_sort_whnf = self.whnf_impl(&arg_sort)?;
                 if !matches!(arg_sort_whnf, MicroExpr::Sort(_)) {
                     return Err(MicroError::ExpectedSort(arg_sort_whnf));
                 }
 
                 self.context.push(arg_ty.as_ref().clone());
-                let body_ty = self.verify_impl(body_cert, body);
+                let body_ty = self.verify_recurse(body_cert, body);
                 self.context.pop();
                 let body_ty = body_ty?;
 
@@ -437,10 +459,11 @@ impl<'env> MicroChecker<'env> {
                 },
                 MicroExpr::Pi(arg_ty, body_ty),
             ) => {
-                let arg_sort = self.verify_impl(arg_ty_cert, arg_ty)?;
-                let l1 = match self.whnf_impl(&arg_sort)? {
-                    MicroExpr::Sort(l) => l,
-                    other => return Err(MicroError::ExpectedSort(other)),
+                let arg_sort = self.verify_recurse(arg_ty_cert, arg_ty)?;
+                let arg_sort_whnf = self.whnf_impl(&arg_sort)?;
+                let l1 = match &arg_sort_whnf {
+                    MicroExpr::Sort(level) => level.clone(),
+                    other => return Err(MicroError::ExpectedSort(other.clone())),
                 };
 
                 if !self.universe_blind && !l1.level_eq(arg_level) {
@@ -451,13 +474,14 @@ impl<'env> MicroChecker<'env> {
                 }
 
                 self.context.push(arg_ty.as_ref().clone());
-                let body_sort = self.verify_impl(body_ty_cert, body_ty);
+                let body_sort = self.verify_recurse(body_ty_cert, body_ty);
                 self.context.pop();
                 let body_sort = body_sort?;
 
-                let l2 = match self.whnf_impl(&body_sort)? {
-                    MicroExpr::Sort(l) => l,
-                    other => return Err(MicroError::ExpectedSort(other)),
+                let body_sort_whnf = self.whnf_impl(&body_sort)?;
+                let l2 = match &body_sort_whnf {
+                    MicroExpr::Sort(level) => level.clone(),
+                    other => return Err(MicroError::ExpectedSort(other.clone())),
                 };
 
                 if !self.universe_blind && !l2.level_eq(body_level) {
@@ -483,13 +507,13 @@ impl<'env> MicroChecker<'env> {
                 },
                 MicroExpr::Let(ty, val, body),
             ) => {
-                let ty_sort = self.verify_impl(ty_cert, ty)?;
+                let ty_sort = self.verify_recurse(ty_cert, ty)?;
                 let ty_sort_whnf = self.whnf_impl(&ty_sort)?;
                 if !matches!(ty_sort_whnf, MicroExpr::Sort(_)) {
                     return Err(MicroError::ExpectedSort(ty_sort_whnf));
                 }
 
-                let val_ty = self.verify_impl(val_cert, val)?;
+                let val_ty = self.verify_recurse(val_cert, val)?;
                 if !self.def_eq_impl(&val_ty, ty)? {
                     return Err(MicroError::TypeMismatch {
                         expected: ty.as_ref().clone(),
@@ -498,7 +522,7 @@ impl<'env> MicroChecker<'env> {
                 }
 
                 self.context.push(ty.as_ref().clone());
-                let body_ty = self.verify_impl(body_cert, body);
+                let body_ty = self.verify_recurse(body_cert, body);
                 self.context.pop();
                 let body_ty = body_ty?;
 
@@ -534,7 +558,7 @@ impl<'env> MicroChecker<'env> {
                 if *idx != *i {
                     return Err(MicroError::StructureMismatch);
                 }
-                let _expr_ty = self.verify_impl(expr_cert, e)?;
+                let _expr_ty = self.verify_recurse(expr_cert, e)?;
                 Ok(field_ty.as_ref().clone())
             }
 
@@ -570,6 +594,10 @@ impl<'env> MicroChecker<'env> {
 
     /// Implementation of WHNF (called via stacker::maybe_grow)
     fn whnf_impl(&self, e: &MicroExpr) -> Result<MicroExpr, MicroError> {
+        stack_safe(|| self.whnf_core(e))
+    }
+
+    fn whnf_core(&self, e: &MicroExpr) -> Result<MicroExpr, MicroError> {
         self.burn()?;
         match e {
             // DELTA: unfold a reducible const to its body — EXCEPT the native
@@ -802,11 +830,15 @@ impl<'env> MicroChecker<'env> {
     /// [`check_def_eq_result`] so e.g. `bvAdd 100 200` fully reduces to the
     /// `300` literal before structural comparison.
     fn whnf_full(&self, e: &MicroExpr) -> Result<MicroExpr, MicroError> {
+        stack_safe(|| self.whnf_full_core(e))
+    }
+
+    fn whnf_full_core(&self, e: &MicroExpr) -> Result<MicroExpr, MicroError> {
         let w = self.whnf_impl(e)?;
-        match w {
+        match &w {
             MicroExpr::App(f, a) => {
-                let f2 = self.whnf_full(&f)?;
-                let a2 = self.whnf_full(&a)?;
+                let f2 = self.whnf_full(f)?;
+                let a2 = self.whnf_full(a)?;
                 // After normalizing args, a previously-stuck native op may now fire.
                 let reassembled = MicroExpr::App(Arc::new(f2), Arc::new(a2));
                 let w2 = self.whnf_impl(&reassembled)?;
@@ -816,7 +848,7 @@ impl<'env> MicroChecker<'env> {
                     self.whnf_full(&w2)
                 }
             }
-            other => Ok(other),
+            other => Ok(other.clone()),
         }
     }
 
@@ -830,6 +862,10 @@ impl<'env> MicroChecker<'env> {
     /// Implementation of def_eq. Returns `Err(Unsupported)` on fuel
     /// exhaustion (propagated as fail-closed); otherwise `Ok(bool)`.
     fn def_eq_impl(&self, a: &MicroExpr, b: &MicroExpr) -> Result<bool, MicroError> {
+        stack_safe(|| self.def_eq_core(a, b))
+    }
+
+    fn def_eq_core(&self, a: &MicroExpr, b: &MicroExpr) -> Result<bool, MicroError> {
         let a_whnf = self.whnf_impl(a)?;
         let b_whnf = self.whnf_impl(b)?;
         if self.structural_eq_impl(&a_whnf, &b_whnf) {
@@ -856,6 +892,10 @@ impl<'env> MicroChecker<'env> {
 
     /// Implementation of structural_eq (called via stacker::maybe_grow)
     fn structural_eq_impl(&self, a: &MicroExpr, b: &MicroExpr) -> bool {
+        stack_safe(|| self.structural_eq_core(a, b))
+    }
+
+    fn structural_eq_core(&self, a: &MicroExpr, b: &MicroExpr) -> bool {
         match (a, b) {
             (MicroExpr::BVar(i), MicroExpr::BVar(j)) => i == j,
             // Universe-blind in the env-aware path (see `universe_blind`).

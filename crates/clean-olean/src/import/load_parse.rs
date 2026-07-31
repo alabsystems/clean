@@ -290,7 +290,10 @@ pub(crate) fn parse_load_module_incremental(
 }
 
 /// Read an array of constants, preserving raw expression pointers.
-fn read_load_constant_array(region: &CompactedRegion, ptr: u64) -> OleanResult<Vec<LoadConstant>> {
+fn read_load_constant_array(
+    region: &CompactedRegion<'_>,
+    ptr: u64,
+) -> OleanResult<Vec<LoadConstant>> {
     if !is_ptr(ptr) {
         return Ok(Vec::new());
     }
@@ -317,7 +320,7 @@ fn read_load_constant_array(region: &CompactedRegion, ptr: u64) -> OleanResult<V
 }
 
 /// Read a single ConstantInfo, storing raw expression pointers.
-fn read_load_constant_info(region: &CompactedRegion, ptr: u64) -> OleanResult<LoadConstant> {
+fn read_load_constant_info(region: &CompactedRegion<'_>, ptr: u64) -> OleanResult<LoadConstant> {
     if !is_ptr(ptr) {
         return Err(OleanError::Region("Invalid constant pointer".into()));
     }
@@ -393,7 +396,7 @@ fn read_load_constant_info(region: &CompactedRegion, ptr: u64) -> OleanResult<Lo
 
 /// Read ConstantVal fields: name, level_params, and raw type pointer.
 fn read_constant_val_fields_raw(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     val_offset: usize,
 ) -> OleanResult<(String, Vec<String>, u64)> {
     let const_val_ptr = region.read_u64_at(val_offset + 8)?;
@@ -422,7 +425,7 @@ fn read_constant_val_fields_raw(
 
 /// Read the raw value pointer for definitions, theorems, and opaques.
 fn read_constant_value_ptr(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     kind: &ConstantKind,
     val_offset: usize,
     val_header: &crate::region::ObjectHeader,
@@ -442,7 +445,7 @@ fn read_constant_value_ptr(
 
 /// Read RecursorVal extra data, preserving raw RHS pointers.
 fn read_load_recursor_val_data(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     val_offset: usize,
 ) -> OleanResult<LoadRecursorValData> {
     let all_ptr = region.read_u64_at(val_offset + 16)?;
@@ -472,7 +475,7 @@ fn read_load_recursor_val_data(
 
 /// Read recursor rules, preserving raw RHS pointers.
 fn read_load_recursor_rules(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     ptr: u64,
 ) -> OleanResult<Vec<LoadRecursorRule>> {
     const MAX_ITERATIONS: usize = 10_000;
@@ -514,7 +517,10 @@ fn read_load_recursor_rules(
 }
 
 /// Read a single recursor rule, preserving the raw RHS pointer.
-fn read_load_recursor_rule(region: &CompactedRegion, ptr: u64) -> OleanResult<LoadRecursorRule> {
+fn read_load_recursor_rule(
+    region: &CompactedRegion<'_>,
+    ptr: u64,
+) -> OleanResult<LoadRecursorRule> {
     let offset = region.ptr_to_offset(ptr)?;
 
     let ctor_ptr = region.read_u64_at(offset + 8)?;

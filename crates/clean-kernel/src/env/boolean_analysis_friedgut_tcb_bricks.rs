@@ -87,9 +87,12 @@ struct TcbConsts {
     bool_true: Expr,
     bool_false: Expr,
     bool_not: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
+    #[cfg(test)]
     nat_succ: Expr,
     rat_mul: Expr,
+    #[cfg(test)]
     rat_zero: Expr,
     rat_one: Expr,
     rat_ble: Expr,
@@ -117,9 +120,12 @@ impl TcbConsts {
             bool_true: k("Bool.true"),
             bool_false: k("Bool.false"),
             bool_not: k("Bool.not"),
+            #[cfg(test)]
             nat_zero: k("Nat.zero"),
+            #[cfg(test)]
             nat_succ: k("Nat.succ"),
             rat_mul: k("Rat.mul"),
+            #[cfg(test)]
             rat_zero: k("Rat.zero"),
             rat_one: k("Rat.one"),
             rat_ble: k("Rat.ble"),
@@ -814,6 +820,7 @@ impl Brick3Consts {
             [self.rat.clone(), a, b],
         )
     }
+    #[cfg(test)]
     fn refl_rat(&self, a: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.refl"), vec![self.l1.clone()]),
@@ -886,6 +893,7 @@ impl Brick3Consts {
         )
     }
     /// `Rat.le_trans a b c h1 h2 : a ≤ c`.
+    #[cfg(test)]
     fn le_trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.le_trans"), vec![]),
@@ -1197,7 +1205,7 @@ impl Environment {
         let nat_le_refl = Expr::const_(Name::from_string("Nat.le.refl"), vec![]);
         let nat_le_step = Expr::const_(Name::from_string("Nat.le.step"), vec![]);
         let nat_zero_le = Expr::const_(Name::from_string("Nat.zero_le"), vec![]);
-        let false_c = Expr::const_(Name::from_string("False"), vec![]);
+        let _false_c = Expr::const_(Name::from_string("False"), vec![]);
         let not_c = Expr::const_(Name::from_string("Not"), vec![]);
 
         let mk = |for_value: bool| -> Expr {

@@ -32,7 +32,7 @@ fn env_with_eq() -> Environment {
 }
 
 /// Assert proof term has type `@Eq.{u1} type_ lhs rhs`.
-fn assert_eq_proof(tc: &TypeChecker, proof: &Expr, type_: Expr, lhs: Expr, rhs: Expr) {
+fn assert_eq_proof(tc: &TypeChecker<'_>, proof: &Expr, type_: Expr, lhs: Expr, rhs: Expr) {
     let ty = tc.infer_type(proof).expect("proof must type-check");
     let u1 = Level::succ(Level::zero());
     let expected = Expr::apps(

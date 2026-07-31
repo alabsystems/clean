@@ -147,6 +147,7 @@ impl CrownLayerNormConsts {
     /// file `nn_verify_crown_layernorm_proof_terms.rs` to the expected API
     /// (it referenced an `ib_eq_refl` that had not yet been defined on this
     /// struct — pre-existing breakage surfaced when running C003 tests).
+    #[cfg(test)]
     pub(super) fn ib_eq_refl(&self, d: &Expr, x: Expr) -> Expr {
         let eq_refl = Expr::const_(
             Name::from_string("Eq.refl"),
@@ -238,6 +239,7 @@ pub(super) fn build_jacobian_dense_type(c: &CrownLayerNormConsts) -> Expr {
 /// Build a universally quantified equality type between two bounds transforms:
 /// `forall (n : Nat) (gamma beta : NNVec n) (ln_eps : Rat) (B : IB n),
 ///   Eq (IB n) (lhs n gamma beta ln_eps B) (rhs n gamma beta ln_eps B)`
+#[cfg(test)]
 pub(super) fn build_ln_equality_type(
     c: &CrownLayerNormConsts,
     lhs_fn: &Expr,
@@ -556,6 +558,7 @@ pub(super) fn build_ln_forward_value(c: &CrownLayerNormConsts) -> Expr {
 /// swaps it for `build_faithful_ibp_forward_value` (non-identity body
 /// depending on both `n` and `B`). Retained behind `#[allow(dead_code)]`
 /// as a demasquerade-audit reference for the pre-#3617 state.
+#[cfg(test)]
 pub(super) fn build_bounds_transform_value(c: &CrownLayerNormConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());

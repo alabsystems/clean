@@ -78,6 +78,12 @@ pub enum CoqImportError {
     InvalidDeclarationKind { kind: String },
     #[error("invalid inductive kind `{kind}`")]
     InvalidInductiveKind { kind: String },
+    #[error(
+        "coinductive block `{name}`: greatest-fixpoint semantics are not supported by this \
+         import lane; refusing to admit it as a least-fixpoint inductive (with recursors it \
+         must not have)"
+    )]
+    CoinductiveUnsupported { name: String },
     #[error("invalid sort `{sort}`")]
     InvalidSort { sort: String },
     #[error("invalid binder info `{info}`")]

@@ -451,6 +451,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.euclidean_domain_init == true`
+    #[cfg(test)]
     pub(crate) fn has_euclidean_domain(&self) -> bool {
         self.euclidean_domain_init
     }

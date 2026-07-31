@@ -57,13 +57,13 @@ fn multi_goal_state(env: Environment) -> ProofState {
 }
 
 /// A tactic that always succeeds (no-op).
-fn succeed_tactic(ctx: &mut TacticCtx) -> TacticResult {
+fn succeed_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let _ = ctx;
     Ok(())
 }
 
 /// A tactic that always fails.
-fn fail_tactic(ctx: &mut TacticCtx) -> TacticResult {
+fn fail_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let _ = ctx;
     Err(TacticError::NoProgress {
         tactic: "fail".into(),
@@ -71,7 +71,7 @@ fn fail_tactic(ctx: &mut TacticCtx) -> TacticResult {
 }
 
 /// A tactic that closes the current goal by assigning it a dummy proof.
-fn close_current_goal(ctx: &mut TacticCtx) -> TacticResult {
+fn close_current_goal(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let goal = ctx.state.current_goal().ok_or(TacticError::NoGoals)?;
     let meta_id = goal.meta_id;
     let target = goal.target.clone();
@@ -151,7 +151,7 @@ fn test_first_picks_first_succeeding_tactic() {
     let mut ps = ProofState::new(env, a);
 
     let mut ctx = TacticCtx::new(&mut ps);
-    let tactics: &[fn(&mut TacticCtx) -> TacticResult] =
+    let tactics: &[fn(&mut TacticCtx<'_>) -> TacticResult] =
         &[fail_tactic, fail_tactic, succeed_tactic, fail_tactic];
     let result = eval_first(tactics, &mut ctx);
     assert!(result.is_ok(), "first should succeed on third tactic");
@@ -164,7 +164,7 @@ fn test_first_fails_when_all_fail() {
     let mut ps = ProofState::new(env, a);
 
     let mut ctx = TacticCtx::new(&mut ps);
-    let tactics: &[fn(&mut TacticCtx) -> TacticResult] = &[fail_tactic];
+    let tactics: &[fn(&mut TacticCtx<'_>) -> TacticResult] = &[fail_tactic];
     let result = eval_first(tactics, &mut ctx);
     // Last tactic's error propagates directly
     assert!(result.is_err());
@@ -177,7 +177,7 @@ fn test_first_empty_list_fails() {
     let mut ps = ProofState::new(env, a);
 
     let mut ctx = TacticCtx::new(&mut ps);
-    let tactics: &[fn(&mut TacticCtx) -> TacticResult] = &[];
+    let tactics: &[fn(&mut TacticCtx<'_>) -> TacticResult] = &[];
     let result = eval_first(tactics, &mut ctx);
     assert!(matches!(result, Err(TacticError::AllTacticsFailed { .. })));
 }

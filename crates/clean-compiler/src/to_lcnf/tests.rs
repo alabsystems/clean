@@ -239,7 +239,7 @@ fn test_code_recursion_detection_nested_fun() {
         Code::ret(inner_fvar),
     );
 
-    let fun_decl = crate::lcnf::FunDecl::new(
+    let fun_decl = FunDecl::new(
         outer_fvar,
         Name::anon(),
         Vec::new(),
@@ -483,7 +483,7 @@ fn test_generic_cases_on_rec_recognition() {
         body = inner.as_ref();
     }
     assert!(
-        super::lower::generic_cases_on(&env, body).is_some(),
+        lower::generic_cases_on(&env, body).is_some(),
         "Decidable.rec (non-recursive, lambda minors) must be recognized"
     );
 
@@ -498,7 +498,7 @@ fn test_generic_cases_on_rec_recognition() {
         let (head, _) = collect_app_args(body);
         if matches!(head.kind(), ExprKind::Const(n, _) if n.to_string() == "List.rec") {
             assert!(
-                super::lower::generic_cases_on(&env, body).is_none(),
+                lower::generic_cases_on(&env, body).is_none(),
                 "List.rec (recursive inductive) must be declined"
             );
         }
@@ -1198,7 +1198,7 @@ fn test_nat_rec_routes_through_synthesized_recursion_not_enclosing_self_call() {
     let code = expr_to_code(&mut ctx, &expr).expect("Nat.rec lowers via the R1 path");
 
     // The lowered value declares exactly one synthesized local function.
-    fn find_fun(code: &Code) -> Option<&crate::lcnf::FunDecl> {
+    fn find_fun(code: &Code) -> Option<&FunDecl> {
         match code {
             Code::Fun(decl, _) => Some(decl),
             Code::Let(_, rest) | Code::JoinPoint(_, rest) => find_fun(rest),
@@ -1330,7 +1330,7 @@ fn test_multi_param_nat_rec_never_self_calls_enclosing_decl() {
             }
             Code::Fun(fun, rest) | Code::JoinPoint(fun, rest) => {
                 // Count FVar self-calls to this fun inside its own body.
-                fn count_fvar_calls(code: &Code, target: clean_kernel::FVarId, n: &mut usize) {
+                fn count_fvar_calls(code: &Code, target: FVarId, n: &mut usize) {
                     match code {
                         Code::Let(decl, rest) => {
                             if let LetValue::FVar { fvar, .. } = &decl.value {
@@ -1534,7 +1534,7 @@ fn test_generic_cases_on_declines_nat_cases() {
         ],
     );
     assert!(
-        super::lower::generic_cases_on(&env, &nat_cases).is_none(),
+        lower::generic_cases_on(&env, &nat_cases).is_none(),
         "generic recognizer must decline Nat.casesOn"
     );
 }
@@ -1873,23 +1873,23 @@ fn test_r1_rec_apply_parts_recognition_and_refusals() {
 
     // List.length: `List.rec` over a RECURSIVE inductive, saturated.
     assert!(
-        super::lower::rec_apply_parts(&env, &peeled("List.length")).is_some(),
+        lower::rec_apply_parts(&env, &peeled("List.length")).is_some(),
         "saturated List.rec (recursive, direct self-field) must be recognized"
     );
     // List.foldl: function-building motive — the spine is OVER-applied.
     assert!(
-        super::lower::rec_apply_parts(&env, &peeled("List.foldl")).is_some(),
+        lower::rec_apply_parts(&env, &peeled("List.foldl")).is_some(),
         "over-applied List.rec (function-building motive) must be recognized"
     );
 
     // Acc.recOn body eliminates via Acc.rec: well-founded, not structural.
     assert!(
-        super::lower::rec_apply_parts(&env, &peeled("Acc.recOn")).is_none(),
+        lower::rec_apply_parts(&env, &peeled("Acc.recOn")).is_none(),
         "Acc.rec (reflexive — well-founded recursion) must refuse"
     );
     // Eq.recOn body eliminates via the INDEXED Eq.rec.
     assert!(
-        super::lower::rec_apply_parts(&env, &peeled("Eq.recOn")).is_none(),
+        lower::rec_apply_parts(&env, &peeled("Eq.recOn")).is_none(),
         "Eq.rec (indexed family) must refuse"
     );
 
@@ -1901,7 +1901,7 @@ fn test_r1_rec_apply_parts_recognition_and_refusals() {
         panic!("List.length body is an application spine");
     };
     assert!(
-        super::lower::rec_apply_parts(&env, no_major).is_some(),
+        lower::rec_apply_parts(&env, no_major).is_some(),
         "no-major List.rec prefix (the partially applied eliminator) is the \
          rangeAux spelling and must be recognized"
     );
@@ -1909,7 +1909,7 @@ fn test_r1_rec_apply_parts_recognition_and_refusals() {
         panic!("no-major spine is still an application");
     };
     assert!(
-        super::lower::rec_apply_parts(&env, missing_minor).is_none(),
+        lower::rec_apply_parts(&env, missing_minor).is_none(),
         "a spine missing a MINOR must refuse (fail-closed partial application)"
     );
 }
@@ -1948,7 +1948,7 @@ fn test_r1_synthesized_recursion_is_structural() {
     };
 
     // Find the synthesized local function (the `go`).
-    fn find_fun(code: &Code) -> Option<&crate::lcnf::FunDecl> {
+    fn find_fun(code: &Code) -> Option<&FunDecl> {
         match code {
             Code::Fun(decl, rest) => Some(decl).or_else(|| find_fun(rest)),
             Code::Let(_, rest) | Code::JoinPoint(_, rest) => find_fun(rest),
@@ -1969,7 +1969,7 @@ fn test_r1_synthesized_recursion_is_structural() {
     assert_eq!(cases.alts.len(), 2, "nil and cons arms");
 
     // Walk an arm body, collecting (self-call args, tail-proj fvars).
-    fn arm_lets(code: &Code) -> Vec<&crate::lcnf::LetDecl> {
+    fn arm_lets(code: &Code) -> Vec<&LetDecl> {
         let mut lets = Vec::new();
         let mut cur = code;
         while let Code::Let(decl, rest) = cur {
@@ -1987,7 +1987,7 @@ fn test_r1_synthesized_recursion_is_structural() {
             Alt::Default(body) => (false, body.as_ref()),
         };
         let lets = arm_lets(body);
-        let tail_proj: Option<clean_kernel::FVarId> = lets
+        let tail_proj: Option<FVarId> = lets
             .iter()
             .find(|l| {
                 matches!(

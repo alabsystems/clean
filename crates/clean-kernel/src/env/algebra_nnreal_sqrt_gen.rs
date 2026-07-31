@@ -188,6 +188,7 @@ impl SqrtGenConsts {
             ],
         )
     }
+    #[cfg(test)]
     fn symm_nn(&self, a: &Expr, b: &Expr, h: Expr) -> Expr {
         Expr::apps(
             self.eq_symm1.clone(),
@@ -471,7 +472,7 @@ fn build_sqrt_gen_sq_core(
     // ── Regroup (A·C)·(A·C) → (A·A)·(C·C)  [mul_mul_mul_comm A C A C] ──
     let aa = c.nnmul(&a, &a);
     let cc_ = c.nnmul(&sqrt, &sqrt);
-    let acac = c.nnmul(&ac, &ac); // (A·C)·(A·C) = lhs once pw≡A·C.
+    let _acac = c.nnmul(&ac, &ac); // (A·C)·(A·C) = lhs once pw≡A·C.
     let aacc = c.nnmul(&aa, &cc_); // (A·A)·(C·C)
     let step_regroup = c.nn_mmm(&a, &sqrt, &a, &sqrt); // acac = aacc
 

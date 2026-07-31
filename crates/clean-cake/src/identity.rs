@@ -122,7 +122,7 @@ struct NormCtx {
 /// scrutinee). Reductions under binders treat the bound variable as a stuck term, so
 /// the result is the open normal form. Fuel-bounded; sets `ctx.complete = false` if
 /// the bound is hit anywhere.
-fn normalize_nf(tc: &TypeChecker, e: &Expr, ctx: &mut NormCtx) -> Expr {
+fn normalize_nf(tc: &TypeChecker<'_>, e: &Expr, ctx: &mut NormCtx) -> Expr {
     if ctx.fuel == 0 {
         ctx.complete = false;
         return e.clone();
@@ -165,7 +165,7 @@ fn normalize_nf(tc: &TypeChecker, e: &Expr, ctx: &mut NormCtx) -> Expr {
 
 /// Compute the Tier-1 [`SemanticIdentity`] of `expr` in `tc`'s environment.
 #[must_use]
-pub fn defeq_canonical_digest(tc: &TypeChecker, expr: &Expr) -> SemanticIdentity {
+pub fn defeq_canonical_digest(tc: &TypeChecker<'_>, expr: &Expr) -> SemanticIdentity {
     defeq_canonical_digest_fueled(tc, expr, DEFAULT_NORMALIZE_FUEL)
 }
 
@@ -173,7 +173,11 @@ pub fn defeq_canonical_digest(tc: &TypeChecker, expr: &Expr) -> SemanticIdentity
 /// `--score-defeq` path calls it cross-crate with a small bound to keep the expensive
 /// kernel normalisation from hanging on heavy mathlib-Real statements.
 #[must_use]
-pub fn defeq_canonical_digest_fueled(tc: &TypeChecker, expr: &Expr, fuel: u32) -> SemanticIdentity {
+pub fn defeq_canonical_digest_fueled(
+    tc: &TypeChecker<'_>,
+    expr: &Expr,
+    fuel: u32,
+) -> SemanticIdentity {
     let structural_digest = flat_digest(expr);
     let mut ctx = NormCtx {
         fuel,
@@ -189,8 +193,11 @@ pub fn defeq_canonical_digest_fueled(tc: &TypeChecker, expr: &Expr, fuel: u32) -
 }
 
 /// The Tier-1.5 digest alone: defeq-normalise then canonical-rewrite, then hash.
+// Intra-run identity API awaiting a production caller; kept alive by its
+// soundness tests. The expect fires when a caller lands.
+#[cfg_attr(not(test), expect(dead_code))]
 #[must_use]
-pub(crate) fn rewrite_canonical_digest(tc: &TypeChecker, expr: &Expr) -> String {
+pub(crate) fn rewrite_canonical_digest(tc: &TypeChecker<'_>, expr: &Expr) -> String {
     let mut ctx = NormCtx {
         fuel: DEFAULT_NORMALIZE_FUEL,
         complete: true,
@@ -289,7 +296,7 @@ fn merkle(tag: u8, parts: &[&[u8]]) -> [u8; 32] {
 fn merkle_with_name(tag: u8, name: &Name, parts: &[&[u8]]) -> [u8; 32] {
     use std::fmt::Write;
     struct HashWrite<'a>(&'a mut blake3::Hasher);
-    impl std::fmt::Write for HashWrite<'_> {
+    impl Write for HashWrite<'_> {
         fn write_str(&mut self, s: &str) -> std::fmt::Result {
             self.0.update(s.as_bytes());
             Ok(())
@@ -387,8 +394,11 @@ fn canonicalize_comm(e: &Expr) -> Expr {
 
 /// The **sound** sameness decision: are `a` and `b` definitionally equal (the same
 /// object)? Run to confirm a digest-bucket match. Delegates to the kernel.
+// Intra-run identity API awaiting a production caller; kept alive by its
+// soundness tests. The expect fires when a caller lands.
+#[cfg_attr(not(test), expect(dead_code))]
 #[must_use]
-pub(crate) fn same_object(tc: &TypeChecker, a: &Expr, b: &Expr) -> bool {
+pub(crate) fn same_object(tc: &TypeChecker<'_>, a: &Expr, b: &Expr) -> bool {
     tc.is_def_eq(a, b)
 }
 

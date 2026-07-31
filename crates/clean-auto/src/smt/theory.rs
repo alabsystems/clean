@@ -255,6 +255,8 @@ pub trait TheorySolver: Send + Sync {
     ///
     /// Convergence with ay's `soft_reset()` trait method
     /// (`ay-core/src/theory.rs`).
+    // Extension point converging with ay's soft_reset(); no in-repo caller yet.
+    #[allow(dead_code)]
     fn soft_reset(&mut self) {
         self.reset();
     }

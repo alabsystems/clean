@@ -97,6 +97,7 @@ impl Environment {
     }
 
     /// Check if Tier A `min_zero_zero_alt` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_rat_min_zero_zero_alt(&self) -> bool {
         self.nn_verify_tier_a_rat_min_zero_zero_alt_init
     }

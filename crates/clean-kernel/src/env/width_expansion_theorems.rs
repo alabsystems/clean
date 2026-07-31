@@ -19,12 +19,18 @@
 //! Reference: Ben-Sasson & Wigderson, "Short Proofs are Narrow -- Resolution
 //! Made Simple", JACM 2001.
 
+#[cfg(test)]
 use super::width_expansion::WidthExpansionConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Width lower bound from boundary expansion
@@ -36,6 +42,7 @@ impl Environment {
     /// Encodes:
     /// `is_refutation p f ->
     ///   proof_width p >= boundary_expansion (incidence_graph f)`.
+    #[cfg(test)]
     pub(super) fn register_width_expansion_helper(
         &mut self,
         c: &WidthExpansionConsts,
@@ -71,6 +78,7 @@ impl Environment {
     /// Main width-expansion lower bound (T8): every resolution refutation
     /// must contain a clause whose width is at least the boundary expansion
     /// of the clause-variable incidence graph.
+    #[cfg(test)]
     pub(super) fn register_width_expansion(
         &mut self,
         c: &WidthExpansionConsts,
@@ -109,6 +117,7 @@ impl Environment {
     /// Encodes:
     /// `boundary_expansion (incidence_graph (restrict f rho)) >=
     ///   boundary_expansion (incidence_graph f) - restriction_size rho`.
+    #[cfg(test)]
     pub(super) fn register_expansion_monotone_restriction_helper(
         &mut self,
         c: &WidthExpansionConsts,
@@ -143,6 +152,7 @@ impl Environment {
     ///
     /// Applying a restriction can decrease expansion only by the number of
     /// variables fixed by the restriction.
+    #[cfg(test)]
     pub(super) fn register_expansion_monotone_restriction(
         &mut self,
         c: &WidthExpansionConsts,
@@ -186,6 +196,7 @@ impl Environment {
     /// Encodes:
     /// `is_refutation p f ->
     ///   proof_width p >= boundary_expansion (incidence_graph f) / 2`.
+    #[cfg(test)]
     pub(super) fn register_width_random_restriction_helper(
         &mut self,
         c: &WidthExpansionConsts,
@@ -221,6 +232,7 @@ impl Environment {
     /// Random restriction argument: after restricting away a controlled set
     /// of variables, a surviving refutation still forces width at least half
     /// the original expansion parameter.
+    #[cfg(test)]
     pub(super) fn register_width_random_restriction(
         &mut self,
         c: &WidthExpansionConsts,
@@ -258,6 +270,7 @@ impl Environment {
     /// Encodes the Ben-Sasson-Wigderson tradeoff:
     /// `resolution_size f >=
     ///   2^((width - initial_width f)^2 / num_variables f)`.
+    #[cfg(test)]
     pub(super) fn register_size_width_helper(
         &mut self,
         c: &WidthExpansionConsts,
@@ -280,6 +293,7 @@ impl Environment {
     /// Ben-Sasson-Wigderson size-width tradeoff: any substantial gap between
     /// initial width and required refutation width forces exponential growth
     /// in proof size.
+    #[cfg(test)]
     pub(super) fn register_size_width_relationship(
         &mut self,
         c: &WidthExpansionConsts,
@@ -315,6 +329,7 @@ impl Environment {
     /// Encodes:
     /// `boundary_expansion (incidence_graph f)^2 <=
     ///   2 * spectral_gap (incidence_graph f)`.
+    #[cfg(test)]
     pub(super) fn register_cheeger_helper(
         &mut self,
         c: &WidthExpansionConsts,
@@ -336,6 +351,7 @@ impl Environment {
     ///
     /// Stretch-goal spectral formulation: the square of boundary expansion
     /// is bounded by a constant multiple of the incidence-graph spectral gap.
+    #[cfg(test)]
     pub(super) fn register_cheeger_inequality(
         &mut self,
         c: &WidthExpansionConsts,

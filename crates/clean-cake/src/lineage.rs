@@ -208,6 +208,8 @@ impl LineageGraph {
     }
 
     /// All edges incident to `digest` — the justification log for its memberships.
+    // Query API awaiting a production caller; kept alive by its membership test.
+    #[cfg_attr(not(test), expect(dead_code))]
     #[must_use]
     pub(crate) fn edges_of(&self, digest: &str) -> Vec<&Edge> {
         match self.index.get(digest) {

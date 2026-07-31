@@ -24,10 +24,15 @@
 
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(test)]
 use super::boolean_analysis_noise_semigroup::ConvConsts;
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 // ===========================================================================
@@ -46,10 +51,12 @@ use crate::name::Name;
 // `mul_mul_mul_comm`) align the Bool-level factors.
 // ===========================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.noiseFactor_conv` — the per-coordinate noise
     /// convolution `Σ_{z:Bool} w(ρ,x,z)·w(ρ,z,y) = 2·w(ρ², x, y)`. Kernel-checked,
     /// `Constructive`, EMPTY domain-axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_noise_factor_conv(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.noiseFactor_conv");
         if self.get_const(&name).is_some() {
@@ -80,6 +87,7 @@ impl Environment {
     }
 }
 
+#[cfg(test)]
 fn build_factor_conv_type(c: &ConvConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat.clone());
@@ -97,12 +105,14 @@ fn build_factor_conv_type(c: &ConvConsts) -> Expr {
 }
 
 /// `w(ρ,x,false)·w(ρ,false,y) + w(ρ,x,true)·w(ρ,true,y)`.
+#[cfg(test)]
 fn factor_conv_lhs(c: &ConvConsts, rho: &Expr, x: &Expr, y: &Expr) -> Expr {
     let zf = c.mul(c.factor(rho, x, &c.bfalse), c.factor(rho, &c.bfalse, y));
     let zt = c.mul(c.factor(rho, x, &c.btrue), c.factor(rho, &c.btrue, y));
     c.add(zf, zt)
 }
 
+#[cfg(test)]
 fn build_factor_conv_value(c: &ConvConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat.clone());
@@ -205,6 +215,7 @@ fn build_factor_conv_value(c: &ConvConsts) -> Expr {
 ///   pm true = pm (¬false) = Rat.neg (pm false)         [pm_not false, ¬false ≡ true]
 ///   ⇒ pm x · pm true = pm x · (−(pm false)) = −(pm x · pm false)   [mul_neg]
 ///   ⇒ ρ·(pm x · pm true) = ρ·(−(pm x·pm false)) = −(ρ·(pm x·pm false))  [mul_neg]
+#[cfg(test)]
 fn prove_factor_true_x(c: &ConvConsts, parent: &EnvDeclBuilder, rho: &Expr, x: &Expr) -> Expr {
     let bf = c.bfalse.clone();
     let pm_x = c.pm(x);
@@ -268,6 +279,7 @@ fn prove_factor_true_x(c: &ConvConsts, parent: &EnvDeclBuilder, rho: &Expr, x: &
 /// `w(ρ,true,y) = 1 + (−(ρ·(pm false · pm y)))`.
 ///   symmetric to `prove_factor_true_x` but the `pm true` sits on the LEFT of the
 ///   inner product, so we use `neg_mul` instead of `mul_neg`.
+#[cfg(test)]
 fn prove_factor_true_y(c: &ConvConsts, parent: &EnvDeclBuilder, rho: &Expr, y: &Expr) -> Expr {
     let bf = c.bfalse.clone();
     let pm_y = c.pm(y);
@@ -319,6 +331,7 @@ fn prove_factor_true_y(c: &ConvConsts, parent: &EnvDeclBuilder, rho: &Expr, y: &
 ///     →[mmmc (pm x)(pm false)(pm y)(pm false)]   (pm x·pm y)·(pm false·pm false)
 ///     →[congr-right pm_mul_self false]           (pm x·pm y)·1
 ///     →[mul_one (pm x·pm y)]                      (pm x·pm y)
+#[cfg(test)]
 fn prove_ab_eq(c: &ConvConsts, parent: &EnvDeclBuilder, rho: &Expr, x: &Expr, y: &Expr) -> Expr {
     let bf = c.bfalse.clone();
     let pm_x = c.pm(x);
@@ -353,6 +366,7 @@ fn prove_ab_eq(c: &ConvConsts, parent: &EnvDeclBuilder, rho: &Expr, x: &Expr, y:
 ///     →[mul_comm (−a) b]   b·(−a)
 ///     →[mul_neg b a]        −(b·a)
 ///     →[congr-neg mul_comm b a]   −(a·b)
+#[cfg(test)]
 fn prove_neg_mul(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, b: &Expr) -> Expr {
     let neg_a = c.neg(a.clone());
     let from = c.mul(neg_a.clone(), b.clone()); // (−a)·b
@@ -380,6 +394,7 @@ fn prove_neg_mul(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, b: &Expr) ->
 }
 
 /// `(pm x·pm false)·(pm false·pm y) = pm x·pm y`.
+#[cfg(test)]
 fn prove_inner_collapse(c: &ConvConsts, parent: &EnvDeclBuilder, x: &Expr, y: &Expr) -> Expr {
     let bf = c.bfalse.clone();
     let pm_x = c.pm(x);

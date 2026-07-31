@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(unsafe_op_in_unsafe_fn)]
-
 //! Reference counting and deallocation for clean objects.
 //!
 //! Ref count semantics: 0 = uniquely owned (1 reference), N = (N+1) references.
@@ -24,28 +22,34 @@ type LeanObj = CleanObj;
 /// # Safety
 /// `child` must be a valid LeanObjPtr (heap object or tagged scalar).
 unsafe fn dec_child_fn(child: LeanObjPtr) -> LeanObjPtr {
-    dec(child as *mut LeanObj);
-    lean_box(0)
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        dec(child as *mut LeanObj);
+        lean_box(0)
+    }
 }
 
 /// clean up an External object's children and resources before dealloc.
 /// # Safety
 /// `o` must be a valid External object pointer (kind == External).
 unsafe fn external_cleanup(o: LeanObjPtr) {
-    // SAFETY: Caller guarantees `o` is a valid External object. The cast to
-    // ExternalObj is valid because kind == External. Dereferencing class to
-    // read foreach/finalize function pointers is valid because the class
-    // pointer outlives the object (caller contract on alloc_external).
-    // The temporary dec_closure is freed directly after foreach returns
-    // (b_lean_obj_arg convention — foreach borrows, refcount stays 0).
-    let ext = o as *const ExternalObj;
-    if let Some(foreach) = (*(*ext).class).foreach {
-        let dec_closure = alloc_closure_obj(dec_child_fn as *const (), 1, &[]);
-        foreach((*ext).data, dec_closure);
-        alloc::dealloc(dec_closure as *mut u8, object_layout(dec_closure));
-    }
-    if let Some(finalize) = (*(*ext).class).finalize {
-        finalize((*ext).data);
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        // SAFETY: Caller guarantees `o` is a valid External object. The cast to
+        // ExternalObj is valid because kind == External. Dereferencing class to
+        // read foreach/finalize function pointers is valid because the class
+        // pointer outlives the object (caller contract on alloc_external).
+        // The temporary dec_closure is freed directly after foreach returns
+        // (b_lean_obj_arg convention — foreach borrows, refcount stays 0).
+        let ext = o as *const ExternalObj;
+        if let Some(foreach) = (*(*ext).class).foreach {
+            let dec_closure = alloc_closure_obj(dec_child_fn as *const (), 1, &[]);
+            foreach((*ext).data, dec_closure);
+            alloc::dealloc(dec_closure as *mut u8, object_layout(dec_closure));
+        }
+        if let Some(finalize) = (*(*ext).class).finalize {
+            finalize((*ext).data);
+        }
     }
 }
 
@@ -55,10 +59,13 @@ unsafe fn external_cleanup(o: LeanObjPtr) {
 /// `o` must be a valid clean object pointer or tagged scalar.
 #[inline]
 pub unsafe fn inc(o: *mut LeanObj) {
-    if !is_scalar(o) {
-        // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
-        // Relaxed ordering suffices — inc only needs atomicity, not ordering.
-        (*o).header.ref_count.fetch_add(1, Ordering::Relaxed);
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        if !is_scalar(o) {
+            // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
+            // Relaxed ordering suffices — inc only needs atomicity, not ordering.
+            (*o).header.ref_count.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 
@@ -68,9 +75,12 @@ pub unsafe fn inc(o: *mut LeanObj) {
 /// `o` must be a valid clean object pointer or tagged scalar.
 #[inline]
 pub unsafe fn inc_n(o: *mut LeanObj, n: u32) {
-    if !is_scalar(o) {
-        // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
-        (*o).header.ref_count.fetch_add(n, Ordering::Relaxed);
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        if !is_scalar(o) {
+            // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
+            (*o).header.ref_count.fetch_add(n, Ordering::Relaxed);
+        }
     }
 }
 
@@ -81,15 +91,18 @@ pub unsafe fn inc_n(o: *mut LeanObj, n: u32) {
 #[inline]
 #[must_use]
 pub unsafe fn is_unique(o: *const LeanObj) -> bool {
-    if is_scalar(o) {
-        return true;
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        if is_scalar(o) {
+            return true;
+        }
+        // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
+        // Relaxed suffices: is_unique is a hint for reuse optimization.
+        // False positive (shared when exclusive) → unnecessary alloc (safe).
+        // False negative cannot happen — the caller holds a reference.
+        // Matches Lean 4 lean_is_exclusive (lean.h:550).
+        (*o).header.ref_count.load(Ordering::Relaxed) == 0
     }
-    // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
-    // Relaxed suffices: is_unique is a hint for reuse optimization.
-    // False positive (shared when exclusive) → unnecessary alloc (safe).
-    // False negative cannot happen — the caller holds a reference.
-    // Matches Lean 4 lean_is_exclusive (lean.h:550).
-    (*o).header.ref_count.load(Ordering::Relaxed) == 0
 }
 
 /// Decrement reference count. Free the object (and recursively dec fields)
@@ -100,29 +113,32 @@ pub unsafe fn is_unique(o: *const LeanObj) -> bool {
 /// After calling dec, `o` must not be used unless the caller holds
 /// another reference.
 pub unsafe fn dec(o: *mut LeanObj) {
-    if is_scalar(o) {
-        return;
-    }
-    // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
-    // Release ordering ensures all prior writes are visible before the
-    // ref_count drop. The Acquire fence below synchronizes with this
-    // Release when the last reference is dropped (old == 0).
-    let old = (*o).header.ref_count.fetch_sub(1, Ordering::Release);
-    // `u32::MAX` is the only wrapped sentinel that can result from prior
-    // refcount underflow (0 -> MAX) without rejecting still-representable
-    // shared counts in the upper half of the `u32` range.
-    debug_assert_ne!(
-        old,
-        u32::MAX,
-        "dec: ref_count wrapped to u32::MAX before decrement — likely prior underflow"
-    );
-    if old == 0 {
-        // Was uniquely owned — synchronize with the Release store above
-        // to ensure all writes by other threads that previously held
-        // references are visible before we read the object's fields
-        // during recursive deallocation.
-        std::sync::atomic::fence(Ordering::Acquire);
-        dealloc_obj(o);
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        if is_scalar(o) {
+            return;
+        }
+        // SAFETY: is_scalar check ensures `o` is a valid heap pointer.
+        // Release ordering ensures all prior writes are visible before the
+        // ref_count drop. The Acquire fence below synchronizes with this
+        // Release when the last reference is dropped (old == 0).
+        let old = (*o).header.ref_count.fetch_sub(1, Ordering::Release);
+        // `u32::MAX` is the only wrapped sentinel that can result from prior
+        // refcount underflow (0 -> MAX) without rejecting still-representable
+        // shared counts in the upper half of the `u32` range.
+        debug_assert_ne!(
+            old,
+            u32::MAX,
+            "dec: ref_count wrapped to u32::MAX before decrement — likely prior underflow"
+        );
+        if old == 0 {
+            // Was uniquely owned — synchronize with the Release store above
+            // to ensure all writes by other threads that previously held
+            // references are visible before we read the object's fields
+            // during recursive deallocation.
+            std::sync::atomic::fence(Ordering::Acquire);
+            dealloc_obj(o);
+        }
     }
 }
 
@@ -134,57 +150,60 @@ pub unsafe fn dec(o: *mut LeanObj) {
 /// # Safety
 /// `o` must be a valid, uniquely owned clean heap object.
 unsafe fn dealloc_obj(o: *mut LeanObj) {
-    let kind = ObjKind::from_u8((*o).header.kind);
+    // SAFETY: The caller provides a valid Lean object pointer and owns the reference-count operation required by this function’s contract.
+    unsafe {
+        let kind = ObjKind::from_u8((*o).header.kind);
 
-    if matches!(kind, ObjKind::Ctor | ObjKind::Closure | ObjKind::Str) {
-        let num_children = obj_child_count(o);
-        let children = obj_child_ptrs(o);
-        for i in 0..num_children {
-            dec(*children.add(i));
+        if matches!(kind, ObjKind::Ctor | ObjKind::Closure | ObjKind::Str) {
+            let num_children = obj_child_count(o);
+            let children = obj_child_ptrs(o);
+            for i in 0..num_children {
+                dec(*children.add(i));
+            }
+            alloc::dealloc(o as *mut u8, object_layout(o));
+        } else if kind == ObjKind::Thunk {
+            // SAFETY: kind == Thunk guarantees `o` was allocated as ThunkObj.
+            // Dec children before dealloc. Part of #2250.
+            let thunk = o as *const ThunkObj;
+            if !(*thunk).closure.is_null() {
+                dec((*thunk).closure as *mut LeanObj);
+            }
+            if !(*thunk).value.is_null() {
+                dec((*thunk).value as *mut LeanObj);
+            }
+            let layout = Layout::new::<ThunkObj>();
+            alloc::dealloc(o as *mut u8, layout);
+        } else if kind == ObjKind::Task {
+            // SAFETY: kind == Task guarantees `o` was allocated as TaskObj.
+            let task = o as *const TaskObj;
+            if !(*task).value.is_null() {
+                dec((*task).value as *mut LeanObj);
+            }
+            let layout = Layout::new::<TaskObj>();
+            alloc::dealloc(o as *mut u8, layout);
+        } else if kind == ObjKind::External {
+            // SAFETY: kind == External guarantees `o` was allocated as ExternalObj.
+            // Calls foreach (dec Lean children) + finalize (free FFI resources)
+            // via shared helper. Part of #2250 self-audit.
+            external_cleanup(o as LeanObjPtr);
+            let layout = Layout::new::<ExternalObj>();
+            alloc::dealloc(o as *mut u8, layout);
+        } else if kind == ObjKind::Array {
+            // SAFETY: kind == Array guarantees `o` was allocated as ArrayObj +
+            // flexible trailing buffer. Reconstruct the layout from capacity.
+            let arr = o as *const ArrayObj;
+            let cap = (*arr).capacity;
+            let size = size_of::<ArrayObj>() + cap * size_of::<*mut LeanObj>();
+            let layout = Layout::from_size_align(size, align_of::<ArrayObj>())
+                .expect("invalid array dealloc layout");
+            // Dec all live elements before dealloc.
+            let data = (o as *const u8).add(size_of::<ArrayObj>()) as *const *mut LeanObj;
+            let sz = (*arr).size;
+            for i in 0..sz {
+                dec(*data.add(i));
+            }
+            alloc::dealloc(o as *mut u8, layout);
         }
-        alloc::dealloc(o as *mut u8, object_layout(o));
-    } else if kind == ObjKind::Thunk {
-        // SAFETY: kind == Thunk guarantees `o` was allocated as ThunkObj.
-        // Dec children before dealloc. Part of #2250.
-        let thunk = o as *const ThunkObj;
-        if !(*thunk).closure.is_null() {
-            dec((*thunk).closure as *mut LeanObj);
-        }
-        if !(*thunk).value.is_null() {
-            dec((*thunk).value as *mut LeanObj);
-        }
-        let layout = Layout::new::<ThunkObj>();
-        alloc::dealloc(o as *mut u8, layout);
-    } else if kind == ObjKind::Task {
-        // SAFETY: kind == Task guarantees `o` was allocated as TaskObj.
-        let task = o as *const TaskObj;
-        if !(*task).value.is_null() {
-            dec((*task).value as *mut LeanObj);
-        }
-        let layout = Layout::new::<TaskObj>();
-        alloc::dealloc(o as *mut u8, layout);
-    } else if kind == ObjKind::External {
-        // SAFETY: kind == External guarantees `o` was allocated as ExternalObj.
-        // Calls foreach (dec Lean children) + finalize (free FFI resources)
-        // via shared helper. Part of #2250 self-audit.
-        external_cleanup(o as LeanObjPtr);
-        let layout = Layout::new::<ExternalObj>();
-        alloc::dealloc(o as *mut u8, layout);
-    } else if kind == ObjKind::Array {
-        // SAFETY: kind == Array guarantees `o` was allocated as ArrayObj +
-        // flexible trailing buffer. Reconstruct the layout from capacity.
-        let arr = o as *const ArrayObj;
-        let cap = (*arr).capacity;
-        let size = size_of::<ArrayObj>() + cap * size_of::<*mut LeanObj>();
-        let layout = Layout::from_size_align(size, align_of::<ArrayObj>())
-            .expect("invalid array dealloc layout");
-        // Dec all live elements before dealloc.
-        let data = (o as *const u8).add(size_of::<ArrayObj>()) as *const *mut LeanObj;
-        let sz = (*arr).size;
-        for i in 0..sz {
-            dec(*data.add(i));
-        }
-        alloc::dealloc(o as *mut u8, layout);
     }
 }
 

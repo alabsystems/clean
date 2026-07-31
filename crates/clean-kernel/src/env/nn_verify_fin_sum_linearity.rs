@@ -28,6 +28,7 @@ impl Environment {
     ///            (Rat.sub (Fin.sum n f) (Fin.sum n g))`
     ///
     /// Subtraction distributes over finite sums (linearity).
+    #[cfg(test)]
     pub(super) fn register_fin_sum_sub(&mut self, c: &FinSumConsts) -> Result<(), EnvError> {
         let sum_sub_type = {
             let mut b = EnvDeclBuilder::new();

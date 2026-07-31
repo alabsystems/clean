@@ -91,6 +91,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_unit` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_unit(&self) -> bool {
         self.unit_init
     }
@@ -158,6 +159,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.plift_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_plift(&mut self) -> Result<(), EnvError> {
         if self.plift_init {
             return Ok(());
@@ -285,6 +287,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_plift` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_plift(&self) -> bool {
         self.plift_init
     }
@@ -632,6 +635,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_fin` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_fin(&self) -> bool {
         self.fin_init
     }
@@ -1748,6 +1752,79 @@ impl Environment {
                 })?;
             }
 
+            // ---- List.headI ----
+            // R169: `l.headI` — the head of a list, or the Inhabited default on
+            // the empty list. Lean core `List.headI [Inhabited α] : List α → α`
+            // (`| [] => default | a :: _ => a`) reduces identically to `List.head!`
+            // — both are `List.headD l default` — so this mirrors the `List.head!`
+            // block exactly, differing only in the registered name. Reducible,
+            // axiom-free. Without it, `l.headI` failed with UnknownIdent. Withheld
+            // in import mode like the R145-R152 accessors.
+            if !self.suppress_lossy_structure_stubs
+                && self.get_const(&Name::from_string("List.headI")).is_none()
+                && self
+                    .get_const(&Name::from_string("Inhabited.default"))
+                    .is_some()
+            {
+                let inhabited_const = Expr::const_(
+                    Name::from_string("Inhabited"),
+                    vec![Level::succ(level_u.clone())],
+                );
+                let inhabited_default = Expr::const_(
+                    Name::from_string("Inhabited.default"),
+                    vec![Level::succ(level_u.clone())],
+                );
+                let head_i_type = {
+                    let mut b = EnvDeclBuilder::new();
+                    let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                    let inhabited_alpha = Expr::app(inhabited_const.clone(), alpha.clone());
+                    let list_a = Expr::app(list_c.clone(), alpha.clone());
+                    let (inst_id, _inst) = b.fresh_local(inhabited_alpha.clone());
+                    let (l_id, _l) = b.fresh_local(list_a.clone());
+                    let e = alpha.clone();
+                    let e = b.mk_pi(l_id, BinderInfo::Default, list_a.clone(), e);
+                    let e = b.mk_pi(
+                        inst_id,
+                        BinderInfo::InstImplicit,
+                        inhabited_alpha.clone(),
+                        e,
+                    );
+                    let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                    b.finish(e)
+                };
+                let head_i_value = {
+                    let mut b = EnvDeclBuilder::new();
+                    let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                    let inhabited_alpha = Expr::app(inhabited_const.clone(), alpha.clone());
+                    let list_a = Expr::app(list_c.clone(), alpha.clone());
+                    let (inst_id, inst) = b.fresh_local(inhabited_alpha.clone());
+                    let (l_id, l) = b.fresh_local(list_a.clone());
+                    let list_headd =
+                        Expr::const_(Name::from_string("List.headD"), vec![level_u.clone()]);
+                    // Inhabited.default α inst
+                    let default_val =
+                        Expr::apps(inhabited_default.clone(), [alpha.clone(), inst.clone()]);
+                    // List.headD α l (Inhabited.default α inst)
+                    let body = Expr::apps(list_headd, [alpha.clone(), l, default_val]);
+                    let e = b.mk_lam(l_id, BinderInfo::Default, list_a.clone(), body);
+                    let e = b.mk_lam(
+                        inst_id,
+                        BinderInfo::InstImplicit,
+                        inhabited_alpha.clone(),
+                        e,
+                    );
+                    let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                    b.finish(e)
+                };
+                self.add_decl(Declaration::Definition {
+                    name: Name::from_string("List.headI"),
+                    level_params: vec![u.clone()],
+                    type_: head_i_type,
+                    value: head_i_value,
+                    is_reducible: true,
+                })?;
+            }
+
             // Array.getD {α : Type u} (as : Array α) (i : Nat) (fallback : α) : α
             //   := List.getD (Array.data as) i fallback
             let array_data_u = Expr::const_(Name::from_string("Array.data"), vec![level_u.clone()]);
@@ -2012,6 +2089,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_array` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_array(&self) -> bool {
         self.array_init
     }

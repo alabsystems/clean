@@ -22,10 +22,10 @@ fn test_convert_fvar_cert_matching_fvar_becomes_bvar() {
         type_: Box::new(ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
+    match &result {
         ProofCert::BVar { idx, expected_type } => {
-            assert_eq!(idx, 0);
-            assert_eq!(*expected_type, ty);
+            assert_eq!(*idx, 0);
+            assert_eq!(expected_type.as_ref(), &ty);
         }
         other => panic!("expected BVar cert, got {:?}", other),
     }
@@ -41,10 +41,10 @@ fn test_convert_fvar_cert_non_matching_fvar_preserved() {
         type_: Box::new(ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, target, 0);
-    match result {
+    match &result {
         ProofCert::FVar { id, type_ } => {
-            assert_eq!(id, other);
-            assert_eq!(*type_, ty);
+            assert_eq!(*id, other);
+            assert_eq!(type_.as_ref(), &ty);
         }
         other => panic!("expected FVar cert, got {:?}", other),
     }
@@ -70,8 +70,8 @@ fn test_convert_fvar_cert_bvar_shifted() {
     };
     // BVar(0) at depth 0 → shifted to BVar(1)
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
-        ProofCert::BVar { idx, .. } => assert_eq!(idx, 1),
+    match &result {
+        ProofCert::BVar { idx, .. } => assert_eq!(*idx, 1),
         other => panic!("expected BVar cert, got {:?}", other),
     }
 }
@@ -86,8 +86,8 @@ fn test_convert_fvar_cert_bvar_not_shifted_below_depth() {
     };
     // BVar(0) at depth 1 → not shifted (0 < 1)
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 1);
-    match result {
-        ProofCert::BVar { idx, .. } => assert_eq!(idx, 0),
+    match &result {
+        ProofCert::BVar { idx, .. } => assert_eq!(*idx, 0),
         other => panic!("expected BVar cert, got {:?}", other),
     }
 }
@@ -111,12 +111,12 @@ fn test_convert_fvar_cert_app_recurses() {
         result_type: Box::new(nat_ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
+    match &result {
         ProofCert::App {
             fn_cert, arg_cert, ..
         } => {
-            assert!(matches!(*fn_cert, ProofCert::BVar { idx: 0, .. }));
-            assert!(matches!(*arg_cert, ProofCert::Lit { .. }));
+            assert!(matches!(fn_cert.as_ref(), ProofCert::BVar { idx: 0, .. }));
+            assert!(matches!(arg_cert.as_ref(), ProofCert::Lit { .. }));
         }
         other => panic!("expected App cert, got {:?}", other),
     }
@@ -140,10 +140,10 @@ fn test_convert_fvar_cert_lam_depth_increment() {
         result_type: Box::new(nat_ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
+    match &result {
         ProofCert::Lam { body_cert, .. } => {
             assert!(
-                matches!(*body_cert, ProofCert::BVar { idx: 1, .. }),
+                matches!(body_cert.as_ref(), ProofCert::BVar { idx: 1, .. }),
                 "expected BVar(1), got {:?}",
                 body_cert
             );
@@ -171,10 +171,10 @@ fn test_convert_fvar_cert_pi_depth_increment() {
         body_level: Level::zero(),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
+    match &result {
         ProofCert::Pi { body_type_cert, .. } => {
             assert!(
-                matches!(*body_type_cert, ProofCert::BVar { idx: 1, .. }),
+                matches!(body_type_cert.as_ref(), ProofCert::BVar { idx: 1, .. }),
                 "Pi body at depth+1: expected BVar(1), got {:?}",
                 body_type_cert
             );
@@ -205,7 +205,7 @@ fn test_convert_fvar_cert_let_depth_increment() {
         result_type: Box::new(nat_ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
+    match &result {
         ProofCert::Let {
             body_cert,
             type_cert,
@@ -213,12 +213,12 @@ fn test_convert_fvar_cert_let_depth_increment() {
             ..
         } => {
             assert!(
-                matches!(*body_cert, ProofCert::BVar { idx: 1, .. }),
+                matches!(body_cert.as_ref(), ProofCert::BVar { idx: 1, .. }),
                 "Let body at depth+1: expected BVar(1), got {:?}",
                 body_cert
             );
-            assert!(matches!(*type_cert, ProofCert::Sort { .. }));
-            assert!(matches!(*value_cert, ProofCert::Lit { .. }));
+            assert!(matches!(type_cert.as_ref(), ProofCert::Sort { .. }));
+            assert!(matches!(value_cert.as_ref(), ProofCert::Lit { .. }));
         }
         other => panic!("expected Let cert, got {:?}", other),
     }
@@ -233,9 +233,9 @@ fn test_convert_fvar_cert_lit_type_abstracted() {
         type_: Box::new(fvar_type),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
-    match result {
+    match &result {
         ProofCert::Lit { lit, type_ } => {
-            assert_eq!(lit, Literal::nat(42));
+            assert_eq!(lit, &Literal::nat(42));
             assert_eq!(type_.kind, ExprKind::BVar(0), "fvar in type → BVar");
         }
         other => panic!("expected Lit cert, got {:?}", other),

@@ -30,6 +30,9 @@
 // refreshes from selecting 0.4.3 until the toolchain moves. See issue #3535.
 use constant_time_eq as _;
 
+#[path = "../lean_toolchain.rs"]
+mod lean_toolchain;
+
 pub mod bootstrap_verify;
 #[cfg(feature = "cli")]
 pub mod cli;
@@ -126,27 +129,56 @@ pub fn parse_header(bytes: &[u8]) -> OleanResult<OleanHeader> {
 pub use export::OleanExporter;
 pub use region::{is_ptr, is_scalar, unbox_scalar, CompactedRegion};
 
+/// Resolve the Lean standard library from this checkout's exact
+/// `lean-toolchain` pin.
+///
+/// The lookup is anchored at the crate manifest rather than the process
+/// current directory. It returns `None` instead of falling back to an
+/// arbitrary installed Lean ABI.
+#[must_use]
+pub fn pinned_lean_lib_path() -> Option<std::path::PathBuf> {
+    if let Some(compiled) = option_env!("CLEAN_OLEAN_PINNED_LEAN_LIB") {
+        let path = std::path::PathBuf::from(compiled);
+        if path.join("Init/Prelude.olean").is_file() {
+            return Some(path);
+        }
+    }
+    lean_toolchain::resolve_pinned_lean(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+        .ok()
+        .map(|resolved| resolved.lib_path)
+}
+
+/// Return the exact repository-pinned Lean standard library or an actionable
+/// error. Authority-bearing integration gates should use this API rather than
+/// silently accepting a different installed toolchain.
+///
+/// # Errors
+///
+/// Returns an error when the workspace pin is invalid or its exact elan
+/// toolchain is unavailable.
+pub fn require_pinned_lean_lib_path() -> Result<std::path::PathBuf, String> {
+    pinned_lean_lib_path().ok_or_else(|| {
+        let pin = option_env!("CLEAN_OLEAN_PINNED_LEAN_TOOLCHAIN")
+            .map(str::to_string)
+            .or_else(|| {
+                std::env::var(lean_toolchain::PINNED_LEAN_TOOLCHAIN_ENV)
+                    .ok()
+                    .filter(|value| !value.is_empty())
+            })
+            .unwrap_or_else(|| {
+                "the toolchain named by the workspace lean-toolchain file".to_string()
+            });
+        format!("repository-pinned Lean toolchain is unavailable: {pin}")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
 
     fn get_lean_lib_path() -> Option<PathBuf> {
-        // Look for lean installation
-        let home = std::env::var("HOME").ok()?;
-        let elan_path = PathBuf::from(home).join(".elan/toolchains");
-
-        if elan_path.exists() {
-            // Find first lean4 toolchain
-            for entry in std::fs::read_dir(&elan_path).ok()? {
-                let entry = entry.ok()?;
-                let name = entry.file_name();
-                if name.to_string_lossy().contains("lean4") {
-                    return Some(entry.path().join("lib/lean"));
-                }
-            }
-        }
-        None
+        pinned_lean_lib_path()
     }
 
     #[test]

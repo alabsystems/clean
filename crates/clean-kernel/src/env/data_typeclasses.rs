@@ -455,6 +455,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_inhabited` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_inhabited(&self) -> bool {
         self.inhabited_init
     }
@@ -1446,6 +1447,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_decidable_eq` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_decidable_eq(&self) -> bool {
         self.decidable_eq_init
     }

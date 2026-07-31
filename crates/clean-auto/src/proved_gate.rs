@@ -207,7 +207,7 @@ pub fn kernel_recheck_proved_grade(env: &Environment, proof: &BvBlastProof) -> G
     // SUB-QUADRATIC trie checker `checkRefutes3 (initialTrie cs) (listLen cs)
     // steps` over the proof data and type-checks the `checkRefutes3_sound`
     // application. The trie checker is the proven (closure ⊆ FOUNDATIONAL)
-    // mechanism designed for the live-gate proof scale (1522 clauses / 11228
+    // mechanism designed for the live-gate proof scale (1522 clauses / 17854
     // steps); the O(steps²) `checkRefutes_sound` path OOMs (>100 GB) on that
     // shape. A forged refutation reduces to `Bool.false` and is rejected HERE
     // by the kernel.
@@ -260,9 +260,9 @@ pub fn kernel_recheck_proved_grade(env: &Environment, proof: &BvBlastProof) -> G
 }
 
 /// Stack size for the kernel re-check thread. The trie checker's ι-reduction
-/// over the live-gate proof (11228 steps) is deep and overflows the 2 MiB
+/// over the live-gate proof (17854 steps) is deep and overflows the 2 MiB
 /// default stack; 256 MiB is the bound the always-on clean live re-check uses
-/// for the same 11228-step trie reduction (see `tests_bv_blast_reflection.rs`
+/// for the same 17854-step trie reduction (see `tests_bv_blast_reflection.rs`
 /// `live_kernel_reflect_and_assert_empty_domain`). The earlier 2 GiB value was
 /// masking the wrong-checker (O(steps²) `checkRefutes_sound`) blowup — which a
 /// bigger stack cannot fix — not a genuine depth requirement of the trie path.

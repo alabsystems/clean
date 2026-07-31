@@ -89,13 +89,19 @@
 //! `Int.sub_add_sub_cancel`. None is a `Declaration::Axiom`, so each registered
 //! theorem has an empty domain-axiom closure (`ProofQuality::Constructive`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across the proof terms.
+#[cfg(test)]
 struct AbsAddLeConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -132,7 +138,9 @@ struct AbsAddLeConsts {
     eq_subst: Expr,
 }
 
+#[cfg(test)]
 impl AbsAddLeConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -178,68 +186,87 @@ impl AbsAddLeConsts {
         }
     }
 
+    #[cfg(test)]
     fn of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_of_nat.clone(), n)
     }
+    #[cfg(test)]
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }
+    #[cfg(test)]
     fn nsucc(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }
+    #[cfg(test)]
     fn nadd(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.nat_add.clone(), [x, y])
     }
+    #[cfg(test)]
     fn nat_abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_nat_abs.clone(), x)
     }
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
+    #[cfg(test)]
     fn iadd(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_add.clone(), [x, y])
     }
+    #[cfg(test)]
     fn isub(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_sub.clone(), [x, y])
     }
+    #[cfg(test)]
     fn snn(&self, m: Expr, n: Expr) -> Expr {
         Expr::apps(self.int_sub_nat_nat.clone(), [m, n])
     }
+    #[cfg(test)]
     fn nle(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.nat_le.clone(), [x, y])
     }
+    #[cfg(test)]
     fn ile(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_le.clone(), [x, y])
     }
+    #[cfg(test)]
     fn nonneg_of(&self, x: Expr) -> Expr {
         Expr::app(self.nonneg.clone(), x)
     }
     /// `@Int.NonNeg.mk n : Int.NonNeg (Int.ofNat n)`.
+    #[cfg(test)]
     fn nonneg_mk(&self, n: Expr) -> Expr {
         Expr::app(self.nonneg_mk.clone(), n)
     }
     /// `@Nat.le.refl n : Nat.le n n`.
+    #[cfg(test)]
     fn nat_le_refl_app(&self, n: Expr) -> Expr {
         Expr::app(self.nat_le_refl.clone(), n)
     }
     /// `@Nat.le.step {x} {y} h : Nat.le x (succ y)`. The two index args are
     /// implicit; supply them positionally.
+    #[cfg(test)]
     fn nat_le_step(&self, x: Expr, y: Expr, h: Expr) -> Expr {
         Expr::apps(self.nat_le_step.clone(), [x, y, h])
     }
     /// `Nat.le_trans x y z hxy hyz : Nat.le x z`.
+    #[cfg(test)]
     fn nat_le_trans(&self, x: Expr, y: Expr, z: Expr, hxy: Expr, hyz: Expr) -> Expr {
         Expr::apps(self.nat_le_trans.clone(), [x, y, z, hxy, hyz])
     }
     /// `Nat.succ_le_succ x y h : Nat.le (succ x) (succ y)`.
+    #[cfg(test)]
     fn nat_succ_le_succ(&self, x: Expr, y: Expr, h: Expr) -> Expr {
         Expr::apps(self.nat_succ_le_succ.clone(), [x, y, h])
     }
     /// `@Eq.symm.{1} Int a b h : Eq Int b a`.
+    #[cfg(test)]
     fn symm_int(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.int_type.clone(), a, b, h])
     }
     /// `fun (x : Int) => Int.NonNeg x` (transport motive).
+    #[cfg(test)]
     fn nonneg_motive(&self, parent: &EnvDeclBuilder) -> Expr {
         let mut mb = EnvDeclBuilder::child_of(parent);
         let (x_id, x) = mb.fresh_local(self.int_type.clone());
@@ -254,6 +281,7 @@ impl AbsAddLeConsts {
 // ---------------------------------------------------------------------------
 
 /// `∀ m n : Nat, Nat.le m n → Int.le (Int.ofNat m) (Int.ofNat n)`.
+#[cfg(test)]
 fn build_le_ofnat_type(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat_type.clone());
@@ -268,6 +296,7 @@ fn build_le_ofnat_type(c: &AbsAddLeConsts) -> Expr {
 }
 
 /// Body — induction on `h : Nat.le m n` via `@Nat.le.rec` (parameter `m`).
+#[cfg(test)]
 fn build_le_ofnat_value(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat_type.clone());
@@ -408,6 +437,7 @@ fn build_le_ofnat_value(c: &AbsAddLeConsts) -> Expr {
 // ---------------------------------------------------------------------------
 
 /// `∀ m k : Nat, Nat.le (Int.natAbs (Int.subNatNat m k)) (Nat.add m k)`.
+#[cfg(test)]
 fn build_natabs_snn_type(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat_type.clone());
@@ -423,6 +453,7 @@ fn build_natabs_snn_type(c: &AbsAddLeConsts) -> Expr {
 
 /// Body — `subNatNat` recurses on its 2nd argument, so induct on `k` via
 /// `@Nat.rec`, motive `fun t => Nat.le (natAbs (subNatNat m t)) (m + t)`.
+#[cfg(test)]
 fn build_natabs_snn_value(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat_type.clone());
@@ -550,6 +581,7 @@ fn build_natabs_snn_value(c: &AbsAddLeConsts) -> Expr {
 ///     (fun p => negSucc (succ p))
 ///     e
 /// ```
+#[cfg(test)]
 fn snn_step(c: &AbsAddLeConsts, parent: &EnvDeclBuilder, e: Expr) -> Expr {
     let int_rec_1 = Expr::const_(
         Name::from_string("Int.rec"),
@@ -597,6 +629,7 @@ fn snn_step(c: &AbsAddLeConsts, parent: &EnvDeclBuilder, e: Expr) -> Expr {
 
 /// `∀ a b : Int,
 ///    Nat.le (Int.natAbs (Int.add a b)) (Nat.add (Int.natAbs a) (Int.natAbs b))`.
+#[cfg(test)]
 fn build_natabs_add_le_type(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -611,6 +644,7 @@ fn build_natabs_add_le_type(c: &AbsAddLeConsts) -> Expr {
 }
 
 /// Body — `@Int.rec` on `a` then on `b`, four constructor leaves.
+#[cfg(test)]
 fn build_natabs_add_le_value(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -784,6 +818,7 @@ fn build_natabs_add_le_value(c: &AbsAddLeConsts) -> Expr {
 }
 
 /// `Int.natAbs_subNatNat_le` constant.
+#[cfg(test)]
 fn natabs_snn_le_const() -> Expr {
     Expr::const_(Name::from_string("Int.natAbs_subNatNat_le"), vec![])
 }
@@ -794,6 +829,7 @@ fn natabs_snn_le_const() -> Expr {
 
 /// `∀ a b : Int,
 ///    Int.le (Int.abs (Int.add a b)) (Int.add (Int.abs a) (Int.abs b))`.
+#[cfg(test)]
 fn build_abs_add_le_type(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -813,6 +849,7 @@ fn build_abs_add_le_type(c: &AbsAddLeConsts) -> Expr {
 ///   Int.le_ofNat_of_le (natAbs (add a b)) (natAbs a + natAbs b)
 ///                      (Int.natAbs_add_le a b)
 /// ```
+#[cfg(test)]
 fn build_abs_add_le_value(c: &AbsAddLeConsts) -> Expr {
     let le_ofnat = Expr::const_(Name::from_string("Int.le_ofNat_of_le"), vec![]);
     let natabs_add_le = Expr::const_(Name::from_string("Int.natAbs_add_le"), vec![]);
@@ -837,6 +874,7 @@ fn build_abs_add_le_value(c: &AbsAddLeConsts) -> Expr {
 
 /// `∀ a b c : Int,
 ///    Int.le (Int.dist a c) (Int.add (Int.dist a b) (Int.dist b c))`.
+#[cfg(test)]
 fn build_dist_triangle_type(c: &AbsAddLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -861,6 +899,7 @@ fn build_dist_triangle_type(c: &AbsAddLeConsts) -> Expr {
 ///     (Int.sub_add_sub_cancel c b a)
 ///     (Int.abs_add_le (Int.sub a b) (Int.sub b c))
 /// ```
+#[cfg(test)]
 fn build_dist_triangle_value(c: &AbsAddLeConsts) -> Expr {
     let abs_add_le = Expr::const_(Name::from_string("Int.abs_add_le"), vec![]);
     let sub_add_sub_cancel = c.sub_add_sub_cancel.clone();
@@ -908,10 +947,12 @@ fn build_dist_triangle_value(c: &AbsAddLeConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Int.dist` as a reducible `Declaration::Definition`
     /// `λ a b => Int.abs (Int.sub a b)` if not already present (shared with the
     /// `Int.dist_comm` module).
+    #[cfg(test)]
     fn ensure_int_dist_def_local(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Int.dist");
         if self.get_const(&name).is_some() {
@@ -952,6 +993,7 @@ impl Environment {
     /// ENSURES: On success, `Int.abs_add_le` and `Int.dist_triangle` are both
     ///          `Declaration::Theorem`s with `proof_quality == Constructive`.
     /// ENSURES: Idempotent — each target is guarded by `get_const`.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_add_le(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

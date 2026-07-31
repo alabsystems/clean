@@ -90,10 +90,13 @@ struct CubedAmGmConsts {
     rat_lt_of_le_of_lt: Expr,
     cube_amgm_two_one: Expr,
     // Logic / Eq / Quot.
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
+    #[cfg(test)]
     eq_rat: Expr,
     eq_trans: Expr,
+    #[cfg(test)]
     eq_symm: Expr,
     eq_subst: Expr,
     congr_arg: Expr,
@@ -129,10 +132,13 @@ impl CubedAmGmConsts {
             rat_add_lt_add_left: k("Rat.add_lt_add_left"),
             rat_lt_of_le_of_lt: k("Rat.lt_of_le_of_lt"),
             cube_amgm_two_one: k("Rat.cube_amgm_two_one"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
             congr_arg: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
@@ -222,6 +228,7 @@ impl CubedAmGmConsts {
             [self.rat.clone(), a.clone(), b.clone(), cc.clone(), hab, hbc],
         )
     }
+    #[cfg(test)]
     fn eq_symm(&self, a: &Expr, b: &Expr, h: Expr) -> Expr {
         Expr::apps(
             self.eq_symm.clone(),
@@ -271,6 +278,7 @@ impl CubedAmGmConsts {
     fn nat_le(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.nat_le.clone(), [a.clone(), b.clone()])
     }
+    #[cfg(test)]
     fn nnreal(&self) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Quot"), vec![Level::succ(Level::zero())]),

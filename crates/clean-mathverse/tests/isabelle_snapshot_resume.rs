@@ -689,11 +689,15 @@ fn periodic_checkpoint_is_written_partial_and_tail_resumes_to_full() {
 /// genuine partial (2 of 3 flips) — which then resumes to all three.
 #[test]
 fn retry_periodic_checkpoint_is_partial_and_resumes_to_full() {
-    use clean_mathverse::hol::isabelle_pure_verify::snapshot;
-
     let _guard = ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    clean_mathverse::process_env::with_env_edits(retry_periodic_checkpoint_with_env);
+}
+
+fn retry_periodic_checkpoint_with_env(env: &mut clean_mathverse::process_env::EnvEditor) {
+    use clean_mathverse::hol::isabelle_pure_verify::snapshot;
+
     let dir = std::env::temp_dir().join(format!("isa_retry_ckpt_{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("mk tmpdir");
     let corpus = dir.join("chain.jsonl");
@@ -715,17 +719,17 @@ fn retry_periodic_checkpoint_is_partial_and_resumes_to_full() {
         "ISA_SNAPSHOT_SKIP_PREFIX_HASH",
         "ISA_SNAPSHOT_ALLOW_MISMATCH",
     ] {
-        std::env::remove_var(var);
+        env.remove(var);
     }
 
     // 1) OLD-arm snapshot: HOL.If withheld ⇒ power_int + both dependents reject
     //    (recorded in the v6 reject index); only K is KV.
-    std::env::set_var("ISA_WITHHOLD_DEF_CONSTS", HOL_IF_DEF_CONST);
-    std::env::set_var("ISA_SNAPSHOT_OUT", &old_snap);
+    env.set("ISA_WITHHOLD_DEF_CONSTS", HOL_IF_DEF_CONST);
+    env.set("ISA_SNAPSHOT_OUT", &old_snap);
     let mut w = ShardWriter::new();
     let old = import_proven_theorems_streaming(&corpus, &mut w).expect("old-arm replay");
-    std::env::remove_var("ISA_SNAPSHOT_OUT");
-    std::env::remove_var("ISA_WITHHOLD_DEF_CONSTS");
+    env.remove("ISA_SNAPSHOT_OUT");
+    env.remove("ISA_WITHHOLD_DEF_CONSTS");
     assert!(old_snap.exists(), "old-arm snapshot must be written");
     assert_eq!(old.kernel_verified, 1, "old arm: only K is KV");
     assert_eq!(
@@ -752,13 +756,13 @@ fn retry_periodic_checkpoint_is_partial_and_resumes_to_full() {
             "{}.ckpt",
             new_snap.to_str().expect("utf8 snapshot path")
         ));
-        std::env::set_var("ISA_SNAPSHOT_OUT", &new_snap);
-        std::env::set_var("ISA_SNAPSHOT_EVERY", "2");
+        env.set("ISA_SNAPSHOT_OUT", &new_snap);
+        env.set("ISA_SNAPSHOT_EVERY", "2");
         let mut w = ShardWriter::new();
         let run = import_proven_theorems_retry(&corpus, &old_snap, &mut w, retry_workers)
             .unwrap_or_else(|e| panic!("checkpointed retry (workers={retry_workers}) failed: {e}"));
-        std::env::remove_var("ISA_SNAPSHOT_OUT");
-        std::env::remove_var("ISA_SNAPSHOT_EVERY");
+        env.remove("ISA_SNAPSHOT_OUT");
+        env.remove("ISA_SNAPSHOT_EVERY");
 
         // (c) Checkpointing never changes the retry's own verdicts.
         assert_eq!(

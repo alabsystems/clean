@@ -59,6 +59,7 @@ enum PeelCase {
 
 /// Shared constants for the peel computation lemmas.
 struct PeelComputeConsts {
+    #[cfg(test)]
     l0: Level,
     l1: Level,
     nat: Expr,
@@ -93,6 +94,7 @@ impl PeelComputeConsts {
         let l0 = Level::zero();
         let l1 = Level::succ(l0.clone());
         Self {
+            #[cfg(test)]
             l0: l0.clone(),
             l1: l1.clone(),
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -217,6 +219,7 @@ impl Environment {
     }
 
     /// Whether the peel computation lemmas have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_peel_compute(&self) -> bool {
         self.boolean_analysis_peel_compute_init
     }

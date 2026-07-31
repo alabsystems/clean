@@ -43,7 +43,6 @@
 use super::decl_builder::EnvDeclBuilder;
 use super::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
-use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.

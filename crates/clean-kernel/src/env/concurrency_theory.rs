@@ -16,11 +16,16 @@
 //! This module provides foundations for verifying concurrent and
 //! distributed systems - essential for modern software verification.
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Concurrency Theory module
     ///
@@ -46,6 +51,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.concurrency_theory_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_concurrency_theory(&mut self) -> Result<(), EnvError> {
         if self.concurrency_theory_init {
             return Ok(());

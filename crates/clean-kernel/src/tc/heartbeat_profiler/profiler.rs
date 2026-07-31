@@ -250,6 +250,7 @@ impl HeartbeatProfiler {
     }
 
     /// Clear all accumulated counters and name context.
+    #[cfg(test)]
     pub(crate) fn reset(&self) {
         self.category_counts.borrow_mut().clear();
         self.name_counts.borrow_mut().clear();

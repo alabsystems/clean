@@ -66,6 +66,7 @@ pub(crate) struct TransConsts {
     exists_intro: Expr,
     exists_elim: Expr,
     // Eq.{1} over Rat.
+    #[cfg(test)]
     eq_rat: Expr,
     eq_trans: Expr,
     eq_subst: Expr,
@@ -105,6 +106,7 @@ impl TransConsts {
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![lvl1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1.clone()]),

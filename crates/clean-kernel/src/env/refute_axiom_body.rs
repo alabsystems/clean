@@ -52,7 +52,8 @@
 //! counterexample found") whenever a closed instance fails to reduce to a
 //! decidable comparison, so it never fabricates a refutation.
 
-use super::Environment;
+#[cfg(test)]
+use crate::env::Environment;
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::name::Name;
 use crate::tc::TypeChecker;
@@ -274,7 +275,7 @@ fn const_app(e: &Expr) -> Option<(String, Vec<Expr>)> {
 /// whnf per layer, no per-candidate `is_def_eq`), capped at a small bound so a
 /// runaway term is reported `None` rather than looping. Handles both the `Nat.lit`
 /// fast-path (a single whnf to the literal) and the `Nat.succ^k Nat.zero` tower.
-fn decode_nat(tc: &TypeChecker, e: &Expr) -> Option<u64> {
+fn decode_nat(tc: &TypeChecker<'_>, e: &Expr) -> Option<u64> {
     let mut cur = tc.whnf(e);
     let mut acc: u64 = 0;
     for _ in 0..=4096u64 {
@@ -299,7 +300,7 @@ fn decode_nat(tc: &TypeChecker, e: &Expr) -> Option<u64> {
 
 /// Decode a CLOSED `Int` (`Int.ofNat k` / `Int.negSucc k`) reduced to its head
 /// constructor, returning a signed value. `None` for a non-numeral Int.
-fn decode_int(tc: &TypeChecker, e: &Expr) -> Option<i128> {
+fn decode_int(tc: &TypeChecker<'_>, e: &Expr) -> Option<i128> {
     let w = tc.whnf(e);
     let ExprKind::App(h, arg) = w.kind() else {
         return None;
@@ -323,7 +324,7 @@ fn decode_int(tc: &TypeChecker, e: &Expr) -> Option<i128> {
 ///
 /// `Some(true)` iff `t ≥ 0`, `Some(false)` iff `t < 0`, `None` if `Rat.le` does
 /// not whnf to `Int.NonNeg <numeral>` — the gate never guesses.
-fn rat_le_truth(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> {
+fn rat_le_truth(tc: &TypeChecker<'_>, a: &Expr, b: &Expr) -> Option<bool> {
     let le = Expr::apps(
         Expr::const_(Name::from_string("Rat.le"), vec![]),
         [a.clone(), b.clone()],
@@ -362,7 +363,7 @@ const PIN_DENOMS: &[i128] = &[1, 2, 4, 8];
 /// normal form), so the pinned value is exactly the kernel's. `None` if no small
 /// dyadic candidate matches (the gate then stays silent on this instance — it
 /// never guesses a value).
-fn pin_rat_value(tc: &TypeChecker, e: &Expr) -> Option<PinnedRat> {
+fn pin_rat_value(tc: &TypeChecker<'_>, e: &Expr) -> Option<PinnedRat> {
     for &den in PIN_DENOMS {
         for num in -den..=den {
             let c = signed_rat(num, den as u64);
@@ -408,7 +409,7 @@ enum OrderProp {
 
 /// Normalize a CLOSED order prop to [`OrderProp`], or `None` if it is not a `≤`
 /// over `Rat`/`Nat` in either spelling.
-fn as_order_prop(tc: &TypeChecker, p: &Expr) -> Option<OrderProp> {
+fn as_order_prop(tc: &TypeChecker<'_>, p: &Expr) -> Option<OrderProp> {
     let (head, args) = const_app(p)?;
     match (head.as_str(), args.len()) {
         ("Rat.le", 2) => Some(OrderProp::Rat(args[0].clone(), args[1].clone())),
@@ -436,7 +437,7 @@ fn as_order_prop(tc: &TypeChecker, p: &Expr) -> Option<OrderProp> {
 /// `And p q` of two such (true iff both true — the v2 friedgut body's TWO-SIDED
 /// dyadic band guard `2^e·eps ≤ K ∧ K ≤ 2^(e+1)·eps`). `None` for anything else —
 /// the gate never guesses.
-fn prop_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn prop_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     // `And lhs rhs` — decide both conjuncts; the conjunction is `Some(true)` iff
     // both are `Some(true)`, `Some(false)` iff some conjunct is decided `false`,
     // and `None` (stay silent) if either conjunct is itself undecidable. The whnf
@@ -495,7 +496,7 @@ enum ConclusionVerdict {
 /// `eps` bound) comes from the kernel's own reduction; only the FINAL addition of
 /// the already-kernel-evaluated summands is done in Rust (the kernel's quotient
 /// `Rat.add` does not canonicalize a 4+-term sum without exploding).
-fn decode_exists_and(tc: &TypeChecker, n: u64, concl: &Expr) -> ConclusionVerdict {
+fn decode_exists_and(tc: &TypeChecker<'_>, n: u64, concl: &Expr) -> ConclusionVerdict {
     let w = tc.whnf(concl);
     let Some((head, args)) = const_app(&w) else {
         return ConclusionVerdict::Undecided;
@@ -548,7 +549,7 @@ fn decode_exists_and(tc: &TypeChecker, n: u64, concl: &Expr) -> ConclusionVerdic
 /// sum). Returns `Some(true)` iff `Σ_S value(mass_fn S) ≤ eps`, `Some(false)` iff
 /// `>`, `None` if the conjunct is not of the `subsetSum`-`≤`-Rat shape or some
 /// summand / `eps` does not kernel-pin.
-fn decide_mass_conjunct(tc: &TypeChecker, n: u64, mass_concl: &Expr) -> Option<bool> {
+fn decide_mass_conjunct(tc: &TypeChecker<'_>, n: u64, mass_concl: &Expr) -> Option<bool> {
     // `mass_concl = (subsetSum n mass_fn) ≤ eps`  (either `Rat.le` or `LE.le` spelling).
     let OrderProp::Rat(lhs_sum, eps_e) = as_order_prop(tc, mass_concl)? else {
         return None;
@@ -672,7 +673,7 @@ const SCALAR_BATTERY: &[((u64, u64), (u64, u64))] = &[
 /// Fourier arithmetic is re-implemented in Rust.
 #[must_use]
 pub fn refute_friedgut_body(
-    tc: &TypeChecker,
+    tc: &TypeChecker<'_>,
     body: &Expr,
     budget: RefuteBudget,
 ) -> Option<Counterexample> {
@@ -690,7 +691,7 @@ pub fn refute_friedgut_body(
 
 /// Try one `(n, f, K, eps)` instance over the dyadic-exponent range `0..=max_e`.
 fn refute_at_instance(
-    tc: &TypeChecker,
+    tc: &TypeChecker<'_>,
     body: &Expr,
     n: u64,
     w: &BoolFnWitness,
@@ -742,7 +743,7 @@ fn refute_at_instance(
 /// Instantiate a leading lambda chain `fun a b c … => body` at `args`, returning
 /// the substituted body. `None` if `expr` has fewer than `args.len()` leading
 /// lambdas (after whnf) — a shape mismatch, not a refutation.
-fn instantiate_chain(tc: &TypeChecker, expr: &Expr, args: &[Expr]) -> Option<Expr> {
+fn instantiate_chain(tc: &TypeChecker<'_>, expr: &Expr, args: &[Expr]) -> Option<Expr> {
     let mut cur = expr.clone();
     for a in args {
         let w = tc.whnf(&cur);
@@ -758,7 +759,7 @@ fn instantiate_chain(tc: &TypeChecker, expr: &Expr, args: &[Expr]) -> Option<Exp
 /// with a sentinel ONLY when the kernel decides its domain prop TRUE. Returns the
 /// body after the last discharge, or `None` if any hypothesis is not decided TRUE
 /// (a vacuous / undecidable branch — never a refutation).
-fn discharge_true_hyps(tc: &TypeChecker, expr: &Expr, count: usize) -> Option<Expr> {
+fn discharge_true_hyps(tc: &TypeChecker<'_>, expr: &Expr, count: usize) -> Option<Expr> {
     let mut cur = expr.clone();
     for _ in 0..count {
         let w = tc.whnf(&cur);
@@ -785,7 +786,7 @@ fn discharge_true_hyps(tc: &TypeChecker, expr: &Expr, count: usize) -> Option<Ex
 /// installed a FALSE body and must be rejected (fail-closed). A `None` result is
 /// NOT a proof of truth — only that no small-N counterexample was found.
 #[must_use]
-pub fn refute_or_ok(tc: &TypeChecker, body: &Expr) -> Option<Counterexample> {
+pub fn refute_or_ok(tc: &TypeChecker<'_>, body: &Expr) -> Option<Counterexample> {
     refute_friedgut_body(tc, body, RefuteBudget::default())
 }
 

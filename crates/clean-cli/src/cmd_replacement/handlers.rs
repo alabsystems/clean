@@ -54,7 +54,42 @@ pub(crate) fn run_status(args: ReplacementStatusArgs) -> Result<(), ReplacementE
     } else {
         render_human(&mut out, &report)?;
     }
-    Ok(())
+    out.flush()?;
+
+    // Fail closed. The report is rendered first either way, so the diagnosis is
+    // never lost -- but a gate that reports `launch_ready: false` and then exits
+    // 0 is not a gate: `clean replacement status && echo READY` would print
+    // READY. Use `--informational` for the exit-0 survey view.
+    if report.launch_ready {
+        Ok(())
+    } else {
+        Err(ReplacementError::LaunchNotReady {
+            message: launch_not_ready_message(&report),
+        })
+    }
+}
+
+/// Summarize why the launch gate is red, for the nonzero-exit error line.
+fn launch_not_ready_message(report: &ReplacementStatusReport) -> String {
+    let blocking_rows: Vec<&str> = report
+        .rows
+        .iter()
+        .filter(|row| row.effective_status != ReplacementStatus::Green)
+        .map(|row| row.id)
+        .collect();
+    let blocking_gates: Vec<&str> = report
+        .zero_trust_gates
+        .iter()
+        .filter(|gate| gate.required_for_launch && gate.status != ZeroTrustGateStatus::Passed)
+        .map(|gate| gate.id)
+        .collect();
+    format!(
+        "overall_status={:?}, zero_trust_gates_passed={}; blocking rows [{}]; blocking zero-trust gates [{}]",
+        report.overall_status,
+        report.zero_trust_gates_passed,
+        blocking_rows.join(", "),
+        blocking_gates.join(", "),
+    )
 }
 
 pub(crate) fn run_release_issue_hygiene(
@@ -110,6 +145,10 @@ pub(crate) fn run_validate_report(args: ValidateReportArgs) -> Result<(), Replac
 pub(crate) fn run_axiom_audit(args: AxiomAuditArgs) -> Result<(), ReplacementError> {
     let verification = AxiomAuditVerification::from_args(&args)?;
     if let Some(evidence_path) = &args.evidence {
+        // Only guard the WRITE: reading/printing the audit from any binary is
+        // harmless, but persisting launch evidence attributes a verdict to a
+        // commit, so it must come from a binary built at that commit.
+        validate_binary_matches_head()?;
         let artifact = verification.launch_evidence_artifact();
         write_json_path(evidence_path, &artifact)?;
     }
@@ -332,7 +371,22 @@ impl ReplacementStatusReport {
             .iter()
             .filter(|gate| gate.required_for_launch)
             .all(|gate| gate.status == ZeroTrustGateStatus::Passed);
-        let rows = replacement_rows();
+        // B003: a row backed by a zero-trust gate cannot outrank that gate here
+        // either, or the fail-closed view and the informational view disagree
+        // about the same rows. `zero_trust_gates` is already computed above, so
+        // this costs nothing and cannot recurse.
+        let mut rows = replacement_rows();
+        for row in &mut rows {
+            if let Some(gate_id) = zero_trust_gate_for_row(row.id) {
+                let gate_status = zero_trust_gates
+                    .iter()
+                    .find(|gate| gate.id == gate_id)
+                    .map(|gate| gate.status);
+                row.effective_status =
+                    reconcile_with_gate_verdict(row.effective_status, gate_status);
+            }
+        }
+        let rows = rows;
         let counts = count_by_status(&rows);
         let effective_counts = count_by_effective_status(&rows);
         let rust_first_tooling = rust_first_tooling_status();

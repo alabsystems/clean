@@ -53,6 +53,7 @@ use crate::name::Name;
 struct IntSubNatNatAddAddConsts {
     int_type: Expr,
     nat_type: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     nat_succ: Expr,
     nat_add: Expr,
@@ -70,6 +71,7 @@ impl IntSubNatNatAddAddConsts {
         Self {
             int_type: Expr::const_(Name::from_string("Int"), vec![]),
             nat_type: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             nat_add: Expr::const_(Name::from_string("Nat.add"), vec![]),

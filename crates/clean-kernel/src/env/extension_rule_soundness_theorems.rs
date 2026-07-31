@@ -17,12 +17,18 @@
 //! the theorem constant universally quantifies the data and hypothesis binders
 //! before concluding with the applied helper.
 
+#[cfg(test)]
 use super::extension_rule_soundness::ExtensionSoundnessConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Forward satisfiability preservation
@@ -35,6 +41,7 @@ impl Environment {
     /// Encodes the forward direction of extension-rule soundness: if `f` is
     /// satisfiable and `y` is fresh for `f`, then `extend_def f y g` is
     /// satisfiable.
+    #[cfg(test)]
     pub(super) fn register_extension_forward_helper(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -80,6 +87,7 @@ impl Environment {
     ///
     /// The theorem surface for forward extension soundness. Semantically, the
     /// helper application denotes `satisfiable (extend_def f y g)`.
+    #[cfg(test)]
     pub(super) fn register_extension_forward(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -144,6 +152,7 @@ impl Environment {
     ///
     /// Encodes the reverse direction of extension-rule soundness: any model of
     /// the extended formula projects to a model of the original formula.
+    #[cfg(test)]
     pub(super) fn register_extension_reverse_helper(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -192,6 +201,7 @@ impl Environment {
     ///
     /// The theorem surface for reverse extension soundness. Semantically, the
     /// helper application denotes `satisfiable f`.
+    #[cfg(test)]
     pub(super) fn register_extension_reverse(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -258,6 +268,7 @@ impl Environment {
     /// Encodes the combined iff statement that `f` is satisfiable exactly when
     /// `extend_def f y g` is satisfiable, with the biconditional understood as
     /// the conjunction of the two implication directions.
+    #[cfg(test)]
     pub(super) fn register_extension_equisatisfiable_helper(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -299,6 +310,7 @@ impl Environment {
     /// The theorem surface for the equisatisfiability claim. Semantically, the
     /// helper application denotes `(satisfiable f <-> satisfiable (extend_def f y g))`,
     /// encoded as a conjunction of implications.
+    #[cfg(test)]
     pub(super) fn register_extension_equisatisfiable(
         &mut self,
         c: &ExtensionSoundnessConsts,

@@ -22,7 +22,7 @@ pub(super) fn process_let_value(
     rest: Code,
     was_live: bool,
     live: &mut LiveVars,
-    ctx: &mut RCContext,
+    ctx: &mut RCContext<'_>,
 ) -> Code {
     match &decl.value {
         // Constructor: the allocation STORES the args (ownership moves into
@@ -171,7 +171,7 @@ fn add_inc_for_consumed(
     keep_owned: &HashSet<FVarId>,
     mut rest: Code,
     live: &LiveVars,
-    ctx: &mut RCContext,
+    ctx: &mut RCContext<'_>,
 ) -> Code {
     let mut transferred: HashSet<FVarId> = HashSet::new();
     for fvar in occurrences {
@@ -191,7 +191,7 @@ fn add_inc_for_consumed(
 }
 
 /// Wrap code with an inc operation.
-pub(super) fn wrap_inc(fvar: FVarId, rest: Code, ctx: &mut RCContext) -> Code {
+pub(super) fn wrap_inc(fvar: FVarId, rest: Code, ctx: &mut RCContext<'_>) -> Code {
     Code::Let(
         LetDecl::new(
             ctx.fresh_fvar(),
@@ -208,7 +208,7 @@ pub(super) fn wrap_inc(fvar: FVarId, rest: Code, ctx: &mut RCContext) -> Code {
 }
 
 /// Wrap code with a dec operation.
-pub(super) fn wrap_dec(fvar: FVarId, rest: Code, ctx: &mut RCContext) -> Code {
+pub(super) fn wrap_dec(fvar: FVarId, rest: Code, ctx: &mut RCContext<'_>) -> Code {
     Code::Let(
         LetDecl::new(
             ctx.fresh_fvar(),

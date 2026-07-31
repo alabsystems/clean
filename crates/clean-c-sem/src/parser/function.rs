@@ -12,7 +12,7 @@ use tree_sitter::Node;
 
 impl CParser {
     /// Parse a function definition node
-    pub(super) fn parse_function_node(&self, node: Node, source: &str) -> ParseResult<FuncDef> {
+    pub(super) fn parse_function_node(&self, node: Node<'_>, source: &str) -> ParseResult<FuncDef> {
         let mut return_type = CType::Void;
         let mut name = String::new();
         let mut params = Vec::new();
@@ -84,7 +84,7 @@ impl CParser {
     /// Parse function declarator (name and parameters)
     fn parse_func_declarator(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
     ) -> ParseResult<(String, Vec<FuncParam>, bool)> {
         let mut name = String::new();
@@ -116,7 +116,11 @@ impl CParser {
     }
 
     /// Parse parameter list
-    fn parse_param_list(&self, node: Node, source: &str) -> ParseResult<(Vec<FuncParam>, bool)> {
+    fn parse_param_list(
+        &self,
+        node: Node<'_>,
+        source: &str,
+    ) -> ParseResult<(Vec<FuncParam>, bool)> {
         let mut params = Vec::new();
         let mut variadic = false;
 
@@ -138,7 +142,7 @@ impl CParser {
     }
 
     /// Parse a parameter declaration
-    fn parse_param_decl(&self, node: Node, source: &str) -> ParseResult<FuncParam> {
+    fn parse_param_decl(&self, node: Node<'_>, source: &str) -> ParseResult<FuncParam> {
         let mut ty = CType::Void;
         let mut name = String::new();
 
@@ -201,7 +205,7 @@ impl CParser {
     /// Parse array declarator
     pub(super) fn parse_array_declarator(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
     ) -> ParseResult<Option<(String, usize)>> {
         let (name, dim) = self.parse_array_declarator_dim(node, source)?;
@@ -222,7 +226,7 @@ impl CParser {
     /// (C99 6.7.2.1p18).
     pub(super) fn parse_array_declarator_dim(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
     ) -> ParseResult<(String, Option<usize>)> {
         let mut name = String::new();

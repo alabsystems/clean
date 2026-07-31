@@ -48,6 +48,7 @@ pub(super) struct ZonotopeConsts {
     pub(super) inst_le_rat: Expr,
     pub(super) and: Expr,
     pub(super) eq: Expr,
+    #[cfg(test)]
     pub(super) exists: Expr,
     /// `Exists` applied at universe `Sort (u+1)` — used for witness types in
     /// `Type 0` (like `NNVec k`).
@@ -81,6 +82,7 @@ impl ZonotopeConsts {
             inst_le_rat: Expr::const_(Name::from_string("instLERat"), vec![]),
             and: Expr::const_(Name::from_string("And"), vec![]),
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+            #[cfg(test)]
             exists: Expr::const_(Name::from_string("Exists"), vec![Level::zero()]),
             exists_type0: Expr::const_(
                 Name::from_string("Exists"),

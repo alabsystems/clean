@@ -14,10 +14,18 @@
 //! * `zip xs ys` ≡ `List.zip xs ys` (truncates to the shorter list, as Isabelle).
 //! * `distinct xs` ≡ `xs.Nodup` (`List.Nodup`, no repeated element).
 //! * `list_all2 R xs ys` ≡ `List.Forall₂ R xs ys` (equal length + pointwise `R`).
+//! * `set xs` (`'a list ⇒ 'a set`, the set of the list's elements) ≡
+//!   `{x | x ∈ xs}` (`setOf (· ∈ xs)`, membership via `List.Mem` — extensionally
+//!   the same element set; no `DecidableEq` needed, unlike `xs.toFinset`).
+//! * `sorted_wrt R xs` ≡ `List.Pairwise R xs` — both hold iff `R` relates every
+//!   earlier element to every later one (`sorted_wrt R (x#ys) = ((∀y∈set ys. R x
+//!   y) ∧ sorted_wrt R ys)` matches `Pairwise R (x::l) ↔ (∀ a ∈ l, R x a) ∧
+//!   Pairwise R l`).
 
 use super::super::super::isabelle_pure::IsaTerm;
 use super::super::lean_type::is_list_typed;
-use super::super::types::{prec, LeanTerm, Unsupported};
+use super::super::term::{fresh_name, translate_term};
+use super::super::types::{prec, BinderKind, LeanTerm, Unsupported};
 use super::{binary_infix, method_object_last, prefix_app};
 
 /// Try to render `n` as a list constant.
@@ -34,11 +42,37 @@ pub(super) fn try_translate(n: &str, args: &[&IsaTerm]) -> Option<Result<LeanTer
         "List.distinct" => method_object_last(n, "Nodup", 1, args),
         "List.zip" => prefix_app("List.zip", 2, args),
         "List.list.list_all2" => prefix_app("List.Forall₂", 3, args),
+        // `set xs` → `{x | x ∈ xs}` (the set of the list's elements).
+        "List.list.set" => set_of_list(args),
+        // `sorted_wrt R xs` → `List.Pairwise R xs`.
+        "List.sorted_wrt" => prefix_app("List.Pairwise", 2, args),
         "List.list.Nil" => nil(args),
         "Nat.size_class.size" => size(args),
         _ => return None,
     };
     Some(out)
+}
+
+/// `set xs` → `{x | x ∈ xs}`: the set of the list's elements, as a comprehension
+/// over a fresh binder not free in `xs` (capture-safe via [`fresh_name`]).
+fn set_of_list(args: &[&IsaTerm]) -> Result<LeanTerm, Unsupported> {
+    let [xs] = args else {
+        return Err(Unsupported::PartialApplication("List.list.set".to_string()));
+    };
+    let var = fresh_name("x", xs);
+    let body = LeanTerm::infix(
+        "∈",
+        prec::REL,
+        LeanTerm::atom(var.clone()),
+        translate_term(xs)?,
+    );
+    Ok(LeanTerm::Binder {
+        kind: BinderKind::SetOf,
+        var,
+        ty: None,
+        dom: None,
+        body: Box::new(body),
+    })
 }
 
 /// The empty-list literal `[]`.
@@ -193,5 +227,32 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(render_top(&out), "List.Forall₂ R xs ys");
+    }
+
+    #[test]
+    fn set_of_list_is_comprehension() {
+        // `set xs` → `{x | x ∈ xs}`; the fresh binder avoids the list name.
+        let out = try_translate("List.list.set", &[&lv("xs")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(render_top(&out), "{x | x ∈ xs}");
+        // A list literally named `x` forces the binder to freshen to `x_1`.
+        let out = try_translate("List.list.set", &[&lv("x")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(render_top(&out), "{x_1 | x_1 ∈ x}");
+    }
+
+    #[test]
+    fn sorted_wrt_is_pairwise() {
+        let r = IsaTerm::Var {
+            n: "R".into(),
+            i: 0,
+            t: tv(),
+        };
+        let out = try_translate("List.sorted_wrt", &[&r, &lv("xs")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(render_top(&out), "List.Pairwise R xs");
     }
 }

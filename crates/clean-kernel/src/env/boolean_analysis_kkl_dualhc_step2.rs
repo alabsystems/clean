@@ -171,6 +171,7 @@ impl Step2Consts {
     fn le(&self, a: Expr, b: Expr) -> Expr {
         self.order.rat_le(a, b)
     }
+    #[cfg(test)]
     fn le0(&self, a: Expr) -> Expr {
         self.le(self.order.rat_zero.clone(), a)
     }

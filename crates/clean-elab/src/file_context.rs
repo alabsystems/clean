@@ -5,6 +5,7 @@
 //! File-level context for tracking accumulated `variable` declarations and
 //! opened namespaces across declarations within a single file.
 
+use crate::infer::user_term::UserTermElab;
 use crate::macro_integration::MacroCtx;
 use crate::namespace::NamespaceState;
 use crate::tactic::TacticRegistry;
@@ -49,6 +50,13 @@ pub struct FileContext {
     macro_ctx: MacroCtx,
     /// Tactic registrations from file-scope `elab ... : tactic` commands.
     tactic_registry: Option<TacticRegistry>,
+    /// Term-elaborator registrations from file-scope `elab ... : term` commands.
+    ///
+    /// `ElabCtx` is rebuilt per declaration, so without persisting these here a
+    /// `elab "myone" : term => ...` was registered and then dropped before the
+    /// next declaration could use it (`UnknownIdent("myone")`). Threaded exactly
+    /// like `tactic_registry`.
+    user_term_elabs: HashMap<String, UserTermElab>,
     /// File-level option overrides from `set_option` commands.
     /// Maps option name -> raw string value (None for boolean toggle).
     /// Section-scoped: `section ... end` restores prior option state.
@@ -342,6 +350,16 @@ impl FileContext {
     /// Replace the persisted tactic registry after declaration elaboration.
     pub(crate) fn replace_tactic_registry(&mut self, tactic_registry: TacticRegistry) {
         self.tactic_registry = Some(tactic_registry);
+    }
+
+    /// Take the persisted user term elaborators for the next declaration.
+    pub(crate) fn take_user_term_elabs(&mut self) -> HashMap<String, UserTermElab> {
+        std::mem::take(&mut self.user_term_elabs)
+    }
+
+    /// Replace the persisted user term elaborators after declaration elaboration.
+    pub(crate) fn replace_user_term_elabs(&mut self, elabs: HashMap<String, UserTermElab>) {
+        self.user_term_elabs = elabs;
     }
 
     /// Set a file-level option override.

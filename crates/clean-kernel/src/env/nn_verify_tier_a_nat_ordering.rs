@@ -172,6 +172,7 @@ impl Environment {
     }
 
     /// Check if Tier A Batch 3 Nat ordering primitives have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_nat_ordering(&self) -> bool {
         self.nn_verify_tier_a_nat_ordering_init
     }

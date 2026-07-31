@@ -103,6 +103,7 @@ pub(crate) struct DyMonoConsts {
     eq_symm1: Expr,
     eq_subst1: Expr,
     eq_trans1: Expr,
+    #[cfg(test)]
     congr_arg11: Expr,
 }
 
@@ -162,6 +163,7 @@ impl DyMonoConsts {
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
             eq_trans1: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
+            #[cfg(test)]
             congr_arg11: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1]),
         }
     }
@@ -555,7 +557,7 @@ fn build_eq_minor(
     eq_kx_ky: &Expr,
     kx_s: &Expr,
     b1: &Expr,
-    b2y: &Expr,
+    _b2y: &Expr,
     two_kx: &Expr,
     two_ky: &Expr,
     succ_two_kx: &Expr,
@@ -565,7 +567,7 @@ fn build_eq_minor(
     let mut rb = EnvDeclBuilder::child_of(parent);
     let (heq_id, heq) = rb.fresh_local(eq_kx_ky.clone());
 
-    let blex = c.digit_test(x, kx, n);
+    let _blex = c.digit_test(x, kx, n);
     let bley = c.digit_test(y, ky, n);
 
     // OUTER motive on bley:

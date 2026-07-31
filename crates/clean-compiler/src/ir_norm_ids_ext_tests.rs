@@ -11,7 +11,7 @@ use crate::ir::{
 };
 use crate::ir_norm_ids_ext::{
     alpha_equiv, canonical_form, content_hash, decl_names_equivalent, detect_collisions,
-    normalize_and_detect, normalize_decl_name, normalize_ids_ext, IdCollisions, NormStats,
+    normalize_and_detect, normalize_decl_name, normalize_ids_ext, IdCollisions,
 };
 use clean_kernel::Name;
 

@@ -200,6 +200,7 @@ impl MassSplitConsts {
         )
     }
     /// `@Eq Bool l r`.
+    #[cfg(test)]
     fn eq_bool(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.u1.clone()]),
@@ -234,6 +235,7 @@ impl MassSplitConsts {
             [self.rat.clone(), self.rat.clone(), x, y, g, h],
         )
     }
+    #[cfg(test)]
     fn bool_true(&self) -> Expr {
         Expr::const_(Name::from_string("Bool.true"), vec![])
     }

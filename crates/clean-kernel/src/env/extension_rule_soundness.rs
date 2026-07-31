@@ -18,13 +18,19 @@
 //! Type and operation definitions live here; theorem registrations belong in a
 //! separate `_theorems.rs` file.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all concrete extension soundness declarations.
+#[cfg(test)]
 pub(super) struct ExtensionSoundnessConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -38,8 +44,10 @@ pub(super) struct ExtensionSoundnessConsts {
     pub(super) var_set: Expr,
 }
 
+#[cfg(test)]
 impl ExtensionSoundnessConsts {
     /// Construct the shared constant expressions referenced by this module.
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -53,10 +61,12 @@ impl ExtensionSoundnessConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize the concrete extension rule soundness declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`, `init_craig_interpolation()`.
+    #[cfg(test)]
     pub(crate) fn init_extension_rule_soundness(&mut self) -> Result<(), EnvError> {
         if self.extension_rule_soundness_init {
             return Ok(());
@@ -106,6 +116,7 @@ impl Environment {
     /// - `Disj (a b : PropForm)` — disjunction
     /// - `Impl (a b : PropForm)` — implication
     /// - `Iff (a b : PropForm)` — biconditional
+    #[cfg(test)]
     fn register_extension_soundness_prop_form(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -223,6 +234,7 @@ impl Environment {
 
     /// `Assignment : Type` — a total variable assignment, intended
     /// concretely as a valuation `Nat -> Bool`.
+    #[cfg(test)]
     fn register_extension_soundness_assignment(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -247,6 +259,7 @@ impl Environment {
     /// `eval (f : PropForm) (a : Assignment) : Bool`
     ///
     /// Evaluates a propositional formula under a total Boolean assignment.
+    #[cfg(test)]
     fn register_extension_soundness_eval(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -285,6 +298,7 @@ impl Environment {
     ///
     /// States that there exists an assignment under which `f` evaluates to
     /// `true`.
+    #[cfg(test)]
     fn register_extension_soundness_satisfiable(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -311,6 +325,7 @@ impl Environment {
     ///
     /// Returns the set of variable indices occurring in a propositional
     /// formula.
+    #[cfg(test)]
     fn register_extension_soundness_vars_of(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -337,6 +352,7 @@ impl Environment {
     ///
     /// States that variable `y` does not occur in `f`, equivalently that
     /// `y` is not a member of `vars_of f`.
+    #[cfg(test)]
     fn register_extension_soundness_fresh_for(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -375,6 +391,7 @@ impl Environment {
     ///
     /// Forms the definitional extension `f ∧ (Var y ↔ g)` obtained by
     /// introducing the fresh variable `y` as an abbreviation for `g`.
+    #[cfg(test)]
     fn register_extension_soundness_extend_def(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -415,6 +432,7 @@ impl Environment {
     ///
     /// Overrides assignment `a` at variable `y` with value `v`, leaving all
     /// other variables unchanged.
+    #[cfg(test)]
     fn register_extension_soundness_assign_extend(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -455,6 +473,7 @@ impl Environment {
     ///
     /// Projects an assignment away from the distinguished extension variable
     /// `y`, forgetting the value assigned at that coordinate.
+    #[cfg(test)]
     fn register_extension_soundness_assign_restrict(
         &mut self,
         c: &ExtensionSoundnessConsts,

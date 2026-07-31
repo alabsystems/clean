@@ -18,6 +18,7 @@ use crate::env::{
     Declaration, EnvError, Environment, KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
 };
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
 use crate::name::Name;
 
@@ -173,6 +174,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn has_nat_succ_base(&self) -> bool {
         self.nat_succ_base_init
     }
@@ -435,11 +437,13 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn has_nat_succ_lt(&self) -> bool {
         self.nat_succ_lt_init
     }
 
     /// Initialize Nat.lt_trichotomy lemma
+    #[cfg(test)]
     pub(crate) fn init_nat_lt_trichotomy(&mut self) -> Result<(), EnvError> {
         if self.nat_lt_trichotomy_init {
             return Ok(());
@@ -494,6 +498,7 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_trichotomy(&self) -> bool {
         self.nat_lt_trichotomy_init
     }
@@ -637,6 +642,7 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_nat_decidable_ord(&self) -> bool {
         self.nat_decidable_ord_init
     }

@@ -176,6 +176,7 @@ impl NNMulConsts {
     fn rle(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_le.clone(), [a, b])
     }
+    #[cfg(test)]
     fn nonneg(&self, a: Expr) -> Expr {
         self.rle(self.rat_zero.clone(), a)
     }
@@ -312,6 +313,7 @@ impl NNMulConsts {
         };
         pb.finish_child(pb.mk_lam(bb_id, BinderInfo::Default, self.nnrat.clone(), inner))
     }
+    #[cfg(test)]
     fn bounded_exists(&self, parent: &EnvDeclBuilder, f: &Expr) -> Expr {
         Expr::apps(
             self.exists_c.clone(),

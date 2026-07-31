@@ -42,7 +42,9 @@
 
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::expr::ExprKind;
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
@@ -72,6 +74,7 @@ pub(crate) struct DistribConsts {
     rat_lt: Expr,
     nat_le: Expr,
     // logic.
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     and_c: Expr,
@@ -82,6 +85,7 @@ pub(crate) struct DistribConsts {
     eq_subst1: Expr,
     congr_arg: Expr,
     // Subtype machinery (for eq_of_val_eq).
+    #[cfg(test)]
     subtype_val: Expr,
     // Quot machinery at level 1.
     quot_mk: Expr,
@@ -117,6 +121,7 @@ impl DistribConsts {
             causeq_add: k("NNReal.CauSeq.add"),
             rat_lt: k("Rat.lt"),
             nat_le: k("Nat.le"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             and_c: k("And"),
@@ -128,6 +133,7 @@ impl DistribConsts {
                 Name::from_string("congrArg"),
                 vec![lvl1.clone(), lvl1.clone()],
             ),
+            #[cfg(test)]
             subtype_val: Expr::const_(Name::from_string("Subtype.val"), vec![lvl1.clone()]),
             quot_mk: Expr::const_(Name::from_string("Quot.mk"), vec![lvl1.clone()]),
             quot_sound: Expr::const_(Name::from_string("Quot.sound"), vec![lvl1.clone()]),
@@ -135,6 +141,7 @@ impl DistribConsts {
         }
     }
 
+    #[cfg(test)]
     fn prop(&self) -> Expr {
         Expr::from_kind(ExprKind::Sort(Level::zero()))
     }
@@ -552,7 +559,7 @@ fn build_recurse_q(
         let (qv_id, qv) = mb.fresh_local(c.rat.clone());
         let qqr_ty = nonneg(c, &qv);
         let (qqr_id, qqr) = mb.fresh_local(qqr_ty.clone());
-        let mk_q = Expr::apps(
+        let _mk_q = Expr::apps(
             subtype_mk.clone(),
             [c.rat.clone(), nn_pred.clone(), qv.clone(), qqr.clone()],
         );

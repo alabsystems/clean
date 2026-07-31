@@ -14,12 +14,18 @@
 //!
 //! Part of #3261.
 
+#[cfg(test)]
 use super::nn_verify_abstract_domain::AbstractDomainConsts;
+#[cfg(test)]
 use super::nn_verify_abstract_domain_ops_defs as ops_defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize IBP instance proofs for the abstract domain framework.
     ///
@@ -29,6 +35,7 @@ impl Environment {
     /// Depends on:
     /// - `init_nn_verify_abstract_domain()` for the framework
     /// - `init_nn_verify_ibp_composition()` for T80/T81/T82
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_abstract_domain_ibp(&mut self) -> Result<(), EnvError> {
         if self.nn_verify_abstract_domain_ibp_init {
             return Ok(());
@@ -53,6 +60,7 @@ impl Environment {
     /// `(d : Nat) -> abstract_domain d`
     ///
     /// This is the canonical embedding: IntervalBounds d is an abstract domain.
+    #[cfg(test)]
     fn register_ad_ibp_instance(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.ibp_instance"),
@@ -63,6 +71,7 @@ impl Environment {
 
     /// `NNVerify.AbstractDomain.ibp_sound_linear`:
     /// T80 witnesses sound_linear for the IBP domain.
+    #[cfg(test)]
     fn register_ad_ibp_sound_linear(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         let thm_type = ops_defs::build_ad_ibp_sound_linear_type(c);
         self.add_decl(Declaration::Axiom {
@@ -84,6 +93,7 @@ impl Environment {
 
     /// `NNVerify.AbstractDomain.ibp_sound_relu`:
     /// T81 witnesses sound_relu for the IBP domain.
+    #[cfg(test)]
     fn register_ad_ibp_sound_relu(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         let thm_type = ops_defs::build_ad_ibp_sound_relu_type(c);
         self.add_decl(Declaration::Axiom {
@@ -105,6 +115,7 @@ impl Environment {
 
     /// `NNVerify.AbstractDomain.ibp_sound_compose`:
     /// T82 witnesses sound_compose for the IBP domain.
+    #[cfg(test)]
     fn register_ad_ibp_sound_compose(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         let thm_type = ops_defs::build_ad_ibp_sound_compose_type(c);
         self.add_decl(Declaration::Axiom {

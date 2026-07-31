@@ -75,6 +75,7 @@ pub(crate) struct OfRatInjConsts {
     and_right: Expr,
     iff_mp: Expr,
     iff_mpr: Expr,
+    #[cfg(test)]
     not_c: Expr,
     classical_em: Expr,
     false_c: Expr,
@@ -122,6 +123,7 @@ impl OfRatInjConsts {
             and_right: k("And.right"),
             iff_mp: k("Iff.mp"),
             iff_mpr: k("Iff.mpr"),
+            #[cfg(test)]
             not_c: k("Not"),
             classical_em: k("Classical.em"),
             false_c: k("False"),

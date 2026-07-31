@@ -50,13 +50,19 @@
 //! - `algebra_int_sub_nat_nat_self_proof.rs` (#3604, `Nat.rec` + `Eq.trans`).
 //! - `algebra_nat_pow_one_proof.rs` (#3604, companion — via `Nat.one_mul`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[cfg(test)]
 struct NatOnePowConsts {
     nat_type: Expr,
     nat_zero: Expr,
@@ -69,7 +75,9 @@ struct NatOnePowConsts {
     eq_trans: Expr,
 }
 
+#[cfg(test)]
 impl NatOnePowConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -86,28 +94,34 @@ impl NatOnePowConsts {
         }
     }
 
+    #[cfg(test)]
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn one(&self) -> Expr {
         self.succ(self.nat_zero.clone())
     }
 
+    #[cfg(test)]
     fn pow(&self, m: Expr, n: Expr) -> Expr {
         Expr::app(Expr::app(self.nat_pow.clone(), m), n)
     }
 
+    #[cfg(test)]
     fn pow_one_base(&self, n: Expr) -> Expr {
         self.pow(self.one(), n)
     }
 
+    #[cfg(test)]
     fn eq_nat(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const.clone(), [self.nat_type.clone(), lhs, rhs])
     }
 }
 
 /// Build `∀ n : Nat, Eq Nat (Nat.pow (Nat.succ Nat.zero) n) (Nat.succ Nat.zero)`.
+#[cfg(test)]
 fn build_type(c: &NatOnePowConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat_type.clone());
@@ -117,6 +131,7 @@ fn build_type(c: &NatOnePowConsts) -> Expr {
 }
 
 /// Body: `λ (n : Nat) => @Nat.rec.{0} motive base step n`.
+#[cfg(test)]
 fn build_value(c: &NatOnePowConsts) -> Expr {
     let mut vb = EnvDeclBuilder::new();
     let (n_id, n) = vb.fresh_local(c.nat_type.clone());
@@ -165,6 +180,7 @@ fn build_value(c: &NatOnePowConsts) -> Expr {
     vb.finish(val_raw)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Nat.one_pow` as a kernel-checked `Declaration::Theorem`.
     ///
@@ -181,6 +197,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Nat.one_pow` is already registered with
     ///          any declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_nat_one_pow_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.one_pow");
         if self.get_const(&name).is_some() {

@@ -221,15 +221,15 @@ impl RecursorVal {
         let mut current = &self.type_;
         for _ in 0..args_before_major {
             match &current.kind {
-                crate::expr::ExprKind::Pi(_, _, body) => current = body,
+                ExprKind::Pi(_, _, body) => current = body,
                 _ => return None,
             }
         }
-        let crate::expr::ExprKind::Pi(_, major_domain, _) = &current.kind else {
+        let ExprKind::Pi(_, major_domain, _) = &current.kind else {
             return None;
         };
         match &major_domain.get_app_fn().kind {
-            crate::expr::ExprKind::Const(name, _) => Some(name),
+            ExprKind::Const(name, _) => Some(name),
             _ => None,
         }
     }

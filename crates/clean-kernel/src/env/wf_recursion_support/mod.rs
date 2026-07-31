@@ -21,13 +21,19 @@
 mod combinators;
 mod fix_support;
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Build a binary relation type `α → α → Prop` as a child of a builder.
+#[cfg(test)]
 pub(super) fn mk_rel_type(b: &EnvDeclBuilder, alpha: &Expr) -> Expr {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let mut s = EnvDeclBuilder::child_of(b);
@@ -39,6 +45,7 @@ pub(super) fn mk_rel_type(b: &EnvDeclBuilder, alpha: &Expr) -> Expr {
     s.finish_child(t)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize well-founded recursion support types.
     ///
@@ -47,6 +54,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.wf_recursion_support_init == true`
     /// ENSURES: Idempotent
+    #[cfg(test)]
     pub(crate) fn init_wf_recursion_support(&mut self) -> Result<(), EnvError> {
         if self.wf_recursion_support_init {
             return Ok(());
@@ -74,6 +82,7 @@ impl Environment {
     }
 
     /// Check if WF recursion support has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_wf_recursion_support(&self) -> bool {
         self.wf_recursion_support_init
     }
@@ -86,6 +95,7 @@ impl Environment {
     ///   wf  : WellFounded rel
     /// ```
     /// Define the `WellFoundedRelation` inductive type.
+    #[cfg(test)]
     fn init_well_founded_relation(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -137,6 +147,7 @@ impl Environment {
     }
 
     /// `WellFoundedRelation.rel` and `.wf` projection definitions.
+    #[cfg(test)]
     fn init_wfr_projections(&mut self, u: &Name) -> Result<(), EnvError> {
         let u_level = Level::param(u.clone());
         let sort_u = Expr::from_kind(ExprKind::Sort(u_level.clone()));
@@ -211,6 +222,7 @@ impl Environment {
     }
 
     /// Define the `SizeOf` inductive type.
+    #[cfg(test)]
     fn init_sizeof(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -260,6 +272,7 @@ impl Environment {
     }
 
     /// `SizeOf.sizeOf` projection and the exported `sizeOf` alias.
+    #[cfg(test)]
     fn init_sizeof_projection(
         &mut self,
         u: &Name,

@@ -182,14 +182,6 @@ fn fold_string_apply(op: &str, args: &[IRArg], known: &KnownExt, max_len: usize)
     }
 }
 
-/// Public string fold entry (operates on IRLiterals).
-/// Since `IRLiteral` has no String variant, returns `None`; real string
-/// folding is via `KnownVal::Str` in the full pass.
-pub(crate) fn fold_string_op(op: &str, args: &[IRLiteral]) -> Option<IRLiteral> {
-    let _ = (op, args);
-    None
-}
-
 /// Evaluate a comparison on two integer operands.
 pub(crate) fn fold_comparison(op: &str, lhs: &IRLiteral, rhs: &IRLiteral) -> Option<bool> {
     let (l, r) = extract_u64_pair(lhs, rhs)?;

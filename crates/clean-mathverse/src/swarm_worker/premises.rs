@@ -135,19 +135,47 @@ impl PremisePool {
     /// instantiation at use time (see [`PremisePool::select_hypotheses`]) makes
     /// the emitted clause and the closed-over const concrete; the kernel
     /// re-checks the fully-applied term, so pooling them stays sound.
+    ///
+    /// # Pool order is canonical, and that is load-bearing
+    ///
+    /// The pool is seeded in `Name` order, NOT in `Environment::constants()`
+    /// order. `constants()` iterates a `hashbrown::HashMap` whose hasher is
+    /// seeded per PROCESS, so that iteration is a different permutation on every
+    /// run. Pool order IS `PremiseId` order ([`PremiseDatabase::add`] assigns
+    /// ids by insertion), and `MePoSelector` breaks equal relevance scores by
+    /// `PremiseId` — so seeding straight off that iterator makes WHICH premises
+    /// a goal is handed, and therefore which proof the hammer finds, differ
+    /// between two runs of the same binary over the same environment.
+    ///
+    /// That is not a theoretical concern: it is why this module's tests failed
+    /// intermittently. `SwarmWorker.demo_refl_*` came back
+    /// `Missed(AxiomDependent(["Classical.em"]))` in roughly a quarter of runs
+    /// and `Proved(Tier1)` in the rest — the same goal, binary, and machine,
+    /// differing only in which equally-scored premises won the tie, hence
+    /// whether the engine closed the goal by reflexivity or through a
+    /// classically-justified premise. A verification result that depends on a
+    /// per-process hash seed is not reproducible, and reproducibility is the
+    /// point of this pipeline.
+    ///
+    /// [`Name`]'s `Ord` is Lean's canonical `cmp_core` order, so the pool — and
+    /// with it every downstream tie-break — is the same on every run and on
+    /// every host. Soundness is untouched either way (the kernel re-checks the
+    /// closed term regardless); what this buys is determinism.
     pub(crate) fn from_env(env: &Environment) -> Self {
-        let mut db = PremiseDatabase::new();
-        let mut premises = Vec::new();
-        for c in env.constants() {
-            if !matches!(c.kind, ConstantKind::Theorem | ConstantKind::Axiom) {
-                continue;
-            }
-            db.add(c.name.clone(), c.type_.clone());
-            premises.push(EnvPremise {
+        let mut premises: Vec<EnvPremise> = env
+            .constants()
+            .filter(|c| matches!(c.kind, ConstantKind::Theorem | ConstantKind::Axiom))
+            .map(|c| EnvPremise {
                 name: c.name.clone(),
                 level_params: c.level_params.clone(),
                 statement: c.type_.clone(),
-            });
+            })
+            .collect();
+        premises.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let mut db = PremiseDatabase::new();
+        for premise in &premises {
+            db.add(premise.name.clone(), premise.statement.clone());
         }
         Self {
             db: Arc::new(db),
@@ -290,6 +318,46 @@ pub(crate) fn closeover_premise_fvars(
 /// input (env, timeout, `local_ctx`, the C1 gate downstream), so a count
 /// difference between a premise-guided run and a bare run isolates the premise
 /// lift.
+///
+/// # The premise-free retry
+///
+/// In premise-guided mode this runs the search TWICE when the first pass did
+/// not return a proof that closed from nothing: once with the MePo-selected
+/// premises, then — if that pass either found nothing or found a proof that
+/// cites hypotheses — once with the premise channel empty, preferring the
+/// premise-free proof when it exists.
+///
+/// Premises are a search AID, and an aid can hurt. MePo admits any premise
+/// above [`MEPO_THRESHOLD`], and symbol overlap alone is a coarse relevance
+/// signal: the goal `@Eq.{1} Nat 0 0` scores every lemma that so much as
+/// mentions `Nat`, so the top-[`MAX_PREMISES_PER_GOAL`] set for it is
+/// `Nat.le_of_lt`, `Nat.le_trans`, `Nat.card`, … — none of which it needs. Two
+/// things then go wrong:
+///
+/// * The engine closes the goal THROUGH one of those clauses. The closed-over
+///   term therefore cites that constant, and the C1 gate reports the constant's
+///   transitive closure, not the goal's: a goal provable by `Eq.refl` comes back
+///   `AxiomDependent(["Classical.em"])` because some cited `Nat` lemma is proved
+///   classically. That is a miss for a goal that needs no axiom at all.
+/// * The extra clauses can also bury the goal — the saturation loop is
+///   quadratic in the processed set — so the guided pass returns nothing where
+///   the bare pass closes immediately.
+///
+/// The retry removes both failure modes, and it is why this module's swarm tests
+/// used to fail intermittently: which of several equally-scored premises won the
+/// MePo tie decided whether the same goal came back `Proved` or
+/// `AxiomDependent`.
+///
+/// A proof that used no hypotheses cannot be tainted by a premise, so that case
+/// short-circuits and costs nothing extra. The retry never weakens the verdict:
+/// both candidates go through the same C1 kernel recheck downstream, and a
+/// premise-free proof is strictly the smaller citation — it cannot turn a miss
+/// into a false graduation. The cost is that a goal nothing can prove now burns
+/// two walls instead of one; bounding a hopeless goal is exactly what the wall
+/// is for, and paying it twice is worth not discarding provable goals.
+///
+/// `ProverMode::Bare` (`with_premises == false`) is untouched: it runs the one
+/// premise-free pass and nothing else, so it remains the honest A/B control.
 pub(crate) fn prove_with_premises(
     env: &Arc<Environment>,
     pool: &PremisePool,
@@ -299,14 +367,50 @@ pub(crate) fn prove_with_premises(
     with_premises: bool,
     goal_levels: &[Level],
 ) -> Option<ProofResult> {
-    let (hypotheses, premise_db) = if with_premises {
-        (pool.select_hypotheses(goal, goal_levels), pool.db_arc())
-    } else {
+    let bare = || {
         // Bare control: empty hypotheses + an empty premise database. MePo is
         // skipped entirely, matching `auto_prove`'s premise-free reachability.
-        (Vec::new(), Arc::new(PremiseDatabase::new()))
+        run_job(
+            env,
+            goal,
+            Vec::new(),
+            Arc::new(PremiseDatabase::new()),
+            local_ctx,
+            timeout,
+        )
     };
+    if !with_premises {
+        return bare();
+    }
 
+    let guided = run_job(
+        env,
+        goal,
+        pool.select_hypotheses(goal, goal_levels),
+        pool.db_arc(),
+        local_ctx,
+        timeout,
+    );
+    // A proof with no proof context used no hypotheses at all — it closed from
+    // nothing, so no premise can have tainted it. Nothing to retry.
+    if guided
+        .as_ref()
+        .is_some_and(|proof| proof.proof_context().is_none())
+    {
+        return guided;
+    }
+    bare().or(guided)
+}
+
+/// Run one proof attempt on the timeout worker thread.
+fn run_job(
+    env: &Arc<Environment>,
+    goal: &Expr,
+    hypotheses: Vec<(Expr, Option<QuantifierOrigin>)>,
+    premise_db: Arc<PremiseDatabase>,
+    local_ctx: Option<&LocalContext>,
+    timeout: Duration,
+) -> Option<ProofResult> {
     let job = ProofJob {
         env: Arc::clone(env),
         goal: goal.clone(),

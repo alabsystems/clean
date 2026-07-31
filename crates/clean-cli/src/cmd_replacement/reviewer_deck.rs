@@ -80,7 +80,7 @@ impl ReviewerProofCommandDeck {
             launch_blocking_wrapper_dependent_row_ids,
             launch_blocking_fingerprint_sha256,
             fingerprint_algorithm:
-                "sha256(row_id || NUL || status || NUL || command || NUL || evidence_artifact || NUL || wrapper_free_bit || NUL || launch_blocking_until_green_bit || LF) for each command in emitted order",
+                "sha256(row_id || NUL || status || NUL || effective_status || NUL || command || NUL || evidence_artifact || NUL || wrapper_free_bit || NUL || launch_blocking_until_green_bit || LF) for each command in emitted order",
             fingerprint_sha256,
             launch_blocking_commands,
             commands,
@@ -93,7 +93,11 @@ impl ReviewerProofCommandDeck {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ReviewerProofCommand {
     pub(crate) row_id: &'static str,
+    /// The status literal declared in `replacement_rows()`.
     pub(crate) status: ReplacementStatus,
+    /// The evidence- and gate-derived status. Launch blocking is decided by
+    /// this, never by the declaration.
+    pub(crate) effective_status: ReplacementStatus,
     pub(crate) command: &'static str,
     pub(crate) evidence_artifact: &'static str,
     pub(crate) wrapper_free: bool,
@@ -105,12 +109,17 @@ impl ReviewerProofCommand {
         Self {
             row_id: row.id,
             status: row.status,
+            effective_status: row.effective_status,
             command: row.gate_command,
             evidence_artifact: row.evidence_artifact,
             wrapper_free: !is_wrapper_proof_surface(row.gate_command)
                 && !is_wrapper_proof_surface(row.evidence_artifact),
+            // Keyed on `effective_status`, matching the readiness accounting
+            // (readiness.rs:162-165). Keying on the declared literal let a row
+            // that declares Green while its evidence or zero-trust gate says
+            // otherwise drop out of the launch-blocking deck entirely.
             launch_blocking_until_green: row.required_for_launch
-                && row.status != ReplacementStatus::Green,
+                && row.effective_status != ReplacementStatus::Green,
         }
     }
 }
@@ -131,6 +140,8 @@ pub(crate) fn reviewer_proof_command_deck_fingerprint_filtered(
         hasher.update(command.row_id.as_bytes());
         hasher.update(b"\0");
         hasher.update(command.status.as_str().as_bytes());
+        hasher.update(b"\0");
+        hasher.update(command.effective_status.as_str().as_bytes());
         hasher.update(b"\0");
         hasher.update(command.command.as_bytes());
         hasher.update(b"\0");

@@ -150,7 +150,7 @@ fn const_one_step(c: &FinProdOneConsts) -> Expr {
     let (k_id, k) = b.fresh_local(c.nat.clone());
     // ih : Fin.prod k (const 1) = 1
     let ih_ty = {
-        let mut d = EnvDeclBuilder::child_of(&b);
+        let d = EnvDeclBuilder::child_of(&b);
         let lhs = c.prod(k.clone(), c.const_one_fn(&d, &k));
         d.finish_child(c.eq_rat(lhs, c.rat_one.clone()))
     };

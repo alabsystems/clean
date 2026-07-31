@@ -86,6 +86,7 @@ pub(crate) struct MulCloseConsts {
     add_zero: Expr,
     mul_comm: Expr,
     // Eq.{1} over Rat.
+    #[cfg(test)]
     eq_rat: Expr,
     eq_symm: Expr,
     eq_subst: Expr,
@@ -120,6 +121,7 @@ impl MulCloseConsts {
             add_comm: k("Rat.add_comm"),
             add_zero: k("Rat.add_zero"),
             mul_comm: k("Rat.mul_comm"),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1.clone()]),
@@ -208,6 +210,7 @@ impl MulCloseConsts {
     fn mul_comm(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.mul_comm.clone(), [a, b])
     }
+    #[cfg(test)]
     fn eq_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq_rat.clone(), [self.rat.clone(), a, b])
     }

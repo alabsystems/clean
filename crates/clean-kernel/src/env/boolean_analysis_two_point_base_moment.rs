@@ -68,6 +68,7 @@ struct MomentConsts {
     raw_equiv: Expr,
     quot_mk: Expr,
     quot_sound: Expr,
+    #[cfg(test)]
     eq1: Expr,
     eq_refl1: Expr,
     eq_trans1: Expr,
@@ -92,6 +93,7 @@ impl MomentConsts {
             raw_equiv: k("Rat.Raw.Equiv"),
             quot_mk: kl("Quot.mk"),
             quot_sound: kl("Quot.sound"),
+            #[cfg(test)]
             eq1: kl("Eq"),
             eq_refl1: kl("Eq.refl"),
             eq_trans1: kl("Eq.trans"),
@@ -122,9 +124,11 @@ impl MomentConsts {
     fn one_third(&self) -> Expr {
         self.frac(1, 3)
     }
+    #[cfg(test)]
     fn rmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn rat_eq(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }

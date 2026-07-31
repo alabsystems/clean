@@ -325,27 +325,24 @@ pub struct EnvEditor {
 }
 
 impl EnvEditor {
-    fn save_once(&mut self, key: &str) {
-        if self
-            .saved
-            .iter()
-            .all(|(candidate, _)| candidate != OsStr::new(key))
-        {
-            self.saved
-                .push((OsString::from(key), std::env::var_os(key)));
+    fn save_once(&mut self, key: &OsStr) {
+        if self.saved.iter().all(|(candidate, _)| candidate != key) {
+            self.saved.push((key.to_os_string(), std::env::var_os(key)));
         }
     }
 
     /// Set key=value until the editor is dropped or the key is edited again.
-    pub fn set(&mut self, key: &str, value: &str) {
+    pub fn set(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+        let key = key.as_ref();
         self.save_once(key);
-        set_var(OsStr::new(key), OsStr::new(value));
+        set_var(key, value.as_ref());
     }
 
     /// Remove key until the editor is dropped or the key is edited again.
-    pub fn remove(&mut self, key: &str) {
+    pub fn remove(&mut self, key: impl AsRef<OsStr>) {
+        let key = key.as_ref();
         self.save_once(key);
-        remove_var(OsStr::new(key));
+        remove_var(key);
     }
 }
 
@@ -538,5 +535,30 @@ mod tests {
         );
         first.join().expect("first thread");
         second.join().expect("second thread");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn env_editor_preserves_non_utf8_values_and_restores_ambient_state() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let key = key("NON_UTF8");
+        let ambient = std::env::var_os(&key);
+        let non_utf8 = OsString::from_vec(vec![b'p', b'a', b't', b'h', 0xff]);
+
+        with_env_edits(|env| {
+            env.set(&key, &non_utf8);
+            assert_eq!(
+                std::env::var_os(&key).as_ref(),
+                Some(&non_utf8),
+                "the editor must not coerce an OsStr value through UTF-8"
+            );
+        });
+
+        assert_eq!(
+            std::env::var_os(&key),
+            ambient,
+            "the editor must restore the exact ambient value"
+        );
     }
 }

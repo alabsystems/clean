@@ -13,13 +13,20 @@
 //! existential satisfiability, providing the constructive witness for the
 //! satisfiability-level theorems in `extension_rule_soundness_theorems.rs`.
 
+#[cfg(test)]
 use super::extension_rule_soundness::ExtensionSoundnessConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 4: Concrete model preservation
@@ -31,6 +38,7 @@ impl Environment {
     ///
     /// Encodes the forward model-preservation claim that extending `sigma`
     /// with `y = eval g sigma` satisfies `extend_def f y g`.
+    #[cfg(test)]
     pub(super) fn register_extension_preserves_model_helper(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -84,6 +92,7 @@ impl Environment {
     /// The theorem surface for the explicit assignment-extension argument.
     /// Semantically, the helper application denotes
     /// `eval (extend_def f y g) (assign_extend sigma y (eval g sigma)) = true`.
+    #[cfg(test)]
     pub(super) fn register_extension_preserves_model(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -154,6 +163,7 @@ impl Environment {
     ///
     /// Encodes the reverse model-projection claim that restricting a model of
     /// the extended formula yields a model of the original formula.
+    #[cfg(test)]
     pub(super) fn register_extension_projection_helper(
         &mut self,
         c: &ExtensionSoundnessConsts,
@@ -209,6 +219,7 @@ impl Environment {
     /// The theorem surface for the explicit assignment-projection argument.
     /// Semantically, the helper application denotes
     /// `eval f (assign_restrict sigma y) = true`.
+    #[cfg(test)]
     pub(super) fn register_extension_projection(
         &mut self,
         c: &ExtensionSoundnessConsts,

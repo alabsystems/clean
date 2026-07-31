@@ -40,7 +40,6 @@ use crate::recursor::RecursorData;
 use crate::recursor_mutual::build_block_recursors;
 use crate::staging_env::MutualStagingEnv;
 use crate::term::{Term, TermKind};
-use crate::validate::Env;
 
 /// A mutual inductive block: `N` inductives sharing `num_params` leading
 /// parameters and `num_level_params` universe params, defined together. The

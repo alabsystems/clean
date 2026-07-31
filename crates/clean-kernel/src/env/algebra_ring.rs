@@ -9,10 +9,16 @@
 //! - Int CommRing instance
 //! - Nat/Int IntegralDomain instances
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(test)]
+use crate::env::{Declaration, EnvError};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
@@ -25,6 +31,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_comm_semiring_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_comm_semiring_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_comm_semiring_inst_init {
             return Ok(());
@@ -142,6 +149,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_comm_semiring_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_comm_semiring_inst(&self) -> bool {
         self.nat_comm_semiring_inst_init
     }
@@ -155,6 +163,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_comm_semiring_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_comm_semiring_inst(&mut self) -> Result<(), EnvError> {
         if self.int_comm_semiring_inst_init {
             return Ok(());
@@ -274,6 +283,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_comm_semiring_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_comm_semiring_inst(&self) -> bool {
         self.int_comm_semiring_inst_init
     }
@@ -287,6 +297,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_comm_ring_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_comm_ring_inst(&mut self) -> Result<(), EnvError> {
         if self.int_comm_ring_inst_init {
             return Ok(());
@@ -393,6 +404,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_comm_ring_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_comm_ring_inst(&self) -> bool {
         self.int_comm_ring_inst_init
     }
@@ -407,6 +419,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_integral_domain_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_integral_domain_inst(&mut self) -> Result<(), EnvError> {
         if self.int_integral_domain_inst_init {
             return Ok(());
@@ -540,6 +553,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_integral_domain_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_integral_domain_inst(&self) -> bool {
         self.int_integral_domain_inst_init
     }
@@ -557,6 +571,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_integral_domain_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_integral_domain_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_integral_domain_inst_init {
             return Ok(());
@@ -590,6 +605,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_integral_domain_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_integral_domain_inst(&self) -> bool {
         self.nat_integral_domain_inst_init
     }

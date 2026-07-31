@@ -10,8 +10,6 @@
 //!
 //! Reference: Lean 4 `src/Lean/Meta/SynthInstance.lean`
 
-#![allow(dead_code)] // Reserved for instance-coherence integration.
-
 use crate::instances::{extract_class_app, InstanceTable};
 use clean_kernel::expr::Expr;
 use clean_kernel::name::Name;

@@ -236,6 +236,11 @@ pub(crate) fn register_method_defs(
 ) -> Vec<(String, Declaration, MethodDefInfo)> {
     let mut eqs = Vec::new();
     scan_method_dicts(&thm.proof, &mut eqs);
+    // zproof (v3.2) encoding: the `…_dict` unfolding is not a `Pure.symmetric`
+    // term-application spine (the scan above finds nothing there) but the `A`/`B`
+    // schematic operands of the enclosing `Pure.equal_elim` axiom. Recover those
+    // dictionary equations by diffing the two goal sides ([`scan_method_dicts_zproof`]).
+    scan_method_dicts_zproof(&thm.proof, &mut eqs);
     // Some overloaded methods (`Orderings.ord_class.max`/`min`/`Least`) export
     // their dictionary axiom as a STANDALONE named theorem whose `prop` IS the
     // dictionary equation `c_class.method ≡ c.method ops` and whose recorded proof

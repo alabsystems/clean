@@ -1,8 +1,6 @@
 // Copyright 2026 Andrew Yates
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
-#![allow(dead_code)]
-
 //! Batched SMT proof search infrastructure.
 //!
 //! Each goal in the batch gets its own fresh Ay solver instance so solver

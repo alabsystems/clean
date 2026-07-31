@@ -436,6 +436,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nn_verification_c009_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nn_verification_c009(&self) -> bool {
         self.nn_verification_c009_init
     }

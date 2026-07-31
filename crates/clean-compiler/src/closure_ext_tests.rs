@@ -7,10 +7,9 @@
 //! Part of #3084 - Runtime closure support.
 
 use super::closure_ext::*;
-use crate::closure::{CaptureMode, CapturedVar, ClosureBuilder, ClosureConvertResult, ClosureEnv};
+use crate::closure::{CaptureMode, ClosureBuilder, ClosureConvertResult, ClosureEnv};
 use crate::lcnf::{Arg, Code, FunDecl, LetDecl, LetValue, Param};
 use clean_kernel::{Expr, FVarId, Name};
-use std::collections::HashSet;
 
 fn fvar(n: u64) -> FVarId {
     FVarId::new(n)

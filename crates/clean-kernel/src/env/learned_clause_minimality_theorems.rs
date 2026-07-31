@@ -19,12 +19,18 @@
 //!            McMillan (2003), "Interpolation and SAT-based model checking";
 //!            Beame et al. (2004), "Understanding the power of clause learning".
 
+#[cfg(test)]
 use super::learned_clause_minimality::LearnedClauseConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Interpolation clause soundness
@@ -38,6 +44,7 @@ impl Environment {
     /// formula from which the conflict graph was derived. The interpolant
     /// extraction guarantees that the clause is not just consistent with
     /// the conflict but is actually entailed by the formula.
+    #[cfg(test)]
     pub(super) fn register_interpolation_clause_sound(
         &mut self,
         c: &LearnedClauseConsts,
@@ -94,6 +101,7 @@ impl Environment {
     /// This follows from the interpolation property: the interpolant uses
     /// only shared variables, so it cannot contain extra literals that a
     /// non-interpolation derivation might produce.
+    #[cfg(test)]
     pub(super) fn register_interpolation_clause_minimal(
         &mut self,
         c: &LearnedClauseConsts,
@@ -156,6 +164,7 @@ impl Environment {
     /// then c1 is at least as strong as c2 in the clause_strength ordering.
     /// This formalizes the intuition that shorter clauses (with fewer literals)
     /// are more restrictive and thus prune more of the search space.
+    #[cfg(test)]
     pub(super) fn register_subsumption_strength(
         &mut self,
         c: &LearnedClauseConsts,
@@ -220,6 +229,7 @@ impl Environment {
     /// This is a direct consequence of minimality: if a literal were redundant,
     /// the clause without it would be a shorter implied clause, contradicting
     /// interpolation_clause_minimal.
+    #[cfg(test)]
     pub(super) fn register_learned_clause_no_redundant_literals(
         &mut self,
         c: &LearnedClauseConsts,
@@ -276,6 +286,7 @@ impl Environment {
     /// This means CDCL with interpolation-based learning performs non-
     /// chronological backtracking optimally: it backtracks as far as possible
     /// without losing any information about the conflict.
+    #[cfg(test)]
     pub(super) fn register_backtrack_level_optimal(
         &mut self,
         c: &LearnedClauseConsts,

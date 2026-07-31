@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Core specification definitions for the clean type theory.
@@ -36,15 +36,30 @@
 //! - `implementation_soundness_env_preservation`: add_decl environment preservation (PART 21c)
 
 mod acc_wtype;
+mod beta_bd_embedding;
 mod beta_bd_sn;
 mod beta_reduces_preserves_typing;
+mod binder_join_components;
 mod bundles;
 mod closedness_bundle;
 mod complete_development;
 mod ctx_canonical_forms;
 mod def_eq_joinable;
 mod def_eq_lift_congr;
+mod defeq_capstone;
+mod defeq_complete_leaves;
+mod defeq_complete_steps;
+mod defeq_fuel;
+mod defeq_fuel_mono;
 mod defeq_iota_delta_gen;
+mod defeq_nf_agree;
+mod defeq_round_app;
+mod defeq_round_binder;
+mod defeq_round_leaf;
+mod defeq_round_rest;
+mod defeq_struct_intro;
+mod defeq_struct_sound;
+mod defeq_whnf_join;
 mod delta_step;
 mod delta_step_bridge;
 mod delta_subst;
@@ -53,6 +68,7 @@ mod derived_rules;
 mod env_closed_checkers;
 mod env_closed_checkers_depth;
 mod env_extensions;
+mod evalir;
 mod expr_model;
 mod expr_model_discrimination;
 mod expr_model_discrimination_lam_pi;
@@ -83,6 +99,13 @@ mod foundation_arith_positivity;
 mod foundation_arith_transport;
 mod foundation_arith_witnesses;
 mod foundation_types;
+mod fuel_adequacy;
+mod fuel_pairing;
+mod hnf_refutation;
+mod impl_infer;
+mod impl_infer_mode_gate;
+mod impl_infer_syntax;
+mod impl_infer_witnesses;
 mod implementation_soundness;
 mod implementation_soundness_admissibility;
 mod implementation_soundness_admissibility_wrappers;
@@ -102,17 +125,23 @@ mod implementation_soundness_whnf_decomposition;
 mod infer_terminates_proof;
 mod iota_closedness_bundle;
 mod iota_core;
+mod iota_immunity;
 mod iota_step;
 mod iota_step_bridge;
 mod iota_subst;
 mod iota_subst_const;
+mod join_tag;
 mod kernel_core_red_env;
 mod kexpr_beq;
 mod kexpr_beq_sound;
+mod kexpr_discr;
 mod micro_checker;
 mod micro_soundness;
 mod mutual_schema;
 mod natrec;
+mod nf_app_leg;
+mod nf_head;
+mod nf_shape;
 mod par_reduces_c;
 mod par_reduces_cd;
 mod par_reduces_cd_commute;
@@ -134,11 +163,20 @@ mod par_reduces_pd;
 mod par_reduction;
 mod pi_injectivity_confluence;
 mod pi_injectivity_def_eq;
+mod proj_rigidity;
+mod rbelow_descent;
 mod rec_env;
 mod rec_env_closed;
 mod reduction_witnesses;
+mod rigid_app_head;
+mod rigid_app_inv;
+mod rigid_preservation;
+mod rigid_tag;
 mod rose_schema;
 mod schema;
+mod spine_join_components;
+mod stuck_app_rigidity;
+mod stuck_immunity;
 mod subject_reduction_bundle;
 mod substitution_commutation;
 mod substitution_commutation_nested;
@@ -162,17 +200,17 @@ mod unique_normal_forms_c;
 mod univ_poly;
 mod wall_a_completeness;
 mod wall_a_headmatch;
+mod whnf_classify;
 mod whnf_lemmas;
 mod whnf_normalizes;
 mod whnf_progress;
 mod whnf_reduction;
+mod whnf_shape;
 mod whnf_terminates_well_typed;
 
 use super::error::SpecError;
 use super::Specification;
-#[cfg(any(test, feature = "test-utils"))]
 use clean_kernel::Environment;
-#[cfg(any(test, feature = "test-utils"))]
 use std::collections::HashMap;
 
 impl Specification {
@@ -218,8 +256,8 @@ impl Specification {
     /// Build the minimum spec needed for zonotope soundness (T01-T08 + T08A/B)
     /// promotion tests — foundation types (Nat, Eq, ...) plus the zonotope
     /// inductives and derived-lemma stubs. Used by `tests_zonotope_kernel` to
-    /// avoid the pre-existing `beta_subst_commutes` failure that currently
-    /// blocks `Specification::new()`. Part of #3363.
+    /// keep the promotion fixture dependency-scoped instead of constructing the
+    /// unrelated full specification. Part of #3363.
     #[cfg(any(test, feature = "test-utils"))]
     pub fn new_zonotope_test_spec() -> Result<Self, SpecError> {
         let mut spec = Self::new_empty();
@@ -237,9 +275,8 @@ impl Specification {
     ///
     /// This mirrors `new_zonotope_test_spec` — the CDCL S01-S06 inductives
     /// only index over `Nat` so the foundation bundle is the minimal prefix
-    /// required to elaborate the structural recursor proof terms. Using this
-    /// dedicated builder avoids the pre-existing `beta_subst_commutes`
-    /// elaboration failure that currently blocks `Specification::new()`.
+    /// required to elaborate the structural recursor proof terms. The dedicated
+    /// builder keeps this fixture dependency-scoped and fast.
     /// Part of #3364.
     ///
     /// # Errors
@@ -273,12 +310,47 @@ impl Specification {
         Ok(spec)
     }
 
+    /// Build exactly the live declarations consumed by red-environment
+    /// reflection, without loading the generated artifact being rebuilt.
+    ///
+    /// This deliberately follows the reflection allowlists rather than the
+    /// full bundle: it is the generator's bootstrap root and therefore must
+    /// never call `add_kernel_core_red_env`.
+    #[doc(hidden)]
+    pub fn new_red_env_reflection_seed() -> Result<Self, SpecError> {
+        let mut spec = Self::new_empty();
+        spec.add_foundation_types()?;
+        spec.add_foundation_arith_lemmas()?;
+        spec.add_foundation_arith_witnesses()?;
+        spec.add_foundation_arith_positivity()?;
+        spec.add_foundation_arith_transport()?;
+        spec.add_expr_model()?;
+        spec.add_rec_env()?;
+        spec.add_iota_step()?;
+        spec.add_delta_step_core()?;
+        spec.add_red_env()?;
+        spec.add_bvar_ceiling_definition()?;
+        spec.add_env_closed_checker_defs()?;
+        Ok(spec)
+    }
+
+    /// Parse, elaborate, and kernel-check every line of a freshly rendered
+    /// red-environment script against an artifact-independent seed.
+    ///
+    /// The generator calls this before replacing any committed artifact, so a
+    /// renderer/parser mismatch cannot publish an unloadable script.
+    #[doc(hidden)]
+    pub fn validate_red_env_reflection_script(script: &str) -> Result<(), SpecError> {
+        let mut spec = Self::new_red_env_reflection_seed()?;
+        spec.add_kernel_core_red_env_script(script)
+    }
+
     /// Construct an empty specification for subset builders.
-    #[cfg(any(test, feature = "test-utils"))]
     fn new_empty() -> Self {
         Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         }
     }
 }

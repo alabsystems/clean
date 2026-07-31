@@ -44,7 +44,7 @@
 //! Part of #3490 T3 / blocker #3503 landed.
 
 use super::decl_builder::EnvDeclBuilder;
-use super::nn_verify_ibp_linear::IbpLinearConsts;
+use super::nn_verify_farkas_order::RatOrderConsts;
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
@@ -53,7 +53,7 @@ use crate::name::Name;
 ///
 /// Produces `motive b` from `h_eq : Eq a b` and `h_motive_a : motive a`.
 fn eq_subst_rat(
-    c: &IbpLinearConsts,
+    c: &RatOrderConsts,
     motive: Expr,
     a: Expr,
     b: Expr,
@@ -83,7 +83,7 @@ fn eq_subst_rat(
 ///       h_dist h_prod_nn
 ///   @Rat.le_of_sub_nonneg (Rat.mul w a) (Rat.mul w b) h_wbwa_nn
 /// ```
-pub(super) fn build_mul_nonneg_le_left_proof(c: &IbpLinearConsts) -> Expr {
+pub(super) fn build_mul_nonneg_le_left_proof(c: &RatOrderConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (w_id, w) = b.fresh_local(c.rat.clone());
     let (a_id, a) = b.fresh_local(c.rat.clone());

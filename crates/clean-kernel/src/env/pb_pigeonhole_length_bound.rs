@@ -18,13 +18,19 @@
 //! We register the classic weaker theorem surface `O(n^3)` to match the
 //! conventional proof-complexity statement for PHP.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across PB pigeonhole length-bound declarations.
+#[cfg(test)]
 pub(super) struct PBPigeonholeLengthBoundConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -34,7 +40,9 @@ pub(super) struct PBPigeonholeLengthBoundConsts {
     pub(super) nat_mul: Expr,
 }
 
+#[cfg(test)]
 impl PBPigeonholeLengthBoundConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -47,10 +55,12 @@ impl PBPigeonholeLengthBoundConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize PB pigeonhole declarations for the concrete PHP length bound.
     ///
     /// Depends on: `init_pb_pigeonhole()`, `init_le()`.
+    #[cfg(test)]
     pub(crate) fn init_pb_pigeonhole_length_bound(&mut self) -> Result<(), EnvError> {
         if self.pb_pigeonhole_length_bound_init {
             return Ok(());
@@ -80,6 +90,7 @@ impl Environment {
     ///
     /// Opaque constructor for the concrete CP-style proof of PHP(n+1, n),
     /// represented in the requested PB proof surface.
+    #[cfg(test)]
     fn register_cp_proof_of_php(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -99,6 +110,7 @@ impl Environment {
     /// `cp_php_step_count (n : Nat) : Nat`
     ///
     /// Step count for the concrete PHP derivation: `2 * n`.
+    #[cfg(test)]
     fn register_cp_php_step_count(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -118,6 +130,7 @@ impl Environment {
     /// `cp_php_axiom_count (n : Nat) : Nat`
     ///
     /// Number of axioms in the concrete PHP derivation: `2 * n + 1`.
+    #[cfg(test)]
     fn register_cp_php_axiom_count(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -137,6 +150,7 @@ impl Environment {
     /// `cp_php_total_size (n : Nat) : Nat`
     ///
     /// Total size of the concrete PHP derivation: `4 * n + 1 = O(n)`.
+    #[cfg(test)]
     fn register_cp_php_total_size(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -161,6 +175,7 @@ impl Environment {
     ///
     /// Encodes:
     /// `LE.le (cp_php_total_size n) (Nat.mul n (Nat.mul n n))`.
+    #[cfg(test)]
     pub(super) fn register_cp_php_size_cubic_helper(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -181,6 +196,7 @@ impl Environment {
     ///
     /// The concrete PHP proof family has linear total size, hence in
     /// particular it satisfies the weaker classic cubic upper bound.
+    #[cfg(test)]
     pub(super) fn register_cp_php_size_cubic(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -214,6 +230,7 @@ impl Environment {
     /// Helper for cp_php_refutation_valid: `(n : Nat) -> Prop`
     ///
     /// Encodes: `CPProofOfPHP n` is a valid refutation of PHP(n+1, n).
+    #[cfg(test)]
     pub(super) fn register_cp_php_refutation_valid_helper(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,
@@ -236,6 +253,7 @@ impl Environment {
     /// This packages the validity of the concrete CP-style refutation of
     /// PHP(n+1, n) in the same helper-then-theorem pattern as the other
     /// PB pigeonhole theorem surfaces.
+    #[cfg(test)]
     pub(super) fn register_cp_php_refutation_valid(
         &mut self,
         c: &PBPigeonholeLengthBoundConsts,

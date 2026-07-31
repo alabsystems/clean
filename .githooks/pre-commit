@@ -5,8 +5,8 @@
 #   * Non-blocking: it formats in place and re-stages; it NEVER fails the commit,
 #     so it cannot wedge automated/scripted committers. Worst case it does
 #     nothing and CI's fmt job still catches drift.
-#   * Per-file `rustfmt` (not `cargo fmt`) so it needs neither a full workspace
-#     load nor the `../ay` sibling — fast, and works in detached/partial trees.
+#   * Per-file `rustfmt` (not `cargo fmt`) so it needs no full workspace
+#     dependency load — fast, and works in detached/partial trees.
 #   * Only touches files already staged (added/copied/modified), and only
 #     re-stages the ones rustfmt actually changed.
 #

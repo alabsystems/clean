@@ -204,6 +204,13 @@ pub(crate) struct KernelSoundnessLaneExpectation {
     pub(crate) id: &'static str,
     pub(crate) expected_tests: Option<u32>,
     pub(crate) expected_output: Option<&'static str>,
+    /// Argv the generator executes to decide this lane's verdict.
+    ///
+    /// `None` marks a lane that is executed in-process (the differential
+    /// preflight), so there is no subprocess to spawn. Every other lane MUST
+    /// carry a command: a lane with no way to be executed can only ever be
+    /// self-declared, which is precisely what this artifact must not do.
+    pub(crate) command: Option<&'static [&'static str]>,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -252,6 +252,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_uint8` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_uint8(&self) -> bool {
         self.uint8_init
     }
@@ -298,6 +299,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_uint16` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_uint16(&self) -> bool {
         self.uint16_init
     }
@@ -344,6 +346,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_uint32` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_uint32(&self) -> bool {
         self.uint32_init
     }
@@ -391,6 +394,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_uint64` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_uint64(&self) -> bool {
         self.uint64_init
     }
@@ -477,6 +481,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_float` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_float(&self) -> bool {
         self.float_init
     }
@@ -775,6 +780,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_usize` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_usize(&self) -> bool {
         self.usize_init
     }

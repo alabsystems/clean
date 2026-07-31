@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -47,20 +47,19 @@ impl Specification {
     ///
     /// # Errors
     /// Returns `SpecError` if any declaration fails to elaborate or kernel-check.
-    pub(super) fn add_kexpr_beq(&mut self) -> Result<(), SpecError> {
-        // =========================================================
-        // Universe-parameter equality (const-arm substrate).
-        // =========================================================
-
-        // level_eqb: boolean equality on universe levels.
-        // Level = zero | succ Level | max Level Level | imax Level Level | param Name.
-        // Outer recursion on the first level via Level.rec's IH (motive
-        // `Level -> Bool`); inner dispatch on the second via Level.rec. The
-        // binary constructors (max/imax) conjoin the two recursive-field IHs
-        // applied to the matching inner fields; `param` compares its Name via
-        // `name_eqb`. Same two-level-recursor shape as `name_eqb` (rec_env), no
-        // nested match, no self-recursion. Every Level.rec carries the 5th
-        // (param) minor after the promotion of Level to the real kernel algebra.
+    /// The two Level primitives `kexpr_beq` shares with `add_env_extensions`.
+    ///
+    /// Split out so `add_kexpr_beq_core` can be wired into the LIVE stage list
+    /// after `add_env_extensions` (stage 101) without double-registering them —
+    /// the kernel rejects the second `add_decl` for a name. `level_eqb` is
+    /// byte-identical to env_extensions' copy and `level_is_zero` is
+    /// alpha-equivalent (`Level.param n` vs `... p`), so the semantics agree and
+    /// this is a dedupe, not a conflict.
+    ///
+    /// The `#[cfg(test)]` spec builders in this file and in `kexpr_beq_sound.rs`
+    /// build a MINIMAL substrate without `env_extensions`, so they still need
+    /// these: they call `add_kexpr_beq`, which is prims + core.
+    pub(super) fn add_kexpr_beq_prims(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             concat!(
                 "def level_eqb (a : Level) (b : Level) : Bool := ",
@@ -109,17 +108,6 @@ impl Specification {
              Two-level Level.rec dispatch (no nested match); param compares Names via name_eqb. \
              Const-arm substrate for kexpr_beq. Confluence-independent.",
         )?;
-
-        // =========================================================
-        // THE REAL LEVEL ALGEBRA (increment #2 — mirrors
-        // clean-kernel/src/level/mod.rs). Smart constructors + classifiers,
-        // ADDED alongside the Nat machinery (nothing consumes them yet; the
-        // sort:Nat->Level flip is a later batch). All reducible defs.
-        // =========================================================
-
-        // level_is_zero (level/mod.rs:367-374): definitely zero. A `param` might
-        // be 0 at runtime so it is NOT definitely zero; `max` is zero iff both
-        // sides are; `imax(_, l2)` is zero iff l2 is (impredicative collapse).
         self.add_recursive_def(
             concat!(
                 "def level_is_zero (l : Level) : Bool := match l with ",
@@ -133,6 +121,42 @@ impl Specification {
              max both-sides, imax the second side (impredicative collapse). \
              Mirrors clean-kernel level/mod.rs:367-374. Confluence-independent.",
         )?;
+        Ok(())
+    }
+
+    /// Prims + core. Used by the `#[cfg(test)]` minimal-substrate builders; the
+    /// live bundle wires `add_kexpr_beq_core` alone (env_extensions already
+    /// supplies the prims).
+    pub(super) fn add_kexpr_beq(&mut self) -> Result<(), SpecError> {
+        self.add_kexpr_beq_prims()?;
+        self.add_kexpr_beq_core()
+    }
+
+    pub(super) fn add_kexpr_beq_core(&mut self) -> Result<(), SpecError> {
+        // =========================================================
+        // Universe-parameter equality (const-arm substrate).
+        // =========================================================
+
+        // level_eqb: boolean equality on universe levels.
+        // Level = zero | succ Level | max Level Level | imax Level Level | param Name.
+        // Outer recursion on the first level via Level.rec's IH (motive
+        // `Level -> Bool`); inner dispatch on the second via Level.rec. The
+        // binary constructors (max/imax) conjoin the two recursive-field IHs
+        // applied to the matching inner fields; `param` compares its Name via
+        // `name_eqb`. Same two-level-recursor shape as `name_eqb` (rec_env), no
+        // nested match, no self-recursion. Every Level.rec carries the 5th
+        // (param) minor after the promotion of Level to the real kernel algebra.
+
+        // =========================================================
+        // THE REAL LEVEL ALGEBRA (increment #2 — mirrors
+        // clean-kernel/src/level/mod.rs). Smart constructors + classifiers,
+        // ADDED alongside the Nat machinery (nothing consumes them yet; the
+        // sort:Nat->Level flip is a later batch). All reducible defs.
+        // =========================================================
+
+        // level_is_zero (level/mod.rs:367-374): definitely zero. A `param` might
+        // be 0 at runtime so it is NOT definitely zero; `max` is zero iff both
+        // sides are; `imax(_, l2)` is zero iff l2 is (impredicative collapse).
 
         // level_is_nonzero (level/mod.rs:382-389): definitely > 0. A `param`
         // might be 0 so it is NOT definitely nonzero; `max` is nonzero if either
@@ -476,7 +500,7 @@ impl Specification {
         // `nat_is_zero (Nat.add 0 0)`, and `Nat.add x 0` reduces to `x` (the
         // zero arm of Nat.add), so it is definitionally `nat_is_zero 0 = true`.
         // Thus a single Eq.cong delivers `Eq Bool (nat_eqb n n) true` up to defeq.
-        self.add_definition(SpecDefinition {
+        self.add_definition_if_absent(SpecDefinition {
             name: "nat_eqb_refl".to_string(),
             type_src: "forall (n : Nat), Eq Bool (nat_eqb n n) Bool.true".to_string(),
             value_src: Some(
@@ -515,7 +539,7 @@ impl Specification {
         //   `fun bp => Bool.and bp (nat_eqb k k)`) lands at
         //   `Bool.and Bool.true (nat_eqb k k)`, which reduces to `nat_eqb k k`
         //   (zero arm of Bool.and / Bool.rec on true), then nat_eqb_refl k closes it.
-        self.add_definition_structural(SpecDefinition {
+        self.add_definition_structural_if_absent(SpecDefinition {
             name: "name_eqb_refl".to_string(),
             type_src: "forall (m : Name), Eq Bool (name_eqb m m) Bool.true".to_string(),
             value_src: Some(

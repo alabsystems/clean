@@ -102,6 +102,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_ufm_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_ufm_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_ufm_inst_init {
             return Ok(());
@@ -271,6 +272,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_ufm_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_ufm_inst(&self) -> bool {
         self.nat_ufm_inst_init
     }

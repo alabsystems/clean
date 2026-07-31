@@ -381,6 +381,7 @@ impl Environment {
     /// small-N refutation gate (`refute_axiom_body`) can RECONSTRUCT the (FALSE)
     /// friedgut body in its validation test without re-implementing the budget.
     /// No proof, axiom, or cert-golden change.
+    #[cfg(test)]
     pub(crate) fn friedgut_budget(&self, e: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Nat.add"), vec![]),
@@ -417,6 +418,7 @@ impl Environment {
     /// value (see `register_friedgut_boolean_helper`); it survives ONLY as a builder
     /// the small-N refutation gate (`refute_axiom_body`) reconstructs to PROVE its
     /// validation test genuinely refutes the false body. No proof/axiom/cert change.
+    #[cfg(test)]
     pub(crate) fn friedgut_l2_faithful_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -557,6 +559,7 @@ impl Environment {
     ///
     /// VISIBILITY: `pub(crate)` so the small-N refutation gate
     /// (`refute_axiom_body`) can reconstruct the v2 body in its validation tests.
+    #[cfg(test)]
     pub(crate) fn friedgut_budget_v2(&self, e: &Expr) -> Expr {
         // 15 as a Nat literal `Nat.succ^15 Nat.zero`.
         let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
@@ -631,6 +634,7 @@ impl Environment {
     /// bound forbids `J = all-coords`, so a genuinely small junta is required.
     ///
     /// VISIBILITY: `pub(crate)` so the gate reconstructs it in its tests.
+    #[cfg(test)]
     pub(crate) fn friedgut_l2_faithful_body_v2(
         &self,
         parent: &EnvDeclBuilder,

@@ -13,8 +13,6 @@
 // The kernel intentionally compiles staged proof/checker APIs before every
 // downstream call path is wired; keep consumer builds quiet while narrower
 // hygiene lints remain active.
-#![allow(dead_code)]
-
 //! clean Kernel - Trusted Type Checker
 //!
 //! This crate implements the core type checking algorithm for clean.
@@ -50,6 +48,7 @@
 /// Pure metadata — never read by the type checker.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(test)]
 pub(crate) mod beta_congruence;
 pub mod bitvec_coercion;
 pub mod bitvec_compute;
@@ -105,6 +104,7 @@ pub mod verify_api;
 
 pub use env::proof_search::{search_proof, ProofSearchResult};
 pub use env::{
+    canonical_ambient_axiom_kind,
     is_foundational_axiom,
     is_trust_marker,
     // Metamath two-pass PASS-1 axiom-only flag (verification-skip, see decl_add)
@@ -120,6 +120,7 @@ pub use env::{
     AttrExtEntry,
     AttrExtState,
     AttrRegistration,
+    CanonicalAmbientAxiomKind,
     CertificationAudit,
     CertificationIssue,
     ConstantInfo,

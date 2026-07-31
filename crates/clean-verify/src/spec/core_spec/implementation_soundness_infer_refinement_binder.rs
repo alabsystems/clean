@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Binder-case infer_type refinement: cert-backed witness surface for lam/pi (#2869).

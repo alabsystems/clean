@@ -473,7 +473,7 @@ impl std::fmt::Display for Level {
         match &self.0 {
             Repr::Zero => write!(f, "0"),
             Repr::Param(i) => write!(f, "u{i}"),
-            Repr::Succ(l) => {
+            Repr::Succ(_) => {
                 let (base, off) = self.get_offset();
                 if matches!(base.0, Repr::Zero) {
                     write!(f, "{off}")

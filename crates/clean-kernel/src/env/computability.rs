@@ -13,11 +13,16 @@
 //! - Kolmogorov complexity
 //! - Lambda calculus and combinatory logic
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Computability module
     ///
@@ -31,6 +36,7 @@ impl Environment {
     /// ENSURES: On success, `self.computability_init == true`
     /// ENSURES: On success, required dependencies (`eq`, `nat`, `list`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_computability(&mut self) -> Result<(), EnvError> {
         if self.computability_init {
             return Ok(());
@@ -246,6 +252,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_computability` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_computability(&self) -> bool {
         self.computability_init
     }

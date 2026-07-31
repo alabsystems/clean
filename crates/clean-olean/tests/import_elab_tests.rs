@@ -12,10 +12,10 @@ use clean_kernel::env::Environment;
 use clean_kernel::expr::{Expr, ExprKind};
 use clean_kernel::name::Name;
 use clean_kernel::tc::TypeChecker;
-use clean_olean::{default_search_paths, load_module_with_deps};
+use clean_olean::{load_module_with_deps, pinned_lean_lib_path};
 
 /// Assert that inferring the type of `expr` yields a Sort — i.e., `expr` is a well-formed type.
-fn assert_type_is_sort(tc: &TypeChecker, expr: &Expr, label: &str) {
+fn assert_type_is_sort(tc: &TypeChecker<'_>, expr: &Expr, label: &str) {
     let inferred = tc
         .infer_type(expr)
         .unwrap_or_else(|e| panic!("{label} type should be well-formed: {e:?}"));
@@ -26,9 +26,7 @@ fn assert_type_is_sort(tc: &TypeChecker, expr: &Expr, label: &str) {
 }
 
 fn get_lean_lib_path() -> Option<std::path::PathBuf> {
-    default_search_paths()
-        .into_iter()
-        .find(|p| p.join("Init/Prelude.olean").exists())
+    pinned_lean_lib_path()
 }
 
 /// Gate this file's integration tests behind `CLEAN_OLEAN_INTEGRATION=1`.

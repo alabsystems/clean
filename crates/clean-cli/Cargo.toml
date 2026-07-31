@@ -77,6 +77,9 @@ walkdir.workspace = true
 rustyline = "18"
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Factory status validates committed Cargo manifest/lock dependency evidence.
+# Also used by the `clean vendor` config-validity unit test.
+toml.workspace = true
 blake3.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
@@ -87,11 +90,9 @@ ark-std = { workspace = true }
 # behind clean-elab's `mathverse-library` feature, plus the clean-mathverse
 # loader/search/release APIs. clean-cli is the only crate that can depend on
 # BOTH clean-mathverse and clean-elab without a dependency cycle (clean-mathverse
-# cannot depend on clean-elab). The gated test in
-# tests/mathverse_real_corpus_e2e.rs is #[ignore] + MATHVERSE_E2E_CORPUS=1 opt-in,
-# so default test runs never need the network/corpus.
+# cannot depend on clean-elab). The explicit qualification utility in
+# examples/mathverse_real_corpus_e2e.rs requires MATHVERSE_E2E_CORPUS=1 and
+# fails if the real corpus cannot be exercised; default tests never run it.
 clean-elab = { workspace = true, features = ["mathverse-library"] }
 clean-mathverse.workspace = true
 clean-kernel = { workspace = true, features = ["test-utils"] }
-# `clean vendor` config-validity unit test parses the embedded source-replacement TOML.
-toml.workspace = true

@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::expr::ParsedExpr;
+use crate::import::{load_module_direct_with_cache, parse_load_module, ExprInternCache};
 use crate::level::ParsedLevel;
 use crate::load_parsed_module;
 use crate::module::{DefinitionSafety, ReducibilityHintsData};
@@ -411,6 +412,35 @@ fn test_definition_hints_roundtrip_regular_height() {
 }
 
 #[test]
+fn test_reducibility_hints_writer_uses_real_lean_abi() {
+    let mut exporter = OleanExporter::new();
+
+    assert_eq!(
+        exporter.write_reducibility_hints(&Reducibility::Opaque),
+        OleanExporter::scalar_ptr(0),
+        "opaque is Lean's nullary scalar constructor"
+    );
+    assert_eq!(
+        exporter.write_reducibility_hints(&Reducibility::Reducible),
+        OleanExporter::scalar_ptr(1),
+        "abbrev is Lean's nullary scalar constructor"
+    );
+
+    let ptr = exporter.write_reducibility_hints(&Reducibility::Regular(17));
+    let region = CompactedRegion::new(&exporter.data, exporter.base_addr);
+    let offset = region.ptr_to_offset(ptr).expect("regular pointer");
+    let header = region.read_header_at(offset).expect("regular header");
+    assert_eq!(header.tag, 2);
+    assert_eq!(header.other, 0);
+    assert_eq!(header.cs_sz, 16);
+    assert_eq!(
+        region.read_u64_at(offset + 8).expect("unboxed UInt32"),
+        17,
+        "regular height is raw UInt32, not a tagged scalar pointer"
+    );
+}
+
+#[test]
 fn test_definition_hints_roundtrip_abbrev() {
     let (parsed_hints, imported) =
         export_parse_import_single_definition("Test.abbrev", Reducibility::Reducible, true);
@@ -542,9 +572,84 @@ fn test_definition_safety_roundtrip_safe_explicit() {
 }
 
 #[test]
-fn test_definition_safety_unknown_tag_degrades_to_none() {
+fn test_environment_export_preserves_unsafe_and_partial_in_both_import_paths() {
+    let unsafe_name = Name::from_string("Test.EnvUnsafe");
+    let partial_name = Name::from_string("Test.EnvPartial");
+    let safe_name = Name::from_string("Test.EnvSafe");
+    let mut source = Environment::new();
+    for name in [&unsafe_name, &partial_name, &safe_name] {
+        source.extend_constants_unchecked(std::iter::once(ConstantInfo {
+            name: name.clone(),
+            level_params: vec![],
+            type_: Expr::type_(),
+            value: Some(Expr::prop()),
+            is_reducible: false,
+            reducibility: Reducibility::Regular(1),
+            kind: clean_kernel::env::ConstantKind::Definition,
+        }));
+    }
+    source.mark_unsafe(unsafe_name.clone());
+    source.mark_partial(partial_name.clone());
+
+    let mut exporter = OleanExporter::new();
+    let module_offset = exporter
+        .write_module_data_with_env(&source, &[], &[])
+        .expect("environment export");
+    exporter.set_root(module_offset);
+    let bytes = exporter
+        .finalize("5afe7900000000000000000000000000000000e0")
+        .expect("finalize environment export");
+
+    let parsed = crate::parse_module(&bytes).expect("parse exported module");
+    let parsed_safety = |name: &str| {
+        parsed
+            .constants
+            .iter()
+            .find(|constant| constant.name == name)
+            .and_then(|constant| constant.definition_safety)
+    };
+    assert_eq!(
+        parsed_safety("Test.EnvUnsafe"),
+        Some(DefinitionSafety::Unsafe)
+    );
+    assert_eq!(
+        parsed_safety("Test.EnvPartial"),
+        Some(DefinitionSafety::Partial)
+    );
+    assert_eq!(parsed_safety("Test.EnvSafe"), Some(DefinitionSafety::Safe));
+
+    let mut parsed_env = Environment::new();
+    load_parsed_module(
+        &mut parsed_env,
+        &parsed,
+        Some("Test.EnvSafetyParsed".into()),
+    )
+    .expect("parsed import");
+    assert!(parsed_env.is_unsafe(&unsafe_name));
+    assert!(parsed_env.is_partial(&partial_name));
+    assert!(!parsed_env.is_unsafe(&safe_name));
+    assert!(!parsed_env.is_partial(&safe_name));
+
+    let load_module = parse_load_module(bytes).expect("direct parse");
+    let mut direct_env = Environment::new();
+    let mut cache = ExprInternCache::default();
+    load_module_direct_with_cache(
+        &mut direct_env,
+        &load_module,
+        Some("Test.EnvSafetyDirect".into()),
+        &mut cache,
+    )
+    .expect("direct import");
+    assert!(direct_env.is_unsafe(&unsafe_name));
+    assert!(direct_env.is_partial(&partial_name));
+    assert!(!direct_env.is_unsafe(&safe_name));
+    assert!(!direct_env.is_partial(&safe_name));
+}
+
+#[test]
+fn test_definition_safety_unknown_tag_fails_closed() {
     // Build a defnInfo whose safety scalar carries an out-of-range tag (7);
-    // the loader must report `None` rather than fabricate a level.
+    // the loader must reject it rather than fabricate safe authority.
     let info = safety_test_definition("Test.weirdSafety");
     let mut exporter = OleanExporter::new();
 
@@ -586,15 +691,9 @@ fn test_definition_safety_unknown_tag_degrades_to_none() {
     let bytes = exporter
         .finalize("5afe79000000000000000000000000000000007e")
         .expect("finalize should succeed");
-    let parsed = crate::parse_module(&bytes).expect("parse_module should succeed");
-    let constant = parsed
-        .constants
-        .iter()
-        .find(|c| c.name == "Test.weirdSafety")
-        .expect("definition should be present");
-    assert_eq!(
-        constant.definition_safety, None,
-        "an unrecognized safety tag must degrade to None, not a fabricated level"
+    assert!(
+        crate::parse_module(&bytes).is_err(),
+        "an unrecognized safety tag must reject the definition"
     );
 }
 
@@ -633,6 +732,9 @@ fn test_definition_safety_absent_for_axiom() {
 
 #[test]
 fn test_definition_safety_tag_roundtrip_total() {
+    assert_eq!(DefinitionSafety::Unsafe.to_tag(), 0);
+    assert_eq!(DefinitionSafety::Safe.to_tag(), 1);
+    assert_eq!(DefinitionSafety::Partial.to_tag(), 2);
     for safety in [
         DefinitionSafety::Safe,
         DefinitionSafety::Unsafe,

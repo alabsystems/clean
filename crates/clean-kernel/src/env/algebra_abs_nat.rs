@@ -9,10 +9,16 @@
 //!
 //! Extracted from `algebra_abs.rs` for maintainability.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(test)]
+use crate::env::{Declaration, EnvError};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
@@ -34,6 +40,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_abs_diff_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_abs_diff(&mut self) -> Result<(), EnvError> {
         if self.nat_abs_diff_init {
             return Ok(());
@@ -238,6 +245,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_abs_diff_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_abs_diff(&self) -> bool {
         self.nat_abs_diff_init
     }

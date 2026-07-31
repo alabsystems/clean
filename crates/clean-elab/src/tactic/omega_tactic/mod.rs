@@ -19,6 +19,7 @@ mod equality_solver;
 mod fail_closed;
 mod gcd_normalize;
 mod le_solver;
+mod nat_div_mod;
 mod nat_sub;
 
 pub(crate) use certified::{extract_certified_mathverse_constraints, mathverse_check_certified};
@@ -691,6 +692,38 @@ fn mathverse_try_uncertified(state: &mut ProofState, goal: &Goal) -> TacticResul
     // Dual bounded Nat truncation shape: `(h : b ≤ a) ⊢ a - b + b = a`. Same
     // fail-closed, close_goal-rechecked design as the eq-zero lane above.
     if let Some(result) = nat_sub::try_nat_sub_add_cancel(state, goal) {
+        return result;
+    }
+
+    // Add-commuted truncation shape: `(h : b ≤ a) ⊢ b + (a - b) = a`. The
+    // `sub_add_cancel` lemma only spells the `(a - b) + b` orientation, so this
+    // sibling commutes via `Nat.add_comm` and chains with `Eq.trans`. Same
+    // fail-closed, close_goal-rechecked design.
+    if let Some(result) = nat_sub::try_nat_add_sub_cancel(state, goal) {
+        return result;
+    }
+
+    // Unconditional left-cancellation `⊢ (a + b) - a = b` — holds for all a, b
+    // (no side condition), but the linear relaxation drops the `- a` atom.
+    // `@Nat.ulpRound.add_sub_cancel_left a b` is re-checked by `close_goal`.
+    if let Some(result) = nat_sub::try_nat_add_sub_cancel_left(state, goal) {
+        return result;
+    }
+
+    // Bounded Nat modulo shape: `(h : 0 < k) ⊢ a % k < k`. The linear relaxation
+    // drops the `a % k` atom (the mod bound needs the defining constraints), so
+    // this fell through to the failing linarith delegate. Fires only on this
+    // exact shape with a matching `0 < k` hypothesis; `@Nat.mod_lt a k h` is
+    // re-checked by `close_goal`, so soundness never rests on detection.
+    if let Some(result) = nat_div_mod::try_nat_mod_lt(state, goal) {
+        return result;
+    }
+
+    // Euclidean division identity `⊢ (a / k) * k + a % k = a`. No side condition
+    // (`Nat.div_add_mod` holds unconditionally); the mod/div atoms are dropped
+    // by the linear relaxation. `@Nat.div_add_mod a k` is re-checked by
+    // `close_goal`, so soundness never rests on detection.
+    if let Some(result) = nat_div_mod::try_nat_div_add_mod(state, goal) {
         return result;
     }
 

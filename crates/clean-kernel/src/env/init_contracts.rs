@@ -5,8 +5,6 @@
 // Contract metadata fields (init_name, required_symbols, expected_new_symbols)
 // and the ClosureAuditResult.contract_id field are structural parts of the
 // contract model used by W1/W3 in Steps 2-3. Suppress until fully wired.
-#![allow(dead_code)]
-
 //! Machine-checked dependency closure contracts for `init_*` functions.
 //!
 //! Each `InitContract` declares:

@@ -368,7 +368,7 @@ pub fn load_module_with_deps_bounded_shared(
     module: &str,
     search_paths: &[PathBuf],
     max_modules: usize,
-    visited: &mut hashbrown::HashSet<String>,
+    visited: &mut HashSet<String>,
 ) -> Result<Vec<LoadSummary>, ImportError> {
     load_module_with_deps_bounded_shared_with_policy(
         env,
@@ -396,7 +396,7 @@ pub fn load_module_with_deps_bounded_shared_with_policy(
     module: &str,
     search_paths: &[PathBuf],
     max_modules: usize,
-    visited: &mut hashbrown::HashSet<String>,
+    visited: &mut HashSet<String>,
     policy: OleanImportPolicy,
 ) -> Result<Vec<LoadSummary>, ImportError> {
     enforce_module_graph_limit_with_loaded(module, search_paths, max_modules, visited)?;

@@ -132,11 +132,13 @@ pub(super) fn build_nat_to_rat_type(c: &PacProofConsts) -> Expr {
 }
 
 /// `NNVerify.PacProof.real_exp : Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_real_exp_type(c: &PacProofConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.rat.clone(), c.rat.clone())
 }
 
 /// `NNVerify.PacProof.neg : Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_neg_type(c: &PacProofConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.rat.clone(), c.rat.clone())
 }

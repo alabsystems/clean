@@ -39,13 +39,6 @@ fn mk_vdecl(v: u32, ty: IRType, value: IRExpr, rest: IRBody) -> IRBody {
     }
 }
 
-fn mk_box(ty: IRType, v: u32) -> IRExpr {
-    IRExpr::Box {
-        ty,
-        arg: arg_var(v),
-    }
-}
-
 fn mk_unbox(ty: IRType, v: u32) -> IRExpr {
     IRExpr::Unbox {
         ty,

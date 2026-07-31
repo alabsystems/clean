@@ -15,17 +15,24 @@
 //!
 //! Part of #3186.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::nn_verify_certified_eval_compute::{CertifiedEvalInstance, ComputeConsts};
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Register a concrete vector as a kernel definition.
     ///
     /// Creates `def name : NNVec n := λ (i : Fin n), <value>`
     /// where the body maps the Fin index to a Rat value.
+    #[cfg(test)]
     pub(crate) fn register_concrete_vec(
         &mut self,
         cc: &ComputeConsts,
@@ -65,6 +72,7 @@ impl Environment {
     /// Creates `def name : NNVec n -> NNVec m := λ (x : NNVec n) (j : Fin m), val`
     /// A constant network that ignores input and returns a fixed output.
     /// The proof of `output = network(input)` is then `Eq.refl`.
+    #[cfg(test)]
     pub(crate) fn register_const_network(
         &mut self,
         cc: &ComputeConsts,
@@ -109,6 +117,7 @@ impl Environment {
     ///
     /// Works because `network(input)` definitionally reduces to the same
     /// term as `output`. The kernel verifies this during type-checking.
+    #[cfg(test)]
     pub(crate) fn register_certified_eval_theorem(
         &mut self,
         cc: &ComputeConsts,
@@ -146,6 +155,7 @@ impl Environment {
     ///
     /// Registers input/output vectors, network function, and proof theorem.
     /// The theorem is verified by the kernel's type checker.
+    #[cfg(test)]
     pub(crate) fn register_certified_eval(
         &mut self,
         instance: &CertifiedEvalInstance,
@@ -186,6 +196,7 @@ impl Environment {
     /// produces a proof that `output = (g . f)(input)` using the
     /// `NNVerify.certified_eval_composition` axiom.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     pub(crate) fn register_certified_composition(
         &mut self,
         cc: &ComputeConsts,

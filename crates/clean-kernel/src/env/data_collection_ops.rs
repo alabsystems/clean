@@ -22,7 +22,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.option_ops_init == true`
-    /// ENSURES: On success, required dependencies (`option`) are initialized
+    /// ENSURES: On success, required dependencies (`option`, `unit`, `bool`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
     pub(crate) fn init_option_ops(&mut self) -> Result<(), EnvError> {
         if self.option_ops_init {
@@ -31,6 +31,17 @@ impl Environment {
 
         // Ensure Option is initialized
         self.init_option()?;
+        // `Option.orElse`'s thunk argument `Unit → Option α` references `Unit`,
+        // so guarantee `Unit`/`Unit.unit` exist before we register it.
+        self.init_unit()?;
+        // `Option.isSome`/`isNone` land in `Bool` and `Option.filter` folds a
+        // `Bool.rec` over its predicate, so `Bool`/`Bool.true`/`Bool.false`
+        // must exist before those declarations are type-checked. Without this
+        // the first `Option.isSome` add fails `UnknownConst(Bool)` in any
+        // environment that has not already initialized `Bool` for other
+        // reasons — which is exactly what a focused `Environment::new()` test
+        // constructs.
+        self.init_bool()?;
 
         let u = Name::from_string("u");
         let type_u = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(u.clone()))));
@@ -340,6 +351,334 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // Option.isSome / Option.isNone : {α : Type u} → Option α → Bool
+        // Both are simple `Option.rec` folds into `Bool` (Sort 1), so the
+        // recursor's motive universe is the concrete `1` (= `succ zero`) rather
+        // than the `succ u` used by the value-returning `Option.getD` above.
+        let bool_const = Expr::const_(Name::from_string("Bool"), vec![]);
+        let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
+        let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);
+        let option_rec_bool = Expr::const_(
+            Name::from_string("Option.rec"),
+            vec![Level::succ(Level::zero()), Level::param(u.clone())],
+        );
+
+        // `{α : Type u} → Option α → Bool` — shared by both predicates.
+        let pred_type = {
+            let mut b = EnvDeclBuilder::new();
+            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+            let (opt_id, _opt) = b.fresh_local(Expr::app(option_const.clone(), alpha.clone()));
+            let r = bool_const.clone();
+            let r = b.mk_pi(
+                opt_id,
+                BinderInfo::Default,
+                Expr::app(option_const.clone(), alpha.clone()),
+                r,
+            );
+            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+            b.finish(r)
+        };
+
+        // λ {α} (o : Option α) => Option.rec (λ _ => Bool) <none> (λ _ => <some>) o
+        let build_pred = |none_val: &Expr, some_val: &Expr| {
+            let mut b = EnvDeclBuilder::new();
+            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+            let (opt_id, opt) = b.fresh_local(Expr::app(option_const.clone(), alpha.clone()));
+            // motive: λ (_ : Option α) => Bool
+            let motive = {
+                let mut c = EnvDeclBuilder::child_of(&b);
+                let (w_id, _w) = c.fresh_local(Expr::app(option_const.clone(), alpha.clone()));
+                let r = bool_const.clone();
+                let r = c.mk_lam(
+                    w_id,
+                    BinderInfo::Default,
+                    Expr::app(option_const.clone(), alpha.clone()),
+                    r,
+                );
+                c.finish_child(r)
+            };
+            // some case: λ (_ : α) => some_val
+            let some_case = {
+                let mut c = EnvDeclBuilder::child_of(&b);
+                let (a_id, _a) = c.fresh_local(alpha.clone());
+                let r = some_val.clone();
+                let r = c.mk_lam(a_id, BinderInfo::Default, alpha.clone(), r);
+                c.finish_child(r)
+            };
+            let body = Expr::apps(
+                option_rec_bool.clone(),
+                [alpha.clone(), motive, none_val.clone(), some_case, opt],
+            );
+            let r = b.mk_lam(
+                opt_id,
+                BinderInfo::Default,
+                Expr::app(option_const.clone(), alpha.clone()),
+                body,
+            );
+            let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+            b.finish(r)
+        };
+
+        if self
+            .get_const(&Name::from_string("Option.isSome"))
+            .is_none()
+        {
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("Option.isSome"),
+                level_params: vec![u.clone()],
+                type_: pred_type.clone(),
+                value: build_pred(&bool_false, &bool_true),
+                is_reducible: true,
+            })?;
+        }
+        if self
+            .get_const(&Name::from_string("Option.isNone"))
+            .is_none()
+        {
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("Option.isNone"),
+                level_params: vec![u.clone()],
+                type_: pred_type,
+                value: build_pred(&bool_true, &bool_false),
+                is_reducible: true,
+            })?;
+        }
+
+        // Option.orElse : {α : Type u} → Option α → (Unit → Option α) → Option α
+        // Lean `Init/Prelude.lean`:
+        //   protected def Option.orElse : Option α → (Unit → Option α) → Option α
+        //     | some a, _ => some a
+        //     | none,   b => b ()
+        // The second argument is a THUNK (`Unit → Option α`) so the fallback is
+        // only forced in the `none` case. Registered as a reducible axiom-free
+        // `Option.rec` fold whose motive returns `Option α` (`Type u`, elim
+        // universe `succ u`), matching `Option.getD`'s `Option.rec.{succ u, u}`.
+        if self
+            .get_const(&Name::from_string("Option.orElse"))
+            .is_none()
+        {
+            let unit_const = Expr::const_(Name::from_string("Unit"), vec![]);
+            let unit_unit = Expr::const_(Name::from_string("Unit.unit"), vec![]);
+            let option_rec_u = Expr::const_(
+                Name::from_string("Option.rec"),
+                vec![
+                    Level::succ(Level::param(u.clone())),
+                    Level::param(u.clone()),
+                ],
+            );
+
+            // Build `Unit → Option α` as a child of `parent` so the embedded
+            // `alpha` fvar is abstracted later by the parent (a fresh
+            // `EnvDeclBuilder::new()` restarts the fvar counter at the same base
+            // and would collide with `alpha`). Non-dependent: `Unit` is unused.
+            let thunk_ty = |parent: &EnvDeclBuilder, alpha: &Expr| {
+                let mut c = EnvDeclBuilder::child_of(parent);
+                let (unit_id, _unit) = c.fresh_local(unit_const.clone());
+                let r = Expr::app(option_const.clone(), alpha.clone());
+                let r = c.mk_pi(unit_id, BinderInfo::Default, unit_const.clone(), r);
+                c.finish_child(r)
+            };
+
+            // Option.orElse type
+            let orelse_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let (opt_id, _opt) = b.fresh_local(Expr::app(option_const.clone(), alpha.clone()));
+                let thunk_type = thunk_ty(&b, &alpha);
+                let (thunk_id, _thunk) = b.fresh_local(thunk_type.clone());
+                let r = Expr::app(option_const.clone(), alpha.clone());
+                let r = b.mk_pi(thunk_id, BinderInfo::Default, thunk_type, r);
+                let r = b.mk_pi(
+                    opt_id,
+                    BinderInfo::Default,
+                    Expr::app(option_const.clone(), alpha.clone()),
+                    r,
+                );
+                let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+                b.finish(r)
+            };
+
+            // Option.orElse value:
+            //   λ {α} (o : Option α) (thunk : Unit → Option α) =>
+            //     @Option.rec α (λ _ => Option α) (thunk ()) (λ a => some a) o
+            let orelse_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let (opt_id, opt) = b.fresh_local(Expr::app(option_const.clone(), alpha.clone()));
+                let thunk_type = thunk_ty(&b, &alpha);
+                let (thunk_id, thunk) = b.fresh_local(thunk_type.clone());
+
+                // motive: λ (_ : Option α) => Option α
+                let motive = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (w_id, _w) = c.fresh_local(Expr::app(option_const.clone(), alpha.clone()));
+                    let r = Expr::app(option_const.clone(), alpha.clone());
+                    let r = c.mk_lam(
+                        w_id,
+                        BinderInfo::Default,
+                        Expr::app(option_const.clone(), alpha.clone()),
+                        r,
+                    );
+                    c.finish_child(r)
+                };
+                // none case: thunk () — force the fallback thunk.
+                let none_case = Expr::app(thunk.clone(), unit_unit.clone());
+                // some case: λ (a : α) => @Option.some α a  (reconstruct `some a`)
+                let some_case = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (a_id, a) = c.fresh_local(alpha.clone());
+                    let r = Expr::apps(option_some.clone(), [alpha.clone(), a]);
+                    let r = c.mk_lam(a_id, BinderInfo::Default, alpha.clone(), r);
+                    c.finish_child(r)
+                };
+
+                let body = Expr::apps(
+                    option_rec_u,
+                    [alpha.clone(), motive, none_case, some_case, opt],
+                );
+                let r = b.mk_lam(thunk_id, BinderInfo::Default, thunk_type, body);
+                let r = b.mk_lam(
+                    opt_id,
+                    BinderInfo::Default,
+                    Expr::app(option_const.clone(), alpha.clone()),
+                    r,
+                );
+                let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+                b.finish(r)
+            };
+
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("Option.orElse"),
+                level_params: vec![u.clone()],
+                type_: orelse_type,
+                value: orelse_value,
+                is_reducible: true,
+            })?;
+        }
+
+        // Option.filter : {α : Type u} → (α → Bool) → Option α → Option α
+        // Lean `Init/Data/Option/Basic.lean`:
+        //   def Option.filter (p : α → Bool) : Option α → Option α
+        //     | some a => if p a then some a else none
+        //     | none   => none
+        // Registered as a reducible axiom-free `Option.rec` fold whose some-case
+        // NESTS a `Bool.rec` to test `p a` (mirrors `List.find?` above). Both the
+        // outer motive and the inner Bool motive land in `Option α` (Type u), so
+        // `Option.rec.{succ u, u}` and `Bool.rec.{succ u}`. Bool.rec minor order
+        // is [false_case, true_case] (false ↦ none — dropped, true ↦ some a —
+        // kept). Without this, `o.filter p` failed with UnknownIdent.
+        if self
+            .get_const(&Name::from_string("Option.filter"))
+            .is_none()
+        {
+            let option_rec_filter = Expr::const_(
+                Name::from_string("Option.rec"),
+                vec![
+                    Level::succ(Level::param(u.clone())),
+                    Level::param(u.clone()),
+                ],
+            );
+            let bool_rec_filter = Expr::const_(
+                Name::from_string("Bool.rec"),
+                vec![Level::succ(Level::param(u.clone()))],
+            );
+
+            // Option.filter type
+            let filter_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let option_alpha = Expr::app(option_const.clone(), alpha.clone());
+                // p : α → Bool (non-dependent; α is a parent fvar in the domain)
+                let p_ty = Expr::pi(BinderInfo::Default, alpha.clone(), bool_const.clone());
+                let (p_id, _p) = b.fresh_local(p_ty.clone());
+                let (o_id, _o) = b.fresh_local(option_alpha.clone());
+                let r = option_alpha.clone();
+                let r = b.mk_pi(o_id, BinderInfo::Default, option_alpha.clone(), r);
+                let r = b.mk_pi(p_id, BinderInfo::Default, p_ty, r);
+                let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+                b.finish(r)
+            };
+
+            // Option.filter value:
+            //   λ {α} (p : α → Bool) (o : Option α) =>
+            //     @Option.rec α (λ _ => Option α) none
+            //       (λ a => @Bool.rec (λ _ => Option α) none (some a) (p a)) o
+            let filter_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let option_alpha = Expr::app(option_const.clone(), alpha.clone());
+                let p_ty = Expr::pi(BinderInfo::Default, alpha.clone(), bool_const.clone());
+                let (p_id, p) = b.fresh_local(p_ty.clone());
+                let (o_id, o) = b.fresh_local(option_alpha.clone());
+
+                // outer Option.rec motive: λ (_ : Option α) => Option α
+                let option_motive = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (w_id, _w) = c.fresh_local(option_alpha.clone());
+                    let r = c.mk_lam(
+                        w_id,
+                        BinderInfo::Default,
+                        option_alpha.clone(),
+                        option_alpha.clone(),
+                    );
+                    c.finish_child(r)
+                };
+                let none_case = Expr::app(option_none.clone(), alpha.clone());
+
+                // some case: λ (a : α) =>
+                //   @Bool.rec (λ _ => Option α) none (some a) (p a)
+                let some_case = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (a_id, a) = c.fresh_local(alpha.clone());
+                    // inner Bool.rec motive: λ (_ : Bool) => Option α
+                    let bool_motive = {
+                        let mut d = EnvDeclBuilder::child_of(&c);
+                        let (bm_id, _bm) = d.fresh_local(bool_const.clone());
+                        let r = d.mk_lam(
+                            bm_id,
+                            BinderInfo::Default,
+                            bool_const.clone(),
+                            option_alpha.clone(),
+                        );
+                        d.finish_child(r)
+                    };
+                    let inner_none = Expr::app(option_none.clone(), alpha.clone());
+                    let some_a = Expr::apps(option_some.clone(), [alpha.clone(), a.clone()]);
+                    let p_a = Expr::app(p.clone(), a.clone());
+                    // Bool.rec motive false_case true_case major
+                    let inner = Expr::apps(
+                        bool_rec_filter.clone(),
+                        [bool_motive, inner_none, some_a, p_a],
+                    );
+                    let r = c.mk_lam(a_id, BinderInfo::Default, alpha.clone(), inner);
+                    c.finish_child(r)
+                };
+
+                let body = Expr::apps(
+                    option_rec_filter,
+                    [
+                        alpha.clone(),
+                        option_motive,
+                        none_case,
+                        some_case,
+                        o.clone(),
+                    ],
+                );
+                let r = b.mk_lam(o_id, BinderInfo::Default, option_alpha.clone(), body);
+                let r = b.mk_lam(p_id, BinderInfo::Default, p_ty, r);
+                let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+                b.finish(r)
+            };
+
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("Option.filter"),
+                level_params: vec![u.clone()],
+                type_: filter_type,
+                value: filter_value,
+                is_reducible: true,
+            })?;
+        }
+
         self.option_ops_init = true;
         Ok(())
     }
@@ -350,6 +689,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_option_ops` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_option_ops(&self) -> bool {
         self.option_ops_init
     }
@@ -1244,6 +1584,135 @@ impl Environment {
                 value: filter_value,
                 is_reducible: true,
             })?;
+
+            // ── List.filterMap {α : Type u} {β : Type v}
+            //        (f : α → Option β) (l : List α) : List β ────────────────────
+            //
+            // Maps then drops the `none`s. Genuine, axiom-free `List.rec` fold
+            // over `List α` (Type u) into the motive `λ _ => List β` (Type v):
+            //   nil  case : List.nil β
+            //   cons case : λ hd _ ih =>
+            //       Option.rec (motive := λ _ : Option β => List β)
+            //                  ih                       -- f hd = none: drop
+            //                  (λ b => List.cons β b ih) -- f hd = some b: keep b
+            //                  (f hd)
+            //
+            // Same skeleton as `List.find?` above (List.rec + a nested dependent
+            // rec on a per-element scrutinee) but the fold lands in a SECOND type
+            // `List β : Type v`, so the outer eliminator is `List.rec.{succ v, u}`
+            // (`list_rec_uv`) and the inner one `Option.rec.{succ v, v}`. `β`, its
+            // `List`/`List.nil`/`List.cons` (`list_const_b`/`list_nil_b`/
+            // `list_cons_b`) and the level `v` come from the `List.map` seed above.
+            let option_v = Expr::const_(Name::from_string("Option"), vec![Level::param(v.clone())]);
+            let option_rec_v = Expr::const_(
+                Name::from_string("Option.rec"),
+                vec![
+                    Level::succ(Level::param(v.clone())),
+                    Level::param(v.clone()),
+                ],
+            );
+            let filtermap_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let (beta_id, beta) = b.fresh_local(type_v.clone());
+                let list_alpha = Expr::app(list_const.clone(), alpha.clone());
+                let list_beta = Expr::app(list_const_b.clone(), beta.clone());
+                let option_beta = Expr::app(option_v.clone(), beta.clone());
+                let f_ty = Expr::pi(BinderInfo::Default, alpha.clone(), option_beta.clone());
+                let (f_id, _f) = b.fresh_local(f_ty.clone());
+                let (l_id, _l) = b.fresh_local(list_alpha.clone());
+                let r = list_beta.clone();
+                let r = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), r);
+                let r = b.mk_pi(f_id, BinderInfo::Default, f_ty.clone(), r);
+                let r = b.mk_pi(beta_id, BinderInfo::Implicit, type_v.clone(), r);
+                let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+                b.finish(r)
+            };
+            let filtermap_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let (beta_id, beta) = b.fresh_local(type_v.clone());
+                let list_alpha = Expr::app(list_const.clone(), alpha.clone());
+                let list_beta = Expr::app(list_const_b.clone(), beta.clone());
+                let option_beta = Expr::app(option_v.clone(), beta.clone());
+                let f_ty = Expr::pi(BinderInfo::Default, alpha.clone(), option_beta.clone());
+                let (f_id, f) = b.fresh_local(f_ty.clone());
+                let (l_id, l) = b.fresh_local(list_alpha.clone());
+
+                // outer List.rec motive: λ (_ : List α) => List β
+                let list_motive = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (w_id, _w) = c.fresh_local(list_alpha.clone());
+                    let r = c.mk_lam(
+                        w_id,
+                        BinderInfo::Default,
+                        list_alpha.clone(),
+                        list_beta.clone(),
+                    );
+                    c.finish_child(r)
+                };
+
+                let nil_case = Expr::app(list_nil_b.clone(), beta.clone());
+
+                // cons case: λ (hd : α) (_ : List α) (ih : List β) =>
+                //   Option.rec (λ _ : Option β => List β) ih
+                //              (λ (b : β) => List.cons β b ih) (f hd)
+                let cons_case = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (hd_id, hd) = c.fresh_local(alpha.clone());
+                    let (tail_id, _tail) = c.fresh_local(list_alpha.clone());
+                    let (ih_id, ih) = c.fresh_local(list_beta.clone());
+
+                    // inner Option.rec motive: λ (_ : Option β) => List β
+                    let opt_motive = {
+                        let mut d = EnvDeclBuilder::child_of(&c);
+                        let (om_id, _om) = d.fresh_local(option_beta.clone());
+                        let r = d.mk_lam(
+                            om_id,
+                            BinderInfo::Default,
+                            option_beta.clone(),
+                            list_beta.clone(),
+                        );
+                        d.finish_child(r)
+                    };
+                    // some case: λ (bb : β) => List.cons β bb ih
+                    let some_case = {
+                        let mut d = EnvDeclBuilder::child_of(&c);
+                        let (bb_id, bb) = d.fresh_local(beta.clone());
+                        let consed =
+                            Expr::apps(list_cons_b.clone(), [beta.clone(), bb.clone(), ih.clone()]);
+                        let r = d.mk_lam(bb_id, BinderInfo::Default, beta.clone(), consed);
+                        d.finish_child(r)
+                    };
+                    let f_hd = Expr::app(f.clone(), hd.clone());
+                    // Option.rec β motive none_case some_case major
+                    let inner = Expr::apps(
+                        option_rec_v.clone(),
+                        [beta.clone(), opt_motive, ih.clone(), some_case, f_hd],
+                    );
+                    let r = c.mk_lam(ih_id, BinderInfo::Default, list_beta.clone(), inner);
+                    let r = c.mk_lam(tail_id, BinderInfo::Default, list_alpha.clone(), r);
+                    let r = c.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), r);
+                    c.finish_child(r)
+                };
+
+                let body = Expr::apps(
+                    list_rec_uv.clone(),
+                    [alpha.clone(), list_motive, nil_case, cons_case, l.clone()],
+                );
+                let r = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
+                let r = b.mk_lam(f_id, BinderInfo::Default, f_ty.clone(), r);
+                let r = b.mk_lam(beta_id, BinderInfo::Implicit, type_v.clone(), r);
+                let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+                b.finish(r)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.filterMap"),
+                level_params: vec![u.clone(), v.clone()],
+                type_: filtermap_type,
+                value: filtermap_value,
+                is_reducible: true,
+            })?;
         } // end import-mode List.find?/List.filter suppression
 
         // ── List.zip {α β : Type u} (xs : List α) (ys : List β)
@@ -1970,6 +2439,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_list_ops` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_list_ops(&self) -> bool {
         self.list_ops_init
     }

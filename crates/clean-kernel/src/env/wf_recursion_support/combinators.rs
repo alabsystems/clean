@@ -6,13 +6,20 @@
 //!
 //! Split from `wf_recursion_support` for file-size compliance.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::wf_recursion_support::mk_rel_type;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Define `InvImage` and the `InvImage.wf` axiom.
     ///
@@ -21,6 +28,7 @@ impl Environment {
     ///   : α → α → Prop := fun a₁ a₂ => r (f a₁) (f a₂)
     /// axiom InvImage.wf : ... → WellFounded r → WellFounded (InvImage r f)
     /// ```
+    #[cfg(test)]
     pub(super) fn init_inv_image(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let v = Name::from_string("v");
@@ -91,6 +99,7 @@ impl Environment {
     }
 
     /// `InvImage.wf` axiom: transporting well-foundedness across a function.
+    #[cfg(test)]
     fn init_inv_image_wf(
         &mut self,
         u: &Name,
@@ -146,6 +155,7 @@ impl Environment {
     }
 
     /// Define `Nat.lt_wfRel : WellFoundedRelation Nat` (axiom-backed).
+    #[cfg(test)]
     pub(super) fn init_nat_lt_wfrel(&mut self) -> Result<(), EnvError> {
         let nat = Expr::const_(Name::from_string("Nat"), vec![]);
         let nat_lt_const = Expr::const_(Name::from_string("Nat.lt"), vec![]);
@@ -184,6 +194,7 @@ impl Environment {
     }
 
     /// Define the `invImage` combinator.
+    #[cfg(test)]
     pub(super) fn init_inv_image_combinator(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let v = Name::from_string("v");
@@ -281,6 +292,7 @@ impl Environment {
     }
 
     /// Define `measure {α : Sort u} (f : α → Nat) : WellFoundedRelation α`.
+    #[cfg(test)]
     pub(super) fn init_measure(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -341,6 +353,7 @@ impl Environment {
     }
 
     /// Define `sizeOfWFRel {α : Sort u} [SizeOf α] : WellFoundedRelation α`.
+    #[cfg(test)]
     pub(super) fn init_sizeof_wfrel(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());

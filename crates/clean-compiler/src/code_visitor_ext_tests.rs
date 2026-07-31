@@ -346,7 +346,6 @@ struct ExprCategoryCounter {
 }
 impl IRExprVisitor for ExprCategoryCounter {
     type Result = ();
-    fn combine(&self, _: (), _: ()) {}
     fn visit_ctor(&mut self, _: &[IRArg]) {
         self.ctors += 1;
     }

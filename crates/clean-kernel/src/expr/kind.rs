@@ -589,6 +589,7 @@ impl ZFCSetExpr {
     }
 
     /// Abstract: replace FVar(id) with BVar(depth), shifting other bound variables up
+    #[cfg(test)]
     pub(crate) fn abstract_fvar_at(&self, id: FVarId, depth: u32) -> Self {
         match self {
             ZFCSetExpr::Empty | ZFCSetExpr::Infinity => self.clone(),
@@ -1148,6 +1149,28 @@ mod arc_eq_tests {
         assert_eq!(
             *shared, *expanded,
             "shared DAG must equal its tree expansion"
+        );
+    }
+
+    /// Structural equality itself must be safe on ordinary Rust test-thread
+    /// stacks. The terms deliberately have identical structure but no shared
+    /// application nodes, so the `Arc::ptr_eq` shortcut cannot hide an
+    /// unguarded recursive descent.
+    #[test]
+    fn test_deep_distinct_structural_equality_is_stack_safe() {
+        const DEPTH: usize = 12_000;
+
+        let arg = || Expr::const_(Name::from_string("arg"), vec![]);
+        let mut left = Expr::const_(Name::from_string("head"), vec![]);
+        let mut right = Expr::const_(Name::from_string("head"), vec![]);
+        for _ in 0..DEPTH {
+            left = Expr::app(left, arg());
+            right = Expr::app(right, arg());
+        }
+
+        assert_eq!(
+            left, right,
+            "deep, independently allocated structural twins must compare equal"
         );
     }
 }

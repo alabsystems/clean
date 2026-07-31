@@ -59,6 +59,7 @@ use crate::name::Name;
 /// Pre-resolved handles + smart-constructors for the radicand ½-Hölder bound.
 pub(crate) struct RadicandConsts {
     nat: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     nat_succ: Expr,
     rat: Expr,
@@ -88,6 +89,7 @@ impl RadicandConsts {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
             nat: k("Nat"),
+            #[cfg(test)]
             nat_zero: k("Nat.zero"),
             nat_succ: k("Nat.succ"),
             rat: k("Rat"),

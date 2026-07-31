@@ -14,8 +14,7 @@ replayed row-by-row, exact-match, with a pinned regeneration recipe.
 | `README.md` | this file |
 
 **Oracle:** `leanprover/lean4 v4.30.0-rc2` (commit `3dc1a088`). Probes captured
-2026-07-08 with the pinned oracle (8 verified family specs; regeneration
-recipe: `gen_ground_truth.lean`).
+2026-07-08 from `scratchpad/parser_specs/*.json` (8 verified family specs).
 
 ## What the harness measures
 
@@ -75,7 +74,7 @@ pattern-fun global-name rule, and postfix-whitespace leniency.
   are kept (`(3 : Nat)` → `(: 3 Nat)`).
 
 Every corrected value was cross-checked against the pinned-oracle probe rows
-(grouping, head constant, value).
+in `scratchpad/parser_specs/*.json` (grouping, head constant, value).
 
 ### RHS unit-thunk regeneration (2026-07-08, Brick 3 §3(a))
 

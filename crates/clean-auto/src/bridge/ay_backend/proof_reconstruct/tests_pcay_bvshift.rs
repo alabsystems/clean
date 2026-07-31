@@ -14,17 +14,14 @@ use super::*;
 use ay_proof::bv_blast_solver::BvExpr;
 
 /// The always-on HEADLINE operand width for shift certification. A width-4
-/// variable barrel shift bit-blasts to ~172 clauses / ~925 resolution steps; the
-/// SUB-QUADRATIC trie reflection (`checkRefutes3_sound`) re-checks it in ~30 s /
-/// ~8 GB — the same order as the width-8 array multiplier milestone 2 certifies.
-/// (The O(steps²) `checkRefutes_sound` reflection OOMs at 30 GB here, which is why
-/// the shift lane uses the sub-quadratic checker.)
+/// variable barrel shift exercises the full gate tree through the sub-quadratic
+/// trie reflection (`checkRefutes3_sound`).
 const W: u32 = 4;
 
 /// A LIGHTER width for the second/third shift-kind positives (`bvlshr`/`bvashr`),
 /// so the three heavy kernel reflections don't OOM when the harness runs them
-/// concurrently. A width-2 barrel shift is a genuine gate-tree bit-blast (~66
-/// clauses / ~277 steps) — the same op, smaller operand.
+/// concurrently. A width-2 barrel shift is the same genuine gate tree over a
+/// smaller operand.
 const W_LIGHT: u32 = 2;
 
 /// The reused resolution-soundness environment (identical layer to milestone 2).
@@ -143,13 +140,11 @@ fn shl_vs_lshr_is_declined_fail_closed() {
     );
 }
 
-/// The width-8 barrel shift (~5356 resolution steps) exceeds
-/// [`MAX_REFLECTION_STEPS`], so the always-on sub-quadratic reflection is CAPPED
-/// fail-closed: `certify_bvshift_unsat` returns `RefutationTooLarge` rather than
-/// run for minutes. (The refutation is genuine and UNSAT — this is a tractability
-/// cap, not a soundness gap; the honest `SmtBacked` verdict survives.)
+/// AY 0e35 reduced the width-8 identity trace to 430 clauses / 266 resolution
+/// steps. It is now within the operational ceiling and must kernel-certify
+/// rather than being rejected by a stale width-based expectation.
 #[test]
-fn bvshift_width8_is_capped_fail_closed() {
+fn bvshift_width8_is_kernel_certified_zero_trust() {
     let env = env();
     let (lhs, rhs) = bvshift_identity_obligation(
         |value, amount| BvExpr::Shl(Box::new(value), Box::new(amount)),
@@ -157,9 +152,25 @@ fn bvshift_width8_is_capped_fail_closed() {
         "S0",
         8,
     );
-    let outcome = certify_bvshift_unsat(&env, &lhs, &rhs);
+    let certified = certify_bvshift_unsat(&env, &lhs, &rhs)
+        .expect("the current width-8 trace is within budget and must certify");
+    assert_eq!(certified.payload.trust_count, 0);
+    assert_eq!(certified.num_clauses, 430);
     assert!(
-        matches!(outcome, Err(BvShiftCertifyError::RefutationTooLarge { .. })),
-        "width-8 shift must be capped fail-closed (RefutationTooLarge), got {outcome:?}"
+        certified.num_resolution_steps <= MAX_REFLECTION_STEPS,
+        "certified trace must be within the enforced cap"
+    );
+}
+
+/// The cap itself remains fail-closed independent of proof-producer shape.
+#[test]
+fn reflection_step_cap_declines_before_kernel_recheck() {
+    let steps = MAX_REFLECTION_STEPS + 1;
+    assert_eq!(
+        enforce_reflection_step_cap(steps),
+        Err(BvShiftCertifyError::RefutationTooLarge {
+            steps,
+            cap: MAX_REFLECTION_STEPS,
+        })
     );
 }

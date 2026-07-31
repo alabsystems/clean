@@ -370,7 +370,7 @@ fn base_noise_zero_eq(
 }
 
 /// `noiseDensityW ρ 0 (dec)(dec)` (the n=0 density, ≡ Rat.one defeq).
-fn base_density_zero(c: &Hc43Consts, rho: &Expr, n: &Expr, dec: &Expr) -> Expr {
+fn base_density_zero(_c: &Hc43Consts, rho: &Expr, n: &Expr, dec: &Expr) -> Expr {
     Expr::apps(
         Expr::const_(Name::from_string("BoolAnalysis.noiseDensityW"), vec![]),
         [rho.clone(), n.clone(), dec.clone(), dec.clone()],

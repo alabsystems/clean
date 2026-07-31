@@ -43,6 +43,7 @@ pub mod bundle;
 mod cross_project;
 mod def_eq;
 mod expr_eq;
+#[cfg(test)]
 pub(crate) mod failed_eq_cache;
 mod gamma_crown_import;
 mod metadata;
@@ -126,11 +127,12 @@ pub use compression::{
     zstd_compress_level, zstd_compress_with_dict, zstd_compress_with_dict_level, zstd_decompress,
     zstd_decompress_with_dict, zstd_unarchive_cert, zstd_unarchive_cert_with_dict, ArchiveStats,
     ArchiveVariantStats, ByteCompressError, CertArchive, CertArchiveEnvelope, CertArchiveError,
-    CertDictionary, CertIdx, CompressError, CompressedCert, CompressedCertNode, CompressedExpr,
-    CompressedLevel, CompressionAlgorithm, CompressionStats, DecompressError, DictArchiveStats,
-    DictCertArchive, DictCompressError, DictTrainError, ExprIdx, LevelIdx, StreamingArchiveHeader,
-    StreamingCertReader, StreamingCertWriter, StreamingError, StreamingProgressCallback,
-    StreamingStats, ZstdArchiveStats, ZstdCertArchive, ZstdCompressError,
+    CertDictionary, CertIdx, CompressError, CompressedCert, CompressedCertNode,
+    CompressedCertSchema, CompressedExpr, CompressedLevel, CompressionAlgorithm, CompressionStats,
+    DecompressError, DictArchiveStats, DictCertArchive, DictCompressError, DictTrainError, ExprIdx,
+    LevelIdx, StreamingArchiveHeader, StreamingCertReader, StreamingCertWriter, StreamingError,
+    StreamingProgressCallback, StreamingStats, ZstdArchiveStats, ZstdCertArchive,
+    ZstdCompressError,
 };
 
 // Re-export replay API

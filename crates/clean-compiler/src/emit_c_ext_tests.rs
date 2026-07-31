@@ -7,9 +7,7 @@
 //! Part of #3084 - IO/FFI/Native.
 
 use crate::emit_c_ext::{CExtEmitConfig, CExtEmitter, EmitStats, FfiFunc};
-use crate::ir::{
-    CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
-};
+use crate::ir::{CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId, VarId};
 use clean_kernel::Name;
 
 // ── Helpers ──
@@ -498,6 +496,7 @@ fn test_emit_extern_c_decl() {
         param_types: vec![IRType::Object],
         return_type: IRType::Object,
     };
+    assert_eq!(func.lean_name, "IO.println");
     let mut emitter = CExtEmitter::new();
     emitter.emit_extern_c_decl(&func);
     let output = emitter.finish();

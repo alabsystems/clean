@@ -13,13 +13,19 @@
 //! This module only registers the declaration surface. Operational semantics
 //! for the checker are left abstract at the kernel boundary.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all VeriPB checker declarations.
+#[cfg(test)]
 pub(super) struct VeriPbCheckerConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -40,7 +46,9 @@ pub(super) struct VeriPbCheckerConsts {
     pub(super) veripb_step: Expr,
 }
 
+#[cfg(test)]
 impl VeriPbCheckerConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         let pb_var = Expr::const_(Name::from_string("VeriPB.PbVar"), vec![]);
         let pb_constraint = Expr::const_(Name::from_string("VeriPB.PbConstraint"), vec![]);
@@ -63,11 +71,13 @@ impl VeriPbCheckerConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize VeriPB checker declarations.
     ///
     /// Depends on: `init_nat()`, `init_bool()`, `init_list()`,
     /// `init_cutting_planes()`.
+    #[cfg(test)]
     pub(crate) fn init_veripb_checker(&mut self) -> Result<(), EnvError> {
         if self.veripb_checker_init {
             return Ok(());
@@ -123,6 +133,7 @@ impl Environment {
     }
 
     /// `VeriPB.PbVar : Type` -- pseudo-Boolean variable.
+    #[cfg(test)]
     fn register_veripb_pb_var(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self.get_const(&Name::from_string("VeriPB.PbVar")).is_some() {
             return Ok(());
@@ -135,6 +146,7 @@ impl Environment {
     }
 
     /// `VeriPB.PbConstraint : Type` -- pseudo-Boolean constraint.
+    #[cfg(test)]
     fn register_veripb_pb_constraint(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.PbConstraint"))
@@ -150,6 +162,7 @@ impl Environment {
     }
 
     /// `VeriPB.Assignment : Type := VeriPB.PbVar -> Bool`.
+    #[cfg(test)]
     fn register_veripb_assignment(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.Assignment"))
@@ -169,6 +182,7 @@ impl Environment {
 
     /// `VeriPB.satisfies_constraint :
     ///    Assignment -> PbConstraint -> Prop`.
+    #[cfg(test)]
     fn register_veripb_satisfies_constraint(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -200,6 +214,7 @@ impl Environment {
     }
 
     /// `VeriPB.ConstraintDb : Type := List VeriPB.PbConstraint`.
+    #[cfg(test)]
     fn register_veripb_constraint_db(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.ConstraintDb"))
@@ -221,6 +236,7 @@ impl Environment {
     }
 
     /// `VeriPB.cp_add : PbConstraint -> PbConstraint -> PbConstraint`.
+    #[cfg(test)]
     fn register_veripb_cp_add(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.cp_add"))
@@ -249,6 +265,7 @@ impl Environment {
     }
 
     /// `VeriPB.cp_multiply : PbConstraint -> Nat -> PbConstraint`.
+    #[cfg(test)]
     fn register_veripb_cp_multiply(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.cp_multiply"))
@@ -277,6 +294,7 @@ impl Environment {
     }
 
     /// `VeriPB.cp_divide : PbConstraint -> Nat -> PbConstraint`.
+    #[cfg(test)]
     fn register_veripb_cp_divide(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.cp_divide"))
@@ -305,6 +323,7 @@ impl Environment {
     }
 
     /// `VeriPB.cp_saturate : PbConstraint -> PbConstraint`.
+    #[cfg(test)]
     fn register_veripb_cp_saturate(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.cp_saturate"))
@@ -325,6 +344,7 @@ impl Environment {
     }
 
     /// `VeriPB.cp_weaken : PbConstraint -> PbVar -> PbConstraint`.
+    #[cfg(test)]
     fn register_veripb_cp_weaken(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.cp_weaken"))

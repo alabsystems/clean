@@ -6,6 +6,7 @@
 // top-level `inversion_chain`.
 
 impl InvConsts {
+    #[cfg(test)]
     fn fin_sum_congr(&self) -> Expr {
         Expr::const_(Name::from_string("Fin.sum_congr"), vec![])
     }

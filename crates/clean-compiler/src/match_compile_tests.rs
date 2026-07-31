@@ -518,7 +518,7 @@ fn test_compile_match_with_guard() {
     // | A if guard => 0
     // | A => 1
     // | B => 2
-    let guard_expr = clean_kernel::Expr::sort(clean_kernel::level::Level::zero());
+    let guard_expr = Expr::sort(clean_kernel::level::Level::zero());
     let scrutinees = vec![mk_var("x")];
     let arms = vec![
         MatchArm {

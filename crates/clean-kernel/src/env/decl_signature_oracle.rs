@@ -4,8 +4,6 @@
 
 // Oracle API methods are used by migration tests across multiple modules.
 // Some methods are not yet called but are part of the designed interface.
-#![allow(dead_code)]
-
 //! Declaration signature oracle for #1444 migration gating.
 //!
 //! Provides pre-insertion equivalence checking for bvar→fvar migration.

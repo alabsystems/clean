@@ -708,7 +708,7 @@ impl CleanBackend {
     /// whole-declaration goals.
     fn render_hole_type(hole: &clean_elab::HoleContext) -> String {
         let ty = &hole.expected_type;
-        format!("{ty:?}")
+        format!("{ty}")
     }
 
     /// Render a hole's captured local hypotheses to pretty-printed
@@ -717,7 +717,7 @@ impl CleanBackend {
     fn render_hole_bindings(hole: &clean_elab::HoleContext) -> Vec<(String, String)> {
         hole.local_bindings
             .iter()
-            .map(|(name, ty)| (name.clone(), format!("{ty:?}")))
+            .map(|(name, ty)| (name.clone(), format!("{ty}")))
             .collect()
     }
 

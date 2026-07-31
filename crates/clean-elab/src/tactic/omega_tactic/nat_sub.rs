@@ -32,7 +32,7 @@
 //! yet) are the next lever.
 
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprKind};
+use clean_kernel::{Expr, ExprKind, Level};
 
 use super::super::arith_mathverse_parse::extract_constant;
 use super::super::{match_eq, match_le, match_lt};
@@ -40,6 +40,13 @@ use super::{Goal, ProofState, TacticError, TacticResult};
 
 /// The proven prelude lemma `∀ (a b : Nat), Nat.le a b → @Eq Nat (a - b) 0`.
 const SUB_EQ_ZERO_OF_LE: &str = "Nat.ulpRound.sub_eq_zero_of_le";
+
+/// The proven, axiom-clean prelude Theorem
+/// `∀ (a b : Nat), @Eq Nat (Nat.add a b) (Nat.add b a)` (Nat.add_comm), used to
+/// commute the addends so the `(a - b) + b = a` truncation lemma discharges a
+/// `b + (a - b) = a` goal. Its axiom closure is empty, so the reconstructed
+/// proof stays axiom-clean.
+const ADD_COMM: &str = "Nat.add_comm";
 
 /// The proven prelude lemma `∀ {a b : Nat}, Nat.lt a b → Nat.le a b`, used to
 /// weaken a `<` hypothesis into the `≤` the truncation lemma needs. Both this
@@ -50,6 +57,12 @@ const LE_OF_LT: &str = "Nat.le_of_lt";
 /// The proven prelude lemma `∀ (a n : Nat), Nat.le n a → @Eq Nat ((a - n) + n) a`
 /// (axiom-clean Theorem), backing the `b ≤ a → a - b + b = a` truncation shape.
 const SUB_ADD_CANCEL: &str = "Nat.ulpRound.sub_add_cancel";
+
+/// The proven, axiom-clean prelude Theorem
+/// `∀ (a b : Nat), @Eq Nat ((a + b) - a) b` (Nat.ulpRound.add_sub_cancel_left),
+/// backing the UNCONDITIONAL `(a + b) - a = b` left-cancellation. Its axiom
+/// closure is empty, so the reconstructed proof stays axiom-clean.
+const ADD_SUB_CANCEL_LEFT: &str = "Nat.ulpRound.add_sub_cancel_left";
 
 /// Try to prove `⊢ a - b = 0` from a hypothesis `a ≤ b` or `a < b`.
 ///
@@ -139,6 +152,131 @@ pub(crate) fn try_nat_sub_add_cancel(state: &mut ProofState, goal: &Goal) -> Opt
         Err(err) => Err(TacticError::ArithmeticFailed {
             tactic: "omega".into(),
             reason: format!("nat-sub-add cancel: kernel rejected the reconstructed proof: {err:?}"),
+        }),
+    })
+}
+
+/// Try to prove `⊢ b + (a - b) = a` from a hypothesis `b ≤ a` (or `b < a`).
+///
+/// The add-commuted sibling of [`try_nat_sub_add_cancel`]: Lean writes the
+/// re-addition on either side of the truncated difference, but the backing lemma
+/// `Nat.ulpRound.sub_add_cancel` states only the `(a - b) + b = a` orientation,
+/// so a `b + (a - b) = a` goal fell through to the failing linarith delegate. The
+/// proof commutes the addends with the proven, axiom-clean `@Nat.add_comm b
+/// (a - b)` and chains through `Eq.trans`:
+///
+///   `@Eq.trans.{1} Nat (b + (a - b)) ((a - b) + b) a`
+///   `    (@Nat.add_comm b (a - b))`
+///   `    (@Nat.ulpRound.sub_add_cancel a b le)`
+///
+/// `Nat.add_comm` emits the middle term in raw `Nat.add` spelling — identical to
+/// the lemma's LHS and def-eq to the goal's `HAdd`/`HSub` spelling — so the
+/// `Eq.trans` chain type-checks. The whole term is re-checked by `close_goal`
+/// (kernel-grade strict inference), so soundness never rests on the detection
+/// logic. FAIL-CLOSED with the same guarantees as [`try_nat_sub_eq_zero`].
+pub(crate) fn try_nat_add_sub_cancel(state: &mut ProofState, goal: &Goal) -> Option<TacticResult> {
+    // Disengage entirely if either backing lemma is absent (import mode / bare
+    // env) — the caller's pipeline then proceeds byte-identically.
+    state.env().get_const(&Name::from_string(SUB_ADD_CANCEL))?;
+    state.env().get_const(&Name::from_string(ADD_COMM))?;
+
+    // Goal must be `@Eq Nat (b + (a - b)) a`.
+    let target = state.metas.instantiate(&goal.target);
+    let (carrier, lhs, rhs) = match_eq(&target)?;
+    if !is_nat_const(&carrier) {
+        return None;
+    }
+    let (add_l, add_r) = match_nat_add(&lhs)?; // add_l = b, add_r = (a - b)
+    let (a, b) = match_nat_sub(&add_r)?;
+    // The left addend must be the subtrahend `b`, and the RHS the minuend `a`.
+    if add_l != b || rhs != a {
+        return None;
+    }
+
+    // Find a proof of `b ≤ a` (subtrahend bounds minuend), directly or by
+    // weakening a `b < a` hypothesis.
+    let le_proof = find_le_proof(goal, &b, &a)?;
+
+    // `@Nat.ulpRound.sub_add_cancel a b le` : `(a - b) + b = a`.
+    let cancel = Expr::apps(
+        Expr::const_(Name::from_string(SUB_ADD_CANCEL), vec![]),
+        [a.clone(), b.clone(), le_proof],
+    );
+    // `@Nat.add_comm b (a - b)` : `Nat.add b (a - b) = Nat.add (a - b) b`.
+    let comm = Expr::apps(
+        Expr::const_(Name::from_string(ADD_COMM), vec![]),
+        [b.clone(), add_r.clone()],
+    );
+    // Middle term `Nat.add (a - b) b` — exactly `Nat.add_comm`'s RHS and def-eq
+    // to `sub_add_cancel`'s LHS, so the kernel accepts the `Eq.trans` chain.
+    let mid = Expr::apps(
+        Expr::const_(Name::from_string("Nat.add"), vec![]),
+        [add_r.clone(), b.clone()],
+    );
+    // `@Eq.trans.{1} Nat (b + (a - b)) ((a - b) + b) a comm cancel`.
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let proof = Expr::apps(
+        Expr::const_(
+            Name::from_string("Eq.trans"),
+            vec![Level::succ(Level::zero())],
+        ),
+        [nat, lhs.clone(), mid, a.clone(), comm, cancel],
+    );
+    Some(match state.close_goal(goal, proof) {
+        Ok(()) => Ok(()),
+        Err(err) => Err(TacticError::ArithmeticFailed {
+            tactic: "omega".into(),
+            reason: format!("nat-add-sub cancel: kernel rejected the reconstructed proof: {err:?}"),
+        }),
+    })
+}
+
+/// Try to prove `⊢ (a + b) - a = b` — the UNCONDITIONAL left-cancellation.
+///
+/// Nat's truncated subtraction makes `(a + b) - a = b` hold for ALL `a, b` (no
+/// side condition: `a ≤ a + b` always), but the linear relaxation drops the
+/// `- a` atom, so the goal fell through to the failing linarith delegate. The
+/// proof is the single closed term `@Nat.ulpRound.add_sub_cancel_left a b`
+/// (proven, axiom-clean), re-checked by `close_goal`. Unlike the sibling lanes,
+/// no hypothesis is needed. FAIL-CLOSED: fires only on the exact `(a + b) - a = b`
+/// shape — the subtracted term is the LEFT addend and the RHS is the right
+/// addend — and only when the backing lemma is present; otherwise returns `None`
+/// and the pipeline is byte-identical. A wrong match is rejected by `close_goal`.
+pub(crate) fn try_nat_add_sub_cancel_left(
+    state: &mut ProofState,
+    goal: &Goal,
+) -> Option<TacticResult> {
+    // Disengage entirely if the backing lemma is absent (import mode / bare env).
+    state
+        .env()
+        .get_const(&Name::from_string(ADD_SUB_CANCEL_LEFT))?;
+
+    // Goal must be `@Eq Nat ((a + b) - a) b`.
+    let target = state.metas.instantiate(&goal.target);
+    let (carrier, lhs, rhs) = match_eq(&target)?;
+    if !is_nat_const(&carrier) {
+        return None;
+    }
+    let (sub_l, sub_r) = match_nat_sub(&lhs)?; // sub_l = a + b, sub_r = a
+    let (add_l, add_r) = match_nat_add(&sub_l)?; // add_l = a, add_r = b
+                                                 // The subtracted term must be the LEFT addend, and the RHS the right addend.
+    if sub_r != add_l || rhs != add_r {
+        return None;
+    }
+
+    // `@Nat.ulpRound.add_sub_cancel_left a b` : `(a + b) - a = b`, def-eq to the
+    // goal's `HAdd`/`HSub`-spelled form.
+    let proof = Expr::apps(
+        Expr::const_(Name::from_string(ADD_SUB_CANCEL_LEFT), vec![]),
+        [add_l, add_r],
+    );
+    Some(match state.close_goal(goal, proof) {
+        Ok(()) => Ok(()),
+        Err(err) => Err(TacticError::ArithmeticFailed {
+            tactic: "omega".into(),
+            reason: format!(
+                "nat add-sub-cancel-left: kernel rejected the reconstructed proof: {err:?}"
+            ),
         }),
     })
 }

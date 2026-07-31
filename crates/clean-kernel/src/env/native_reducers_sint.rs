@@ -39,13 +39,6 @@ pub(crate) mod names {
         };
     }
 
-    // Type names (for decidable equality proof terms)
-    name!(pub(crate) INT8 = "Int8");
-    name!(pub(crate) INT16 = "Int16");
-    name!(pub(crate) INT32 = "Int32");
-    name!(pub(crate) INT64 = "Int64");
-    name!(pub(crate) ISIZE = "ISize");
-
     // Int8 operations
     name!(pub(crate) INT8_ADD = "Int8.add");
     name!(pub(crate) INT8_SUB = "Int8.sub");
@@ -207,7 +200,7 @@ macro_rules! define_small_sint_reducers {
         $add:ident, $sub:ident, $mul:ident, $div:ident, $mod_:ident,
         $beq:ident, $blt:ident, $ble:ident,
         $dec_eq:ident, $dec_lt:ident, $dec_le:ident,
-        $modulus:expr, $bits:expr, $type_name:expr
+        $modulus:expr, $bits:expr
     ) => {
         pub(crate) fn $add(args: &[&Expr]) -> Option<Expr> {
             reduce_small_add(args, $modulus)
@@ -263,7 +256,7 @@ macro_rules! define_u64_sint_reducers {
         $add:ident, $sub:ident, $mul:ident, $div:ident, $mod_:ident,
         $beq:ident, $blt:ident, $ble:ident,
         $dec_eq:ident, $dec_lt:ident, $dec_le:ident,
-        $bits:expr, $type_name:expr
+        $bits:expr
     ) => {
         pub(crate) fn $add(args: &[&Expr]) -> Option<Expr> {
             reduce_u64_add(args)
@@ -341,8 +334,7 @@ define_small_sint_reducers!(
     reduce_int8_dec_lt,
     reduce_int8_dec_le,
     INT8_MODULUS,
-    8,
-    &*names::INT8
+    8
 );
 
 define_small_sint_reducers!(
@@ -358,8 +350,7 @@ define_small_sint_reducers!(
     reduce_int16_dec_lt,
     reduce_int16_dec_le,
     INT16_MODULUS,
-    16,
-    &*names::INT16
+    16
 );
 
 define_small_sint_reducers!(
@@ -375,8 +366,7 @@ define_small_sint_reducers!(
     reduce_int32_dec_lt,
     reduce_int32_dec_le,
     INT32_MODULUS,
-    32,
-    &*names::INT32
+    32
 );
 
 define_u64_sint_reducers!(
@@ -391,8 +381,7 @@ define_u64_sint_reducers!(
     reduce_int64_dec_eq,
     reduce_int64_dec_lt,
     reduce_int64_dec_le,
-    64,
-    &*names::INT64
+    64
 );
 
 define_u64_sint_reducers!(
@@ -407,8 +396,7 @@ define_u64_sint_reducers!(
     reduce_isize_dec_eq,
     reduce_isize_dec_lt,
     reduce_isize_dec_le,
-    64,
-    &*names::ISIZE
+    64
 );
 
 // --- Registration ---

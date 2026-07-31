@@ -35,6 +35,7 @@ struct H1ConnectConsts {
     set_size_nat: Expr,
     subset_sum: Expr,
     fourier_coeff: Expr,
+    #[cfg(test)]
     eq1: Expr,
     eq_trans: Expr,
     eq_symm: Expr,
@@ -71,6 +72,7 @@ impl H1ConnectConsts {
             set_size_nat: k("BoolAnalysis.setSizeNat"),
             subset_sum: k("BoolAnalysis.subsetSum"),
             fourier_coeff: k("BoolAnalysis.FourierCoefficient"),
+            #[cfg(test)]
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
@@ -142,6 +144,7 @@ impl H1ConnectConsts {
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }
@@ -165,6 +168,7 @@ impl H1ConnectConsts {
     fn le(&self, a: Expr, b: Expr) -> Expr {
         self.order.rat_le(a, b)
     }
+    #[cfg(test)]
     fn le0(&self, a: Expr) -> Expr {
         self.le(self.order.rat_zero.clone(), a)
     }
@@ -202,6 +206,7 @@ impl H1ConnectConsts {
         let c = self.fcoeff(n, f, s);
         self.mul(c.clone(), c)
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }

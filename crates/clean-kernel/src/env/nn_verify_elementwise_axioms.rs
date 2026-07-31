@@ -18,14 +18,21 @@
 //!
 //! Part of #3181.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::nn_verify_elementwise::ElemConsts;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Register all element-wise inequality axioms.
+    #[cfg(test)]
     pub(super) fn register_elementwise_axioms(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         self.register_vec_le_trans(c)?;
         self.register_vec_le_add_mono(c)?;
@@ -38,6 +45,7 @@ impl Environment {
 
     /// `NNVerify.vec_le_trans`:
     /// `{n} -> (a b c : NNVec n) -> vec_le a b -> vec_le b c -> vec_le a c`
+    #[cfg(test)]
     fn register_vec_le_trans(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -73,6 +81,7 @@ impl Environment {
     /// `NNVerify.vec_le_add_mono`:
     /// `{n} -> (a b c d : NNVec n) -> vec_le a b -> vec_le c d`
     /// `-> vec_le (add a c) (add b d)`
+    #[cfg(test)]
     fn register_vec_le_add_mono(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -116,6 +125,7 @@ impl Environment {
     /// `NNVerify.vec_le_smul_nonneg`:
     /// `{n} -> (s : Rat) -> (a b : NNVec n) ->`
     /// `  LE.le Rat.zero s -> vec_le a b -> vec_le (smul s a) (smul s b)`
+    #[cfg(test)]
     fn register_vec_le_smul_nonneg(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -159,6 +169,7 @@ impl Environment {
     /// `NNVerify.mat_mulvec_le_mono`:
     /// `{m n} -> (A : NNMat m n) -> (x y : NNVec n) ->`
     /// `  mat_nonneg A -> vec_le x y -> vec_le (mulVec A x) (mulVec A y)`
+    #[cfg(test)]
     fn register_mat_mulvec_le_mono(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -216,6 +227,7 @@ impl Environment {
     /// `{n} -> (x b : NNVec n) ->`
     /// `  (forall i, |x i| <= b i) ->`
     /// `  And (vec_le (smul (-1) b) x) (vec_le x b)`
+    #[cfg(test)]
     fn register_abs_vec_le(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let rat_one = Expr::const_(Name::from_string("Rat.one"), vec![]);
         let ty = {
@@ -263,6 +275,7 @@ impl Environment {
     /// `NNVerify.interval_contains_vec_le`:
     /// `{n} -> (B : IntervalBounds n) -> (x : NNVec n) ->`
     /// `  contains B x -> And (vec_le B.lower x) (vec_le x B.upper)`
+    #[cfg(test)]
     fn register_interval_contains_vec_le(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();

@@ -49,93 +49,150 @@
 //! down to the more-primitive Int
 //! axiom (no new Rat axiom, no `sorry`, no fabrication).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
 use super::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
+use crate::expr::BinderInfo;
+use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants for the Rat ordering proof terms.
 struct RatOrderConsts {
+    #[cfg(test)]
     rat: Expr,
+    #[cfg(test)]
     rat_le: Expr,
     rat_lt: Expr,
+    #[cfg(test)]
     rat_mul: Expr,
+    #[cfg(test)]
     rat_num: Expr,
+    #[cfg(test)]
     rat_eff_denom: Expr,
     rat_zero: Expr,
     rat_one: Expr,
+    #[cfg(test)]
     int: Expr,
+    #[cfg(test)]
     int_le: Expr,
+    #[cfg(test)]
     int_lt: Expr,
+    #[cfg(test)]
     int_zero: Expr,
+    #[cfg(test)]
     int_mul: Expr,
+    #[cfg(test)]
     int_of_nat: Expr,
+    #[cfg(test)]
     int_le_refl: Expr,
+    #[cfg(test)]
     int_le_total: Expr,
+    #[cfg(test)]
     int_lt_iff: Expr,
+    #[cfg(test)]
     int_mul_pos: Expr,
+    #[cfg(test)]
     int_mul_nonneg: Expr,
+    #[cfg(test)]
     int_zero_mul: Expr,
+    #[cfg(test)]
     int_mul_one: Expr,
+    #[cfg(test)]
     eq_subst: Expr,
+    #[cfg(test)]
     eq_symm: Expr,
+    #[cfg(test)]
     or_const: Expr,
+    #[cfg(test)]
     iff_const: Expr,
+    #[cfg(test)]
     and_const: Expr,
+    #[cfg(test)]
     not_const: Expr,
 }
 
 impl RatOrderConsts {
     fn new() -> Self {
+        #[cfg(test)]
         let type1 = Level::succ(Level::zero());
         Self {
+            #[cfg(test)]
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             rat_le: Expr::const_(Name::from_string("Rat.le"), vec![]),
             rat_lt: Expr::const_(Name::from_string("Rat.lt"), vec![]),
+            #[cfg(test)]
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
+            #[cfg(test)]
             rat_num: Expr::const_(Name::from_string("Rat.num"), vec![]),
+            #[cfg(test)]
             rat_eff_denom: Expr::const_(Name::from_string("Rat.effDenom"), vec![]),
             rat_zero: Expr::const_(Name::from_string("Rat.zero"), vec![]),
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
+            #[cfg(test)]
             int: Expr::const_(Name::from_string("Int"), vec![]),
+            #[cfg(test)]
             int_le: Expr::const_(Name::from_string("Int.le"), vec![]),
+            #[cfg(test)]
             int_lt: Expr::const_(Name::from_string("Int.lt"), vec![]),
+            #[cfg(test)]
             int_zero: Expr::const_(Name::from_string("Int.zero"), vec![]),
+            #[cfg(test)]
             int_mul: Expr::const_(Name::from_string("Int.mul"), vec![]),
+            #[cfg(test)]
             int_of_nat: Expr::const_(Name::from_string("Int.ofNat"), vec![]),
+            #[cfg(test)]
             int_le_refl: Expr::const_(Name::from_string("Int.le_refl"), vec![]),
+            #[cfg(test)]
             int_le_total: Expr::const_(Name::from_string("Int.le_total"), vec![]),
+            #[cfg(test)]
             int_lt_iff: Expr::const_(Name::from_string("Int.lt_iff_le_not_le"), vec![]),
+            #[cfg(test)]
             int_mul_pos: Expr::const_(Name::from_string("Int.mul_pos"), vec![]),
+            #[cfg(test)]
             int_mul_nonneg: Expr::const_(Name::from_string("Int.mul_nonneg"), vec![]),
+            #[cfg(test)]
             int_zero_mul: Expr::const_(Name::from_string("Int.zero_mul"), vec![]),
+            #[cfg(test)]
             int_mul_one: Expr::const_(Name::from_string("Int.mul_one"), vec![]),
+            #[cfg(test)]
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![type1.clone()]),
+            #[cfg(test)]
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![type1]),
+            #[cfg(test)]
             or_const: Expr::const_(Name::from_string("Or"), vec![]),
+            #[cfg(test)]
             iff_const: Expr::const_(Name::from_string("Iff"), vec![]),
+            #[cfg(test)]
             and_const: Expr::const_(Name::from_string("And"), vec![]),
+            #[cfg(test)]
             not_const: Expr::const_(Name::from_string("Not"), vec![]),
         }
     }
 
     /// `Int.le x y`.
+    #[cfg(test)]
     fn int_le(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_le.clone(), [x, y])
     }
 
     /// `Int.lt x y`.
+    #[cfg(test)]
     fn int_lt(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_lt.clone(), [x, y])
     }
 
     /// `Int.mul x y`.
+    #[cfg(test)]
     fn imul(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_mul.clone(), [x, y])
     }
 
     /// `@Eq.subst.{1} Int motive @x @y h_eq h_motive_x : motive y`.
+    #[cfg(test)]
     fn isubst(&self, motive: Expr, x: Expr, y: Expr, h_eq: Expr, h_mx: Expr) -> Expr {
         Expr::apps(
             self.eq_subst.clone(),
@@ -144,11 +201,13 @@ impl RatOrderConsts {
     }
 
     /// `@Eq.symm.{1} Int @x @y h : Eq Int y x`.
+    #[cfg(test)]
     fn isymm(&self, x: Expr, y: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.int.clone(), x, y, h])
     }
 
     /// `Rat.le a b` (the stated, not-yet-unfolded type).
+    #[cfg(test)]
     fn rat_le(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_le.clone(), [a, b])
     }
@@ -164,6 +223,7 @@ impl RatOrderConsts {
     /// `#false-le_trans` soundness fix in `algebra.rs::init_rat_ord`), so any
     /// Int-level proof term built over it will be definitionally accepted
     /// against the `Rat.le` / `Rat.lt` stated type.
+    #[cfg(test)]
     fn cross(&self, x: Expr, y: Expr) -> Expr {
         let num_x = Expr::app(self.rat_num.clone(), x);
         let denom_y = Expr::app(
@@ -233,6 +293,7 @@ impl Environment {
     /// Proof: `λ a => @Int.le_refl (cross a a)`. The stated `Rat.le a a`
     /// delta-reduces to `Int.le (cross a a) (cross a a)`, which is the type
     /// of `Int.le_refl (cross a a)`.
+    #[cfg(test)]
     fn register_rat_le_refl(&mut self, c: &RatOrderConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.le_refl");
         if self.get_const(&name).is_some() {
@@ -267,6 +328,7 @@ impl Environment {
     /// goal delta-reduces to
     /// `Or (Int.le (cross a b) (cross b a)) (Int.le (cross b a) (cross a b))`,
     /// which is exactly the type of `Int.le_total (cross a b) (cross b a)`.
+    #[cfg(test)]
     fn register_rat_le_total(&mut self, c: &RatOrderConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.le_total");
         if self.get_const(&name).is_some() {
@@ -355,6 +417,7 @@ impl Environment {
     /// `Constructive`. It still eliminates the *Rat-level* admitted axiom
     /// (replacing it with a genuine kernel-checked term), pushing the residual
     /// trust down to the single more-primitive Int axiom.
+    #[cfg(test)]
     fn register_rat_lt_iff_le_not_le(&mut self, c: &RatOrderConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.lt_iff_le_not_le");
         if self.get_const(&name).is_some() {
@@ -418,6 +481,7 @@ impl Environment {
     /// `Int.mul_one (Int.mul na nb)`. All four rewrites are single `@Eq.subst.{1}`
     /// steps. Honest classification: `Constructive` (`Int.mul_pos`,
     /// `Int.zero_mul`, `Int.mul_one` are all constructive Theorems).
+    #[cfg(test)]
     fn register_rat_mul_pos(&mut self, c: &RatOrderConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.mul_pos");
         if self.get_const(&name).is_some() {
@@ -631,6 +695,7 @@ impl Environment {
     /// foundational equality primitive, so `Rat.mul_nonneg` is genuinely
     /// `ProofQuality::Constructive` (empty domain-axiom closure) — true even for
     /// the zero-denominator free `Rat.mk` carrier. NOT an axiom, NOT a `sorry`.
+    #[cfg(test)]
     fn register_rat_mul_nonneg(&mut self, c: &RatOrderConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.mul_nonneg");
         if self.get_const(&name).is_some() {

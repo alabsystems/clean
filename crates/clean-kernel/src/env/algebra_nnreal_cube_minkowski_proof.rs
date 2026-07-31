@@ -5,7 +5,7 @@
 // Proof bodies for `algebra_nnreal_cube_minkowski.rs` (`include!`d there).
 
 impl Environment {
-    pub(super) fn register_cube_split_a(&mut self, c: &MinkowskiConsts) -> Result<(), EnvError> {
+    fn register_cube_split_a(&mut self, c: &MinkowskiConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_split_A");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -19,7 +19,7 @@ impl Environment {
         })
     }
 
-    pub(super) fn register_cube_split_b(&mut self, c: &MinkowskiConsts) -> Result<(), EnvError> {
+    fn register_cube_split_b(&mut self, c: &MinkowskiConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_split_B");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -33,7 +33,7 @@ impl Environment {
         })
     }
 
-    pub(super) fn register_cube_minkowski(&mut self, c: &MinkowskiConsts) -> Result<(), EnvError> {
+    fn register_cube_minkowski(&mut self, c: &MinkowskiConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_minkowski");
         if self.get_const(&name).is_some() {
             return Ok(());

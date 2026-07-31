@@ -275,6 +275,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_true_false()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_true_false(&self) -> bool {
         self.true_false_init
     }

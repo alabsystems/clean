@@ -45,16 +45,22 @@
 //! integral AND the residual single-character sum in one composition step.
 //! Constructive, empty admitted-axiom closure. Idempotent.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Self-contained constants for the diagonal rung. Mirrors the atoms shared by
 /// `Pow4SpectralConsts` (spectral body shape) and `QuadConsts` (symmetric
 /// difference / single-character shape) so the rewrite types by defeq against
 /// both `pow4_noisefn_spectral`'s RHS and `subsetSum_chi_quad_orthogonality`.
+#[cfg(test)]
 struct DiagConsts {
     nat: Expr,
     rat: Expr,
@@ -84,7 +90,9 @@ struct DiagConsts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl DiagConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -131,40 +139,52 @@ impl DiagConsts {
 
     // ── shared atoms ───────────────────────────────────────────────────────────
 
+    #[cfg(test)]
     fn rat_ty(&self) -> Expr {
         self.rat.clone()
     }
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn f_type(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn ssum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
+    #[cfg(test)]
     fn chi_(&self, n: &Expr, s: &Expr, x: &Expr) -> Expr {
         Expr::apps(self.chi.clone(), [n.clone(), s.clone(), x.clone()])
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two.clone(), n.clone()])
     }
+    #[cfg(test)]
     fn sum_pow(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [self.pow2(n), g])
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
     /// `congrArg Rat Rat a b g h : g a = g b` from `h : a = b`.
+    #[cfg(test)]
     fn congr(&self, a: Expr, b: Expr, g: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -172,6 +192,7 @@ impl DiagConsts {
         )
     }
     /// `congrArg (fun z => left·z) h : left·a = left·b`.
+    #[cfg(test)]
     fn mul_left_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -193,6 +214,7 @@ impl DiagConsts {
 
     /// `fun (jx : Fin (2^n)) => pow4 (noiseFn ρ n F jx)` — the `Fin.sum` summand
     /// (byte-identical to `Pow4SpectralConsts::lhs_jx_fn`).
+    #[cfg(test)]
     fn lhs_jx_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_pow = self.fin_of(&self.pow2(n));
@@ -205,16 +227,19 @@ impl DiagConsts {
         let p4 = self.mul(sq.clone(), sq);
         b.finish_child(b.mk_lam(jx_id, BinderInfo::Default, fin_pow, p4))
     }
+    #[cfg(test)]
     fn lhs(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         self.sum_pow(n, self.lhs_jx_fn(parent, rho, n, f))
     }
 
     // ── spectral-body factors (mirror Pow4SpectralConsts) ──────────────────────
 
+    #[cfg(test)]
     fn pow(&self, rho: &Expr, k: &Expr) -> Expr {
         Expr::apps(self.pow_nat.clone(), [rho.clone(), k.clone()])
     }
     /// `indNat b = @Bool.rec.{1} (fun _ => Nat) 0 1 b`.
+    #[cfg(test)]
     fn ind_nat(&self, s_i: Expr) -> Expr {
         let nat_one = Expr::app(self.nat_succ.clone(), self.nat_zero.clone());
         let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
@@ -229,6 +254,7 @@ impl DiagConsts {
         )
     }
     /// `pc n S = Fin.sumNat n (fun i => indNat (S i))` — popcount `|S|`.
+    #[cfg(test)]
     fn popcount(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -238,10 +264,12 @@ impl DiagConsts {
         Expr::apps(self.fin_sum_nat.clone(), [n.clone(), pc_fn])
     }
     /// `w S = ρ^{pc n S}`.
+    #[cfg(test)]
     fn weight(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, s: &Expr) -> Expr {
         self.pow(rho, &self.popcount(parent, n, s))
     }
     /// `A F S = subsetSum n (fun y => F y · χ_S y)`.
+    #[cfg(test)]
     fn a_coeff(&self, parent: &EnvDeclBuilder, n: &Expr, f: &Expr, s: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -251,6 +279,7 @@ impl DiagConsts {
         self.ssum(n, g_fn)
     }
     /// `wblk = (w1·w2)·(w3·w4)`.
+    #[cfg(test)]
     fn wblk(
         &self,
         parent: &EnvDeclBuilder,
@@ -268,6 +297,7 @@ impl DiagConsts {
         self.mul(self.mul(w1, w2), self.mul(w3, w4))
     }
     /// `ablk = (A1·A2)·(A3·A4)`.
+    #[cfg(test)]
     fn ablk(
         &self,
         parent: &EnvDeclBuilder,
@@ -290,6 +320,7 @@ impl DiagConsts {
     /// `fun (i : Fin n) => Bool.xor (S i) (T i)` — `S Δ T` as `HCPoint n`
     /// (byte-identical to `QuadConsts::symm_diff_fn`, so the diagonal subset
     /// β-matches `subsetSum_chi_quad_orthogonality`'s RHS subset).
+    #[cfg(test)]
     fn symm_diff_fn(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr, t: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -301,6 +332,7 @@ impl DiagConsts {
         b.finish_child(b.mk_lam(i_id, BinderInfo::Default, fin_n, body))
     }
     /// `(S1 Δ S2) Δ (S3 Δ S4)` as an `HCPoint n`.
+    #[cfg(test)]
     fn sd4(
         &self,
         parent: &EnvDeclBuilder,
@@ -317,6 +349,7 @@ impl DiagConsts {
     /// `Σ_x (χ_{S1} x·χ_{S2} x)·(χ_{S3} x·χ_{S4} x)` — explicit inner correlation
     /// (byte-identical to `Pow4SpectralConsts::xsum_chi4` and to the LHS subset of
     /// `subsetSum_chi_quad_orthogonality`).
+    #[cfg(test)]
     fn xsum_chi4(
         &self,
         parent: &EnvDeclBuilder,
@@ -339,29 +372,35 @@ impl DiagConsts {
     }
     // ── diagonal-VALUE atoms (2^n · ind) — byte-match subsetSum_chi_quad_diag RHS ─
 
+    #[cfg(test)]
     fn one_nat(&self) -> Expr {
         Expr::app(self.nat_succ.clone(), self.nat_zero.clone())
     }
     /// `Rat.mk (Int.ofNat (2^n)) 1` — the rational `2^n` (byte-identical to
     /// `DiagConsts::cube` in `boolean_analysis_chi_quad_diag.rs`).
+    #[cfg(test)]
     fn cube(&self, n: &Expr) -> Expr {
         let ofnat = Expr::app(self.int_of_nat.clone(), self.pow2(n));
         Expr::apps(self.rat_mk.clone(), [ofnat, self.one_nat()])
     }
     /// `Nat.beq m Nat.zero`.
+    #[cfg(test)]
     fn beq0(&self, m: Expr) -> Expr {
         Expr::apps(self.nat_beq.clone(), [m, self.nat_zero.clone()])
     }
     /// `setSizeNat n U`.
+    #[cfg(test)]
     fn ss_nat(&self, n: &Expr, u: &Expr) -> Expr {
         Expr::apps(self.set_size_nat.clone(), [n.clone(), u.clone()])
     }
     /// `ind (Nat.beq (setSizeNat n U) 0)` — the empty-set indicator `ind(U=∅)`.
+    #[cfg(test)]
     fn empty_ind(&self, n: &Expr, u: &Expr) -> Expr {
         Expr::app(self.ind.clone(), self.beq0(self.ss_nat(n, u)))
     }
     /// `2^n · ind ((S1 Δ S2) Δ (S3 Δ S4) = ∅)` — the DIAGONAL VALUE of the inner
     /// character correlation (byte-identical to `subsetSum_chi_quad_diag`'s RHS).
+    #[cfg(test)]
     fn xsum_diag_value(
         &self,
         parent: &EnvDeclBuilder,
@@ -378,6 +417,7 @@ impl DiagConsts {
     /// Spectral body at fixed `(S1,S2,S3,S4)`: explicit form (`pow4_noisefn_spectral`
     /// RHS) when `diag=false`, diagonal form when `diag=true`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn spectral_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -407,6 +447,7 @@ impl DiagConsts {
     /// `Σ_x (χ_{S1}·χ_{S2})·(χ_{S3}·χ_{S4})` straight to its `2^n`-or-`0` diagonal
     /// VALUE `2^n · ind((S1 Δ S2) Δ (S3 Δ S4) = ∅)`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn perquad_diag(
         &self,
         parent: &EnvDeclBuilder,
@@ -439,6 +480,7 @@ impl DiagConsts {
 
     /// `s_nest(diag)`: `Σ_{S1} Σ_{S3} Σ_{S2} Σ_{S4} <spectral_body diag>`
     /// (the (S1,S3,S2,S4) peel order of `pow4_noisefn_spectral`'s RHS).
+    #[cfg(test)]
     fn s_nest(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, diag: bool) -> Expr {
         // fixed peel order [S1, S3, S2, S4]; spectral_body takes (S1,S2,S3,S4).
         let s1_fn = {
@@ -479,6 +521,7 @@ impl DiagConsts {
     /// The 4-deep `subsetSum_congr` proof `s_nest(explicit) = s_nest(diag)`.
     /// At each level we wrap the next-level integrands (before/after) in a
     /// `subsetSum_congr`; the bottom hypothesis is `perquad_diag`.
+    #[cfg(test)]
     fn nest_congr(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr) -> Expr {
         let hcp = self.hcpoint_of(n);
         // helper: integrand `fun S => <remaining nest>` for a given peel prefix.
@@ -497,6 +540,7 @@ impl DiagConsts {
     }
 
     /// `subsetSum_congr n G H h`.
+    #[cfg(test)]
     fn ss_congr(&self, n: &Expr, g: &Expr, h: &Expr, hyp: Expr) -> Expr {
         Expr::apps(
             self.subset_sum_congr.clone(),
@@ -505,6 +549,7 @@ impl DiagConsts {
     }
 
     /// `fun S1 => Σ_{S3} Σ_{S2} Σ_{S4} <body diag?>` — outermost integrand.
+    #[cfg(test)]
     fn s1_integrand(
         &self,
         parent: &EnvDeclBuilder,
@@ -520,6 +565,7 @@ impl DiagConsts {
         b1.finish_child(b1.mk_lam(s1_id, BinderInfo::Default, hcp.clone(), self.ssum(n, inner)))
     }
     /// `fun S3 => Σ_{S2} Σ_{S4} <body>` at fixed S1.
+    #[cfg(test)]
     fn s3_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -536,6 +582,7 @@ impl DiagConsts {
         b3.finish_child(b3.mk_lam(s3_id, BinderInfo::Default, hcp.clone(), self.ssum(n, inner)))
     }
     /// `fun S2 => Σ_{S4} <body>` at fixed (S1,S3).
+    #[cfg(test)]
     fn s2_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -554,6 +601,7 @@ impl DiagConsts {
     }
     /// `fun S4 => <spectral_body>` at fixed (S1,S3,S2).
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn s4_body(
         &self,
         parent: &EnvDeclBuilder,
@@ -573,6 +621,7 @@ impl DiagConsts {
     }
 
     /// `subsetSum_congr` over S3 (level 1), proof for fixed S1.
+    #[cfg(test)]
     fn s3_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -593,6 +642,7 @@ impl DiagConsts {
         self.ss_congr(n, &before, &after, h)
     }
     /// `fun S3 => Σ_{S2} Σ_{S4} <body diag?>` at fixed S1.
+    #[cfg(test)]
     fn s3_integrand(
         &self,
         parent: &EnvDeclBuilder,
@@ -610,6 +660,7 @@ impl DiagConsts {
     }
 
     /// `subsetSum_congr` over S2 (level 2), proof for fixed (S1,S3).
+    #[cfg(test)]
     fn s2_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -631,6 +682,7 @@ impl DiagConsts {
         self.ss_congr(n, &before, &after, h)
     }
     /// `fun S2 => Σ_{S4} <body diag?>` at fixed (S1,S3).
+    #[cfg(test)]
     fn s2_integrand(
         &self,
         parent: &EnvDeclBuilder,
@@ -650,6 +702,7 @@ impl DiagConsts {
 
     /// `subsetSum_congr` over S4 (level 3, bottom), proof for fixed (S1,S2,S3).
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn s4_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -676,6 +729,7 @@ impl DiagConsts {
 
 /// `∀ (ρ : Rat) (n : Nat) (F : HCPoint n → Rat),
 ///   Fin.sum (2^n) (fun jx => pow4 (noiseFn ρ n F jx)) = s_nest(SpectralDiag)`.
+#[cfg(test)]
 fn build_diag_type(c: &DiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -692,6 +746,7 @@ fn build_diag_type(c: &DiagConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_diag_value(c: &DiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat_ty());
@@ -717,6 +772,7 @@ fn build_diag_value(c: &DiagConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.pow4_noisefn_spectral_diag` — RUNG 2 of the
     /// sharp-KKL roadmap. Composes `pow4_noisefn_spectral` (explicit inner
@@ -727,6 +783,7 @@ impl Environment {
     /// congruence whose bottom hypothesis is
     /// `congrArg (wblk·_) (congrArg (ablk·_) (subsetSum_chi_quad_diag …))`.
     /// Constructive, empty admitted-axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_spectral_diag_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_spectral_diag");
         if self.get_const(&name).is_some() {

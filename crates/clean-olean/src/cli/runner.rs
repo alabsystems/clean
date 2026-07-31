@@ -359,7 +359,7 @@ fn run_cumulative_verification(args: &ResolvedArgs) {
 
     // Load-only fast path defers no-confusion regeneration to ONE pass over the
     // complete environment (per-module regeneration on a partial env mis-generates
-    // aux constants — see `import::tests::diag_full_shared_vs_perloop`). Count the
+    // aux constants — see the `diag_full_shared_vs_perloop` example). Count the
     // constants it produces via an environment-size delta — one O(env) pass, NOT a
     // per-module `collect_new_env_names` scan — so `constants_total` includes them.
     if args.load_only {

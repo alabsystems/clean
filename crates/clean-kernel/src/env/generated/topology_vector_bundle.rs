@@ -13,6 +13,7 @@ use crate::name::Name;
 pub(crate) const NAMESPACE: &str = "Topology.VectorBundle";
 pub(crate) const DECL_COUNT: usize = 19;
 
+#[cfg(test)]
 pub(crate) const DECL_NAMES: [&str; DECL_COUNT] = [
     "Topology.VectorBundle",
     "Topology.VectorBundle.toFiberBundle",
@@ -295,8 +296,8 @@ pub(crate) fn payload() -> Vec<ConstantInfo> {
     //    [Semiring R] → [TS E] → [TS B] → [TS F] → [AddCommGroup F] →
     //    (E → B) → Type u
     {
-        let (mut b, ids, _vars) = ctx.bind_full_vb_context();
-        let body = ctx.type_u.clone();
+        let (b, _ids, _vars) = ctx.bind_full_vb_context();
+        let _body = ctx.type_u.clone();
         // π is already bound as the last implicit; need to make it Default for the main type
         // Actually, the original code binds π as Default for VectorBundle itself.
         // But bind_full_vb_context binds π as Implicit. For VectorBundle, π is a Default param.

@@ -301,6 +301,387 @@ impl Environment {
             value: None,
         });
 
+        // ── List.contains {α : Type u} [BEq α] (as : List α) (a : α) : Bool ─
+        // R170: Lean `Init/Data/List/Basic.lean` — `List.contains as a := as.elem a`,
+        // where `List.elem a | [] => false | b::bs => a == b || elem a bs`. Folded
+        // over `as` as
+        //   @List.rec α (λ _ => Bool) Bool.false
+        //             (λ hd _ ih => Bool.or (@BEq.beq α inst a hd) ih) as
+        // — the same `List.rec.{1,u}`-into-`Bool` shape as `List.any`, but the
+        // cons test is `a == hd` (the fixed query element vs the head, via the
+        // `[BEq α]` instance). Registered HERE (not with `List.any`/`List.all` in
+        // `init_list_combinators`) because its type references `BEq`, which is
+        // registered only after that earlier combinator pass. Reducible,
+        // axiom-free; withheld in import mode with the rest of this init.
+        if self
+            .get_const(&Name::from_string("List.contains"))
+            .is_none()
+        {
+            let bool_or = Expr::const_(Name::from_string("Bool.or"), vec![]);
+            let contains_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, _inst) = b.fresh_local(beq_alpha.clone());
+                let (as_id, _as) = b.fresh_local(list_alpha.clone());
+                let (a_id, _a) = b.fresh_local(alpha.clone());
+                let e = bool_const.clone();
+                let e = b.mk_pi(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_pi(as_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_pi(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let contains_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, inst) = b.fresh_local(beq_alpha.clone());
+                let (as_id, as_) = b.fresh_local(list_alpha.clone());
+                let (a_id, a) = b.fresh_local(alpha.clone());
+
+                // motive: λ (_ : List α) => Bool
+                let (m_id, _m) = b.fresh_local(list_alpha.clone());
+                let motive = b.mk_lam(
+                    m_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    bool_const.clone(),
+                );
+
+                // cons case: λ (hd : α) (_ : List α) (ih : Bool) =>
+                //              Bool.or (@BEq.beq α inst a hd) ih
+                let (hd_id, hd) = b.fresh_local(alpha.clone());
+                let (tl_id, _tl) = b.fresh_local(list_alpha.clone());
+                let (ih_id, ih) = b.fresh_local(bool_const.clone());
+                let beq_a_hd = Expr::apps(
+                    beq_beq.clone(),
+                    [alpha.clone(), inst.clone(), a.clone(), hd.clone()],
+                );
+                let cons_body = Expr::apps(bool_or.clone(), [beq_a_hd, ih.clone()]);
+                let cons_case = b.mk_lam(ih_id, BinderInfo::Default, bool_const.clone(), cons_body);
+                let cons_case = b.mk_lam(tl_id, BinderInfo::Default, list_alpha.clone(), cons_case);
+                let cons_case = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), cons_case);
+
+                let body = Expr::apps(
+                    list_rec(lvl_bool.clone()),
+                    [
+                        alpha.clone(),
+                        motive,
+                        bool_false.clone(),
+                        cons_case,
+                        as_.clone(),
+                    ],
+                );
+                let e = b.mk_lam(a_id, BinderInfo::Default, alpha.clone(), body);
+                let e = b.mk_lam(as_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_lam(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.contains"),
+                level_params: vec![u.clone()],
+                type_: contains_type,
+                value: contains_value,
+                is_reducible: true,
+            })?;
+        }
+
+        // ── List.count {α : Type u} [BEq α] (a : α) (l : List α) : Nat ──────
+        // R171: Lean `Init/Data/List/Count.lean` — `List.count a l := countP (· == a) l`,
+        // the number of elements of `l` that BEq-equal `a`. Folded over `l` as
+        //   @List.rec α (λ _ => Nat) Nat.zero
+        //     (λ hd _ ih => @Bool.rec (λ _ => Nat) ih (Nat.succ ih) (@BEq.beq α inst hd a)) l
+        // — a `List.rec.{1,u}`-into-`Nat` fold whose cons case is `if hd == a
+        // then ih+1 else ih`, spelled with `Bool.rec` (minor order [false, true])
+        // over the instance's `hd == a`. `Bool.rec`/`Nat.succ` are fundamental and
+        // available here; deliberately NOT `Bool.toNat` (R163), which is registered
+        // in a LATER init pass than `init_beq_list` (same ordering trap as placing
+        // List.contains before BEq). Arg order `(a, l)` matches Lean, so `l.count a`
+        // resolves `l` to the `List α` parameter. Withheld in import mode.
+        if self.get_const(&Name::from_string("List.count")).is_none() {
+            let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
+            let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+            let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+            let bool_rec = Expr::const_(Name::from_string("Bool.rec"), vec![lvl_bool.clone()]);
+
+            let count_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, _inst) = b.fresh_local(beq_alpha.clone());
+                let (a_id, _a) = b.fresh_local(alpha.clone());
+                let (l_id, _l) = b.fresh_local(list_alpha.clone());
+                let e = nat_const.clone();
+                let e = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_pi(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_pi(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let count_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, inst) = b.fresh_local(beq_alpha.clone());
+                let (a_id, a) = b.fresh_local(alpha.clone());
+                let (l_id, l) = b.fresh_local(list_alpha.clone());
+
+                // motive: λ (_ : List α) => Nat
+                let (m_id, _m) = b.fresh_local(list_alpha.clone());
+                let motive = b.mk_lam(
+                    m_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    nat_const.clone(),
+                );
+
+                // cons case: λ (hd : α) (_ : List α) (ih : Nat) =>
+                //              Nat.add (Bool.toNat (@BEq.beq α inst hd a)) ih
+                let (hd_id, hd) = b.fresh_local(alpha.clone());
+                let (tl_id, _tl) = b.fresh_local(list_alpha.clone());
+                let (ih_id, ih) = b.fresh_local(nat_const.clone());
+                let beq_hd_a = Expr::apps(
+                    beq_beq.clone(),
+                    [alpha.clone(), inst.clone(), hd.clone(), a.clone()],
+                );
+                // inner Bool.rec motive: λ (_ : Bool) => Nat
+                let (bm_id, _bm) = b.fresh_local(bool_const.clone());
+                let bool_motive = b.mk_lam(
+                    bm_id,
+                    BinderInfo::Default,
+                    bool_const.clone(),
+                    nat_const.clone(),
+                );
+                let succ_ih = Expr::app(nat_succ.clone(), ih.clone());
+                // @Bool.rec (λ _ => Nat) ih (Nat.succ ih) (hd == a)
+                //   = if hd == a then ih + 1 else ih   (minor order [false, true])
+                let cons_body = Expr::apps(
+                    bool_rec.clone(),
+                    [bool_motive, ih.clone(), succ_ih, beq_hd_a],
+                );
+                let cons_case = b.mk_lam(ih_id, BinderInfo::Default, nat_const.clone(), cons_body);
+                let cons_case = b.mk_lam(tl_id, BinderInfo::Default, list_alpha.clone(), cons_case);
+                let cons_case = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), cons_case);
+
+                let body = Expr::apps(
+                    list_rec(lvl_bool.clone()),
+                    [
+                        alpha.clone(),
+                        motive,
+                        nat_zero.clone(),
+                        cons_case,
+                        l.clone(),
+                    ],
+                );
+                let e = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
+                let e = b.mk_lam(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_lam(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.count"),
+                level_params: vec![u.clone()],
+                type_: count_type,
+                value: count_value,
+                is_reducible: true,
+            })?;
+        }
+
+        // ── List.elem {α : Type u} [BEq α] (a : α) (l : List α) : Bool ──────
+        // R172: Lean `Init/Data/List/Basic.lean` — the primitive `List.contains`
+        // delegates to: `List.elem a | [] => false | b::bs => a == b || elem a bs`.
+        // Folded over `l` as
+        //   @List.rec α (λ _ => Bool) Bool.false
+        //             (λ hd _ ih => Bool.or (@BEq.beq α inst a hd) ih) l
+        // — identical `List.rec.{1,u}`→`Bool` shape to `List.contains` (R170), but
+        // the query element `a` is the FIRST explicit argument (so `l.elem a`
+        // resolves `l` to the `List α` parameter, matching Lean). Uses only
+        // fundamental primitives (Bool.or/Bool.false/BEq.beq/List.rec — NOT the
+        // later-registered Bool.toNat). Withheld in import mode.
+        if self.get_const(&Name::from_string("List.elem")).is_none() {
+            let bool_or = Expr::const_(Name::from_string("Bool.or"), vec![]);
+
+            let elem_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, _inst) = b.fresh_local(beq_alpha.clone());
+                let (a_id, _a) = b.fresh_local(alpha.clone());
+                let (l_id, _l) = b.fresh_local(list_alpha.clone());
+                let e = bool_const.clone();
+                let e = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_pi(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_pi(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let elem_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, inst) = b.fresh_local(beq_alpha.clone());
+                let (a_id, a) = b.fresh_local(alpha.clone());
+                let (l_id, l) = b.fresh_local(list_alpha.clone());
+
+                // motive: λ (_ : List α) => Bool
+                let (m_id, _m) = b.fresh_local(list_alpha.clone());
+                let motive = b.mk_lam(
+                    m_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    bool_const.clone(),
+                );
+
+                // cons case: λ (hd : α) (_ : List α) (ih : Bool) =>
+                //              Bool.or (@BEq.beq α inst a hd) ih
+                let (hd_id, hd) = b.fresh_local(alpha.clone());
+                let (tl_id, _tl) = b.fresh_local(list_alpha.clone());
+                let (ih_id, ih) = b.fresh_local(bool_const.clone());
+                let beq_a_hd = Expr::apps(
+                    beq_beq.clone(),
+                    [alpha.clone(), inst.clone(), a.clone(), hd.clone()],
+                );
+                let cons_body = Expr::apps(bool_or.clone(), [beq_a_hd, ih.clone()]);
+                let cons_case = b.mk_lam(ih_id, BinderInfo::Default, bool_const.clone(), cons_body);
+                let cons_case = b.mk_lam(tl_id, BinderInfo::Default, list_alpha.clone(), cons_case);
+                let cons_case = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), cons_case);
+
+                let body = Expr::apps(
+                    list_rec(lvl_bool.clone()),
+                    [
+                        alpha.clone(),
+                        motive,
+                        bool_false.clone(),
+                        cons_case,
+                        l.clone(),
+                    ],
+                );
+                let e = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
+                let e = b.mk_lam(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_lam(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.elem"),
+                level_params: vec![u.clone()],
+                type_: elem_type,
+                value: elem_value,
+                is_reducible: true,
+            })?;
+        }
+
+        // ── List.indexOf {α : Type u} [BEq α] (a : α) (l : List α) : Nat ────
+        // R173: Lean `Init/Data/List/Basic.lean` — `List.indexOf a := findIdx (· == a)`,
+        // the 0-based position of the first element BEq-equal to `a`, or `l.length`
+        // if none. As a direct (accumulator-free) fold:
+        //   indexOf a (hd :: tl) = if hd == a then 0 else Nat.succ (indexOf a tl)
+        //   indexOf a []         = 0
+        // i.e. @List.rec α (λ _ => Nat) Nat.zero
+        //        (λ hd _ ih => @Bool.rec (λ _ => Nat) (Nat.succ ih) Nat.zero (@BEq.beq α inst hd a)) l
+        // Bool.rec minor order [false, true]: no-match ↦ `Nat.succ ih` (1 + the
+        // index within the tail), match ↦ `Nat.zero` (found here). Same type/shape
+        // as `List.count` but the cons branches are swapped. All-fundamental
+        // primitives (Bool.rec/Nat.succ/Nat.zero/BEq.beq/List.rec); withheld in
+        // import mode.
+        if self.get_const(&Name::from_string("List.indexOf")).is_none() {
+            let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
+            let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+            let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+            let bool_rec = Expr::const_(Name::from_string("Bool.rec"), vec![lvl_bool.clone()]);
+
+            let index_of_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, _inst) = b.fresh_local(beq_alpha.clone());
+                let (a_id, _a) = b.fresh_local(alpha.clone());
+                let (l_id, _l) = b.fresh_local(list_alpha.clone());
+                let e = nat_const.clone();
+                let e = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_pi(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_pi(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let index_of_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let beq_alpha = Expr::app(beq_const.clone(), alpha.clone());
+                let list_alpha = list_alpha_of(&alpha);
+                let (inst_id, inst) = b.fresh_local(beq_alpha.clone());
+                let (a_id, a) = b.fresh_local(alpha.clone());
+                let (l_id, l) = b.fresh_local(list_alpha.clone());
+
+                // motive: λ (_ : List α) => Nat
+                let (m_id, _m) = b.fresh_local(list_alpha.clone());
+                let motive = b.mk_lam(
+                    m_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    nat_const.clone(),
+                );
+
+                // cons case: λ (hd : α) (_ : List α) (ih : Nat) =>
+                //   @Bool.rec (λ _ => Nat) (Nat.succ ih) Nat.zero (@BEq.beq α inst hd a)
+                let (hd_id, hd) = b.fresh_local(alpha.clone());
+                let (tl_id, _tl) = b.fresh_local(list_alpha.clone());
+                let (ih_id, ih) = b.fresh_local(nat_const.clone());
+                let beq_hd_a = Expr::apps(
+                    beq_beq.clone(),
+                    [alpha.clone(), inst.clone(), hd.clone(), a.clone()],
+                );
+                let (bm_id, _bm) = b.fresh_local(bool_const.clone());
+                let bool_motive = b.mk_lam(
+                    bm_id,
+                    BinderInfo::Default,
+                    bool_const.clone(),
+                    nat_const.clone(),
+                );
+                let succ_ih = Expr::app(nat_succ.clone(), ih.clone());
+                let cons_body = Expr::apps(
+                    bool_rec.clone(),
+                    [bool_motive, succ_ih, nat_zero.clone(), beq_hd_a],
+                );
+                let cons_case = b.mk_lam(ih_id, BinderInfo::Default, nat_const.clone(), cons_body);
+                let cons_case = b.mk_lam(tl_id, BinderInfo::Default, list_alpha.clone(), cons_case);
+                let cons_case = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), cons_case);
+
+                let body = Expr::apps(
+                    list_rec(lvl_bool.clone()),
+                    [
+                        alpha.clone(),
+                        motive,
+                        nat_zero.clone(),
+                        cons_case,
+                        l.clone(),
+                    ],
+                );
+                let e = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
+                let e = b.mk_lam(a_id, BinderInfo::Default, alpha.clone(), e);
+                let e = b.mk_lam(inst_id, BinderInfo::InstImplicit, beq_alpha.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.indexOf"),
+                level_params: vec![u.clone()],
+                type_: index_of_type,
+                value: index_of_value,
+                is_reducible: true,
+            })?;
+        }
+
         Ok(())
     }
 }

@@ -40,6 +40,7 @@ pub(crate) struct NNAddConsts {
     nat: Expr,
     rat: Expr,
     rat_zero: Expr,
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_add: Expr,
     nnrat_val: Expr,
@@ -69,6 +70,7 @@ pub(crate) struct NNAddConsts {
     exists_intro: Expr,
     exists_elim: Expr,
     // Eq.{1} over Rat.
+    #[cfg(test)]
     eq_rat: Expr,
     eq_symm: Expr,
     eq_subst: Expr,
@@ -82,6 +84,7 @@ impl NNAddConsts {
             nat: k("Nat"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_add: k("NNRat.add"),
             nnrat_val: k("NNRat.val"),
@@ -111,12 +114,14 @@ impl NNAddConsts {
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![lvl1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1]),
         }
     }
 
+    #[cfg(test)]
     fn seq_ty(&self) -> Expr {
         Expr::pi(BinderInfo::Default, self.nat.clone(), self.nnrat.clone())
     }

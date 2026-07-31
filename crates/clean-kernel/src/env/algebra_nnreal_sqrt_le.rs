@@ -52,6 +52,7 @@ pub(crate) struct SqrtLeConsts {
     rat_zero: Expr,
     rat_le: Expr,
     rat_lt: Expr,
+    #[cfg(test)]
     rat_mul: Expr,
     rat_add: Expr,
     rat_inv: Expr,
@@ -94,6 +95,7 @@ impl SqrtLeConsts {
             rat_zero: k("Rat.zero"),
             rat_le: k("Rat.le"),
             rat_lt: k("Rat.lt"),
+            #[cfg(test)]
             rat_mul: k("Rat.mul"),
             rat_add: k("Rat.add"),
             rat_inv: k("Rat.inv"),
@@ -133,6 +135,7 @@ impl SqrtLeConsts {
     fn npow2(&self, n: Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.nat_lit(2), n])
     }
+    #[cfg(test)]
     fn rmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }

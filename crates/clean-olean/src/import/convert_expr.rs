@@ -115,7 +115,7 @@ pub(crate) fn convert_expr(
     expr: &ParsedExpr,
     intern: &mut ExprInternCache,
 ) -> Result<(Expr, ExprSharingStats), ImportError> {
-    let mut work: SmallVec<[ConvertWork; 64]> = SmallVec::new();
+    let mut work: SmallVec<[ConvertWork<'_>; 64]> = SmallVec::new();
     // Results stack holds Arc<Expr> so Build* steps reuse interned children
     // directly as ExprKind fields, giving true pointer-level sharing.
     let mut results: SmallVec<[Arc<Expr>; 32]> = SmallVec::new();

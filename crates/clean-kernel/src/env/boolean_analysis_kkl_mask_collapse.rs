@@ -218,6 +218,7 @@ impl MaskConsts {
             [ty, a],
         )
     }
+    #[cfg(test)]
     fn refl_rat(&self, a: Expr) -> Expr {
         self.refl_at(&self.l1, self.rat.clone(), a)
     }
@@ -237,6 +238,7 @@ impl MaskConsts {
         )
     }
     /// `@Eq.subst.{1} Nat motive a b h_eq h_a : motive b`.
+    #[cfg(test)]
     fn subst_nat(&self, motive: Expr, a: Expr, b: Expr, h_eq: Expr, h_a: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.subst"), vec![self.l1.clone()]),

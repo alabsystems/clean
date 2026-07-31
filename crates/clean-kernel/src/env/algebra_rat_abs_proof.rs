@@ -77,6 +77,7 @@ pub(super) struct RatAbsConsts {
     add_right_cancel: Expr,
     add_assoc: Expr,
     add_comm: Expr,
+    #[cfg(test)]
     add_zero: Expr,
     zero_add: Expr,
     // Logic.
@@ -115,6 +116,7 @@ impl RatAbsConsts {
             add_right_cancel: c("Rat.add_right_cancel"),
             add_assoc: c("Rat.add_assoc"),
             add_comm: c("Rat.add_comm"),
+            #[cfg(test)]
             add_zero: c("Rat.add_zero"),
             zero_add: c("Rat.zero_add"),
             or_c: c("Or"),

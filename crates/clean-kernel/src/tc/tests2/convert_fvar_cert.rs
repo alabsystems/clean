@@ -38,14 +38,14 @@ fn test_convert_fvar_cert_to_bvar_multiple_fvars() {
     let result = convert_fvar_cert_to_bvar(app_cert, fvar1, 0);
 
     // The fn_cert should be BVar(0), but arg_cert should still be FVar(200)
-    match result {
+    match &result {
         ProofCert::App {
             fn_cert, arg_cert, ..
         } => {
             // fn_cert should be converted to BVar
-            match *fn_cert {
+            match fn_cert.as_ref() {
                 ProofCert::BVar { idx, .. } => {
-                    assert_eq!(idx, 0, "FVar1 should convert to BVar(0)");
+                    assert_eq!(*idx, 0, "FVar1 should convert to BVar(0)");
                 }
                 ProofCert::FVar { id, .. } => {
                     panic!("FVar1 should have been converted, got FVar({})", id.0);
@@ -54,7 +54,7 @@ fn test_convert_fvar_cert_to_bvar_multiple_fvars() {
             }
 
             // arg_cert should NOT be converted (different FVar)
-            match *arg_cert {
+            match arg_cert.as_ref() {
                 ProofCert::FVar { id, .. } => {
                     assert_eq!(
                         id.0, 200,
@@ -105,15 +105,15 @@ fn test_convert_fvar_cert_pi_body_depth() {
     // In the body, depth should be 1, so fvar -> BVar(1)
     let result = convert_fvar_cert_to_bvar(pi_cert, fvar, 0);
 
-    match result {
+    match &result {
         ProofCert::Pi { body_type_cert, .. } => {
-            match *body_type_cert {
+            match body_type_cert.as_ref() {
                 ProofCert::BVar { idx, .. } => {
                     // With correct depth + 1: fvar at body depth 1 -> BVar(1)
                     // With depth - 1: would be depth -1, wrong
                     // With depth * 1: would be depth 0, giving BVar(0)
                     assert_eq!(
-                        idx, 1,
+                        *idx, 1,
                         "FVar in Pi body should become BVar(1) at depth 1, got BVar({idx})"
                     );
                 }

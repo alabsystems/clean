@@ -3,10 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Wall-A COMPLETION — `def_eq_whnf_complete` over the FULL β+ι+δ+ζ reduction
-//! (Aristotle port; strategy guide `/tmp/ari-wallaiota/project_aristotle/
-//! WallAIota.lean`, namespace `WallAIota`, [propext, Quot.sound]-only closure
-//! there; ZETA extension per the validated `scratch/aristotle-conf-zeta/
-//! ConfZeta.lean` guide — `KExpr.let_` is a GENUINE constructor, and
+//! (Aristotle port; strategy guide `scratch/aristotle-harvest/
+//! aristotle-walla-iota/aristotle-walla-iota_aristotle/WallAIota.lean`, namespace
+//! `WallAIota` — IN THE TREE as of the 2026-07-26 second rescue. TREAT IT AS
+//! UNVERIFIED: elaborated under leanprover/lean4:v4.30.0-rc2 it exits 1 with 2
+//! errors and 1 `sorry`, so the "[propext, Quot.sound]-only closure" this comment
+//! used to assert of it is NOT established — the file does not currently compile.
+//! It is a strategy sketch, not a checked proof; see
+//! scratch/aristotle-harvest/UNRESCUED_CENSUS_2026-07-26.md.
+//! ZETA extension per the validated `scratch/aristotle-harvest/
+//! aristotle-conf-zeta/aristotle-conf-zeta_aristotle/ConfZeta.lean` guide —
+//! `KExpr.let_` is a GENUINE constructor, and
 //! `par_reduces_cd` carries the let_ (zeta) contraction plus the trailing
 //! let_cong congruence; a let_ is its own spine head, never an iota/delta
 //! redex and never neutral/whnf, so the rigidity family survives with
@@ -111,7 +118,8 @@ const I_BINDERS: &str = concat!(
 );
 
 /// Inline `KExpr.rec` discriminator: `sort` maps to `Nat` (inhabited), every
-/// other head to `Empty`. KExpr ctor order: sort, bvar, app, lam, pi, const, let_.
+/// other head to `Empty`. KExpr ctor order: sort, bvar, app, lam, pi, const,
+/// let_, proj, lit.
 const KEXPR_IS_SORT: &str = concat!(
     "(KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",

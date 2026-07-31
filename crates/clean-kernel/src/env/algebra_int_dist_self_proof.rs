@@ -74,13 +74,19 @@
 //! - `algebra_int_sub_self_proof.rs` (`Int.sub_self`, dependency).
 //! - `algebra_int_add_neg_self_proof.rs` (transitive dependency).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[cfg(test)]
 struct IntDistSelfConsts {
     int_type: Expr,
     int_dist: Expr,
@@ -96,7 +102,9 @@ struct IntDistSelfConsts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl IntDistSelfConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         let int_of_nat = Expr::const_(Name::from_string("Int.ofNat"), vec![]);
@@ -118,29 +126,35 @@ impl IntDistSelfConsts {
         }
     }
 
+    #[cfg(test)]
     fn dist(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.int_dist.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
 
+    #[cfg(test)]
     fn sub(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.int_sub.clone(), a), b)
     }
 
     /// `Int.ofNat 0` — the conclusion RHS, matching the original axiom signature.
+    #[cfg(test)]
     fn of_nat_zero(&self) -> Expr {
         Expr::app(self.int_of_nat.clone(), self.nat_zero.clone())
     }
 
+    #[cfg(test)]
     fn eq_int(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const.clone(), [self.int_type.clone(), lhs, rhs])
     }
 }
 
 /// Build `∀ a : Int, Eq Int (Int.dist a a) (Int.ofNat 0)`.
+#[cfg(test)]
 fn build_type(c: &IntDistSelfConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -157,6 +171,7 @@ fn build_type(c: &IntDistSelfConsts) -> Expr {
 ///     (@congrArg.{1,1} Int Int (Int.sub a a) Int.zero Int.abs (Int.sub_self a))
 ///     Int.abs_zero
 /// ```
+#[cfg(test)]
 fn build_value(c: &IntDistSelfConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -200,10 +215,12 @@ fn build_value(c: &IntDistSelfConsts) -> Expr {
     b.finish(val_raw)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register the reducible `Int.dist` Definition `λ a b => Int.abs (Int.sub
     /// a b)` if it is not already present. Mirrors the body registered by
     /// `init_int_dist` so the standalone `Int.dist_self` proof env is faithful.
+    #[cfg(test)]
     fn register_int_dist_def(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int
@@ -254,6 +271,7 @@ impl Environment {
     /// definitionally (both `Int.abs` and `Int.natAbs` are reducible), so the
     /// goal is closed by `@Eq.refl.{1} Int (Int.ofNat 0)`. Matches the
     /// constructive registration in `init_int_abs_props`.
+    #[cfg(test)]
     fn register_int_abs_zero_def(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int
@@ -311,6 +329,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Int.dist_self` is already registered with any
     ///          declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_int_dist_self_proof(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

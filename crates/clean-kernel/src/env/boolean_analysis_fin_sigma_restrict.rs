@@ -56,6 +56,7 @@ pub(super) struct SigmaRestrictConsts {
     pub(super) nat_le_of_ss: Expr,
     pub(super) nat_lt_of_le_ne: Expr,
     pub(super) false_c: Expr,
+    #[cfg(test)]
     pub(super) false_elim_l1: Expr,
     pub(super) eq1: Expr,
     pub(super) eq_symm: Expr,
@@ -82,6 +83,7 @@ impl SigmaRestrictConsts {
             nat_le_of_ss: k("Nat.le_of_succ_le_succ"),
             nat_lt_of_le_ne: k("Nat.lt_of_le_of_ne"),
             false_c: k("False"),
+            #[cfg(test)]
             false_elim_l1: Expr::const_(Name::from_string("False.elim"), vec![l1.clone()]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
@@ -112,6 +114,7 @@ impl SigmaRestrictConsts {
         Expr::apps(self.eq1.clone(), [self.nat.clone(), l, r])
     }
     /// `σ x`.
+    #[cfg(test)]
     pub(super) fn app1(&self, f: &Expr, x: Expr) -> Expr {
         Expr::app(f.clone(), x)
     }

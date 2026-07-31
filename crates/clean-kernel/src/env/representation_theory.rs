@@ -13,11 +13,16 @@
 //! - Weight Theory: structure of semisimple representations
 //! - Young Tableaux: combinatorics of symmetric group representations
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize RepresentationTheory module
     ///
@@ -41,6 +46,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.representation_theory_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_representation_theory(&mut self) -> Result<(), EnvError> {
         if self.representation_theory_init {
             return Ok(());
@@ -407,6 +413,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.representation_theory_init == true`
+    #[cfg(test)]
     pub(crate) fn has_representation_theory(&self) -> bool {
         self.representation_theory_init
     }

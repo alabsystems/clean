@@ -595,7 +595,7 @@ fn dichotomy_step(c: &OffDiagConsts) -> Expr {
 
     // ── inner Bool.rec on `y last`, given outer top value `va` and `ea`. ──
     let inner = |va: Expr, ea: Expr, parent: &EnvDeclBuilder| -> Expr {
-        let mut d = EnvDeclBuilder::child_of(parent);
+        let d = EnvDeclBuilder::child_of(parent);
         // motive_b : fun (b' : Bool) => Eq Bool (y last) b' → goal
         let motive_b = {
             let mut e = EnvDeclBuilder::child_of(&d);
@@ -722,6 +722,7 @@ struct OffDiagWrapConsts {
     eq_bool: Expr,
     eq_trans_bool: Expr,
     eq_symm_bool: Expr,
+    #[cfg(test)]
     btrue: Expr,
     bfalse: Expr,
     dichotomy: Expr,
@@ -761,6 +762,7 @@ impl OffDiagWrapConsts {
             eq_bool: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans_bool: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm_bool: Expr::const_(Name::from_string("Eq.symm"), vec![l1]),
+            #[cfg(test)]
             btrue: Expr::const_(Name::from_string("Bool.true"), vec![]),
             bfalse: Expr::const_(Name::from_string("Bool.false"), vec![]),
             dichotomy: Expr::const_(

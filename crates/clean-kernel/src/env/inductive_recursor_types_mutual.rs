@@ -11,11 +11,16 @@
 //! Extracted from `inductive_recursor_types.rs` for file-size compliance.
 //! Reference: Lean 4 `inductive.cpp:752-776`.
 
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::inductive::{count_pi_args, InductiveDecl};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 use super::inductive_fixed_indices::{ind_const_with_levels, CtorInfo};
 use super::Environment;
 
@@ -23,6 +28,7 @@ impl Environment {
     /// Build motive types for all types in a mutual inductive block.
     ///
     /// Each motive has type: `Pi indices_i, T_i params indices_i -> Sort u`
+    #[cfg(test)]
     fn build_mutual_motive_types(&self, decl: &InductiveDecl, motive_univ: &Level) -> Vec<Expr> {
         let num_params = decl.num_params;
         let mut motive_types = Vec::with_capacity(decl.types.len());
@@ -71,6 +77,7 @@ impl Environment {
     /// For mutual inductives, each minor's conclusion uses the motive of the
     /// type that constructor belongs to. IH types use the motive of the type
     /// the recursive field returns to (Lean 4 inductive.cpp:644,658).
+    #[cfg(test)]
     fn build_mutual_minor_types(
         &self,
         ind_name: &Name,
@@ -111,6 +118,7 @@ impl Environment {
     }
 
     /// Wrap motives, parameters, and apply infer_implicit to a result type.
+    #[cfg(test)]
     fn wrap_mutual_outer_binders(
         &self,
         mut result_ty: Expr,
@@ -150,6 +158,7 @@ impl Environment {
     ///
     /// Key difference from simple: num_motives = num_types, num_minors = total_ctors.
     /// Reference: Lean 4 `inductive.cpp:752-776`.
+    #[cfg(test)]
     pub(crate) fn build_mutual_recursor_type(
         &self,
         ind_name: &Name,
@@ -268,6 +277,7 @@ impl Environment {
     /// ((e : Even) -> motive_even e -> motive_odd (Odd.succ_even e)) ->
     /// motive_even t
     /// ```
+    #[cfg(test)]
     pub(crate) fn build_mutual_rec_on_type(
         &self,
         ind_name: &Name,

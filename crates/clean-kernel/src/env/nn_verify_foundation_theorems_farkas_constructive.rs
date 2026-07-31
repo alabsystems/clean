@@ -64,16 +64,14 @@ use crate::env::nn_verify_foundation_theorems_farkas_constructive_proofs::{
     build_farkas_combine_2_le_bound_proof, build_farkas_combine_2_proof, FarkasConsts,
 };
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::expr::BinderInfo;
 use crate::name::Name;
 
 impl Environment {
     /// Initialize the constructive Farkas-combination theorems.
     ///
-    /// Depends on: `init_nn_verify_foundation_theorems` (which itself
-    /// initializes `init_nn_verify_ibp_linear`, providing
-    /// `mul_nonneg_le_left` / `add_le_add`, and `init_nn_verify_proofs`,
-    /// providing `Rat.le_trans`).
+    /// Depends on: `init_nn_verify_farkas_order`, which provides exactly the
+    /// constructive Rat order declarations used by these proofs.
     ///
     /// # Contract
     /// REQUIRES: `self` is a valid Environment
@@ -85,7 +83,7 @@ impl Environment {
         if self.nn_verify_farkas_constructive_init {
             return Ok(());
         }
-        self.init_nn_verify_foundation_theorems()?;
+        self.init_nn_verify_farkas_order()?;
 
         let c = FarkasConsts::new();
         self.register_farkas_scale(&c)?;

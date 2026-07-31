@@ -21,13 +21,19 @@
 //!
 //! Part of #3262.
 
+#[cfg(test)]
 use super::nn_verify_robustness_generalization_defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for robustness-generalization formalization.
+#[cfg(test)]
 pub(super) struct RobustnessGenConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -53,7 +59,9 @@ pub(super) struct RobustnessGenConsts {
     pub(super) gen_bound: Expr,
 }
 
+#[cfg(test)]
 impl RobustnessGenConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -100,6 +108,7 @@ impl RobustnessGenConsts {
     }
 
     /// Build `LE.le @Rat instLERat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -114,6 +123,7 @@ impl RobustnessGenConsts {
     }
 
     /// Build `LT.lt @Rat instLTRat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_lt(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -128,26 +138,31 @@ impl RobustnessGenConsts {
     }
 
     /// Build `Rat.add a b`.
+    #[cfg(test)]
     pub(super) fn add(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_add.clone(), a), b)
     }
 
     /// Build `Rat.mul a b`.
+    #[cfg(test)]
     pub(super) fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 
     /// Build `Rat.div a b`.
+    #[cfg(test)]
     pub(super) fn div(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_div.clone(), a), b)
     }
 
     /// Build `NNVerify.NNVec n`.
+    #[cfg(test)]
     pub(super) fn vec_of(&self, n: Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n)
     }
 
     /// Function type `NNVerify.NNVec n -> NNVerify.NNVec n`.
+    #[cfg(test)]
     pub(super) fn endo_ty(&self, n: &Expr) -> Expr {
         Expr::pi(
             BinderInfo::Default,
@@ -157,6 +172,7 @@ impl RobustnessGenConsts {
     }
 
     /// `Rat.add Rat.one Rat.one` (the constant 2).
+    #[cfg(test)]
     pub(super) fn two(&self) -> Expr {
         self.add(self.rat_one.clone(), self.rat_one.clone())
     }
@@ -166,6 +182,7 @@ impl RobustnessGenConsts {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Initialize C010 (robustness-generalization bounds) declarations.
     ///
@@ -173,7 +190,7 @@ impl Environment {
     /// - `init_nn_verify_types()` for NNVec
     /// - `init_rat()` / `init_rat_ord()` for Rat arithmetic and ordering
     /// - `init_eq()` for equality, `init_and()` for conjunction
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_robustness_gen(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string(
@@ -287,7 +304,7 @@ impl Environment {
     /// replaced with a faithful Lipschitz predicate. Axiom retirement
     /// requires Branch B (faithful `lipschitz_local`) plus a genuine
     /// certificate-to-Lipschitz proof.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_rg_certified_implies_lipschitz_local(
         &mut self,
         c: &RobustnessGenConsts,
@@ -337,7 +354,7 @@ impl Environment {
     //       machinery via the Tier-2 .olean bridge.
     // Both are out of scope for #3571.
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_rg_lipschitz_rademacher_bound(
         &mut self,
         c: &RobustnessGenConsts,
@@ -365,7 +382,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_rg_rademacher_gen_bound(
         &mut self,
         c: &RobustnessGenConsts,
@@ -389,7 +406,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_rg_certificate_gen_bound(
         &mut self,
         c: &RobustnessGenConsts,
@@ -415,7 +432,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_rg_tighter_cert_better_gen(
         &mut self,
         c: &RobustnessGenConsts,

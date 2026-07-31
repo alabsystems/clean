@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 //! Goal closing, management, and proof state cloning operations.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use super::error::TacticError;
 use super::{Goal, LocalDecl, ProofState};
 use crate::unify::MetaState;

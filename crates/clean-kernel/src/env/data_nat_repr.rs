@@ -50,7 +50,7 @@
 
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 

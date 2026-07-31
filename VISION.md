@@ -173,7 +173,7 @@ certificate for commit-pinned
 boundaries rather than relying on this vision document; the replacement audit
 is `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md` in the development tree.
 
-<sub>For current LOC and test counts, see [README.md#current-state](README.md#current-state) and verify with `clean release readiness-smoke`.</sub>
+<sub>For current LOC and test counts, see [README.md#status](README.md#status) and verify with `clean release readiness-smoke`.</sub>
 
 ## Non-Goals
 

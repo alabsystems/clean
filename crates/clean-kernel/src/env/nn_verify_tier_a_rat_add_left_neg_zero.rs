@@ -78,6 +78,7 @@ impl Environment {
     }
 
     /// Check if Tier A `Rat.add_left_neg_zero` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_rat_add_left_neg_zero(&self) -> bool {
         self.nn_verify_tier_a_rat_add_left_neg_zero_init
     }

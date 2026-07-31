@@ -139,7 +139,7 @@ fn twocycle_step_value(c: &TwoCycleConsts) -> Expr {
     // ===========================================================================
     let sum_m_f = c.sum(&m, &f);
     let sum_k_cf = c.sum(&k, &cf);
-    let r_rhs = c.add(sum_k_cf.clone(), a.clone());
+    let _r_rhs = c.add(sum_k_cf.clone(), a.clone());
     let r1 = Expr::apps(c.fin_sum_succ.clone(), [k.clone(), f.clone()]);
 
     // The tail (sum_remove legs, complement-sum equality, IH, final assembly)

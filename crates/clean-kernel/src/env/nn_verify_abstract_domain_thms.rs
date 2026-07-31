@@ -14,13 +14,20 @@
 //!
 //! Part of #3261.
 
+#[cfg(test)]
 use super::nn_verify_abstract_domain::AbstractDomainConsts;
+#[cfg(test)]
 use super::nn_verify_abstract_domain_defs as defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
+    #[cfg(test)]
     pub(super) fn register_ad_galois_soundness(
         &mut self,
         c: &AbstractDomainConsts,
@@ -43,6 +50,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_ad_transformer_soundness(
         &mut self,
         c: &AbstractDomainConsts,
@@ -65,6 +73,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_ad_composition_soundness(
         &mut self,
         c: &AbstractDomainConsts,
@@ -87,6 +96,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_ad_precision_monotone(
         &mut self,
         c: &AbstractDomainConsts,
@@ -109,6 +119,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_ad_ibp_is_interval_domain(
         &mut self,
         c: &AbstractDomainConsts,
@@ -131,6 +142,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_ad_zonotope_refines_interval(
         &mut self,
         c: &AbstractDomainConsts,

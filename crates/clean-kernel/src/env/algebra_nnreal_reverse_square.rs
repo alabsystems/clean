@@ -59,18 +59,23 @@
 
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::expr::ExprKind;
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the reverse-order keystone.
 pub(crate) struct RevSqConsts {
+    #[cfg(test)]
     prop: Expr,
     nat: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     rat: Expr,
     rat_zero: Expr,
     rat_two: Expr,
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_val: Expr,
     nnrat_of_rat: Expr,
@@ -89,7 +94,9 @@ pub(crate) struct RevSqConsts {
     rat_half_pos: Expr,
     rat_add_assoc: Expr,
     rat_add_halves: Expr,
+    #[cfg(test)]
     rat_add_zero: Expr,
+    #[cfg(test)]
     rat_add_lt_add_left: Expr,
     rat_lt_iff_le_not_le: Expr,
     not_c: Expr,
@@ -113,12 +120,15 @@ impl RevSqConsts {
         let lvl1 = Level::succ(Level::zero());
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
+            #[cfg(test)]
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             nat: k("Nat"),
+            #[cfg(test)]
             nat_zero: k("Nat.zero"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
             rat_two: k("Rat.two"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_val: k("NNRat.val"),
             nnrat_of_rat: k("NNRat.ofRat"),
@@ -136,7 +146,9 @@ impl RevSqConsts {
             rat_half_pos: k("Rat.half_pos"),
             rat_add_assoc: k("Rat.add_assoc"),
             rat_add_halves: k("Rat.add_halves"),
+            #[cfg(test)]
             rat_add_zero: k("Rat.add_zero"),
+            #[cfg(test)]
             rat_add_lt_add_left: k("Rat.add_lt_add_left"),
             rat_lt_iff_le_not_le: k("Rat.lt_iff_le_not_le"),
             not_c: k("Not"),
@@ -233,10 +245,12 @@ impl RevSqConsts {
         Expr::app(self.rat_add_halves.clone(), eps)
     }
     /// `Rat.add_zero a : Eq Rat (Rat.add a Rat.zero) a`.
+    #[cfg(test)]
     fn add_zero(&self, a: Expr) -> Expr {
         Expr::app(self.rat_add_zero.clone(), a)
     }
     /// `Rat.add_lt_add_left a b c h : (c+a) < (c+b)`.
+    #[cfg(test)]
     fn add_lt_add_left(&self, a: Expr, b: Expr, cc: Expr, h: Expr) -> Expr {
         Expr::apps(self.rat_add_lt_add_left.clone(), [a, b, cc, h])
     }

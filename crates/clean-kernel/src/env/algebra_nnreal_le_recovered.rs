@@ -86,6 +86,7 @@ pub(crate) struct NNLeConsts {
     pub(crate) exists_elim: Expr,
     pub(crate) propext: Expr,
     // Eq.{1} over Rat.
+    #[cfg(test)]
     pub(crate) eq_rat: Expr,
     pub(crate) eq_trans: Expr,
     pub(crate) eq_subst: Expr,
@@ -135,6 +136,7 @@ impl NNLeConsts {
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![lvl1.clone()]),
             propext: k("propext"),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1.clone()]),

@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 use super::super::ProofCert;
 use super::compress::compress_cert;
 use super::decompress::decompress_cert;
+use super::limits::{
+    decode_certificate_bincode_limited, read_declared_bounded, read_unknown_bounded,
+    MAX_COMPRESSED_ARCHIVE_BYTES, MAX_DICTIONARY_BYTES, MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+};
 use super::types::CompressedCert;
 
 /// A trained dictionary for certificate compression.
@@ -44,6 +48,12 @@ impl CertDictionary {
     /// Minimum samples needed for effective training
     pub const MIN_SAMPLES: usize = 5;
 
+    /// Maximum number of samples accepted by one training request.
+    pub const MAX_TRAINING_SAMPLES: usize = 100_000;
+
+    /// Maximum aggregate serialized sample bytes accepted for training.
+    pub const MAX_TRAINING_SAMPLE_BYTES: usize = MAX_UNCOMPRESSED_ARCHIVE_BYTES;
+
     /// Create a dictionary from raw bytes.
     pub fn from_bytes(data: Vec<u8>, target_level: i32) -> Self {
         let dict_id = Self::compute_id(&data);
@@ -62,24 +72,21 @@ impl CertDictionary {
         max_size: usize,
         level: i32,
     ) -> Result<Self, DictTrainError> {
-        if samples.len() < Self::MIN_SAMPLES {
-            return Err(DictTrainError::NotEnoughSamples {
-                provided: samples.len(),
-                minimum: Self::MIN_SAMPLES,
-            });
-        }
+        validate_training_shape(samples.len(), max_size)?;
 
-        let sample_bytes: Vec<Vec<u8>> = samples
-            .iter()
-            .map(|cert| {
-                let compressed = compress_cert(cert).map_err(|e| {
-                    DictTrainError::SerializeError(format!("Failed to compress sample: {e}"))
+        let mut aggregate_bytes = 0usize;
+        let mut sample_bytes = Vec::with_capacity(samples.len());
+        for cert in samples {
+            let compressed = compress_cert(cert).map_err(|e| {
+                DictTrainError::SerializeError(format!("Failed to compress sample: {e}"))
+            })?;
+            let bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
+                .map_err(|e| {
+                    DictTrainError::SerializeError(format!("Failed to serialize sample: {e}"))
                 })?;
-                bincode::serde::encode_to_vec(&compressed, bincode::config::standard()).map_err(
-                    |e| DictTrainError::SerializeError(format!("Failed to serialize sample: {e}")),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            add_training_sample_bytes(&mut aggregate_bytes, bytes.len())?;
+            sample_bytes.push(bytes);
+        }
 
         let dict_data = zstd::dict::from_samples(&sample_bytes, max_size)
             .map_err(|e| DictTrainError::TrainError(e.to_string()))?;
@@ -101,11 +108,10 @@ impl CertDictionary {
         max_size: usize,
         level: i32,
     ) -> Result<Self, DictTrainError> {
-        if samples.len() < Self::MIN_SAMPLES {
-            return Err(DictTrainError::NotEnoughSamples {
-                provided: samples.len(),
-                minimum: Self::MIN_SAMPLES,
-            });
+        validate_training_shape(samples.len(), max_size)?;
+        let mut aggregate_bytes = 0usize;
+        for sample in samples {
+            add_training_sample_bytes(&mut aggregate_bytes, sample.len())?;
         }
 
         let dict_data = zstd::dict::from_samples(samples, max_size)
@@ -159,12 +165,65 @@ pub enum DictTrainError {
         /// Minimum samples required
         minimum: usize,
     },
+    /// A dictionary training resource limit was exceeded.
+    #[error("{resource} {size} exceeds maximum {max}")]
+    ResourceLimit {
+        /// Resource being limited.
+        resource: &'static str,
+        /// Requested or accumulated amount.
+        size: usize,
+        /// Maximum accepted amount.
+        max: usize,
+    },
     /// Failed to serialize sample
     #[error("Serialization error: {0}")]
     SerializeError(String),
     /// Zstd training failed
     #[error("Dictionary training error: {0}")]
     TrainError(String),
+}
+
+fn validate_training_shape(sample_count: usize, max_size: usize) -> Result<(), DictTrainError> {
+    if max_size > MAX_DICTIONARY_BYTES {
+        return Err(DictTrainError::ResourceLimit {
+            resource: "dictionary size",
+            size: max_size,
+            max: MAX_DICTIONARY_BYTES,
+        });
+    }
+    if sample_count < CertDictionary::MIN_SAMPLES {
+        return Err(DictTrainError::NotEnoughSamples {
+            provided: sample_count,
+            minimum: CertDictionary::MIN_SAMPLES,
+        });
+    }
+    if sample_count > CertDictionary::MAX_TRAINING_SAMPLES {
+        return Err(DictTrainError::ResourceLimit {
+            resource: "dictionary training sample count",
+            size: sample_count,
+            max: CertDictionary::MAX_TRAINING_SAMPLES,
+        });
+    }
+    Ok(())
+}
+
+fn add_training_sample_bytes(total: &mut usize, sample_size: usize) -> Result<(), DictTrainError> {
+    let next = total
+        .checked_add(sample_size)
+        .ok_or(DictTrainError::ResourceLimit {
+            resource: "dictionary training sample bytes",
+            size: usize::MAX,
+            max: CertDictionary::MAX_TRAINING_SAMPLE_BYTES,
+        })?;
+    if next > CertDictionary::MAX_TRAINING_SAMPLE_BYTES {
+        return Err(DictTrainError::ResourceLimit {
+            resource: "dictionary training sample bytes",
+            size: next,
+            max: CertDictionary::MAX_TRAINING_SAMPLE_BYTES,
+        });
+    }
+    *total = next;
+    Ok(())
 }
 
 /// A certificate archive compressed with a trained dictionary.
@@ -184,7 +243,11 @@ pub struct DictCertArchive {
 
 impl DictCertArchive {
     /// Archive format version
-    pub const VERSION: u8 = 1;
+    ///
+    /// Version 2 preserves binder multiplicity and let-binding metadata in
+    /// compressed expressions. Version 1 is rejected rather than decoded
+    /// lossily.
+    pub const VERSION: u8 = 2;
 }
 
 /// Statistics about dictionary-compressed archive.
@@ -248,13 +311,37 @@ pub enum DictCompressError {
         /// Found dictionary ID
         found: u32,
     },
-    /// Data too large to store in archive format (>4GB uncompressed)
+    /// Data exceeds an archive resource limit.
     #[error("Data size {size} exceeds maximum {max} bytes")]
     SizeOverflow {
         /// Actual data size in bytes
         size: usize,
         /// Maximum allowed size in bytes
         max: u32,
+    },
+    /// Archive format version is unsupported.
+    #[error("Unsupported archive version {found}; expected {expected}")]
+    UnsupportedVersion {
+        /// Version found in the archive.
+        found: u8,
+        /// Version supported by this decoder.
+        expected: u8,
+    },
+    /// Dictionary format version is unsupported.
+    #[error("Unsupported dictionary version {found}; expected {expected}")]
+    UnsupportedDictionaryVersion {
+        /// Version found in the dictionary.
+        found: u8,
+        /// Version supported by this decoder.
+        expected: u8,
+    },
+    /// Dictionary bytes do not match their declared identifier.
+    #[error("Dictionary ID mismatch: expected {expected:#x}, found {found:#x}")]
+    DictionaryIdMismatch {
+        /// Identifier recomputed from the dictionary bytes.
+        expected: u32,
+        /// Identifier declared by the dictionary.
+        found: u32,
     },
 }
 
@@ -265,6 +352,35 @@ fn usize_to_u32_dict(size: usize) -> Result<u32, DictCompressError> {
         size,
         max: u32::MAX,
     })
+}
+
+fn ensure_size(size: usize, max: usize) -> Result<(), DictCompressError> {
+    if size <= max {
+        Ok(())
+    } else {
+        Err(DictCompressError::SizeOverflow {
+            size,
+            max: max as u32,
+        })
+    }
+}
+
+fn validate_dictionary(dict: &CertDictionary) -> Result<(), DictCompressError> {
+    ensure_size(dict.data.len(), MAX_DICTIONARY_BYTES)?;
+    if dict.version != CertDictionary::VERSION {
+        return Err(DictCompressError::UnsupportedDictionaryVersion {
+            found: dict.version,
+            expected: CertDictionary::VERSION,
+        });
+    }
+    let expected = CertDictionary::compute_id(&dict.data);
+    if dict.dict_id != expected {
+        return Err(DictCompressError::DictionaryIdMismatch {
+            expected,
+            found: dict.dict_id,
+        });
+    }
+    Ok(())
 }
 
 /// Archive a certificate using dictionary compression.
@@ -281,11 +397,13 @@ pub fn zstd_archive_cert_with_dict_level(
     dict: &CertDictionary,
     level: i32,
 ) -> Result<DictCertArchive, DictCompressError> {
+    validate_dictionary(dict)?;
     let compressed =
         compress_cert(cert).map_err(|e| DictCompressError::CompressError(e.to_string()))?;
 
     let bincode_bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
         .map_err(|e| DictCompressError::SerializeError(e.to_string()))?;
+    ensure_size(bincode_bytes.len(), MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
 
     let uncompressed_size = usize_to_u32_dict(bincode_bytes.len())?;
 
@@ -299,6 +417,7 @@ pub fn zstd_archive_cert_with_dict_level(
             .finish()
             .map_err(|e| DictCompressError::CompressError(e.to_string()))?;
     }
+    ensure_size(output.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
 
     Ok(DictCertArchive {
         compressed_data: output,
@@ -314,6 +433,14 @@ pub fn zstd_unarchive_cert_with_dict(
     archive: &DictCertArchive,
     dict: &CertDictionary,
 ) -> Result<ProofCert, DictCompressError> {
+    if archive.version != DictCertArchive::VERSION {
+        return Err(DictCompressError::UnsupportedVersion {
+            found: archive.version,
+            expected: DictCertArchive::VERSION,
+        });
+    }
+    validate_dictionary(dict)?;
+    ensure_size(archive.compressed_data.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
     if archive.dict_id != dict.dict_id {
         return Err(DictCompressError::DictMismatch {
             expected: archive.dict_id,
@@ -321,21 +448,23 @@ pub fn zstd_unarchive_cert_with_dict(
         });
     }
 
-    let mut decompressed = Vec::with_capacity(archive.uncompressed_size as usize);
-    {
-        let mut decoder = zstd::stream::Decoder::with_dictionary(
-            std::io::Cursor::new(&archive.compressed_data),
-            &dict.data,
-        )
-        .map_err(|e| DictCompressError::DecompressError(e.to_string()))?;
-        std::io::Read::read_to_end(&mut decoder, &mut decompressed)
-            .map_err(|e| DictCompressError::DecompressError(e.to_string()))?;
-    }
+    let mut decoder = zstd::stream::Decoder::with_dictionary(
+        std::io::Cursor::new(&archive.compressed_data),
+        &dict.data,
+    )
+    .map_err(|e| DictCompressError::DecompressError(e.to_string()))?
+    .single_frame();
+    let decompressed = read_declared_bounded(
+        &mut decoder,
+        archive.uncompressed_size as usize,
+        MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+        "dictionary certificate archive",
+    )
+    .map_err(DictCompressError::DecompressError)?;
+    reject_trailing_dict_zstd_input(&mut decoder)?;
 
-    let compressed_cert: CompressedCert =
-        bincode::serde::decode_from_slice(&decompressed, bincode::config::standard())
-            .map(|(__v, _)| __v)
-            .map_err(|e| DictCompressError::DeserializeError(e.to_string()))?;
+    let compressed_cert: CompressedCert = decode_certificate_bincode_limited(&decompressed)
+        .map_err(DictCompressError::DeserializeError)?;
 
     decompress_cert(&compressed_cert)
         .map_err(|e| DictCompressError::DeserializeError(format!("Structure decompress: {e}")))
@@ -346,6 +475,7 @@ pub fn zstd_archive_cert_with_dict_stats(
     cert: &ProofCert,
     dict: &CertDictionary,
 ) -> Result<(DictCertArchive, DictArchiveStats), DictCompressError> {
+    validate_dictionary(dict)?;
     zstd_archive_cert_with_dict_stats_level(cert, dict, dict.target_level)
 }
 
@@ -355,6 +485,7 @@ pub fn zstd_archive_cert_with_dict_stats_level(
     dict: &CertDictionary,
     level: i32,
 ) -> Result<(DictCertArchive, DictArchiveStats), DictCompressError> {
+    validate_dictionary(dict)?;
     let original_bytes = bincode::serde::encode_to_vec(cert, bincode::config::standard())
         .map_err(|e| DictCompressError::SerializeError(e.to_string()))?;
     let original_cert_bytes = original_bytes.len();
@@ -363,6 +494,7 @@ pub fn zstd_archive_cert_with_dict_stats_level(
         compress_cert(cert).map_err(|e| DictCompressError::CompressError(e.to_string()))?;
     let structure_bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
         .map_err(|e| DictCompressError::SerializeError(e.to_string()))?;
+    ensure_size(structure_bytes.len(), MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
     let structure_shared_bytes = structure_bytes.len();
 
     let mut output = Vec::new();
@@ -375,6 +507,7 @@ pub fn zstd_archive_cert_with_dict_stats_level(
             .finish()
             .map_err(|e| DictCompressError::CompressError(e.to_string()))?;
     }
+    ensure_size(output.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
     let archive_bytes = output.len();
 
     let archive = DictCertArchive {
@@ -422,6 +555,7 @@ pub fn zstd_compress_with_dict(
     data: &[u8],
     dict: &CertDictionary,
 ) -> Result<Vec<u8>, DictCompressError> {
+    validate_dictionary(dict)?;
     zstd_compress_with_dict_level(data, dict, dict.target_level)
 }
 
@@ -431,6 +565,7 @@ pub fn zstd_compress_with_dict_level(
     dict: &CertDictionary,
     level: i32,
 ) -> Result<Vec<u8>, DictCompressError> {
+    validate_dictionary(dict)?;
     let mut output = Vec::new();
     {
         let mut encoder = zstd::stream::Encoder::with_dictionary(&mut output, level, &dict.data)
@@ -441,6 +576,7 @@ pub fn zstd_compress_with_dict_level(
             .finish()
             .map_err(|e| DictCompressError::CompressError(e.to_string()))?;
     }
+    ensure_size(output.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
     Ok(output)
 }
 
@@ -449,15 +585,37 @@ pub fn zstd_decompress_with_dict(
     data: &[u8],
     dict: &CertDictionary,
 ) -> Result<Vec<u8>, DictCompressError> {
-    let mut decompressed = Vec::new();
+    validate_dictionary(dict)?;
+    ensure_size(data.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
+    let mut decoder =
+        zstd::stream::Decoder::with_dictionary(std::io::Cursor::new(data), &dict.data)
+            .map_err(|e| DictCompressError::DecompressError(e.to_string()))?
+            .single_frame();
+    let output = read_unknown_bounded(
+        &mut decoder,
+        MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+        "dictionary zstd payload",
+    )
+    .map_err(DictCompressError::DecompressError)?;
+    reject_trailing_dict_zstd_input(&mut decoder)?;
+    Ok(output)
+}
+
+fn reject_trailing_dict_zstd_input<R: std::io::BufRead>(
+    decoder: &mut zstd::stream::Decoder<'_, R>,
+) -> Result<(), DictCompressError> {
+    let mut trailing = [0_u8; 1];
+    if decoder
+        .get_mut()
+        .read(&mut trailing)
+        .map_err(|error| DictCompressError::DecompressError(error.to_string()))?
+        != 0
     {
-        let mut decoder =
-            zstd::stream::Decoder::with_dictionary(std::io::Cursor::new(data), &dict.data)
-                .map_err(|e| DictCompressError::DecompressError(e.to_string()))?;
-        std::io::Read::read_to_end(&mut decoder, &mut decompressed)
-            .map_err(|e| DictCompressError::DecompressError(e.to_string()))?;
+        return Err(DictCompressError::DecompressError(
+            "trailing bytes after dictionary zstd frame".to_string(),
+        ));
     }
-    Ok(decompressed)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -482,5 +640,71 @@ mod tests {
         assert!(dict.is_compatible_level(5)); // diff 5
         assert!(!dict.is_compatible_level(16)); // diff 6
         assert!(!dict.is_compatible_level(4)); // diff 6
+    }
+
+    #[test]
+    fn training_rejects_oversized_dictionary_before_sample_processing() {
+        let error = CertDictionary::train_from_bytes(&[], MAX_DICTIONARY_BYTES + 1, 3).unwrap_err();
+        assert!(matches!(
+            error,
+            DictTrainError::ResourceLimit {
+                resource: "dictionary size",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn training_caps_sample_count_and_aggregate_bytes() {
+        assert!(matches!(
+            validate_training_shape(CertDictionary::MAX_TRAINING_SAMPLES + 1, 1024),
+            Err(DictTrainError::ResourceLimit {
+                resource: "dictionary training sample count",
+                ..
+            })
+        ));
+
+        let mut total = CertDictionary::MAX_TRAINING_SAMPLE_BYTES;
+        assert!(matches!(
+            add_training_sample_bytes(&mut total, 1),
+            Err(DictTrainError::ResourceLimit {
+                resource: "dictionary training sample bytes",
+                ..
+            })
+        ));
+
+        let mut overflow = usize::MAX;
+        assert!(matches!(
+            add_training_sample_bytes(&mut overflow, 1),
+            Err(DictTrainError::ResourceLimit {
+                resource: "dictionary training sample bytes",
+                size: usize::MAX,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn dictionary_operations_reject_legacy_or_forged_metadata() {
+        let mut legacy = CertDictionary::from_bytes(vec![1, 2, 3], 3);
+        legacy.version = CertDictionary::VERSION - 1;
+        assert!(matches!(
+            zstd_compress_with_dict(b"payload", &legacy),
+            Err(DictCompressError::UnsupportedDictionaryVersion { .. })
+        ));
+
+        let mut mutated = CertDictionary::from_bytes(vec![1, 2, 3], 3);
+        mutated.data.push(4);
+        assert!(matches!(
+            zstd_compress_with_dict(b"payload", &mutated),
+            Err(DictCompressError::DictionaryIdMismatch { .. })
+        ));
+
+        let mut forged = CertDictionary::from_bytes(vec![1, 2, 3], 3);
+        forged.dict_id ^= 1;
+        assert!(matches!(
+            zstd_decompress_with_dict(b"", &forged),
+            Err(DictCompressError::DictionaryIdMismatch { .. })
+        ));
     }
 }

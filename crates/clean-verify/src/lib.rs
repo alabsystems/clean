@@ -70,6 +70,7 @@ pub mod interval_arith;
 pub mod neural_surgery;
 pub mod nn_verify;
 pub mod no_masquerade;
+pub mod premise_witness;
 pub mod promotion_guard;
 pub mod promotion_report;
 pub mod proof_artifact_v1;

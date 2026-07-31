@@ -51,11 +51,13 @@ struct IntLeOfOfNatConsts {
     nat: Expr,
     nat_succ: Expr,
     nat_le: Expr,
+    #[cfg(test)]
     int: Expr,
     int_of_nat: Expr,
     int_le: Expr,
     or_const: Expr,
     or_rec: Expr,
+    #[cfg(test)]
     false_const: Expr,
     false_elim: Expr,
     nat_le_or_lt: Expr,
@@ -70,11 +72,13 @@ impl IntLeOfOfNatConsts {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             nat_le: Expr::const_(Name::from_string("Nat.le"), vec![]),
+            #[cfg(test)]
             int: Expr::const_(Name::from_string("Int"), vec![]),
             int_of_nat: Expr::const_(Name::from_string("Int.ofNat"), vec![]),
             int_le: Expr::const_(Name::from_string("Int.le"), vec![]),
             or_const: Expr::const_(Name::from_string("Or"), vec![]),
             or_rec: Expr::const_(Name::from_string("Or.rec"), vec![]),
+            #[cfg(test)]
             false_const: Expr::const_(Name::from_string("False"), vec![]),
             false_elim: Expr::const_(
                 Name::from_string("False.elim"),

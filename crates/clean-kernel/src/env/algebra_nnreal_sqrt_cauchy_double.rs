@@ -56,6 +56,7 @@ pub(crate) struct DoubleConsts {
     rat_mul: Expr,
     rat_inv: Expr,
     rat_ofnat: Expr,
+    #[cfg(test)]
     rat_ofnat_mul: Expr,
     rat_inv_two_pow_succ: Expr,
     rat_add_natcast_one: Expr,
@@ -66,6 +67,7 @@ pub(crate) struct DoubleConsts {
     rat_mul_one: Expr,
     rat_ne_zero_of_pos: Expr,
     rat_zero_lt_ofnat_two_pow: Expr,
+    #[cfg(test)]
     rat_inv_ofnat_two_add_self: Expr,
     eq_rat: Expr,
     eq_refl: Expr,
@@ -89,6 +91,7 @@ impl DoubleConsts {
             rat_mul: k("Rat.mul"),
             rat_inv: k("Rat.inv"),
             rat_ofnat: k("Rat.ofNat"),
+            #[cfg(test)]
             rat_ofnat_mul: k("Rat.ofNat_mul"),
             rat_inv_two_pow_succ: k("Rat.inv_two_pow_succ"),
             rat_add_natcast_one: k("Rat.add_natCast_one"),
@@ -99,6 +102,7 @@ impl DoubleConsts {
             rat_mul_one: k("Rat.mul_one"),
             rat_ne_zero_of_pos: k("Rat.ne_zero_of_pos"),
             rat_zero_lt_ofnat_two_pow: k("Rat.zero_lt_ofNat_two_pow"),
+            #[cfg(test)]
             rat_inv_ofnat_two_add_self: k("Rat.inv_ofNat_two_add_self"),
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_refl: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
@@ -210,7 +214,7 @@ impl Environment {
         let inv2 = c.inv(of2.clone());
 
         let ty = {
-            let mut b = EnvDeclBuilder::new();
+            let b = EnvDeclBuilder::new();
             let concl = c.eq_ty(c.add(inv2.clone(), inv2.clone()), one.clone());
             b.finish(concl)
         };

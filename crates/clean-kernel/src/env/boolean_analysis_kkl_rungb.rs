@@ -157,6 +157,7 @@ impl RungBConsts {
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }

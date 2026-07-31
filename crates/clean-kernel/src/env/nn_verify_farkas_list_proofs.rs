@@ -173,17 +173,20 @@ impl FarkasListConsts {
     //    a concrete `List Row` and the applied `farkas_combine_list` instance.
 
     /// `Row := Prod Rat (Prod Rat Rat)` type — exposed for the parser.
+    #[cfg(test)]
     pub(in crate::env) fn row_type(&self) -> Expr {
         self.row_ty()
     }
 
     /// `List Row` type — exposed for the parser.
+    #[cfg(test)]
     pub(in crate::env) fn rows_type(&self) -> Expr {
         self.rows_ty()
     }
 
     /// Build a concrete row literal `Prod.mk Rat (Prod Rat Rat) mu
     /// (Prod.mk Rat Rat a b) : Row` from the three rational `Expr`s.
+    #[cfg(test)]
     pub(in crate::env) fn mk_row_lit(&self, mu: Expr, a: Expr, b: Expr) -> Expr {
         let prod_mk = Expr::const_(
             Name::from_string("Prod.mk"),
@@ -194,6 +197,7 @@ impl FarkasListConsts {
     }
 
     /// Fold a slice of `Row` literals into `r0 :: r1 :: … :: List.nil Row`.
+    #[cfg(test)]
     pub(in crate::env) fn mk_rows_list(&self, rows: &[Expr]) -> Expr {
         let row_ty = self.row_ty();
         let nil = Expr::app(
@@ -207,18 +211,21 @@ impl FarkasListConsts {
     }
 
     /// `farkasRowsValid rows` proposition — exposed for the parser hypothesis.
+    #[cfg(test)]
     pub(in crate::env) fn rows_valid_prop(&self, rows: &Expr) -> Expr {
         self.valid_app(rows)
     }
 
     /// `farkasLower rows ≤ farkasUpper rows` proposition — the combination
     /// conclusion the parser registers, exposed for the parser.
+    #[cfg(test)]
     pub(in crate::env) fn combine_concl(&self, rows: &Expr) -> Expr {
         self.fk.rat_le(self.lower_app(rows), self.upper_app(rows))
     }
 
     /// `@NNVerify.farkas_combine_list rows hv : farkasLower rows ≤
     /// farkasUpper rows` — the kernel-checked applied combination theorem.
+    #[cfg(test)]
     pub(in crate::env) fn apply_combine_list(&self, rows: &Expr, hv: &Expr) -> Expr {
         let thm = Expr::const_(Name::from_string("NNVerify.farkas_combine_list"), vec![]);
         Expr::apps(thm, [rows.clone(), hv.clone()])
@@ -227,6 +234,7 @@ impl FarkasListConsts {
 
 /// Construct the parser-facing builder. Public-in-`env` factory so the cert
 /// parser can build `List Row` instances without re-deriving the encoding.
+#[cfg(test)]
 pub(in crate::env) fn farkas_list_consts() -> FarkasListConsts {
     FarkasListConsts::new()
 }

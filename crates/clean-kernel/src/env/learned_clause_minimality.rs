@@ -26,13 +26,19 @@
 //!            McMillan (2003), "Interpolation and SAT-based model checking";
 //!            Beame et al. (2004), "Understanding the power of clause learning".
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all learned clause minimality declarations.
+#[cfg(test)]
 pub(super) struct LearnedClauseConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -46,7 +52,9 @@ pub(super) struct LearnedClauseConsts {
     pub(super) conflict_graph: Expr,
 }
 
+#[cfg(test)]
 impl LearnedClauseConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -60,10 +68,12 @@ impl LearnedClauseConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize learned clause minimality declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`, `init_craig_interpolation()`.
+    #[cfg(test)]
     pub(crate) fn init_learned_clause_minimality(&mut self) -> Result<(), EnvError> {
         if self.learned_clause_minimality_init {
             return Ok(());
@@ -98,6 +108,7 @@ impl Environment {
     /// Abstractly a set of literals. Registered as an opaque axiom type
     /// with constructors for building from literal lists and projecting
     /// the literal set and its size.
+    #[cfg(test)]
     fn register_learned_clause(&mut self, c: &LearnedClauseConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.LearnedClause"))
@@ -139,6 +150,7 @@ impl Environment {
     /// Partial order on clause informativeness: c1 is at least as strong
     /// as c2 if every assignment falsified by c1 is also falsified by c2.
     /// A stronger clause prunes more of the search space.
+    #[cfg(test)]
     fn register_clause_strength(&mut self, c: &LearnedClauseConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.clause_strength"))
@@ -178,6 +190,7 @@ impl Environment {
     /// of this partition yields the learned clause.
     ///
     /// Reference: McMillan (2003), "Interpolation and SAT-based model checking".
+    #[cfg(test)]
     fn register_interpolation_clause(&mut self, c: &LearnedClauseConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.interpolation_clause"))
@@ -206,6 +219,7 @@ impl Environment {
     /// Clause c1 subsumes c2 if the literal set of c1 is a subset of the
     /// literal set of c2. Subsumption implies that c1 is at least as strong
     /// as c2 (fewer literals = more restrictive = more pruning).
+    #[cfg(test)]
     fn register_clause_subsumes(&mut self, c: &LearnedClauseConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.clause_subsumes"))
@@ -248,6 +262,7 @@ impl Environment {
     /// Projections:
     /// - `conflict_level : ConflictGraph -> Nat` — the decision level of the conflict
     /// - `num_literals : ConflictGraph -> Nat` — total literals in the trail
+    #[cfg(test)]
     fn register_conflict_graph(&mut self, c: &LearnedClauseConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.ConflictGraph"))

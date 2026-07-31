@@ -6,7 +6,9 @@
 
 use super::OleanExporter;
 use crate::error::OleanResult;
-use crate::module::{ParsedExtension, ParsedExtensionEntry, ParsedExtensionEntryData};
+use crate::module::{
+    DefinitionSafety, ParsedExtension, ParsedExtensionEntry, ParsedExtensionEntryData,
+};
 use crate::region::tags;
 use clean_kernel::env::Environment;
 use clean_kernel::name::Name;
@@ -208,7 +210,17 @@ impl OleanExporter {
                 continue; // Quotients are handled in step 5
             }
             all_names.push(c.name.clone());
-            const_ptrs.push(self.write_constant_info(c)?);
+            // Partial is the tighter classification if a malformed caller has
+            // placed a name in both registries: either way it must not regain
+            // ordinary safe definitional authority on round-trip.
+            let safety = if env.is_partial(&c.name) {
+                DefinitionSafety::Partial
+            } else if env.is_unsafe(&c.name) {
+                DefinitionSafety::Unsafe
+            } else {
+                DefinitionSafety::Safe
+            };
+            const_ptrs.push(self.write_constant_info_with_definition_safety(c, safety)?);
         }
 
         // 2. Inductive types

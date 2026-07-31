@@ -69,6 +69,7 @@ struct NatLeAntisymmConsts {
     nat_lt_irrefl: Expr,
     eq_const: Expr,
     eq_refl: Expr,
+    #[cfg(test)]
     false_const: Expr,
     false_elim: Expr,
 }
@@ -85,6 +86,7 @@ impl NatLeAntisymmConsts {
             nat_lt_irrefl: Expr::const_(Name::from_string("Nat.lt_irrefl"), vec![]),
             eq_const: Expr::const_(Name::from_string("Eq"), vec![type1.clone()]),
             eq_refl: Expr::const_(Name::from_string("Eq.refl"), vec![type1]),
+            #[cfg(test)]
             false_const: Expr::const_(Name::from_string("False"), vec![]),
             // False.elim.{0} — the eliminated goal `Eq a (succ m)` lives in Prop.
             false_elim: Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]),

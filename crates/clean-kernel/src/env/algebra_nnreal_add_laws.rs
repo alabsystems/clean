@@ -55,11 +55,13 @@ pub(crate) struct NNAddLawConsts {
     nat: Expr,
     rat: Expr,
     rat_zero: Expr,
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_val: Expr,
     nnrat_add: Expr,
     nnrat_val_add: Expr,
     causeq: Expr,
+    #[cfg(test)]
     causeq_mk: Expr,
     causeq_seq: Expr,
     causeq_equiv: Expr,
@@ -68,6 +70,7 @@ pub(crate) struct NNAddLawConsts {
     nnreal_add: Expr,
     rat_add: Expr,
     rat_lt: Expr,
+    #[cfg(test)]
     rat_zero_pt: Expr,
     rat_add_zero: Expr,
     rat_add_comm: Expr,
@@ -84,6 +87,7 @@ pub(crate) struct NNAddLawConsts {
     and_intro: Expr,
     exists_intro: Expr,
     // Eq.{1} over Rat / NNReal.
+    #[cfg(test)]
     eq_rat: Expr,
     eq_symm: Expr,
     eq_trans: Expr,
@@ -100,11 +104,13 @@ impl NNAddLawConsts {
             nat: k("Nat"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_val: k("NNRat.val"),
             nnrat_add: k("NNRat.add"),
             nnrat_val_add: k("NNRat.val_add"),
             causeq: k("NNReal.CauSeq"),
+            #[cfg(test)]
             causeq_mk: k("NNReal.CauSeq.mk"),
             causeq_seq: k("NNReal.CauSeq.seq"),
             causeq_equiv: k("NNReal.CauSeq.Equiv"),
@@ -113,6 +119,7 @@ impl NNAddLawConsts {
             nnreal_add: k("NNReal.add"),
             rat_add: k("Rat.add"),
             rat_lt: k("Rat.lt"),
+            #[cfg(test)]
             rat_zero_pt: k("Rat.zero"),
             rat_add_zero: k("Rat.add_zero"),
             rat_add_comm: k("Rat.add_comm"),
@@ -126,6 +133,7 @@ impl NNAddLawConsts {
             and_c: k("And"),
             and_intro: k("And.intro"),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![lvl1.clone()]),
@@ -174,6 +182,7 @@ impl NNAddLawConsts {
         Expr::apps(self.nnreal_add.clone(), [x, y])
     }
     /// `NNReal.CauSeq.Equiv a b : Prop`.
+    #[cfg(test)]
     fn equiv(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.causeq_equiv.clone(), [a, b])
     }
@@ -202,6 +211,7 @@ impl NNAddLawConsts {
         Expr::apps(self.eq_nnreal.clone(), [self.nnreal.clone(), a, b])
     }
     /// `@Eq.{1} Rat a b`.
+    #[cfg(test)]
     fn eq_rat_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq_rat.clone(), [self.rat.clone(), a, b])
     }
@@ -655,7 +665,7 @@ fn build_add_comm_proof(c: &NNAddLawConsts) -> Expr {
         // vals_eq m : val(seq L m) = val(seq R m).
         //   val(seq L m) ≡ val(NNRat.add (p m)(q m))  →[val_add]  (vp+vq)
         //                ≡  →[add_comm]  (vq+vp)  ≡[val_add⁻¹]  val(seq R m).
-        let vals_eq = |bb: &EnvDeclBuilder, m: &Expr| -> Expr {
+        let vals_eq = |_bb: &EnvDeclBuilder, m: &Expr| -> Expr {
             let pm = c.seq_at(p, m);
             let qm = c.seq_at(q, m);
             let vp = c.val(pm.clone());
@@ -917,7 +927,7 @@ fn build_add_zero_leaf(c: &NNAddLawConsts, parent: &EnvDeclBuilder, p: &Expr) ->
     //   L m ≡ NNRat.add (p m) (NNReal.CauSeq.seq (const z) m) ≡ NNRat.add (p m) z.
     //   val =[val_add] (vp + val z) ; val z ≡ 0 (Subtype.val (Subtype.mk 0 _)).
     //   So (vp + val z) ≡ (vp + 0) =[add_zero] vp.
-    let vals_eq = |bb: &EnvDeclBuilder, m: &Expr| -> Expr {
+    let vals_eq = |_bb: &EnvDeclBuilder, m: &Expr| -> Expr {
         let pm = c.seq_at(p, m); // p m
         let vp = c.val(pm.clone()); // vp
                                     // seq(const z) m ≡ z (CauSeq.const reduces), so L m ≡ NNRat.add (p m) z.

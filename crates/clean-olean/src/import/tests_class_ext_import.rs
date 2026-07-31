@@ -26,19 +26,13 @@ use super::{load_module_with_deps, parse_module};
 use crate::module::{ParsedClassEntry, ParsedExtensionEntry, LEAN_CLASS_EXTENSION};
 use clean_kernel::env::Environment;
 use clean_kernel::name::Name;
-use std::path::PathBuf;
 
 /// The pinned toolchain whose `ClassEntry` layout the decoder targets.
 const PINNED_TOOLCHAIN: &str = "leanprover--lean4---v4.30.0-rc2";
 
 /// Locate the pinned v4.30.0-rc2 stdlib, or `None` to skip.
-fn v4_30_lib_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let lib = PathBuf::from(home)
-        .join(".elan/toolchains")
-        .join(PINNED_TOOLCHAIN)
-        .join("lib/lean");
-    lib.exists().then_some(lib)
+fn v4_30_lib_path() -> Option<std::path::PathBuf> {
+    crate::pinned_lean_lib_path()
 }
 
 /// Decode the `Lean.classExtension` entries of a single `.olean` (relative path

@@ -32,13 +32,19 @@
 //!
 //! Part of #3079.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for compose_lipschitz.
+#[cfg(test)]
 struct ComposeLipConsts {
     nat: Expr,
     rat: Expr,
@@ -49,7 +55,9 @@ struct ComposeLipConsts {
     compose_fns: Expr,
 }
 
+#[cfg(test)]
 impl ComposeLipConsts {
+    #[cfg(test)]
     fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -62,10 +70,12 @@ impl ComposeLipConsts {
         }
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n)
     }
 
+    #[cfg(test)]
     fn endo_ty(&self, n: &Expr) -> Expr {
         Expr::pi(
             BinderInfo::Default,
@@ -74,12 +84,14 @@ impl ComposeLipConsts {
         )
     }
 
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 }
 
 /// `NNVerify.is_lipschitz : (n : Nat) -> (NNVec n -> NNVec n) -> Rat -> Prop`
+#[cfg(test)]
 fn build_is_lipschitz_type(c: &ComposeLipConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -95,6 +107,7 @@ fn build_is_lipschitz_type(c: &ComposeLipConsts) -> Expr {
 /// `NNVerify.compose_fns : (n : Nat) -> (NNVec n -> NNVec n) -> (NNVec n -> NNVec n) -> (NNVec n -> NNVec n)`
 ///
 /// Definition: `compose_fns n f g = fun x => g (f x)`
+#[cfg(test)]
 fn build_compose_fns_type(c: &ComposeLipConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -114,6 +127,7 @@ fn build_compose_fns_type(c: &ComposeLipConsts) -> Expr {
 ///   is_lipschitz n g Lg ->
 ///   is_lipschitz n (compose_fns n f g) (Rat.mul Lf Lg)
 /// ```
+#[cfg(test)]
 fn build_compose_lipschitz_type(c: &ComposeLipConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -155,6 +169,7 @@ fn build_compose_lipschitz_type(c: &ComposeLipConsts) -> Expr {
     b.finish(e)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize T30 (Lipschitz composition) declarations.
     ///
@@ -164,7 +179,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment
     /// ENSURES: Idempotent
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_lipschitz_compose(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.compose_lipschitz_axiom"))

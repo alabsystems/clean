@@ -97,6 +97,7 @@ struct FinalConsts {
     pow8_cube: Expr,
     pow_nat_succ: Expr,
     mul_one: Expr,
+    #[cfg(test)]
     mul_comm: Expr,
     mul_assoc: Expr,
     mmmc: Expr,
@@ -138,6 +139,7 @@ impl FinalConsts {
             pow8_cube: k("BoolAnalysis.dualhc_pow8_eq_two_pow_cube"),
             pow_nat_succ: k("Rat.powNat_succ"),
             mul_one: k("Rat.mul_one"),
+            #[cfg(test)]
             mul_comm: k("Rat.mul_comm"),
             mul_assoc: k("Rat.mul_assoc"),
             mmmc: k("Rat.mul_mul_mul_comm"),
@@ -150,6 +152,7 @@ impl FinalConsts {
     fn rat(&self) -> Expr {
         self.rat.clone()
     }
+    #[cfg(test)]
     fn zero(&self) -> Expr {
         self.order.rat_zero.clone()
     }
@@ -165,6 +168,7 @@ impl FinalConsts {
     fn le(&self, a: Expr, b: Expr) -> Expr {
         self.order.rat_le(a, b)
     }
+    #[cfg(test)]
     fn le0(&self, a: Expr) -> Expr {
         self.le(self.zero(), a)
     }
@@ -230,6 +234,7 @@ impl FinalConsts {
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat())
     }
@@ -281,6 +286,7 @@ impl FinalConsts {
     fn mul_one(&self, a: Expr) -> Expr {
         Expr::app(self.mul_one.clone(), a)
     }
+    #[cfg(test)]
     fn mul_comm(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.mul_comm.clone(), [a, b])
     }

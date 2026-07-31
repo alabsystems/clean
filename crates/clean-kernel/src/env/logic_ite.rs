@@ -51,6 +51,7 @@ impl Environment {
     /// # Contract
     ///
     /// ENSURES: Returns `true` iff `init_ite()` has completed successfully
+    #[cfg(test)]
     pub(crate) fn has_ite(&self) -> bool {
         self.ite_init
     }

@@ -41,12 +41,15 @@
 
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::expr::ExprKind;
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for `IsCauchy_bounded`.
 pub(crate) struct BoundedConsts {
+    #[cfg(test)]
     prop: Expr,
     nat: Expr,
     nat_zero: Expr,
@@ -86,12 +89,15 @@ pub(crate) struct BoundedConsts {
     rat_add: Expr,
     rat_zero_lt_one: Expr,
     rat_lt_iff_le_not_le: Expr,
+    #[cfg(test)]
     rat_le_trans: Expr,
     nnrat_val: Expr,
     nnrat_add: Expr,
     nnrat_one: Expr,
     nnrat_val_add: Expr,
+    #[cfg(test)]
     nnrat_val_of_rat: Expr,
+    #[cfg(test)]
     rat_zero_le_one: Expr,
     and_c: Expr,
     and_left: Expr,
@@ -106,6 +112,7 @@ impl BoundedConsts {
         let lvl1 = Level::succ(Level::zero());
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
+            #[cfg(test)]
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             nat: k("Nat"),
             nat_zero: k("Nat.zero"),
@@ -141,12 +148,15 @@ impl BoundedConsts {
             rat_add: k("Rat.add"),
             rat_zero_lt_one: k("Rat.zero_lt_one"),
             rat_lt_iff_le_not_le: k("Rat.lt_iff_le_not_le"),
+            #[cfg(test)]
             rat_le_trans: k("Rat.le_trans"),
             nnrat_val: k("NNRat.val"),
             nnrat_add: k("NNRat.add"),
             nnrat_one: k("NNRat.one"),
             nnrat_val_add: k("NNRat.val_add"),
+            #[cfg(test)]
             nnrat_val_of_rat: k("NNRat.val_ofRat"),
+            #[cfg(test)]
             rat_zero_le_one: k("Rat.zero_le_one"),
             and_c: k("And"),
             and_left: k("And.left"),
@@ -209,6 +219,7 @@ impl BoundedConsts {
         Expr::apps(self.nnrat_val_add.clone(), [p, q])
     }
     /// `Rat.le_trans a b c hab hbc : Rat.le a c`.
+    #[cfg(test)]
     fn rle_trans(&self, a: Expr, b: Expr, cc: Expr, hab: Expr, hbc: Expr) -> Expr {
         Expr::apps(self.rat_le_trans.clone(), [a, b, cc, hab, hbc])
     }

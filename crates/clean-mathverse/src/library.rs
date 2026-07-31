@@ -1967,57 +1967,59 @@ mod tests {
     use crate::types::{AxiomProfile, ContentDomain, ImportConfidence, SourceSystem};
     use clean_kernel::flat::{FlatExpr, FlatLevel};
 
-    /// PERF MEASUREMENT (ignored): isolates the bm25-lazy win (commit 5ea8c824).
-    /// Loads K synthetic shards two ways — EAGER (rebuild BM25 after every shard,
-    /// = the old behavior replayed via the still-public `build_search_index`) vs
-    /// LAZY (defer; one query triggers a single build). Both pay identical
-    /// `load_shard` + `build_deps` cost (build_deps is ~free here — trivial Sort
-    /// types), so the A/B ratio isolates the BM25 term and is robust to box
-    /// contention (same box, min of N runs). The speedup GROWS with K — the
-    /// O(N^2)->O(N) signature.
+    /// The lazy BM25 path must be semantically identical to rebuilding eagerly
+    /// after every shard. This bounded synthetic test exercises both paths and
+    /// compares their complete ranked result identities and scores.
     #[test]
-    #[ignore = "perf measurement: eager-vs-lazy BM25 rebuild"]
-    fn perf_bm25_eager_vs_lazy() {
-        use std::time::Instant;
-        let iters = 5usize;
-        let c = 200usize;
-        for &k in &[10usize, 20, 40] {
-            let mut shards: Vec<ShardReader> = Vec::with_capacity(k);
-            for s in 0..k {
-                let names: Vec<String> = (0..c)
-                    .map(|i| format!("Mod{s}.theorem_{i}_alpha_beta_gamma"))
-                    .collect();
-                let entries: Vec<(&str, ContentDomain, AxiomProfile)> = names
-                    .iter()
-                    .map(|n| (n.as_str(), ContentDomain::PureMath, AxiomProfile::NONE))
-                    .collect();
-                shards.push(build_test_shard(&entries));
-            }
-            let (mut eager_min, mut lazy_min) = (u128::MAX, u128::MAX);
-            for _ in 0..iters {
-                let t = Instant::now();
-                let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-                for sh in &shards {
-                    lib.load_shard(sh).unwrap();
-                    lib.build_search_index(); // EAGER: old per-shard rebuild
-                }
-                eager_min = eager_min.min(t.elapsed().as_micros());
+    fn eager_and_lazy_bm25_indexing_are_equivalent() {
+        const SHARD_COUNT: usize = 8;
+        const CONSTANTS_PER_SHARD: usize = 32;
 
-                let t = Instant::now();
-                let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-                for sh in &shards {
-                    lib.load_shard(sh).unwrap(); // LAZY: defer
-                }
-                let _ = lib.search_explain("theorem alpha", 5); // one build
-                lazy_min = lazy_min.min(t.elapsed().as_micros());
-            }
-            eprintln!(
-                "K={k:>3} x C={c} = {:>5} consts | EAGER {:>9} us | LAZY {:>9} us | speedup {:.1}x",
-                k * c,
-                eager_min,
-                lazy_min,
-                eager_min as f64 / lazy_min as f64
+        let mut shards: Vec<ShardReader> = Vec::with_capacity(SHARD_COUNT);
+        for shard in 0..SHARD_COUNT {
+            let names: Vec<String> = (0..CONSTANTS_PER_SHARD)
+                .map(|i| format!("Mod{shard}.theorem_{i}_alpha_beta_gamma"))
+                .collect();
+            let entries: Vec<(&str, ContentDomain, AxiomProfile)> = names
+                .iter()
+                .map(|name| (name.as_str(), ContentDomain::PureMath, AxiomProfile::NONE))
+                .collect();
+            shards.push(build_test_shard(&entries));
+        }
+
+        let mut eager = MathverseLibrary::new(TrustPolicy::permissive());
+        let mut lazy = MathverseLibrary::new(TrustPolicy::permissive());
+        for shard in &shards {
+            eager.load_shard(shard).expect("load eager shard");
+            eager.build_search_index();
+            lazy.load_shard(shard).expect("load lazy shard");
+        }
+
+        let eager_results = eager.search_explain("theorem alpha", 16);
+        let lazy_results = lazy.search_explain("theorem alpha", 16);
+        assert!(
+            !eager_results.is_empty(),
+            "query must exercise the BM25 index"
+        );
+        assert_eq!(eager.constant_count(), SHARD_COUNT * CONSTANTS_PER_SHARD);
+        assert_eq!(lazy.constant_count(), eager.constant_count());
+        assert_eq!(lazy_results.len(), eager_results.len());
+        for (eager_hit, lazy_hit) in eager_results.iter().zip(&lazy_results) {
+            assert_eq!(lazy_hit.constant_idx, eager_hit.constant_idx);
+            assert_eq!(
+                lazy_hit.total_score.to_bits(),
+                eager_hit.total_score.to_bits()
             );
+            assert_eq!(lazy_hit.query_tokens, eager_hit.query_tokens);
+            assert_eq!(lazy_hit.token_scores.len(), eager_hit.token_scores.len());
+            for (eager_token, lazy_token) in
+                eager_hit.token_scores.iter().zip(&lazy_hit.token_scores)
+            {
+                assert_eq!(lazy_token.token, eager_token.token);
+                assert_eq!(lazy_token.tf, eager_token.tf);
+                assert_eq!(lazy_token.df, eager_token.df);
+                assert_eq!(lazy_token.score.to_bits(), eager_token.score.to_bits());
+            }
         }
     }
 

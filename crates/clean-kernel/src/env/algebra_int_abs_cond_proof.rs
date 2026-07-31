@@ -70,13 +70,19 @@
 //! domain-axiom closure of each registered theorem is empty
 //! (`ProofQuality::Constructive`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across both proofs.
+#[cfg(test)]
 struct IntAbsCondConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -105,7 +111,9 @@ struct IntAbsCondConsts {
     eq_subst: Expr,
 }
 
+#[cfg(test)]
 impl IntAbsCondConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -144,47 +152,58 @@ impl IntAbsCondConsts {
         }
     }
 
+    #[cfg(test)]
     fn of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_of_nat.clone(), n)
     }
 
+    #[cfg(test)]
     fn int_zero(&self) -> Expr {
         self.of_nat(self.nat_zero.clone())
     }
 
+    #[cfg(test)]
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
 
+    #[cfg(test)]
     fn neg(&self, x: Expr) -> Expr {
         Expr::app(self.int_neg.clone(), x)
     }
 
+    #[cfg(test)]
     fn add(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_add.clone(), x), y)
     }
 
+    #[cfg(test)]
     fn le(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_le.clone(), x), y)
     }
 
+    #[cfg(test)]
     fn lt(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_lt.clone(), x), y)
     }
 
+    #[cfg(test)]
     fn nonneg_of(&self, x: Expr) -> Expr {
         Expr::app(self.nonneg.clone(), x)
     }
 
+    #[cfg(test)]
     fn eq_int(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const.clone(), [self.int_type.clone(), lhs, rhs])
     }
 
     /// `@Eq.refl.{1} Int v`.
+    #[cfg(test)]
     fn eq_refl_int(&self, v: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [self.int_type.clone(), v])
     }
@@ -195,6 +214,7 @@ impl IntAbsCondConsts {
 // ---------------------------------------------------------------------------
 
 /// `∀ a : Int, Int.le (Int.ofNat 0) a → Eq Int (Int.abs a) a`.
+#[cfg(test)]
 fn build_of_nonneg_type(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -215,6 +235,7 @@ fn build_of_nonneg_type(c: &IntAbsCondConsts) -> Expr {
 ///     (@Eq.subst.{1} Int (fun x => NonNeg x)
 ///        (Int.add a 0) a (Int.add_zero a) h)
 /// ```
+#[cfg(test)]
 fn build_of_nonneg_value(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -284,6 +305,7 @@ fn build_of_nonneg_value(c: &IntAbsCondConsts) -> Expr {
 // ---------------------------------------------------------------------------
 
 /// `∀ a : Int, Int.lt a (Int.ofNat 0) → Eq Int (Int.abs a) (Int.neg a)`.
+#[cfg(test)]
 fn build_of_neg_type(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -299,6 +321,7 @@ fn build_of_neg_type(c: &IntAbsCondConsts) -> Expr {
 ///                      (fun _ : Nat => False)`.
 ///
 /// `disc (Int.ofNat n)` reduces to `True`, `disc (Int.negSucc n)` to `False`.
+#[cfg(test)]
 fn discriminator(c: &IntAbsCondConsts, parent: &EnvDeclBuilder) -> Expr {
     let mut b = EnvDeclBuilder::child_of(parent);
     // motive: fun _ : Int => Prop
@@ -351,6 +374,7 @@ fn discriminator(c: &IntAbsCondConsts, parent: &EnvDeclBuilder) -> Expr {
 ///     a
 ///     h
 /// ```
+#[cfg(test)]
 fn build_of_neg_value(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -483,6 +507,7 @@ fn build_of_neg_value(c: &IntAbsCondConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register the conditional absolute-value identities `Int.abs_of_nonneg`
     /// and `Int.abs_of_neg` as kernel-checked `Declaration::Theorem`s in a
@@ -495,6 +520,7 @@ impl Environment {
     ///          `Declaration::Theorem`s with `proof_quality == Constructive`.
     /// ENSURES: Idempotent — if a target is already registered with any
     ///          declaration kind, that target is left untouched.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_cond(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

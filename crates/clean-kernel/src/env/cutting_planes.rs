@@ -32,6 +32,7 @@ pub(super) struct CuttingPlanesConsts {
     /// ProofTheory.CuttingPlanesProof : Type
     pub(super) cp_proof: Expr,
     /// ResComplexity.CNF : Type
+    #[cfg(test)]
     pub(super) cnf: Expr,
     /// ResComplexity.TreeResProof : Type
     pub(super) tree_res_proof: Expr,
@@ -45,6 +46,7 @@ impl CuttingPlanesConsts {
             type0: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
             linear_ineq: Expr::const_(Name::from_string("ProofTheory.LinearInequality"), vec![]),
             cp_proof: Expr::const_(Name::from_string("ProofTheory.CuttingPlanesProof"), vec![]),
+            #[cfg(test)]
             cnf: Expr::const_(Name::from_string("ResComplexity.CNF"), vec![]),
             tree_res_proof: Expr::const_(Name::from_string("ResComplexity.TreeResProof"), vec![]),
         }

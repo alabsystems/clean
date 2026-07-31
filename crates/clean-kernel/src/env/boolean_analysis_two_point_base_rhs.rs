@@ -141,6 +141,7 @@ impl CubeMulConsts {
         )
     }
     /// `a·p = a·q` from `h : p = q`.
+    #[cfg(test)]
     fn cong_mul_right(
         &self,
         parent: &EnvDeclBuilder,

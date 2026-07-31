@@ -69,11 +69,13 @@ use crate::name::Name;
 struct IntAddNegSelfConsts {
     int_type: Expr,
     nat_type: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     nat_succ: Expr,
     int_add: Expr,
     int_neg: Expr,
     int_of_nat: Expr,
+    #[cfg(test)]
     int_neg_succ: Expr,
     int_zero: Expr,
     int_rec: Expr,
@@ -89,11 +91,13 @@ impl IntAddNegSelfConsts {
         Self {
             int_type: Expr::const_(Name::from_string("Int"), vec![]),
             nat_type: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             int_add: Expr::const_(Name::from_string("Int.add"), vec![]),
             int_neg: Expr::const_(Name::from_string("Int.neg"), vec![]),
             int_of_nat: Expr::const_(Name::from_string("Int.ofNat"), vec![]),
+            #[cfg(test)]
             int_neg_succ: Expr::const_(Name::from_string("Int.negSucc"), vec![]),
             int_zero: Expr::const_(Name::from_string("Int.zero"), vec![]),
             // Prop-valued motives — Sort 0.
@@ -121,6 +125,7 @@ impl IntAddNegSelfConsts {
         Expr::app(self.int_of_nat.clone(), n)
     }
 
+    #[cfg(test)]
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }

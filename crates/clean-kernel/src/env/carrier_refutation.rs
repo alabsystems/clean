@@ -180,7 +180,7 @@ fn const_app(e: &Expr) -> Option<(String, Vec<Expr>)> {
 
 /// Decode a closed `Nat` to its value by matching `Nat.succ^k Nat.zero` for
 /// small `k`. Returns `None` for a non-literal / out-of-range nat.
-fn decode_nat(tc: &TypeChecker, e: &Expr) -> Option<u64> {
+fn decode_nat(tc: &TypeChecker<'_>, e: &Expr) -> Option<u64> {
     (0..=16u64).find(|&k| tc.is_def_eq(e, &nat(k)))
 }
 
@@ -189,7 +189,7 @@ fn decode_nat(tc: &TypeChecker, e: &Expr) -> Option<u64> {
 /// `Int.le`; TRUE iff BOTH directions reduce to TRUE (antisymmetry on the
 /// quotient ⇒ genuine equality); `None` otherwise. Works on the WS-A quotient
 /// `Rat` where constructor `noConfusion` does not apply.
-fn rat_eq_truth_via_order(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> {
+fn rat_eq_truth_via_order(tc: &TypeChecker<'_>, a: &Expr, b: &Expr) -> Option<bool> {
     let le = |lhs: &Expr, rhs: &Expr| {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.le"), vec![]),
@@ -215,7 +215,7 @@ fn rat_eq_truth_via_order(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> 
 ///
 /// `None` = not a base shape this layer decides (a contains/order-bridge prop is
 /// handled by [`prop_truth`]).
-fn base_prop_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn base_prop_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     // `Ne` / negation: `Pi (_ : @Eq Rat a b) False` (non-dependent).
     if let ExprKind::Pi(_, dom, body) = p.kind() {
         if is_false_const(body) {
@@ -263,7 +263,7 @@ fn fin1_zero() -> Expr {
 /// Three-valued truth of a closed `NNVerify.IntervalBounds.contains B x`
 /// proposition for `d = 1`: reduce to `∀ i, And (Rat.le (B.lo i)(x i))
 /// (Rat.le (x i)(B.hi i))`, instantiate at the single index, AND the decisions.
-fn contains_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn contains_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     let w = tc.whnf(p);
     let body = match w.kind() {
         ExprKind::Pi(_, _, body) => (**body).clone(),
@@ -312,7 +312,7 @@ fn nnvec0_witness() -> Expr {
 /// Returns `None` for `k ≠ 0` / `n ≠ 1` (the general existential is NOT decided
 /// — the engine never fabricates a refutation over a non-point zonotope) or any
 /// unexpected shape.
-fn zono_point_contains_truth(tc: &TypeChecker, args: &[Expr]) -> Option<bool> {
+fn zono_point_contains_truth(tc: &TypeChecker<'_>, args: &[Expr]) -> Option<bool> {
     if args.len() != 4 {
         return None;
     }
@@ -367,7 +367,7 @@ fn zono_point_contains_truth(tc: &TypeChecker, args: &[Expr]) -> Option<bool> {
 /// `None` for anything not engine-decidable (uninterpreted-predicate or
 /// opaque-carrier conclusions, or a non-point `Zonotope.contains`), so the
 /// engine never fabricates a refutation.
-fn prop_truth(tc: &TypeChecker, p: &Expr) -> Option<bool> {
+fn prop_truth(tc: &TypeChecker<'_>, p: &Expr) -> Option<bool> {
     if let Some((head, args)) = const_app(p) {
         if head == "NNVerify.IntervalBounds.contains" {
             return contains_truth(tc, p);
@@ -466,7 +466,7 @@ fn ib1_point(v: Expr) -> Expr {
 /// Classify a leading-binder domain. `dom` is inspected AFTER earlier binders
 /// have been instantiated, so a `Fin <bound>` / `IntervalBounds <d>` domain
 /// already carries a concrete bound.
-fn binder_kind(tc: &TypeChecker, dom: &Expr) -> BinderKind {
+fn binder_kind(tc: &TypeChecker<'_>, dom: &Expr) -> BinderKind {
     if tc.is_def_eq(dom, &nat_ty()) {
         return BinderKind::Nat;
     }
@@ -514,7 +514,7 @@ fn binder_kind(tc: &TypeChecker, dom: &Expr) -> BinderKind {
 
 /// Decode the concrete bound `n` of a `Fin <bound>` domain (0..=4 covers the
 /// live envs). Returns `None` for a symbolic bound (skip — non-refutable).
-fn fin_bound(tc: &TypeChecker, dom: &Expr) -> Option<u64> {
+fn fin_bound(tc: &TypeChecker<'_>, dom: &Expr) -> Option<u64> {
     let dw = tc.whnf(dom);
     let bound = match dw.kind() {
         ExprKind::App(_, a) => (**a).clone(),
@@ -544,8 +544,8 @@ const MAX_BINDER_DEPTH: usize = 8;
 /// The axiom is refutable iff some assignment makes every hypothesis TRUE while
 /// the conclusion reduces to a FALSE closed prop.
 #[must_use]
-pub fn is_refutable(tc: &TypeChecker, ty: &Expr) -> bool {
-    fn go(tc: &TypeChecker, cur: &Expr, depth: usize) -> bool {
+pub fn is_refutable(tc: &TypeChecker<'_>, ty: &Expr) -> bool {
+    fn go(tc: &TypeChecker<'_>, cur: &Expr, depth: usize) -> bool {
         if depth > MAX_BINDER_DEPTH {
             return false;
         }
@@ -645,12 +645,12 @@ pub enum RefutationOutcome {
 /// - else [`RefutationOutcome::Opaque`] — the conclusion never reduced to a
 ///   concrete decidable prop, so C4 could not examine the axiom at all.
 #[must_use]
-pub fn classify_refutation(tc: &TypeChecker, ty: &Expr) -> RefutationOutcome {
+pub fn classify_refutation(tc: &TypeChecker<'_>, ty: &Expr) -> RefutationOutcome {
     /// Returns `(found_false, found_decided)` over the reachable conclusion
     /// nodes of this subtree: `found_false` iff some conclusion is a FALSE
     /// concrete prop; `found_decided` iff some conclusion reduced to a concrete
     /// decidable prop (`prop_truth == Some(_)`).
-    fn go(tc: &TypeChecker, cur: &Expr, depth: usize) -> (bool, bool) {
+    fn go(tc: &TypeChecker<'_>, cur: &Expr, depth: usize) -> (bool, bool) {
         if depth > MAX_BINDER_DEPTH {
             return (false, false);
         }
@@ -742,6 +742,7 @@ pub fn classify_refutation(tc: &TypeChecker, ty: &Expr) -> RefutationOutcome {
 // behaviour is unchanged.
 
 /// `BoolAnalysis.HCPoint n` — the cube-point type `Fin n → Bool`.
+#[cfg(test)]
 fn hcpoint_ty(n: u64) -> Expr {
     Expr::app(
         Expr::const_(Name::from_string("BoolAnalysis.HCPoint"), vec![]),
@@ -754,6 +755,7 @@ fn hcpoint_ty(n: u64) -> Expr {
 /// ALL its Fourier mass at level 1 — the extremal counterexample to high-level
 /// concentration claims like `Var ≤ C·M_{≥k}`. Each is a closed term the kernel
 /// evaluates on concrete inputs.
+#[cfg(test)]
 fn boolfn_witnesses_for(n: u64) -> Vec<(String, Expr)> {
     let hcp = hcpoint_ty(n);
     let const_fn = |b: &str| {
@@ -779,17 +781,20 @@ fn boolfn_witnesses_for(n: u64) -> Vec<(String, Expr)> {
 }
 
 /// Detect a `BoolAnalysis.BoolFn n` domain and return the concrete `n`.
-fn boolfn_arg(tc: &TypeChecker, dom: &Expr) -> Option<u64> {
+#[cfg(test)]
+fn boolfn_arg(tc: &TypeChecker<'_>, dom: &Expr) -> Option<u64> {
     applied_const_arg(tc, dom, "BoolAnalysis.BoolFn")
 }
 
 /// Detect a `BoolAnalysis.HCPoint n` domain and return the concrete `n`.
-fn hcpoint_arg(tc: &TypeChecker, dom: &Expr) -> Option<u64> {
+#[cfg(test)]
+fn hcpoint_arg(tc: &TypeChecker<'_>, dom: &Expr) -> Option<u64> {
     applied_const_arg(tc, dom, "BoolAnalysis.HCPoint")
 }
 
 /// If `dom` is `<name> <arg>` with `<arg>` a decodable `Nat`, return it.
-fn applied_const_arg(tc: &TypeChecker, dom: &Expr, name: &str) -> Option<u64> {
+#[cfg(test)]
+fn applied_const_arg(tc: &TypeChecker<'_>, dom: &Expr, name: &str) -> Option<u64> {
     if let ExprKind::App(f, a) = dom.kind() {
         if matches!(f.kind(), ExprKind::Const(nm, _) if nm.to_string() == name) {
             return decode_nat(tc, a);
@@ -802,6 +807,7 @@ fn applied_const_arg(tc: &TypeChecker, dom: &Expr, name: &str) -> Option<u64> {
 /// all-false and all-true points. These separate the constant cases and make any
 /// dictator evaluate; standard basis points `e_i` (a closed `fun j => Nat.beq
 /// (Fin.val j) i`) can be added when a statement needs coordinate distinctions.
+#[cfg(test)]
 fn hcpoint_witnesses_for(n: u64) -> Vec<(String, Expr)> {
     let fin_n = Expr::app(Expr::const_(Name::from_string("Fin"), vec![]), nat(n));
     let const_pt = |b: &str| {
@@ -819,7 +825,8 @@ fn hcpoint_witnesses_for(n: u64) -> Vec<(String, Expr)> {
 
 /// Render a closed `Int` numeral (`Int.ofNat k` / `Int.negSucc k`) for a clear
 /// counterexample message; `?` if it does not reduce to a numeral.
-fn render_int(tc: &TypeChecker, e: &Expr) -> String {
+#[cfg(test)]
+fn render_int(tc: &TypeChecker<'_>, e: &Expr) -> String {
     let w = tc.whnf(e);
     if let ExprKind::App(h, k) = w.kind() {
         if let Some(kk) = decode_nat(tc, k) {
@@ -837,7 +844,8 @@ fn render_int(tc: &TypeChecker, e: &Expr) -> String {
 
 /// Render a closed `Nat` or `Rat` (`Rat.mk num denom`) operand to a readable
 /// value for a clear counterexample; `?` if it does not reduce to a numeral.
-fn render_value(tc: &TypeChecker, e: &Expr) -> String {
+#[cfg(test)]
+fn render_value(tc: &TypeChecker<'_>, e: &Expr) -> String {
     let w = tc.whnf(e);
     if let Some(k) = decode_nat(tc, &w) {
         return k.to_string();
@@ -860,7 +868,8 @@ fn render_value(tc: &TypeChecker, e: &Expr) -> String {
 /// If `prop` is a closed decidable comparison (`Rat.le` / `Nat.le` / `Int.le`),
 /// render it with its EVALUATED operands so the counterexample reads like an
 /// indictment: `` `1 ≤ 0` is FALSE ``.
-fn describe_false_prop(tc: &TypeChecker, prop: &Expr) -> Option<String> {
+#[cfg(test)]
+fn describe_false_prop(tc: &TypeChecker<'_>, prop: &Expr) -> Option<String> {
     if let ExprKind::App(inner, b) = prop.kind() {
         if let ExprKind::App(h, a) = inner.kind() {
             if let ExprKind::Const(nm, _) = h.kind() {
@@ -893,10 +902,16 @@ fn describe_false_prop(tc: &TypeChecker, prop: &Expr) -> Option<String> {
 /// within the small-instance battery (`n ≤ 4`, the canonical functions). It is a
 /// cheap, high-yield filter, not a decision procedure.
 #[must_use]
-pub fn refute_conjecture(tc: &TypeChecker, ty: &Expr) -> Option<String> {
+#[cfg(test)]
+pub fn refute_conjecture(tc: &TypeChecker<'_>, ty: &Expr) -> Option<String> {
     const MAX_NAT: u64 = 4;
     const MAX_DEPTH: usize = MAX_BINDER_DEPTH + 8;
-    fn go(tc: &TypeChecker, cur: &Expr, depth: usize, trail: &mut Vec<String>) -> Option<String> {
+    fn go(
+        tc: &TypeChecker<'_>,
+        cur: &Expr,
+        depth: usize,
+        trail: &mut Vec<String>,
+    ) -> Option<String> {
         if depth > MAX_DEPTH {
             return None;
         }
@@ -1040,7 +1055,7 @@ pub fn census_carriers(env: &Environment) -> Vec<CarrierCensus> {
 
 /// Does the type's RESULT sort (after peeling leading Pi binders) land in `Prop`
 /// (`Sort 0`)? Used to detect proof-sorted inductives.
-fn result_sort_is_prop(tc: &TypeChecker, ty: &Expr) -> bool {
+fn result_sort_is_prop(tc: &TypeChecker<'_>, ty: &Expr) -> bool {
     let mut cur = ty.clone();
     // Peel leading Pi binders (the inductive's params/indices). We instantiate
     // with a `Sort 0` sentinel; the FINAL sort of a non-dependent codomain is
@@ -1067,7 +1082,7 @@ fn result_sort_is_prop(tc: &TypeChecker, ty: &Expr) -> bool {
 ///
 /// The first `num_params` Pi binders are parameters (shared with the inductive),
 /// not fields; only binders AFTER them count.
-fn constructor_has_prop_field(tc: &TypeChecker, ctor_ty: &Expr, num_params: u32) -> bool {
+fn constructor_has_prop_field(tc: &TypeChecker<'_>, ctor_ty: &Expr, num_params: u32) -> bool {
     // Walk the telescope, instantiating each binder with a `Prop` sentinel so
     // nested domains are closed. We only need the SHAPE (is the domain literally
     // `Prop` = `Sort 0`?) of each field domain.

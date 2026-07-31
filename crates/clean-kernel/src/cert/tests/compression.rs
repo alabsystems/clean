@@ -5,9 +5,508 @@
 //! Certificate compression and archive tests (LZ4, ZSTD)
 
 use crate::cert::*;
-use crate::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, Literal};
+use crate::expr::{BigNat, BinderData, BinderInfo, Expr, ExprKind, FVarId, Literal, Multiplicity};
 use crate::level::Level;
 use crate::name::Name;
+
+#[test]
+fn test_decompress_rejects_cyclic_and_forward_table_edges() {
+    let level_cycle = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![],
+        levels: vec![CompressedLevel::Succ(0)],
+        certs: vec![CompressedCertNode::Sort { level: 0 }],
+        root: 0,
+    };
+    assert!(matches!(
+        decompress_cert(&level_cycle),
+        Err(DecompressError::NonCanonicalReference {
+            table: "level",
+            parent: 0,
+            child: 0,
+        })
+    ));
+
+    let expr_cycle = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![CompressedExpr::App(0, 0)],
+        levels: vec![],
+        certs: vec![CompressedCertNode::BVar {
+            idx: 0,
+            expected_type: 0,
+        }],
+        root: 0,
+    };
+    assert!(matches!(
+        decompress_cert(&expr_cycle),
+        Err(DecompressError::NonCanonicalReference {
+            table: "expression",
+            parent: 0,
+            child: 0,
+        })
+    ));
+
+    let cert_cycle = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![],
+        levels: vec![],
+        certs: vec![CompressedCertNode::App {
+            fn_cert: 0,
+            fn_type: 0,
+            arg_cert: 0,
+            result_type: 0,
+        }],
+        root: 0,
+    };
+    assert!(matches!(
+        decompress_cert(&cert_cycle),
+        Err(DecompressError::NonCanonicalReference {
+            table: "certificate",
+            parent: 0,
+            child: 0,
+        })
+    ));
+
+    let forward_level = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![],
+        levels: vec![CompressedLevel::Succ(1), CompressedLevel::Zero],
+        certs: vec![CompressedCertNode::Sort { level: 0 }],
+        root: 0,
+    };
+    assert!(matches!(
+        decompress_cert(&forward_level),
+        Err(DecompressError::NonCanonicalReference {
+            table: "level",
+            parent: 0,
+            child: 1,
+        })
+    ));
+}
+
+#[test]
+fn test_compressed_expr_roundtrip_preserves_binders_and_let_metadata() {
+    let leaf = Expr::from_kind(ExprKind::BVar(0));
+    let named_let = Expr::from_kind(ExprKind::Let(
+        Name::from_string("keptName"),
+        leaf.clone().into(),
+        leaf.clone().into(),
+        leaf.clone().into(),
+        true,
+    ));
+    let linear_lam = Expr::from_kind(ExprKind::Lam(
+        BinderData::new(BinderInfo::Default, Multiplicity::One),
+        leaf.clone().into(),
+        named_let.into(),
+    ));
+    let erased_pi = Expr::from_kind(ExprKind::Pi(
+        BinderData::new(BinderInfo::Implicit, Multiplicity::Zero),
+        leaf.into(),
+        linear_lam.into(),
+    ));
+    let cert = ProofCert::BVar {
+        idx: 0,
+        expected_type: Box::new(erased_pi),
+    };
+
+    let compressed = compress_cert(&cert).unwrap();
+    let restored = decompress_cert(&compressed).unwrap();
+    assert_eq!(restored, cert);
+}
+
+#[test]
+fn test_compression_memoizes_shared_expression_identity() {
+    let mut expr = Expr::from_kind(ExprKind::BVar(0));
+    const DEPTH: usize = 48;
+    for _ in 0..DEPTH {
+        let shared = std::sync::Arc::new(expr);
+        expr = Expr::from_kind(ExprKind::App(shared.clone(), shared));
+    }
+    let cert = ProofCert::BVar {
+        idx: 0,
+        expected_type: Box::new(expr),
+    };
+
+    let compressed = compress_cert(&cert).unwrap();
+    assert_eq!(compressed.exprs.len(), DEPTH + 1);
+}
+
+#[test]
+fn test_compression_is_linear_for_deep_level_chain() {
+    const DEPTH: usize = 20_000;
+    std::thread::Builder::new()
+        .name("linear-level-compression".to_string())
+        .stack_size(64 * 1024)
+        .spawn(|| {
+            let mut level = Level::Zero;
+            for _ in 0..DEPTH {
+                level = Level::Succ(crate::level::level_arc(level));
+            }
+            let cert = ProofCert::Sort { level };
+            let compressed = compress_cert(&cert).unwrap();
+            assert_eq!(compressed.levels.len(), DEPTH + 1);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn test_decompress_rejects_exponentially_expanding_certificate_dag() {
+    let mut certs = vec![CompressedCertNode::Sort { level: 0 }];
+    for index in 1..32_u32 {
+        certs.push(CompressedCertNode::App {
+            fn_cert: index - 1,
+            fn_type: 0,
+            arg_cert: index - 1,
+            result_type: 0,
+        });
+    }
+    let compressed = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![CompressedExpr::BVar(0)],
+        levels: vec![CompressedLevel::Zero],
+        root: certs.len() as u32 - 1,
+        certs,
+    };
+
+    assert!(matches!(
+        decompress_cert(&compressed),
+        Err(DecompressError::ExpandedCertLimit { .. })
+    ));
+}
+
+#[test]
+fn test_decompress_rejects_shared_large_literal_payload_bomb() {
+    let large_literal = Literal::Nat(BigNat::from_limbs(vec![1; 128 * 1024]));
+    let mut certs = vec![CompressedCertNode::Lit {
+        lit: large_literal,
+        type_: 0,
+    }];
+    for index in 1..12_u32 {
+        certs.push(CompressedCertNode::App {
+            fn_cert: index - 1,
+            fn_type: 0,
+            arg_cert: index - 1,
+            result_type: 0,
+        });
+    }
+    let compressed = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![CompressedExpr::BVar(0)],
+        levels: vec![],
+        root: certs.len() as u32 - 1,
+        certs,
+    };
+
+    assert!(matches!(
+        decompress_cert(&compressed),
+        Err(DecompressError::ExpandedCertByteLimit { .. })
+    ));
+}
+
+#[test]
+fn test_decompress_rejects_shared_large_expression_referenced_by_cert_dag() {
+    let large_literal = Literal::Nat(BigNat::from_limbs(vec![1; 128 * 1024]));
+    let mut certs = vec![CompressedCertNode::BVar {
+        idx: 0,
+        expected_type: 0,
+    }];
+    for index in 1..12_u32 {
+        certs.push(CompressedCertNode::App {
+            fn_cert: index - 1,
+            fn_type: 0,
+            arg_cert: index - 1,
+            result_type: 0,
+        });
+    }
+    let compressed = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        exprs: vec![CompressedExpr::Lit(large_literal)],
+        levels: vec![],
+        root: certs.len() as u32 - 1,
+        certs,
+    };
+
+    assert!(matches!(
+        decompress_cert(&compressed),
+        Err(DecompressError::ExpandedCertByteLimit { .. })
+    ));
+}
+
+#[test]
+fn test_decompress_rejects_high_fanout_large_expression_root_clones() {
+    let large_literal = Literal::Nat(BigNat::from_limbs(vec![1; 128 * 1024]));
+    let mut exprs = vec![CompressedExpr::Lit(large_literal)];
+    // Every reachable parent retains one new Arc<Expr> clone of the large
+    // root, while the left edge keeps the whole chain reachable.
+    for index in 1..320_u32 {
+        exprs.push(CompressedExpr::App(index - 1, 0));
+    }
+    let compressed = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        root: 0,
+        exprs,
+        levels: vec![],
+        certs: vec![CompressedCertNode::BVar {
+            idx: 0,
+            expected_type: 319,
+        }],
+    };
+
+    assert!(matches!(
+        decompress_cert(&compressed),
+        Err(DecompressError::ExpandedCertByteLimit { .. })
+    ));
+}
+
+#[test]
+fn test_decompress_rejects_deep_reachable_expression_and_level_tables() {
+    const TABLE_NODES: u32 = 500_000;
+
+    let mut exprs = Vec::with_capacity(TABLE_NODES as usize);
+    exprs.push(CompressedExpr::Sort(TABLE_NODES - 1));
+    for index in 1..TABLE_NODES {
+        exprs.push(CompressedExpr::App(index - 1, index - 1));
+    }
+
+    let mut levels = Vec::with_capacity(TABLE_NODES as usize);
+    levels.push(CompressedLevel::Zero);
+    for index in 1..TABLE_NODES {
+        levels.push(CompressedLevel::Succ(index - 1));
+    }
+    let table_bomb = CompressedCert {
+        schema: CompressedCertSchema::current(),
+        root: 0,
+        exprs,
+        levels,
+        certs: vec![CompressedCertNode::BVar {
+            idx: 0,
+            expected_type: TABLE_NODES - 1,
+        }],
+    };
+    assert!(matches!(
+        decompress_cert(&table_bomb),
+        Err(DecompressError::ExpandedCertLimit { .. })
+            | Err(DecompressError::ExpandedCertByteLimit { .. })
+    ));
+}
+
+#[test]
+fn test_decompress_linear_certificate_chain_avoids_quadratic_cache_clones() {
+    const DEPTH: u32 = 20_000;
+    std::thread::Builder::new()
+        .name("linear-cert-decompression".to_string())
+        .stack_size(64 * 1024)
+        .spawn(|| {
+            let mut certs = Vec::with_capacity(DEPTH as usize);
+            certs.push(CompressedCertNode::Sort { level: 0 });
+            for index in 1..DEPTH {
+                certs.push(CompressedCertNode::DefEq {
+                    inner: index - 1,
+                    expected_type: 0,
+                    actual_type: 0,
+                    eq_steps: vec![],
+                });
+            }
+            let compressed = CompressedCert {
+                schema: CompressedCertSchema::current(),
+                exprs: vec![CompressedExpr::BVar(0)],
+                levels: vec![CompressedLevel::Zero],
+                root: DEPTH - 1,
+                certs,
+            };
+
+            let _cert = decompress_cert(&compressed).unwrap();
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn test_compression_and_decompression_are_stack_safe_on_small_threads() {
+    const DEPTH: u32 = 2_000;
+
+    std::thread::Builder::new()
+        .stack_size(64 * 1024)
+        .spawn(|| {
+            let mut level = Level::zero();
+            for _ in 0..DEPTH {
+                level = Level::succ(level);
+            }
+            let cert = ProofCert::Sort { level };
+            let compressed = compress_cert(&cert).expect("deep compression must be stack-safe");
+            assert_eq!(compressed.levels.len(), DEPTH as usize + 1);
+        })
+        .expect("spawn compression thread")
+        .join()
+        .expect("deep compression thread must not overflow");
+
+    std::thread::Builder::new()
+        .stack_size(64 * 1024)
+        .spawn(|| {
+            let mut levels = Vec::with_capacity(DEPTH as usize + 1);
+            levels.push(CompressedLevel::Zero);
+            for idx in 1..=DEPTH {
+                levels.push(CompressedLevel::Succ(idx - 1));
+            }
+            let compressed = CompressedCert {
+                schema: CompressedCertSchema::current(),
+                exprs: vec![],
+                levels,
+                certs: vec![CompressedCertNode::Sort { level: DEPTH }],
+                root: 0,
+            };
+            let cert = decompress_cert(&compressed).expect("deep decompression must be stack-safe");
+            let ProofCert::Sort { level } = &cert else {
+                panic!("expected Sort certificate");
+            };
+            let mut cursor = level;
+            let mut depth = 0;
+            while let Level::Succ(inner) = cursor {
+                depth += 1;
+                cursor = inner;
+            }
+            assert_eq!(depth, DEPTH);
+        })
+        .expect("spawn decompression thread")
+        .join()
+        .expect("deep decompression thread must not overflow");
+}
+
+#[test]
+fn test_archive_decoders_reject_versions_and_lying_sizes_before_decode() {
+    let cert = ProofCert::Sort {
+        level: Level::zero(),
+    };
+
+    let mut lz4 = archive_cert(&cert).expect("create LZ4 archive");
+    lz4.version = CertArchive::VERSION + 1;
+    assert!(matches!(
+        unarchive_cert(&lz4),
+        Err(ByteCompressError::UnsupportedVersion { .. })
+    ));
+    let mut legacy_lz4 = archive_cert(&cert).expect("create LZ4 archive");
+    legacy_lz4.version = 1;
+    assert!(matches!(
+        unarchive_cert(&legacy_lz4),
+        Err(ByteCompressError::UnsupportedVersion { found: 1, .. })
+    ));
+
+    let mut lz4 = archive_cert(&cert).expect("create LZ4 archive");
+    lz4.uncompressed_size = lz4.uncompressed_size.saturating_add(1);
+    assert!(matches!(
+        unarchive_cert(&lz4),
+        Err(ByteCompressError::DecompressError(message))
+            if message.contains("does not match LZ4 size prefix")
+    ));
+
+    let mut lz4 = archive_cert(&cert).expect("create LZ4 archive");
+    lz4.uncompressed_size = u32::MAX;
+    assert!(matches!(
+        unarchive_cert(&lz4),
+        Err(ByteCompressError::DecompressError(_)) | Err(ByteCompressError::SizeOverflow { .. })
+    ));
+
+    let mut zstd = zstd_archive_cert(&cert).expect("create zstd archive");
+    zstd.version = ZstdCertArchive::VERSION + 1;
+    assert!(matches!(
+        zstd_unarchive_cert(&zstd),
+        Err(ZstdCompressError::UnsupportedVersion { .. })
+    ));
+    let mut legacy_zstd = zstd_archive_cert(&cert).expect("create zstd archive");
+    legacy_zstd.version = 1;
+    assert!(matches!(
+        zstd_unarchive_cert(&legacy_zstd),
+        Err(ZstdCompressError::UnsupportedVersion { found: 1, .. })
+    ));
+
+    let dict = CertDictionary::from_bytes(vec![], 3);
+    let mut legacy_dict =
+        zstd_archive_cert_with_dict(&cert, &dict).expect("create dictionary archive");
+    legacy_dict.version = 1;
+    assert!(matches!(
+        zstd_unarchive_cert_with_dict(&legacy_dict, &dict),
+        Err(DictCompressError::UnsupportedVersion { found: 1, .. })
+    ));
+
+    let mut zstd = zstd_archive_cert(&cert).expect("create zstd archive");
+    zstd.uncompressed_size = zstd.uncompressed_size.saturating_add(1);
+    assert!(matches!(
+        zstd_unarchive_cert(&zstd),
+        Err(ZstdCompressError::DecompressError(message))
+            if message.contains("does not match decoded size")
+    ));
+
+    let mut zstd = zstd_archive_cert(&cert).expect("create zstd archive");
+    zstd.uncompressed_size = u32::MAX;
+    assert!(matches!(
+        zstd_unarchive_cert(&zstd),
+        Err(ZstdCompressError::DecompressError(message))
+            if message.contains("exceeds maximum")
+    ));
+
+    let mut malicious_lz4 = u32::MAX.to_le_bytes().to_vec();
+    malicious_lz4.push(0);
+    assert!(matches!(
+        lz4_decompress(&malicious_lz4),
+        Err(ByteCompressError::SizeOverflow { .. })
+    ));
+}
+
+#[test]
+fn test_archive_decoders_reject_trailing_and_concatenated_frames() {
+    let data = b"canonical carrier payload";
+
+    let mut lz4 = lz4_compress(data);
+    lz4.push(0);
+    assert!(matches!(
+        lz4_decompress(&lz4),
+        Err(ByteCompressError::DecompressError(_))
+    ));
+
+    let mut zstd = zstd_compress(data).expect("first zstd frame");
+    zstd.extend(zstd_compress(b"second frame").expect("second zstd frame"));
+    assert!(matches!(
+        zstd_decompress(&zstd),
+        Err(ZstdCompressError::DecompressError(message))
+            if message.contains("trailing bytes")
+    ));
+
+    let cert = ProofCert::Sort {
+        level: Level::zero(),
+    };
+    let mut zstd_archive = zstd_archive_cert(&cert).expect("zstd archive");
+    zstd_archive
+        .compressed_data
+        .extend(zstd_compress(b"second frame").expect("second frame"));
+    assert!(matches!(
+        zstd_unarchive_cert(&zstd_archive),
+        Err(ZstdCompressError::DecompressError(message))
+            if message.contains("trailing bytes")
+    ));
+
+    let dict = CertDictionary::from_bytes(vec![], 3);
+    let mut dict_data = zstd_compress_with_dict(data, &dict).expect("first dictionary frame");
+    dict_data
+        .extend(zstd_compress_with_dict(b"second frame", &dict).expect("second dictionary frame"));
+    assert!(matches!(
+        zstd_decompress_with_dict(&dict_data, &dict),
+        Err(DictCompressError::DecompressError(message))
+            if message.contains("trailing bytes")
+    ));
+
+    let mut dict_archive = zstd_archive_cert_with_dict(&cert, &dict).expect("dictionary archive");
+    dict_archive
+        .compressed_data
+        .extend(zstd_compress_with_dict(b"second frame", &dict).expect("second dictionary frame"));
+    assert!(matches!(
+        zstd_unarchive_cert_with_dict(&dict_archive, &dict),
+        Err(DictCompressError::DecompressError(message))
+            if message.contains("trailing bytes")
+    ));
+}
 
 #[test]
 fn test_compress_simple_sort() {
@@ -621,10 +1120,7 @@ fn test_lz4_decompress_invalid_data() {
     // Invalid LZ4 data should return an error
     let invalid_data = b"not valid lz4 data";
     let result = lz4_decompress(invalid_data);
-    assert!(
-        matches!(result, Err(ByteCompressError::DecompressError(_))),
-        "expected DecompressError, got: {result:?}"
-    );
+    assert!(result.is_err(), "invalid LZ4 carrier was accepted");
 }
 
 #[test]

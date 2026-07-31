@@ -40,7 +40,7 @@
 //! Part of #3490 Batch 0 / #3476.
 
 use super::decl_builder::EnvDeclBuilder;
-use super::nn_verify_ibp_linear::IbpLinearConsts;
+use super::nn_verify_farkas_order::RatOrderConsts;
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
@@ -49,7 +49,7 @@ use crate::name::Name;
 ///
 /// Produces `motive b` from `h_eq : Eq a b` and `h_motive_a : motive a`.
 fn eq_subst_rat(
-    c: &IbpLinearConsts,
+    c: &RatOrderConsts,
     motive: Expr,
     a: Expr,
     b: Expr,
@@ -79,7 +79,7 @@ fn eq_subst_rat(
 ///   let step_d : b1+a2 ≤ b1+b2 := Rat.add_le_add_left a2 b2 h2 b1
 ///   Rat.le_trans (a1+a2) (b1+a2) (b1+b2) step_c step_d
 /// ```
-pub(super) fn build_add_le_add_proof(c: &IbpLinearConsts) -> Expr {
+pub(super) fn build_add_le_add_proof(c: &RatOrderConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a1_id, a1) = b.fresh_local(c.rat.clone());
     let (b1_id, b1v) = b.fresh_local(c.rat.clone());

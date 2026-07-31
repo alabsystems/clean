@@ -466,6 +466,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_state_t` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_state_t(&self) -> bool {
         self.state_t_init
     }
@@ -552,6 +553,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_state_m` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_state_m(&self) -> bool {
         self.state_m_init
     }
@@ -704,6 +706,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_id` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_id(&self) -> bool {
         self.id_init
     }

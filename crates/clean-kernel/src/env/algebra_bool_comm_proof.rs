@@ -100,7 +100,7 @@ impl Environment {
             // For a fixed `lhs` constructor, split on `b` and emit reflexivity
             // leaves. Bool.rec minors are in ctor order: false-case, then true.
             let inner_rec = |lhs: Expr, parent: &EnvDeclBuilder| {
-                let mut c = EnvDeclBuilder::child_of(parent);
+                let c = EnvDeclBuilder::child_of(parent);
                 let motive_b = {
                     let mut d = EnvDeclBuilder::child_of(&c);
                     let (bp_id, bp) = d.fresh_local(bool_c.clone());

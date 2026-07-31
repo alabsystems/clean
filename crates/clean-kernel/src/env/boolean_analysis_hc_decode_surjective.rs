@@ -60,17 +60,25 @@
 
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 include!("boolean_analysis_hc_decode_surjective_build.rs");
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.hcDecode_surjective` — see the module docs.
     /// Kernel-checked, `Constructive`, empty admitted-axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_hc_decode_surjective(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.hcDecode_surjective");
         if self.get_const(&name).is_some() {

@@ -215,6 +215,7 @@ impl Environment {
     }
 
     /// Check if CommSemigroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_comm_semigroup(&self) -> bool {
         self.comm_semigroup_init
     }
@@ -232,6 +233,7 @@ impl Environment {
     }
 
     /// Check if AddCommSemigroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_add_comm_semigroup(&self) -> bool {
         self.add_comm_semigroup_init
     }

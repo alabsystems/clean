@@ -28,10 +28,6 @@ fn lit_u64(v: u64) -> IRExpr {
     IRExpr::Lit(IRLiteral::UInt64(v))
 }
 
-fn lit_bool(v: bool) -> IRExpr {
-    IRExpr::Lit(IRLiteral::Bool(v))
-}
-
 fn str_expr(s: &str) -> IRExpr {
     IRExpr::String(s.to_owned())
 }

@@ -19,11 +19,17 @@
 //!
 //! Part of #3205.
 
+#[cfg(test)]
 use super::nn_verify_ibp_linear::sorry_inhabit_pi;
+#[cfg(test)]
 use super::nn_verify_lipschitz::LipschitzConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 // =============================================================================
@@ -40,6 +46,7 @@ use crate::name::Name;
 /// hence `Lip(id + g) <= 1 + Lip(g)`. This strengthens `residual_lip` by
 /// requiring the non-negativity hypothesis on `L`, making the bound tighter
 /// for downstream composition.
+#[cfg(test)]
 fn build_residual_lipschitz_type(c: &LipschitzConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -82,6 +89,7 @@ fn build_residual_lipschitz_type(c: &LipschitzConsts) -> Expr {
 /// constant at most `prod_{i=1}^N L_i = lip_product N L`. This uses
 /// `NNVerify.Lipschitz.compose_chain` (registered below) and the existing
 /// `lip_product`.
+#[cfg(test)]
 fn build_nfold_product_type(c: &LipschitzConsts) -> Expr {
     let lip_product = Expr::const_(Name::from_string("NNVerify.Lipschitz.lip_product"), vec![]);
     let compose_chain = Expr::const_(
@@ -153,6 +161,7 @@ fn build_nfold_product_type(c: &LipschitzConsts) -> Expr {
 /// This follows from `1 + x <= exp(x)` for all `x >= 0` and monotonicity
 /// of the product. Same type as `product_convergence` but stated without
 /// the spectral bound scaffolding.
+#[cfg(test)]
 fn build_product_le_exp_sum_type(c: &LipschitzConsts) -> Expr {
     let lip_product = Expr::const_(Name::from_string("NNVerify.Lipschitz.lip_product"), vec![]);
     let fin_sum = Expr::const_(Name::from_string("Fin.sum"), vec![]);
@@ -193,6 +202,7 @@ fn build_product_le_exp_sum_type(c: &LipschitzConsts) -> Expr {
 /// The largest singular value (spectral norm) of a linear map `W` equals its
 /// Lipschitz constant: `sigma_max(W) = sup_{x != 0} ||Wx|| / ||x||`. This
 /// bridges the `spectral_norm` predicate to `Lipschitz.constant`.
+#[cfg(test)]
 fn build_spectral_norm_lipschitz_type(c: &LipschitzConsts) -> Expr {
     let spectral_norm = Expr::const_(
         Name::from_string("NNVerify.Lipschitz.spectral_norm"),
@@ -222,6 +232,7 @@ fn build_spectral_norm_lipschitz_type(c: &LipschitzConsts) -> Expr {
 /// `NNVerify.Lipschitz.compose_chain : Nat -> Nat -> (Fin N -> (NNVec n -> NNVec n)) -> (NNVec n -> NNVec n)`
 ///
 /// Sequential composition of `N` endomorphisms on `NNVec n`.
+#[cfg(test)]
 fn build_compose_chain_type(c: &LipschitzConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (big_n_id, big_n) = b.fresh_local(c.nat.clone());
@@ -240,11 +251,12 @@ fn build_compose_chain_type(c: &LipschitzConsts) -> Expr {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Initialize extended Lipschitz theorems (Part of #3205).
     ///
     /// Depends on `init_nn_verify_lipschitz()` for the core definitions.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_lipschitz_ext(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.Lipschitz.residual_lipschitz"))
@@ -266,7 +278,7 @@ impl Environment {
 
     /// `NNVerify.Lipschitz.compose_chain : (N : Nat) -> (n : Nat) -> (Fin N -> NNVec n -> NNVec n) -> NNVec n -> NNVec n`
     /// Opaque: placeholder `fun (_ : Nat) (n : Nat) (_ : Fin N -> ...) (v : NNVec n) => v`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_compose_chain(&mut self, c: &LipschitzConsts) -> Result<(), EnvError> {
         let ty = build_compose_chain_type(c);
         let value = {
@@ -294,7 +306,7 @@ impl Environment {
     }
 
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_residual_lipschitz(&mut self, c: &LipschitzConsts) -> Result<(), EnvError> {
         let thm_type = build_residual_lipschitz_type(c);
         let value = sorry_inhabit_pi(self, &thm_type);
@@ -317,7 +329,7 @@ impl Environment {
     }
 
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_nfold_product(&mut self, c: &LipschitzConsts) -> Result<(), EnvError> {
         let thm_type = build_nfold_product_type(c);
         let value = sorry_inhabit_pi(self, &thm_type);
@@ -340,7 +352,7 @@ impl Environment {
     }
 
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_product_le_exp_sum(&mut self, c: &LipschitzConsts) -> Result<(), EnvError> {
         let thm_type = build_product_le_exp_sum_type(c);
         let value = sorry_inhabit_pi(self, &thm_type);
@@ -363,7 +375,7 @@ impl Environment {
     }
 
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_spectral_norm_lipschitz(&mut self, c: &LipschitzConsts) -> Result<(), EnvError> {
         let thm_type = build_spectral_norm_lipschitz_type(c);
         let value = sorry_inhabit_pi(self, &thm_type);

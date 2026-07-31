@@ -125,7 +125,6 @@
 //! Part of #3509 (Branch B). Tranche A #3 of
 //! `designs/2026-06-13-nnverify-5axiom-retirement-roadmap.md`.
 
-use super::nn_verify_zonotope::ZonotopeConsts;
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};

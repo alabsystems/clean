@@ -20,12 +20,18 @@
 //!   width"
 //! - Ben-Sasson & Wigderson (2001), "Short proofs are narrow"
 
+#[cfg(test)]
 use super::tree_width_resolution::TreeWidthResConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Atserias-Dalmau width upper bound
@@ -35,6 +41,7 @@ impl Environment {
     ///
     /// Encodes:
     /// `resolution_width f <= tree_width (primal_graph f) + 1`.
+    #[cfg(test)]
     pub(super) fn register_atserias_dalmau_helper(
         &mut self,
         c: &TreeWidthResConsts,
@@ -53,6 +60,7 @@ impl Environment {
 
     /// `TreeWidthRes.atserias_dalmau : forall (f : CNF),
     ///     TreeWidthRes.atserias_dalmau_helper f`
+    #[cfg(test)]
     pub(super) fn register_atserias_dalmau(
         &mut self,
         c: &TreeWidthResConsts,
@@ -88,6 +96,7 @@ impl Environment {
     /// Encodes:
     /// `log2(resolution_size f) * 16 * num_variables f >=
     ///   (resolution_width f - initial_width f)^2`.
+    #[cfg(test)]
     pub(super) fn register_ben_sasson_wigderson_helper(
         &mut self,
         c: &TreeWidthResConsts,
@@ -106,6 +115,7 @@ impl Environment {
 
     /// `TreeWidthRes.ben_sasson_wigderson : forall (f : CNF),
     ///     TreeWidthRes.ben_sasson_wigderson_helper f`
+    #[cfg(test)]
     pub(super) fn register_ben_sasson_wigderson(
         &mut self,
         c: &TreeWidthResConsts,
@@ -141,6 +151,7 @@ impl Environment {
     /// Encodes:
     /// `tree_width (primal_graph f) <= k ->
     ///   resolution_size f <= num_variables f ^ (k + 2)`.
+    #[cfg(test)]
     pub(super) fn register_bounded_tw_poly_size_helper(
         &mut self,
         c: &TreeWidthResConsts,
@@ -166,6 +177,7 @@ impl Environment {
 
     /// `TreeWidthRes.bounded_tw_poly_size : forall (f : CNF) (k : Nat),
     ///     TreeWidthRes.bounded_tw_poly_size_helper f k`
+    #[cfg(test)]
     pub(super) fn register_bounded_tw_poly_size(
         &mut self,
         c: &TreeWidthResConsts,
@@ -203,6 +215,7 @@ impl Environment {
     ///
     /// Encodes:
     /// `is_refutation p f -> res_proof_width p >= resolution_width f`.
+    #[cfg(test)]
     pub(super) fn register_width_lower_bound_helper(
         &mut self,
         c: &TreeWidthResConsts,
@@ -234,6 +247,7 @@ impl Environment {
     /// `TreeWidthRes.width_lower_bound :
     ///     forall (f : CNF) (p : ResolutionProof),
     ///     TreeWidthRes.width_lower_bound_helper f p`
+    #[cfg(test)]
     pub(super) fn register_width_lower_bound(
         &mut self,
         c: &TreeWidthResConsts,
@@ -271,6 +285,7 @@ impl Environment {
     ///
     /// Encodes:
     /// `is_refutation p f -> res_proof_size p >= resolution_size f`.
+    #[cfg(test)]
     pub(super) fn register_size_lower_bound_helper(
         &mut self,
         c: &TreeWidthResConsts,
@@ -302,6 +317,7 @@ impl Environment {
     /// `TreeWidthRes.size_lower_bound :
     ///     forall (f : CNF) (p : ResolutionProof),
     ///     TreeWidthRes.size_lower_bound_helper f p`
+    #[cfg(test)]
     pub(super) fn register_size_lower_bound(
         &mut self,
         c: &TreeWidthResConsts,

@@ -43,6 +43,7 @@ mod proof_quality;
 mod refute_axiom_body;
 mod registration;
 mod serialization;
+#[cfg(test)]
 mod shared_init;
 mod snapshot;
 mod sorry_summary;
@@ -52,7 +53,8 @@ mod soundness_certificate;
 mod trusted_ext;
 mod unfold;
 pub use axiom_audit::{
-    is_foundational_axiom, is_trust_marker, CertificationAudit, CertificationIssue, ProofQuality,
+    canonical_ambient_axiom_kind, is_foundational_axiom, is_trust_marker,
+    CanonicalAmbientAxiomKind, CertificationAudit, CertificationIssue, ProofQuality,
     SoundnessReport,
 };
 #[cfg(any(test, feature = "math-overlays"))]
@@ -107,10 +109,13 @@ mod abstract_interpretation_framework_defs2;
 #[cfg(any(test, feature = "math-overlays"))]
 mod abstract_interpretation_framework_ext;
 pub mod ai_proof_search;
+#[cfg(test)]
 pub(crate) mod ai_proof_tactics;
+#[cfg(test)]
 pub(crate) mod ai_verify_loop;
 mod algebra;
 mod algebra_abs;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_abs_int;
 mod algebra_abs_nat;
 mod algebra_advanced;
@@ -125,6 +130,7 @@ mod algebra_bool_dec_eq_proof;
 mod algebra_comm_group;
 mod algebra_comm_monoid;
 mod algebra_comm_semigroup;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_dist;
 mod algebra_field;
 mod algebra_field_inst;
@@ -135,11 +141,17 @@ mod algebra_fin_index_lemmas;
 mod algebra_fin_last_cases;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_fin_split_index;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_abs_add_le_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_abs_cond_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_abs_mul_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_abs_neg_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_abs_sub_abs_le_dist_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_abs_sub_le_proof;
 mod algebra_int_add_assoc_negsucc_negsucc_negsucc_proof;
 mod algebra_int_add_assoc_negsucc_negsucc_ofnat_succ_proof;
@@ -177,7 +189,9 @@ mod algebra_int_add_sub_nat_nat_zero_right_negsucc_proof;
 mod algebra_int_add_sub_nat_nat_zero_right_ofnat_succ_proof;
 mod algebra_int_add_zero_proof;
 mod algebra_int_dec_eq_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_dist_comm_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_dist_self_proof;
 mod algebra_int_le_antisymm_proof;
 mod algebra_int_le_of_add_le_add_left_proof;
@@ -232,6 +246,7 @@ mod algebra_int_sub_eq_add_neg_proof;
 mod algebra_int_sub_nat_nat_add_add_proof;
 mod algebra_int_sub_nat_nat_eq_add_proof;
 mod algebra_int_sub_nat_nat_self_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_int_sub_nat_nat_self_succ_proof;
 mod algebra_int_sub_nat_nat_succ_succ_proof;
 mod algebra_int_sub_nat_nat_zero_left_proof;
@@ -269,18 +284,25 @@ mod algebra_nat_mul_one_proof;
 mod algebra_nat_mul_succ_proof;
 mod algebra_nat_mul_zero_proof;
 mod algebra_nat_one_mul_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_one_pow_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_add_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_le_pow_left_proof;
 mod algebra_nat_pow_le_pow_right_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_mul_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_nine_eightfold_le_budget_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_nine_le_pow_two_eightfold_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_one_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_two_e_plus_one_cubed_proof;
 mod algebra_nat_pow_two_succ_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_pow_zero_proof;
 mod algebra_nat_right_distrib_proof;
 mod algebra_nat_sub_zero_proof;
@@ -294,6 +316,7 @@ mod algebra_nat_testbit_def;
 mod algebra_nat_testbit_lt_pow_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_three_e_add_five_bound_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_xor_involution_proof;
 mod algebra_nat_zero_add_proof;
 mod algebra_nat_zero_mul_proof;
@@ -505,7 +528,9 @@ mod algebra_nnreal_zero_add;
 mod algebra_rat_abs_mul_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_abs_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_add_assoc_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_add_comm_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_add_lt_add_mixed;
@@ -580,13 +605,17 @@ mod nat_arith_order_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_le_of_natcast_le_natcast_proof;
 mod algebra_rat_le_trans_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_mul_assoc_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_mul_comm_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_mul_le_mul_proof;
 mod algebra_rat_order_proofs;
 mod algebra_rat_quotient;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_sub_add_assoc_proof;
+#[cfg(any(test, feature = "math-overlays"))]
 mod algebra_rat_sub_add_sub_proof;
 mod algebra_rat_tranche_b_proofs;
 // `algebra_rat_tranche_d1_proofs` REMOVED (#3654): proofs relied on the
@@ -1142,11 +1171,14 @@ mod cutting_planes;
 #[cfg(any(test, feature = "math-overlays"))]
 mod cutting_planes_theorems;
 mod data;
+mod data_bool_ops;
 mod data_collection_ops;
 mod data_control_lazy;
 mod data_dvd;
 mod data_for_in;
 mod data_fun_comp;
+mod data_fun_const;
+mod data_fun_flip;
 mod data_fun_id;
 mod data_functor;
 mod data_getelem;
@@ -1181,6 +1213,7 @@ mod data_types_nat_sub_simp;
 mod data_types_nat_ulp_round_lemmas;
 mod data_types_uint;
 pub(crate) mod decl_builder;
+#[cfg(test)]
 pub(crate) mod decl_signature_oracle;
 #[cfg(any(test, feature = "math-overlays"))]
 mod differential_equations;
@@ -1262,14 +1295,23 @@ mod logic_simp_ite_eq;
 mod logic_true_false;
 mod measure_theory;
 mod metric;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_bounded;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_compact;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_complete;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_completeness;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_continuity;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_continuity_lipschitz;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_continuity_uniform;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_separable;
+#[cfg(any(test, feature = "math-overlays"))]
 mod metric_totally_bounded;
 mod nn_verification;
 #[cfg(any(test, feature = "math-overlays"))]
@@ -1370,6 +1412,8 @@ mod nn_verify_elementwise_axioms;
 mod nn_verify_farkas_list;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_farkas_list_proofs;
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
+mod nn_verify_farkas_order;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_farkas_to_interval_constructive;
 #[cfg(any(test, feature = "math-overlays"))]
@@ -1400,9 +1444,9 @@ mod nn_verify_float_rational_defs;
 mod nn_verify_foundation_theorems;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_foundation_theorems_farkas;
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
 mod nn_verify_foundation_theorems_farkas_constructive;
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
 mod nn_verify_foundation_theorems_farkas_constructive_proofs;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_foundation_types;
@@ -1412,13 +1456,13 @@ mod nn_verify_ibp_composition;
 mod nn_verify_ibp_conv;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_ibp_linear;
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
 mod nn_verify_ibp_linear_add_le;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_ibp_linear_decomp;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_ibp_linear_define;
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
 mod nn_verify_ibp_linear_mul_le;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_ibp_linear_mul_nonpos_le;
@@ -1590,9 +1634,9 @@ mod nn_verify_proof_guided_nas_defs2;
 mod nn_verify_proofs;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_rat_min_le_max;
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
 mod nn_verify_rat_ordering;
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
 mod nn_verify_rat_ordering_proofs;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verify_relu;
@@ -1691,6 +1735,7 @@ mod pb_pigeonhole;
 mod pb_pigeonhole_length_bound;
 #[cfg(any(test, feature = "math-overlays"))]
 mod pb_pigeonhole_theorems;
+#[cfg(test)]
 pub(crate) mod proof_builder;
 #[cfg(any(test, feature = "math-overlays"))]
 mod proof_complexity_proofs;
@@ -1722,13 +1767,17 @@ mod topology_algebraic;
 #[cfg(any(test, feature = "math-overlays"))]
 mod topology_algebraic2;
 mod topology_basic;
+#[cfg(any(test, feature = "math-overlays"))]
 mod topology_compact;
+#[cfg(any(test, feature = "math-overlays"))]
 mod topology_connected;
 #[cfg(any(test, feature = "math-overlays"))]
 mod topology_construct;
 #[cfg(any(test, feature = "math-overlays"))]
 mod topology_diff;
+#[cfg(any(test, feature = "math-overlays"))]
 mod topology_hausdorff;
+#[cfg(any(test, feature = "math-overlays"))]
 mod topology_homeomorphism;
 #[cfg(any(test, feature = "math-overlays"))]
 mod topology_homotopy;
@@ -1752,6 +1801,7 @@ mod veripb_checker_steps;
 mod veripb_checker_theorems;
 #[cfg(any(test, feature = "math-overlays"))]
 mod veripb_checker_theorems_verifier;
+#[cfg(any(test, feature = "math-overlays"))]
 mod wf_recursion_support;
 #[cfg(any(test, feature = "math-overlays"))]
 mod width_expansion;
@@ -1851,6 +1901,7 @@ mod native_reducers_string;
 mod native_reducers_string_ext;
 mod native_reducers_uint;
 mod native_reducers_uint_conv;
+#[cfg(test)]
 mod reduction_cache;
 #[cfg(test)]
 mod tests_native_reducers_init;
@@ -2091,6 +2142,12 @@ pub struct Environment {
     /// Whether the `Function.comp` combinator has been initialized
     #[serde(default)]
     fun_comp_init: bool,
+    /// Whether the `flip` combinator has been initialized
+    #[serde(default)]
+    fun_flip_init: bool,
+    /// Whether the `Function.const` combinator has been initialized
+    #[serde(default)]
+    fun_const_init: bool,
     /// Whether the `Functor` class (+ map/mapConst/mapRev) has been initialized (Brick P1)
     #[serde(default)]
     functor_class_init: bool,
@@ -2161,6 +2218,9 @@ pub struct Environment {
     ordering_init: bool,
     /// Whether Option operations (map, bind, getD) have been initialized
     option_ops_init: bool,
+    /// Whether basic Bool operations (toNat) have been initialized
+    #[serde(default)]
+    bool_ops_init: bool,
     /// Whether List operations (append, reverse, map) have been initialized
     list_ops_init: bool,
     /// Whether `List.mapM` has been initialized. Registered after the
@@ -3129,11 +3189,6 @@ pub struct Environment {
     /// Reference: Lean 4 type_checker.cpp:988-991 `reduce_native`
     #[serde(skip)]
     native_reducers: HashMap<Name, NativeReducerFn>,
-    /// Environment-level delta reduction cache.
-    /// Caches constant unfolding results across TypeChecker instances.
-    /// Part of #3210.
-    #[serde(skip)]
-    reduction_cache: reduction_cache::ReductionCache,
     /// Export bindings (declaration -> exported C name)
     export_bindings: HashMap<Name, String>,
     /// Deprecated declarations with optional message
@@ -3981,6 +4036,9 @@ impl Environment {
         // own inits (each carries its IMPORT MODE rationale).
         self.init_fun_id()?;
         self.init_fun_comp()?;
+        self.init_fun_flip()?;
+        self.init_fun_const()?;
+        self.init_bool_ops()?;
         self.init_functor_class()?;
         self.init_functor_instances()?;
         self.init_seq_classes()?;
@@ -4576,6 +4634,7 @@ impl Environment {
     /// byte-identical to `self`, so running the existing refutation scanner over
     /// it isolates exactly the effect of unfolding this one carrier.
     #[must_use]
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(crate) fn with_opaque_made_transparent(&self, name: &Name) -> Option<Environment> {
         let info = self.constants.get(name)?;
         if info.kind != ConstantKind::Opaque || info.value.is_none() {
@@ -4622,12 +4681,9 @@ impl Environment {
     /// environment AFTER this pass, through `add_decl`'s `check_type`, and keep
     /// their values. It also never touches any on-disk `.olean` / `.mathverse`
     /// data — only the resident in-memory map.
-    pub fn elide_proof_values(
-        &mut self,
-        policy: crate::env::ProofValueElision,
-    ) -> crate::env::ProofElisionStats {
-        let mut stats = crate::env::ProofElisionStats::default();
-        if policy == crate::env::ProofValueElision::None {
+    pub fn elide_proof_values(&mut self, policy: ProofValueElision) -> ProofElisionStats {
+        let mut stats = ProofElisionStats::default();
+        if policy == ProofValueElision::None {
             stats.retained = self.constants.len();
             return stats;
         }
@@ -4666,12 +4722,9 @@ impl Environment {
     /// elided at registration rather than as a post-pass. Returns all-zero for
     /// [`ProofValueElision::None`].
     #[must_use]
-    pub fn count_elided_proof_values(
-        &self,
-        policy: crate::env::ProofValueElision,
-    ) -> crate::env::ProofElisionStats {
-        let mut stats = crate::env::ProofElisionStats::default();
-        if policy == crate::env::ProofValueElision::None {
+    pub fn count_elided_proof_values(&self, policy: ProofValueElision) -> ProofElisionStats {
+        let mut stats = ProofElisionStats::default();
+        if policy == ProofValueElision::None {
             stats.retained = self.constants.len();
             return stats;
         }
@@ -5157,13 +5210,13 @@ impl Environment {
     pub fn forget_proof_values_for<'a, I>(
         &mut self,
         names: I,
-        policy: crate::env::ProofValueElision,
-    ) -> crate::env::ProofElisionStats
+        policy: ProofValueElision,
+    ) -> ProofElisionStats
     where
         I: IntoIterator<Item = &'a Name>,
     {
-        let mut stats = crate::env::ProofElisionStats::default();
-        if policy == crate::env::ProofValueElision::None {
+        let mut stats = ProofElisionStats::default();
+        if policy == ProofValueElision::None {
             return stats;
         }
         for name in names {
@@ -5237,7 +5290,7 @@ impl Environment {
     /// constant gains a reduction rule it did not have before.
     pub(crate) fn discharge_axiom_for_redefinition(&mut self, name: &Name) -> bool {
         if let Some(info) = self.constants.get(name) {
-            if matches!(info.kind, crate::env::types::ConstantKind::Axiom) {
+            if matches!(info.kind, ConstantKind::Axiom) {
                 self.constants.remove(name);
                 self.declaration_verification.remove(name);
                 self.generation += 1;
@@ -5283,10 +5336,7 @@ impl Environment {
             return false;
         }
         match self.constants.get(name) {
-            Some(info)
-                if matches!(info.kind, crate::env::types::ConstantKind::Axiom)
-                    && info.value.is_none() =>
-            {
+            Some(info) if matches!(info.kind, ConstantKind::Axiom) && info.value.is_none() => {
                 self.constants.remove(name);
                 self.declaration_verification.remove(name);
                 self.generation += 1;

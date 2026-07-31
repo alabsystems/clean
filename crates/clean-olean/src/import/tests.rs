@@ -26,105 +26,6 @@ use std::path::Path;
 use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
 
-/// DIAGNOSTIC (ignored, full v4.30 stdlib): load every module two ways —
-/// per-module loop with a fresh `visited` each call (legacy) vs the
-/// shared-`visited` `load_modules_with_deps` (the fix) — and dump which
-/// constants differ to /tmp. Resolves whether the batch summary's 215709→212647
-/// drop is real load-level loss (per-loop has constants shared lacks) or the old
-/// per-loop path OVER-counting via re-walks (shared lacks nothing real).
-#[test]
-#[ignore = "diagnostic: full toolchain load, ~1h; requires local v4.30.0 oleans"]
-fn diag_full_shared_vs_perloop() {
-    use std::collections::HashSet as StdHashSet;
-    use std::io::Write;
-    use std::path::PathBuf;
-
-    let home = env::var("HOME").expect("HOME");
-    let lib = PathBuf::from(&home).join(".elan/toolchains/leanprover--lean4---v4.30.0/lib/lean");
-    if !lib.join("Init.olean").exists() {
-        eprintln!("SKIP: no v4.30.0 toolchain at {}", lib.display());
-        return;
-    }
-    let paths = vec![lib.clone()];
-
-    fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
-        if let Ok(rd) = fs::read_dir(dir) {
-            for e in rd.flatten() {
-                let p = e.path();
-                if p.is_dir() {
-                    walk(&p, out);
-                } else if p.extension().and_then(|s| s.to_str()) == Some("olean") {
-                    out.push(p);
-                }
-            }
-        }
-    }
-    let mut files = Vec::new();
-    walk(&lib, &mut files);
-    let modules: Vec<String> = files
-        .iter()
-        .map(|p| {
-            let rel = p.strip_prefix(&lib).expect("under lib").with_extension("");
-            rel.components()
-                .filter_map(|c| c.as_os_str().to_str())
-                .collect::<Vec<_>>()
-                .join(".")
-        })
-        .collect();
-    eprintln!("discovered {} modules", modules.len());
-
-    let names = |env: &Environment| -> StdHashSet<String> {
-        let mut s = StdHashSet::new();
-        for c in env.constants() {
-            s.insert(c.name.to_string());
-        }
-        for i in env.inductives() {
-            s.insert(i.name.to_string());
-        }
-        for c in env.constructors() {
-            s.insert(c.name.to_string());
-        }
-        for r in env.recursors() {
-            s.insert(r.name.to_string());
-        }
-        s
-    };
-
-    let mut env_a = Environment::default();
-    for m in &modules {
-        let _ = crate::load_module_with_deps(&mut env_a, m, &paths);
-    }
-    let a = names(&env_a);
-    eprintln!("per-loop (fresh visited): {} names", a.len());
-    drop(env_a);
-
-    let mut env_b = Environment::default();
-    let _ = crate::load_modules_with_deps(&mut env_b, &modules, &paths);
-    let b = names(&env_b);
-    eprintln!("shared (load_modules):   {} names", b.len());
-
-    let mut only_a: Vec<&String> = a.difference(&b).collect();
-    let mut only_b: Vec<&String> = b.difference(&a).collect();
-    only_a.sort();
-    only_b.sort();
-    eprintln!(
-        "ONLY in per-loop: {}  | ONLY in shared: {}",
-        only_a.len(),
-        only_b.len()
-    );
-    if let Ok(mut f) = fs::File::create("/tmp/diag_only_in_perloop.txt") {
-        for n in &only_a {
-            let _ = writeln!(f, "{n}");
-        }
-    }
-    for n in only_a.iter().take(60) {
-        eprintln!("  - {n}");
-    }
-    for n in only_b.iter().take(20) {
-        eprintln!("  + {n}");
-    }
-}
-
 fn write_empty_olean(path: &Path) {
     let parent = path.parent().expect("fixture parent");
     fs::create_dir_all(parent).expect("create fixture directories");
@@ -440,6 +341,38 @@ fn test_default_search_paths_uses_userprofile_when_home_missing() {
         "expected toolchain path from USERPROFILE to be discovered"
     );
     assert_eq!(paths[0], toolchain_lib);
+}
+
+#[test]
+fn test_default_search_paths_prioritizes_exact_pin_among_multiple_toolchains() {
+    let temp_home = TempDir::new().expect("tempdir");
+    let toolchains = temp_home.path().join(".elan/toolchains");
+    let old = toolchains.join("leanprover--lean4---v4.8.0/lib/lean");
+    let pinned = toolchains.join("leanprover--lean4---v4.30.0-rc2/lib/lean");
+    let stable = toolchains.join("leanprover--lean4---v4.30.0/lib/lean");
+    for lib in [&old, &pinned, &stable] {
+        write_empty_olean(&lib.join("Init/Prelude.olean"));
+    }
+
+    let mut env_map = HashMap::new();
+    env_map.insert("HOME", temp_home.path().as_os_str().to_os_string());
+    let paths = super::collect_default_search_paths_with_pinned(
+        |key| env_map.get(key).cloned(),
+        |path| fs::read_dir(path),
+        Some(pinned.clone()),
+    );
+
+    assert_eq!(paths.first(), Some(&pinned), "exact pin must be first");
+    assert_eq!(
+        paths.iter().filter(|path| *path == &pinned).count(),
+        1,
+        "fallback scan must not duplicate the pin"
+    );
+    assert_eq!(
+        &paths[1..],
+        &[stable, old],
+        "non-authority fallbacks must have deterministic directory ordering"
+    );
 }
 
 #[test]
@@ -1033,9 +966,7 @@ fn test_nonempty_like_inductive_has_large_elim_false() {
 use crate::region::CompactedRegion;
 
 fn get_lean_lib_path() -> Option<std::path::PathBuf> {
-    crate::import::default_search_paths()
-        .into_iter()
-        .find(|p| p.join("Init/Prelude.olean").exists())
+    crate::pinned_lean_lib_path()
 }
 
 /// Gate `.olean` integration tests on the matching Lean toolchain being
@@ -1046,7 +977,7 @@ fn get_lean_lib_path() -> Option<std::path::PathBuf> {
 /// reflect Lean version drift rather than real bugs in the import
 /// pipeline. Opt in with `CLEAN_OLEAN_PRELUDE_INTEGRATION=1`.
 fn require_olean_prelude_integration() -> Option<std::path::PathBuf> {
-    if std::env::var_os("CLEAN_OLEAN_PRELUDE_INTEGRATION").is_none() {
+    if env::var_os("CLEAN_OLEAN_PRELUDE_INTEGRATION").is_none() {
         eprintln!(
             "TRACE: olean Prelude integration test skipped — set \
              CLEAN_OLEAN_PRELUDE_INTEGRATION=1 to run against the matching \
@@ -1070,7 +1001,7 @@ fn load_prelude_region() -> Option<(Vec<u8>, u64)> {
 }
 
 /// Compare direct vs two-phase conversion for a single expression offset.
-fn compare_expr_at(region: &CompactedRegion, offset: usize) -> (bool, bool, bool) {
+fn compare_expr_at(region: &CompactedRegion<'_>, offset: usize) -> (bool, bool, bool) {
     let ptr = region.offset_to_ptr(offset);
     let two_phase = region.read_expr_at(offset).ok().and_then(|pe| {
         let mut c = ExprInternCache::default();
@@ -1292,6 +1223,8 @@ fn compare_recursor(kname: &Name, name: &str, a: &Environment, b: &Environment) 
 /// Load Init/Prelude.olean through both paths and compare constant-by-constant.
 #[test]
 fn test_direct_load_path_matches_parsed_module_path() {
+    use clean_kernel::expr::{BinderInfo, ExprKind};
+
     let Some(lib_path) = require_olean_prelude_integration() else {
         return;
     };
@@ -1328,6 +1261,49 @@ fn test_direct_load_path_matches_parsed_module_path() {
         checked > 100,
         "expected >100 constants checked, only {checked}"
     );
+
+    // This is an independent ABI oracle, not merely cross-path equality:
+    // pinned Lean prints
+    //   @Monad.rec : {m} -> {motive} ->
+    //     ([Applicative] -> [Bind] -> ...) -> (t) -> ...
+    // The two instance binders are inside the recursor-constructor domain.
+    // If both import paths ever read the cached Expr.Data hash byte again,
+    // their mutual parity could still pass while this sequence fails.
+    let expected_outer = [
+        BinderInfo::Implicit,
+        BinderInfo::Implicit,
+        BinderInfo::Default,
+        BinderInfo::Default,
+    ];
+    for (label, env) in [("parsed", &env_parsed), ("direct", &env_direct)] {
+        let monad_rec = env
+            .get_const(&Name::interned("Monad.rec"))
+            .unwrap_or_else(|| panic!("Monad.rec missing from {label} environment"));
+        let mut ty = &monad_rec.type_;
+        let mut actual_outer = Vec::new();
+        let mut domains = Vec::new();
+        while let ExprKind::Pi(binder, domain, body) = ty.kind() {
+            actual_outer.push(binder.info);
+            domains.push(domain);
+            ty = body;
+        }
+        assert_eq!(
+            actual_outer, expected_outer,
+            "{label} importer must preserve pinned Lean's outer Monad.rec binder ABI"
+        );
+
+        let mut constructor_domain = domains[2].as_ref();
+        let mut instance_infos = Vec::new();
+        while let ExprKind::Pi(binder, _, body) = constructor_domain.kind() {
+            instance_infos.push(binder.info);
+            constructor_domain = body;
+        }
+        assert_eq!(
+            instance_infos,
+            [BinderInfo::InstImplicit, BinderInfo::InstImplicit],
+            "{label} importer must preserve pinned Lean's Monad.rec instance binders"
+        );
+    }
 }
 
 /// Verify that parse_load_module produces the correct number of imports and constants.

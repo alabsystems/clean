@@ -49,13 +49,20 @@
 //! inductive types already imported from `clean-verify`) is tracked
 //! under issue #3630.
 
+#[cfg(test)]
 use super::cdcl_soundness::CDCLSoundnessConsts;
+#[cfg(test)]
 use super::cdcl_soundness_proofs;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // S01: Trail consistency preservation
@@ -68,6 +75,7 @@ impl Environment {
     /// demasquerade. The per-transition induction step axioms in
     /// `cdcl_soundness_proofs::register_s01_step_axioms` capture the
     /// case-by-case proof obligations from IsaSAT Lemma 3.1.
+    #[cfg(test)]
     pub(super) fn register_cdcl_trail_consistency_preserved(
         &mut self,
         c: &CDCLSoundnessConsts,
@@ -95,6 +103,7 @@ impl Environment {
     /// demasquerade. The per-transition induction step axioms in
     /// `cdcl_soundness_proofs::register_s02_step_axioms` capture each
     /// BCP watchlist-update case.
+    #[cfg(test)]
     pub(super) fn register_cdcl_two_watched_preserved(
         &mut self,
         c: &CDCLSoundnessConsts,
@@ -123,6 +132,7 @@ impl Environment {
     /// `cdcl_soundness_proofs::register_s03_step_axioms` (including
     /// `resolution_step_sound`) encode the resolution-chain obligation
     /// from IsaSAT Theorem 4.2.
+    #[cfg(test)]
     pub(super) fn register_cdcl_resolution_soundness(
         &mut self,
         c: &CDCLSoundnessConsts,
@@ -149,6 +159,7 @@ impl Environment {
     /// Registered as an honest `Declaration::Axiom` post-#3630
     /// demasquerade. The supporting `backtrack_step_correct` step
     /// axiom remains registered by `register_s04_step_axioms`.
+    #[cfg(test)]
     pub(super) fn register_cdcl_backtrack_correctness(
         &mut self,
         c: &CDCLSoundnessConsts,
@@ -175,6 +186,7 @@ impl Environment {
     /// Registered as an honest `Declaration::Axiom` post-#3630
     /// demasquerade. The supporting `bcp_fixpoint_complete` step axiom
     /// remains registered by `register_s05_step_axioms`.
+    #[cfg(test)]
     pub(super) fn register_cdcl_propagation_completeness(
         &mut self,
         c: &CDCLSoundnessConsts,
@@ -202,6 +214,7 @@ impl Environment {
     /// demasquerade. The supporting `measure_decreases` /
     /// `conflict_decreases_measure` / `measure_well_founded` step
     /// axioms remain registered by `register_s06_step_axioms`.
+    #[cfg(test)]
     pub(super) fn register_cdcl_terminates(
         &mut self,
         c: &CDCLSoundnessConsts,
@@ -224,6 +237,7 @@ impl Environment {
 // ============================================================================
 
 /// Register a helper axiom: (s : CDCLState) -> (s' : CDCLState) -> Prop
+#[cfg(test)]
 fn register_helper_state_pair(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -253,6 +267,7 @@ fn register_helper_state_pair(
 }
 
 /// Register a helper axiom: (s : CDCLState) -> (k : Nat) -> (s' : CDCLState) -> Prop
+#[cfg(test)]
 fn register_helper_state_nat_state(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -284,6 +299,7 @@ fn register_helper_state_nat_state(
 }
 
 /// Register a helper axiom: (s : CDCLState) -> Prop
+#[cfg(test)]
 fn register_helper_state_prop(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -302,6 +318,7 @@ fn register_helper_state_prop(
 
 /// Build the claim type `forall (s s' : CDCLState), helper s s'` for a
 /// state-pair helper.
+#[cfg(test)]
 fn build_state_pair_claim_type(c: &CDCLSoundnessConsts, helper_name: &str) -> Expr {
     let helper = Expr::const_(Name::from_string(helper_name), vec![]);
     let mut b = EnvDeclBuilder::new();
@@ -315,6 +332,7 @@ fn build_state_pair_claim_type(c: &CDCLSoundnessConsts, helper_name: &str) -> Ex
 
 /// Build the claim type `forall (s : CDCLState) (k : Nat) (s' : CDCLState),
 /// helper s k s'`.
+#[cfg(test)]
 fn build_state_nat_state_claim_type(c: &CDCLSoundnessConsts, helper_name: &str) -> Expr {
     let helper = Expr::const_(Name::from_string(helper_name), vec![]);
     let mut b = EnvDeclBuilder::new();
@@ -329,6 +347,7 @@ fn build_state_nat_state_claim_type(c: &CDCLSoundnessConsts, helper_name: &str) 
 }
 
 /// Build the claim type `forall (s : CDCLState), helper s`.
+#[cfg(test)]
 fn build_state_claim_type(c: &CDCLSoundnessConsts, helper_name: &str) -> Expr {
     let helper = Expr::const_(Name::from_string(helper_name), vec![]);
     let mut b = EnvDeclBuilder::new();
@@ -340,6 +359,7 @@ fn build_state_claim_type(c: &CDCLSoundnessConsts, helper_name: &str) -> Expr {
 
 /// Register a top-level CDCL soundness claim as an honest
 /// `Declaration::Axiom` (post-#3630 demasquerade).
+#[cfg(test)]
 fn register_axiom_claim(env: &mut Environment, name: &str, ty: Expr) -> Result<(), EnvError> {
     if env.get_const(&Name::from_string(name)).is_some() {
         return Ok(());

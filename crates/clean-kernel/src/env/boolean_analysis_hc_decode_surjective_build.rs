@@ -6,6 +6,7 @@
 // Kept in a sibling file to honour the <=500-line module cap.
 
 /// Shared atoms for the `hcDecode_surjective` construction.
+#[cfg(test)]
 struct SurjConsts {
     l0: Level,
     l1: Level,
@@ -45,7 +46,9 @@ struct SurjConsts {
     zero_lt_succ: Expr,
 }
 
+#[cfg(test)]
 impl SurjConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let l0 = Level::zero();
         let l1 = Level::succ(l0.clone());
@@ -97,51 +100,65 @@ impl SurjConsts {
         }
     }
 
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn succ(&self, n: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n.clone())
     }
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two.clone(), n.clone()])
     }
+    #[cfg(test)]
     fn val(&self, n: &Expr, i: &Expr) -> Expr {
         Expr::apps(self.fin_val.clone(), [n.clone(), i.clone()])
     }
+    #[cfg(test)]
     fn islt(&self, n: &Expr, i: &Expr) -> Expr {
         Expr::apps(self.fin_islt.clone(), [n.clone(), i.clone()])
     }
+    #[cfg(test)]
     fn last(&self, n: &Expr) -> Expr {
         Expr::app(self.fin_last.clone(), n.clone())
     }
+    #[cfg(test)]
     fn cast_succ(&self, n: &Expr, i: &Expr) -> Expr {
         Expr::apps(self.fin_cast_succ.clone(), [n.clone(), i.clone()])
     }
+    #[cfg(test)]
     fn decode(&self, n: &Expr, k: &Expr) -> Expr {
         Expr::apps(self.hc_decode.clone(), [n.clone(), k.clone()])
     }
     /// `@Eq Bool l r`.
+    #[cfg(test)]
     fn eq_bool(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.bool_.clone(), l, r])
     }
     /// `@Eq (HCPoint n) l r`.
+    #[cfg(test)]
     fn eq_point(&self, n: &Expr, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.hcpoint_of(n), l, r])
     }
+    #[cfg(test)]
     fn trans_bool(&self, a: Expr, b: Expr, cc: Expr, hab: Expr, hbc: Expr) -> Expr {
         Expr::apps(
             self.eq_trans.clone(),
             [self.bool_.clone(), a, b, cc, hab, hbc],
         )
     }
+    #[cfg(test)]
     fn symm_bool(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.bool_.clone(), a, b, h])
     }
     /// `Exists.{1} (Fin (2^n)) pred`.
+    #[cfg(test)]
     fn exists_decode(&self, n: &Expr, pred: Expr) -> Expr {
         Expr::apps(
             self.exists_const.clone(),
@@ -149,6 +166,7 @@ impl SurjConsts {
         )
     }
     /// The surjectivity predicate at level `n`: `fun (jS : Fin (2^n)) => hcDecode n jS = S`.
+    #[cfg(test)]
     fn pred(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let (j_id, j) = d.fresh_local(self.fin_of(&self.pow2(n)));
@@ -156,6 +174,7 @@ impl SurjConsts {
         d.finish_child(d.mk_lam(j_id, BinderInfo::Default, self.fin_of(&self.pow2(n)), body))
     }
     /// `∀ (S : HCPoint n), ∃ (jS : Fin (2^n)), hcDecode n jS = S`.
+    #[cfg(test)]
     fn motive_body(&self, parent: &EnvDeclBuilder, n: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let (s_id, s) = d.fresh_local(self.hcpoint_of(n));
@@ -163,6 +182,7 @@ impl SurjConsts {
         d.finish_child(d.mk_pi(s_id, BinderInfo::Default, self.hcpoint_of(n), body))
     }
     /// `@Exists.intro.{1} (Fin (2^n)) pred witness proof : ∃ jS, hcDecode n jS = S`.
+    #[cfg(test)]
     fn intro(&self, n: &Expr, pred: Expr, witness: Expr, proof: Expr) -> Expr {
         Expr::apps(
             self.exists_intro.clone(),
@@ -172,6 +192,7 @@ impl SurjConsts {
 }
 
 /// Build `(type, value)` of `BoolAnalysis.hcDecode_surjective`.
+#[cfg(test)]
 fn build_surjective(c: &SurjConsts) -> (Expr, Expr) {
     // type: ∀ (n : Nat) (S : HCPoint n), ∃ jS, hcDecode n jS = S.
     let type_ = {
@@ -202,6 +223,7 @@ fn build_surjective(c: &SurjConsts) -> (Expr, Expr) {
 }
 
 /// base : ∀ (S : HCPoint 0), ∃ (jS : Fin (2^0)), hcDecode 0 jS = S.
+#[cfg(test)]
 fn build_base(c: &SurjConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let zero = c.nat_zero.clone();
@@ -247,6 +269,7 @@ fn build_base(c: &SurjConsts) -> Expr {
 }
 
 /// `fun (_ : Fin n) => Bool`.
+#[cfg(test)]
 fn const_bool_motive(c: &SurjConsts, parent: &EnvDeclBuilder, n: &Expr) -> Expr {
     let mut d = EnvDeclBuilder::child_of(parent);
     let (u_id, _u) = d.fresh_local(c.fin_of(n));

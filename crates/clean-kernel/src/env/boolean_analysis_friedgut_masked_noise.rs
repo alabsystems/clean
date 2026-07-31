@@ -90,6 +90,7 @@ struct MaskedNoiseConsts {
     fin: Expr,
     fin_sum: Expr,
     hcpoint: Expr,
+    #[cfg(test)]
     bool_: Expr,
     bool_not: Expr,
     bool_fn: Expr,
@@ -128,6 +129,7 @@ impl MaskedNoiseConsts {
             fin: k("Fin"),
             fin_sum: k("Fin.sum"),
             hcpoint: k("BoolAnalysis.HCPoint"),
+            #[cfg(test)]
             bool_: k("Bool"),
             bool_not: k("Bool.not"),
             bool_fn: k("BoolAnalysis.BoolFn"),

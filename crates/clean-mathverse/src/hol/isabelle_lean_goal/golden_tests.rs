@@ -27,15 +27,18 @@ use super::types::LeanGoal;
 
 const GOLDEN: &str = include_str!("../../../tests/fixtures/isabelle/pathb_golden.jsonl");
 
-/// The batch-3 ids the harness is expected to reproduce exactly.
+/// The batch-3 ids the harness is expected to reproduce exactly. `c30`
+/// (`set_append`, `set (xs @ ys) = set xs ∪ set ys`) joined this set once the
+/// `List.list.set` → `{x | x ∈ xs}` mapping landed (coverage-round 3); it renders
+/// exactly modulo the comprehension bound-variable name (`x`, canonical).
 const EXPECTED_EXACT: &[&str] = &[
     "c01", "c02", "c03", "c04", "c05", "c06", "c07", "c08", "c09", "c10", "c11", "c12", "c13",
-    "c14", "c15", "c16", "c17", "c18", "c19", "c25", "c26", "c27", "c28",
+    "c14", "c15", "c16", "c17", "c18", "c19", "c25", "c26", "c27", "c28", "c30",
 ];
 
 /// The batch-3 ids that are honestly declined (class/locale premise, polymorphic
-/// order, multiset, list-set embedding) — outside the faithful pattern library.
-const EXPECTED_UNSUPPORTED: &[&str] = &["c20", "c21", "c22", "c23", "c24", "c29", "c30"];
+/// order, multiset) — outside the faithful pattern library.
+const EXPECTED_UNSUPPORTED: &[&str] = &["c20", "c21", "c22", "c23", "c24", "c29"];
 
 #[derive(Debug)]
 struct GoldenPair {
@@ -311,10 +314,11 @@ fn golden_coverage_matches_pinned_contract() {
     assert_eq!(unsupported, want_unsup, "the unsupported id set drifted");
 
     let coverage = 100.0 * exact.len() as f64 / pairs.len() as f64;
-    // Honest, pinned coverage: 23/30 = 76.7%. Assert a stable floor and ceiling.
+    // Honest, pinned coverage: 24/30 = 80.0% (c30 joined once `List.list.set`
+    // landed). Assert a stable floor and ceiling.
     assert!(
-        (76.0..=77.0).contains(&coverage),
-        "coverage {coverage:.1}% ({}/{}) drifted from the pinned 76.7%",
+        (79.0..=81.0).contains(&coverage),
+        "coverage {coverage:.1}% ({}/{}) drifted from the pinned 80.0%",
         exact.len(),
         pairs.len()
     );

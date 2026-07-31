@@ -7,12 +7,18 @@
 //! Extracted from `metric_continuity.rs` for maintainability.
 //! Contains `init_metric_uniform_continuous` and `has_metric_uniform_continuous`.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize uniformly continuous functions for metric spaces.
     ///
@@ -25,6 +31,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.metric_uniform_continuous_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_metric_uniform_continuous(&mut self) -> Result<(), EnvError> {
         if self.metric_uniform_continuous_init {
             return Ok(());
@@ -319,6 +326,7 @@ impl Environment {
     }
 
     /// Check if Metric.UniformContinuous has been initialized
+    #[cfg(test)]
     pub(crate) fn has_metric_uniform_continuous(&self) -> bool {
         self.metric_uniform_continuous_init
     }

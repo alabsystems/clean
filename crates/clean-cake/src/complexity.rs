@@ -94,6 +94,9 @@ pub fn proof_complexity(env: &Environment, name: &Name) -> Option<ProofComplexit
 }
 
 /// One lineage item's combined score: cross-node goodness + within-node complexity.
+// Best-proof selection awaiting its pipeline caller; kept alive by tests.
+// The expects fire when a caller lands.
+#[cfg_attr(not(test), expect(dead_code))]
 #[derive(Debug, Clone)]
 pub(crate) struct ProofRecord {
     /// Cross-node goodness (`G` mass + `F` floor) of the derivation's closure.
@@ -106,6 +109,7 @@ pub(crate) struct ProofRecord {
 /// 1. soundness **floor** (higher = better: `Foundational` > `AxiomDependent` > `Unsound`),
 /// 2. goodness **`g_mass`** (higher = better),
 /// 3. **complexity** (lower `term_size`, then `term_depth`, then `distinct_lemmas` = better).
+#[cfg_attr(not(test), expect(dead_code))]
 #[must_use]
 pub(crate) fn better(a: &ProofRecord, b: &ProofRecord) -> std::cmp::Ordering {
     use std::cmp::Ordering;
@@ -129,6 +133,7 @@ pub(crate) fn better(a: &ProofRecord, b: &ProofRecord) -> std::cmp::Ordering {
 }
 
 /// The canonical (best) proof among lineage items of one fact, or `None` if empty.
+#[cfg_attr(not(test), expect(dead_code))]
 #[must_use]
 pub(crate) fn best(candidates: &[ProofRecord]) -> Option<&ProofRecord> {
     candidates.iter().max_by(|a, b| better(a, b))

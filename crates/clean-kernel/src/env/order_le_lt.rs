@@ -259,6 +259,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.le_init == true`
+    #[cfg(test)]
     pub(crate) fn has_le(&self) -> bool {
         self.le_init
     }
@@ -467,6 +468,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.lt_init == true`
+    #[cfg(test)]
     pub(crate) fn has_lt(&self) -> bool {
         self.lt_init
     }
@@ -598,6 +600,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.ge_init == true`
+    #[cfg(test)]
     pub(crate) fn has_ge(&self) -> bool {
         self.ge_init
     }
@@ -729,6 +732,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.gt_init == true`
+    #[cfg(test)]
     pub(crate) fn has_gt(&self) -> bool {
         self.gt_init
     }

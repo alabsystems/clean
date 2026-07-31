@@ -115,9 +115,9 @@ impl Environment {
 
         // ── Walk the aux telescope: params, motives, indices, major, minors ──
         let mut cur = aux_ty.clone();
-        let mut walk_n = |b: &mut EnvDeclBuilder,
-                          cur: &mut Expr,
-                          n: usize|
+        let walk_n = |b: &mut EnvDeclBuilder,
+                      cur: &mut Expr,
+                      n: usize|
          -> Result<Vec<WalkedBinder>, EnvError> {
             (0..n).map(|_| walk_one(b, cur, aux_name)).collect()
         };

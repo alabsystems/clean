@@ -5,8 +5,6 @@
 // The elaborator keeps staged Lean compatibility and tactic APIs compiled
 // before every downstream call path is wired; keep consumer builds quiet while
 // narrower hygiene lints remain active.
-#![allow(dead_code)]
-
 //! clean Elaborator
 //!
 //! Converts surface syntax to kernel terms via:
@@ -964,6 +962,11 @@ fn elaborate_decl_and_register_inner_with_aux(
         if let Some(tactic_registry) = file_ctx.take_tactic_registry() {
             ctx.set_tactic_registry(tactic_registry);
         }
+        // `elab ... : term` registrations, persisted across declarations for the
+        // same reason as the tactic registry above: ElabCtx is rebuilt per
+        // declaration, so without this a registered term elaborator is dropped
+        // before the next declaration can call it.
+        ctx.set_user_term_elabs(file_ctx.take_user_term_elabs());
     }
 
     let result = ctx.elab_decl(decl);
@@ -971,6 +974,7 @@ fn elaborate_decl_and_register_inner_with_aux(
     if let Some(ref mut file_ctx) = file_ctx {
         file_ctx.replace_macro_ctx(ctx.take_macro_ctx());
         file_ctx.replace_tactic_registry(ctx.take_tactic_registry());
+        file_ctx.replace_user_term_elabs(ctx.take_user_term_elabs());
     }
 
     let result = result?;

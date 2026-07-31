@@ -8,17 +8,24 @@
 //! - Metric.Complete type and axioms (complete_spec, complete_of_seq_limit,
 //!   converges_unique, converges_of_cauchy_complete)
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Metric.Complete and related axioms for complete metric spaces.
     ///
     /// Adds: Metric.Complete, complete_spec, complete_of_seq_limit,
     ///       converges_unique, converges_of_cauchy_complete
+    #[cfg(test)]
     pub(crate) fn init_metric_complete(&mut self) -> Result<(), EnvError> {
         if self.metric_complete_init {
             return Ok(());
@@ -37,10 +44,12 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_metric_complete(&self) -> bool {
         self.metric_complete_init
     }
 
+    #[cfg(test)]
     fn add_metric_complete_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -62,6 +71,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_complete_spec(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -129,6 +139,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_complete_of_seq_limit(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -197,6 +208,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_converges_unique(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -262,6 +274,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_converges_of_cauchy_complete(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());

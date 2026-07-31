@@ -62,6 +62,7 @@ pub(crate) struct TeleConsts {
     rat: Expr,
     rat_zero: Expr,
     rat_add: Expr,
+    #[cfg(test)]
     rat_mul: Expr,
     rat_inv: Expr,
     rat_le: Expr,
@@ -104,6 +105,7 @@ impl TeleConsts {
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
             rat_add: k("Rat.add"),
+            #[cfg(test)]
             rat_mul: k("Rat.mul"),
             rat_inv: k("Rat.inv"),
             rat_le: k("Rat.le"),

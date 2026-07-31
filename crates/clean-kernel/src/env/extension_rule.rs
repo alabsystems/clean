@@ -25,13 +25,19 @@
 //! - Krajicek (1995), "Bounded Arithmetic, Propositional Logic and Complexity
 //!   Theory", Chapter 14
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all extension rule declarations.
+#[cfg(test)]
 pub(super) struct ExtensionRuleConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -48,7 +54,9 @@ pub(super) struct ExtensionRuleConsts {
     pub(super) er_proof: Expr,
 }
 
+#[cfg(test)]
 impl ExtensionRuleConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -69,11 +77,13 @@ impl ExtensionRuleConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize extension rule declarations for SAT Extended Resolution.
     ///
     /// Depends on: `init_nat()`, `init_resolution_complexity()`,
     /// `init_proof_hierarchy()`.
+    #[cfg(test)]
     pub(crate) fn init_extension_rule(&mut self) -> Result<(), EnvError> {
         if self.extension_rule_init {
             return Ok(());
@@ -111,6 +121,7 @@ impl Environment {
     /// where phi is a boolean connective and A, B are existing formulas.
     /// The variable index, the connective, and the operand formulas are
     /// abstract -- only the equivalence relationship matters for soundness.
+    #[cfg(test)]
     fn register_extension_variable(&mut self, c: &ExtensionRuleConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.ExtensionVariable"))
@@ -177,6 +188,7 @@ impl Environment {
     /// - `Base (p : ResComplexity.CNF)` -- original CNF formula
     /// - `Extend (ev : ExtensionVariable) (rest : ExtendedResolutionProof)` --
     ///   introduce an extension variable and continue
+    #[cfg(test)]
     fn register_extended_resolution_proof(
         &mut self,
         c: &ExtensionRuleConsts,
@@ -225,6 +237,7 @@ impl Environment {
     /// The number of extension variables used in an Extended Resolution proof.
     /// This measures the additional definitional complexity beyond the
     /// original formula variables.
+    #[cfg(test)]
     fn register_extension_complexity(&mut self, c: &ExtensionRuleConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.extension_complexity"))
@@ -250,6 +263,7 @@ impl Environment {
     ///
     /// Reference: Tseitin (1968), "On the Complexity of Derivation in
     ///            Propositional Calculus"
+    #[cfg(test)]
     fn register_tseitin_transform(&mut self, c: &ExtensionRuleConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.tseitin_transform"))

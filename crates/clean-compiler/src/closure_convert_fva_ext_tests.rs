@@ -8,9 +8,7 @@
 
 use crate::closure_convert_fva_ext::*;
 use crate::closure_convert_fva_ext2::*;
-use crate::ir::{
-    CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
-};
+use crate::ir::{CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId, VarId};
 use clean_kernel::Name;
 use std::collections::{HashMap, HashSet};
 

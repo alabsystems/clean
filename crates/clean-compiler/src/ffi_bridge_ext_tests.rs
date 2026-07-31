@@ -293,6 +293,12 @@ fn test_marshaling_ptr_param() {
     assert_eq!(steps, vec![MarshalingStep::BoxToPtr]);
 }
 
+#[test]
+fn test_reverse_marshaling_steps_are_distinct() {
+    assert_ne!(MarshalingStep::PtrToBox, MarshalingStep::UintToNat);
+    assert_ne!(MarshalingStep::UintToNat, MarshalingStep::PtrToString);
+}
+
 // ════════════════════════════════════════════════════════════════════
 // check_abi_compatibility
 // ════════════════════════════════════════════════════════════════════

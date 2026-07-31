@@ -36,9 +36,8 @@
 //! closure for every theorem. NO `sorry` / `add_decl_unchecked` /
 //! `add_decl_structural`.
 
-use super::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::env::{EnvError, Environment};
+use crate::expr::Expr;
 use crate::level::Level;
 use crate::name::Name;
 
@@ -87,9 +86,11 @@ pub(crate) struct CbrtSqueezeConsts {
     rat_one_mul: Expr,
     rat_right_distrib: Expr,
     rat_add_natcast_one: Expr,
+    #[cfg(test)]
     rat_add_assoc: Expr,
     // Eq toolkit (Rat is Sort 1)
     eq1: Expr,
+    #[cfg(test)]
     eq_refl1: Expr,
     eq_symm1: Expr,
     eq_subst1: Expr,
@@ -150,8 +151,10 @@ impl CbrtSqueezeConsts {
             rat_one_mul: k("Rat.one_mul"),
             rat_right_distrib: k("Rat.right_distrib"),
             rat_add_natcast_one: k("Rat.add_natCast_one"),
+            #[cfg(test)]
             rat_add_assoc: k("Rat.add_assoc"),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
@@ -216,6 +219,7 @@ impl CbrtSqueezeConsts {
     fn eq(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }
+    #[cfg(test)]
     fn refl(&self, a: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), a])
     }
@@ -283,6 +287,7 @@ impl CbrtSqueezeConsts {
     fn add_natcast_one(&self, k: Expr) -> Expr {
         Expr::app(self.rat_add_natcast_one.clone(), k)
     }
+    #[cfg(test)]
     fn add_assoc(&self, a: Expr, b: Expr, c: Expr) -> Expr {
         Expr::apps(self.rat_add_assoc.clone(), [a, b, c])
     }

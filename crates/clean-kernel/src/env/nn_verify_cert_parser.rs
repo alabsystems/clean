@@ -11,15 +11,24 @@
 //!
 //! Part of #3255.
 
+#[cfg(test)]
 use num_bigint::{BigInt, BigUint};
+#[cfg(test)]
 use num_rational::BigRational;
+#[cfg(test)]
 use num_traits::{One, Signed, Zero};
+#[cfg(test)]
 use serde::Deserialize;
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BigNat, BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 // ---------------------------------------------------------------------------
@@ -29,6 +38,7 @@ use crate::name::Name;
 /// Errors from certificate parsing and Expr construction.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
+#[cfg(test)]
 pub enum CertParseError {
     #[error("JSON parse error: {0}")]
     Json(#[from] serde_json::Error),
@@ -94,6 +104,7 @@ pub enum CertParseError {
 
 /// Top-level gamma-crown certificate.
 #[derive(Debug, Clone, Deserialize)]
+#[cfg(test)]
 pub(crate) struct Certificate {
     #[serde(default)]
     pub network_name: String,
@@ -102,6 +113,7 @@ pub(crate) struct Certificate {
 
 /// Per-layer certificate data.
 #[derive(Debug, Clone, Deserialize)]
+#[cfg(test)]
 pub(crate) struct LayerCert {
     pub layer_id: usize,
     pub input_bounds: BoundsData,
@@ -115,6 +127,7 @@ pub(crate) struct LayerCert {
 
 /// Interval bounds as parallel lower/upper vectors.
 #[derive(Debug, Clone, Deserialize)]
+#[cfg(test)]
 pub(crate) struct BoundsData {
     pub lower: Vec<f64>,
     pub upper: Vec<f64>,
@@ -127,6 +140,7 @@ pub(crate) struct BoundsData {
 /// `coefficients[j]` is a vector of `m` non-negative multipliers for
 /// the `j`-th output bound inequality.
 #[derive(Debug, Clone, Deserialize)]
+#[cfg(test)]
 pub(crate) struct FarkasWitness {
     /// Farkas multiplier matrix: one coefficient vector per output bound.
     /// Each inner vector has length equal to the number of input bound
@@ -138,12 +152,14 @@ pub(crate) struct FarkasWitness {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
+#[cfg(test)]
 pub(crate) enum ProofType {
     Ibp,
     Farkas,
     Crown,
 }
 
+#[cfg(test)]
 fn default_proof_type() -> ProofType {
     ProofType::Ibp
 }
@@ -152,14 +168,17 @@ fn default_proof_type() -> ProofType {
 // Validation
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 impl Certificate {
     /// Parse JSON into a `Certificate`, validating structural invariants.
+    #[cfg(test)]
     pub(crate) fn parse(json: &str) -> Result<Self, CertParseError> {
         let cert: Certificate = serde_json::from_str(json)?;
         cert.validate()?;
         Ok(cert)
     }
 
+    #[cfg(test)]
     fn validate(&self) -> Result<(), CertParseError> {
         if self.layers.is_empty() {
             return Err(CertParseError::EmptyLayers);
@@ -188,6 +207,7 @@ impl Certificate {
     }
 }
 
+#[cfg(test)]
 fn validate_bounds(b: &BoundsData, layer_id: usize) -> Result<(), CertParseError> {
     if b.lower.len() != b.upper.len() {
         return Err(CertParseError::DimMismatch {
@@ -215,6 +235,7 @@ fn validate_bounds(b: &BoundsData, layer_id: usize) -> Result<(), CertParseError
 /// the Farkas witness must have exactly `2 * d_out` rows (one per output
 /// lower+upper bound inequality), each with `2 * d_in` non-negative
 /// coefficients (one per input lower+upper bound constraint).
+#[cfg(test)]
 fn validate_farkas(layer: &LayerCert) -> Result<(), CertParseError> {
     let farkas = match &layer.farkas {
         Some(f) => f,
@@ -266,6 +287,7 @@ fn validate_farkas(layer: &LayerCert) -> Result<(), CertParseError> {
 // ---------------------------------------------------------------------------
 
 /// Constants for certificate-to-Expr conversion.
+#[cfg(test)]
 pub(crate) struct CertConsts {
     pub rat: Expr,
     pub fin: Expr,
@@ -278,7 +300,9 @@ pub(crate) struct CertConsts {
     pub rat_mk: Expr,
 }
 
+#[cfg(test)]
 impl CertConsts {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self {
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
@@ -297,6 +321,7 @@ impl CertConsts {
     ///
     /// Truncates to integer for the scaffold; exact p/q encoding can
     /// be added when gamma-crown emits exact rational coefficients.
+    #[cfg(test)]
     pub(crate) fn rat_from_f64(&self, v: f64) -> Expr {
         let int_of_nat = Expr::const_(Name::from_string("Int.ofNat"), vec![]);
         let int_neg_succ = Expr::const_(Name::from_string("Int.negSucc"), vec![]);
@@ -319,6 +344,7 @@ impl CertConsts {
     /// kernel proof of `lit = lit`.  This is what makes the combined-vs-
     /// conclusion coefficient equality kernel-checkable without a native Rat
     /// reducer.
+    #[cfg(test)]
     pub(crate) fn rat_from_exact(&self, num: &BigInt, den: &BigInt) -> Expr {
         debug_assert!(
             den.is_positive(),
@@ -347,12 +373,14 @@ impl CertConsts {
     }
 
     /// Build `@Eq Rat lhs rhs` (the proposition).
+    #[cfg(test)]
     pub(crate) fn rat_eq(&self, lhs: Expr, rhs: Expr) -> Expr {
         let eq = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
         Expr::app(Expr::app(Expr::app(eq, self.rat.clone()), lhs), rhs)
     }
 
     /// Build `@Eq.refl Rat x : @Eq Rat x x`.
+    #[cfg(test)]
     pub(crate) fn rat_eq_refl(&self, x: Expr) -> Expr {
         let eq_refl = Expr::const_(
             Name::from_string("Eq.refl"),
@@ -362,6 +390,7 @@ impl CertConsts {
     }
 
     /// Build `LE.le @Rat instLERat lhs rhs`.
+    #[cfg(test)]
     pub(crate) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -376,6 +405,7 @@ impl CertConsts {
     }
 
     /// Build `IntervalBounds.subset @d b1 b2`.
+    #[cfg(test)]
     pub(crate) fn subset(&self, d: &Expr, b1: &Expr, b2: &Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.ib_subset.clone(), d.clone()), b1.clone()),
@@ -409,6 +439,7 @@ impl CertConsts {
 /// Because the limb ordering matches exactly, the resulting `BigNat` denotes the
 /// SAME natural number as `u` — with no truncation and no width cap. This is the
 /// exact `BigUint -> kernel-Nat` bridge for the trusted lowering in `rat_from_exact`.
+#[cfg(test)]
 fn biguint_to_bignat(u: &BigUint) -> BigNat {
     BigNat::from_limbs(u.to_u64_digits())
 }
@@ -420,13 +451,16 @@ fn biguint_to_bignat(u: &BigUint) -> BigNat {
 /// fail-closed reject (zero denominator, malformed input) is preserved.
 /// Semantics mirror `clean_elab::cert::external::ExternalRational`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) struct ExactRat {
     r: BigRational,
 }
 
+#[cfg(test)]
 impl ExactRat {
     /// The exact rational `0` (= `0/1`). Not a `const` because `BigRational`
     /// is heap-backed and cannot be const-constructed.
+    #[cfg(test)]
     fn zero() -> ExactRat {
         ExactRat {
             r: BigRational::zero(),
@@ -434,12 +468,14 @@ impl ExactRat {
     }
 
     /// Numerator accessor (reduced, sign-carrying). Used by error formatting.
+    #[cfg(test)]
     fn num(&self) -> &BigInt {
         self.r.numer()
     }
 
     /// Denominator accessor (reduced, always `> 0`). Used by error formatting
     /// and by `rat_from_exact` lowering.
+    #[cfg(test)]
     fn den(&self) -> &BigInt {
         self.r.denom()
     }
@@ -452,6 +488,7 @@ impl ExactRat {
     /// never a panic, never an accept. `BigRational::new` then gcd-reduces and
     /// moves the sign onto the numerator so the `reduced`/`den > 0` invariant
     /// holds by construction.
+    #[cfg(test)]
     fn reduced(num: BigInt, den: BigInt) -> Result<Self, CertParseError> {
         if den.is_zero() {
             return Err(CertParseError::RationalArith {
@@ -463,19 +500,23 @@ impl ExactRat {
         })
     }
 
+    #[cfg(test)]
     fn from_int(n: BigInt) -> Self {
         ExactRat {
             r: BigRational::from_integer(n),
         }
     }
 
+    #[cfg(test)]
     fn is_zero(&self) -> bool {
         self.r.is_zero()
     }
+    #[cfg(test)]
     fn is_negative(&self) -> bool {
         self.r.is_negative()
     }
 
+    #[cfg(test)]
     fn neg(&self) -> Self {
         ExactRat { r: -self.r.clone() }
     }
@@ -483,6 +524,7 @@ impl ExactRat {
     /// Exact arbitrary-precision addition (infallible; `Result` kept so the
     /// `?` call-sites in `NormConstraint`/`verify_entailment` are untouched).
     #[allow(clippy::should_implement_trait, clippy::unnecessary_wraps)]
+    #[cfg(test)]
     fn add(&self, other: &Self) -> Result<Self, CertParseError> {
         Ok(ExactRat {
             r: self.r.clone() + other.r.clone(),
@@ -492,6 +534,7 @@ impl ExactRat {
     /// Exact arbitrary-precision multiplication (infallible; `Result` kept for
     /// API stability at the `?` call-sites).
     #[allow(clippy::should_implement_trait, clippy::unnecessary_wraps)]
+    #[cfg(test)]
     fn mul(&self, other: &Self) -> Result<Self, CertParseError> {
         Ok(ExactRat {
             r: self.r.clone() * other.r.clone(),
@@ -500,11 +543,13 @@ impl ExactRat {
 
     /// `self <= other` via exact `BigRational` total order (no cross-multiply,
     /// so the prior i128 cross-multiplication overflow hazard is removed).
+    #[cfg(test)]
     fn le(&self, other: &Self) -> bool {
         self.r <= other.r
     }
 
     /// `self < other` via exact `BigRational` total order.
+    #[cfg(test)]
     fn lt(&self, other: &Self) -> bool {
         self.r < other.r
     }
@@ -513,6 +558,7 @@ impl ExactRat {
 /// Parse a rational from a JSON value that is either a string ("n/d", an
 /// integer, or a decimal), or an integer number. Mirrors the grammar of
 /// `clean_elab::cert::external::rational::parse_rational_str`.
+#[cfg(test)]
 fn parse_exact_rat(value: &serde_json::Value) -> Result<ExactRat, CertParseError> {
     match value {
         serde_json::Value::String(s) => parse_rat_str(s),
@@ -528,6 +574,7 @@ fn parse_exact_rat(value: &serde_json::Value) -> Result<ExactRat, CertParseError
     }
 }
 
+#[cfg(test)]
 fn parse_rat_str(s: &str) -> Result<ExactRat, CertParseError> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
@@ -557,6 +604,7 @@ fn parse_rat_str(s: &str) -> Result<ExactRat, CertParseError> {
     }
 }
 
+#[cfg(test)]
 fn parse_int_or_decimal(s: &str) -> Result<ExactRat, CertParseError> {
     if s.contains(['e', 'E']) {
         return Err(CertParseError::RationalArith {
@@ -623,6 +671,7 @@ fn parse_int_or_decimal(s: &str) -> Result<ExactRat, CertParseError> {
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg(test)]
 pub(crate) enum EntailKind {
     Le,
     Lt,
@@ -632,6 +681,7 @@ pub(crate) enum EntailKind {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg(test)]
 pub(crate) struct EntailConstraint {
     pub kind: EntailKind,
     /// variable -> coefficient (rational, as JSON string / number).
@@ -640,6 +690,7 @@ pub(crate) struct EntailConstraint {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg(test)]
 pub(crate) struct EntailmentCert {
     pub version: String,
     pub premises: Vec<EntailConstraint>,
@@ -650,13 +701,16 @@ pub(crate) struct EntailmentCert {
 /// A constraint normalized to `sum coeff_i * x_i <= constant` (with a strict
 /// flag for `<`).
 #[derive(Debug, Clone)]
+#[cfg(test)]
 struct NormConstraint {
     coeffs: std::collections::BTreeMap<String, ExactRat>,
     constant: ExactRat,
     strict: bool,
 }
 
+#[cfg(test)]
 impl NormConstraint {
+    #[cfg(test)]
     fn zero() -> Self {
         NormConstraint {
             coeffs: std::collections::BTreeMap::new(),
@@ -665,6 +719,7 @@ impl NormConstraint {
         }
     }
 
+    #[cfg(test)]
     fn scale(&self, factor: &ExactRat) -> Result<Self, CertParseError> {
         if factor.is_zero() {
             return Ok(NormConstraint::zero());
@@ -683,6 +738,7 @@ impl NormConstraint {
         })
     }
 
+    #[cfg(test)]
     fn add(mut self, other: Self) -> Result<Self, CertParseError> {
         for (var, coeff) in other.coeffs {
             let next = match self.coeffs.remove(&var) {
@@ -701,6 +757,7 @@ impl NormConstraint {
     }
 }
 
+#[cfg(test)]
 fn parse_coeff_map(
     m: &std::collections::BTreeMap<String, serde_json::Value>,
 ) -> Result<std::collections::BTreeMap<String, ExactRat>, CertParseError> {
@@ -715,6 +772,7 @@ fn parse_coeff_map(
 }
 
 /// Normalize a constraint to one (inequalities) or two (equalities) `<=` forms.
+#[cfg(test)]
 fn normalize(constraint: &EntailConstraint) -> Result<Vec<NormConstraint>, CertParseError> {
     let coeffs = parse_coeff_map(&constraint.coefficients)?;
     let constant = parse_exact_rat(&constraint.constant)?;
@@ -760,6 +818,7 @@ fn normalize(constraint: &EntailConstraint) -> Result<Vec<NormConstraint>, CertP
 /// Outcome of an exact-rational entailment combination: the derived combined
 /// constraint and the (single, normalized) conclusion it was checked against.
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub(crate) struct EntailmentResult {
     /// Derived (combined) coefficient map == conclusion coefficient map.
     pub coeffs: std::collections::BTreeMap<String, ExactRat>,
@@ -789,6 +848,7 @@ pub(crate) struct EntailmentResult {
 /// Returns `Ok(result)` iff the combination is sound; an unsound certificate
 /// (wrong coefficients, insufficient bound, negative multiplier, version /
 /// length mismatch) yields an `Err` and MUST NOT be turned into a witness.
+#[cfg(test)]
 pub(crate) fn verify_entailment(cert: &EntailmentCert) -> Result<EntailmentResult, CertParseError> {
     if cert.version != "1.0" {
         return Err(CertParseError::EntailmentFailed {
@@ -886,6 +946,7 @@ pub(crate) fn verify_entailment(cert: &EntailmentCert) -> Result<EntailmentResul
 
 /// A single layer's bounds converted to kernel `Expr` terms.
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub(crate) struct LayerBoundsExpr {
     pub input_dim: usize,
     pub output_dim: usize,
@@ -898,6 +959,7 @@ pub(crate) struct LayerBoundsExpr {
 
 /// Result of converting a full certificate to Expr terms.
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub(crate) struct CertificateExprs {
     pub layers: Vec<LayerBoundsExpr>,
     /// Composed `IntervalBounds.subset` type for the full chain, or `None`
@@ -905,12 +967,14 @@ pub(crate) struct CertificateExprs {
     pub chain_proof_type: Option<Expr>,
 }
 
+#[cfg(test)]
 fn axiom_name(prefix: &str, layer_id: usize, role: &str) -> Name {
     Name::from_string(&format!("cert_{prefix}_L{layer_id}_{role}"))
 }
 
 /// Convert `BoundsData` into an `IntervalBounds d` Expr by registering
 /// axioms for the lower/upper vectors and their validity witness.
+#[cfg(test)]
 fn bounds_to_expr(
     env: &mut Environment,
     c: &CertConsts,
@@ -970,6 +1034,7 @@ fn bounds_to_expr(
     ))
 }
 
+#[cfg(test)]
 fn register_subset_axiom(
     env: &mut Environment,
     c: &CertConsts,
@@ -994,6 +1059,7 @@ fn register_subset_axiom(
 /// Each Farkas witness row is a set of non-negative multipliers for input
 /// constraints. The matrix is registered as an opaque axiom whose concrete
 /// values are captured in the certificate metadata.
+#[cfg(test)]
 fn register_farkas_coeffs(
     env: &mut Environment,
     c: &CertConsts,
@@ -1039,13 +1105,14 @@ fn register_farkas_coeffs(
     Ok(Expr::const_(coeff_name, vec![]))
 }
 
+#[cfg(test)]
 impl Environment {
     /// Parse a gamma-crown certificate JSON and register kernel Expr terms.
     ///
     /// Registers axioms for bound vectors and validity witnesses, constructs
     /// `IntervalBounds` terms per layer, and (for multi-layer certs) registers
     /// per-link subset axioms and computes the composed chain proof type.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn parse_nn_certificate(
         &mut self,
         json: &str,
@@ -1182,7 +1249,7 @@ impl Environment {
     ///
     /// Returns `(theorem_name, farkas_list_backed)`; `farkas_list_backed` is
     /// `true` iff the registered witness is `farkas_combine_list`-backed.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn verify_entailment_certificate_kernel(
         &mut self,
         json: &str,
@@ -1195,7 +1262,7 @@ impl Environment {
     /// Like [`Self::verify_entailment_certificate_kernel`] but also returns
     /// whether the registered witness is backed by `farkas_combine_list`
     /// (`true`) versus the equality-fallback `Eq.refl` scaffold (`false`).
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn verify_entailment_certificate_kernel_ex(
         &mut self,
         json: &str,
@@ -1259,7 +1326,7 @@ impl Environment {
 /// Each parsed row `(muᵢ, cᵢ)` is encoded as the `Row` literal
 /// `(muᵢ, cᵢ, cᵢ)`, so the `farkasUpper rows` / `farkasLower rows` folds both
 /// iota-reduce to the multiplier-combination sum `Σ muᵢ·cᵢ`.
-#[cfg(any(test, feature = "math-overlays"))]
+#[cfg(test)]
 fn build_farkas_list_witness(
     rows: &[(ExactRat, ExactRat)],
 ) -> Result<(Expr, Expr), CertParseError> {

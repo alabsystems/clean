@@ -16,6 +16,7 @@ use crate::region::{is_ptr, is_scalar, tags, unbox_scalar, CompactedRegion};
 
 impl<'a> CompactedRegion<'a> {
     /// Read an array of ConstantInfo (v2 - based on actual structure)
+    #[cfg(test)]
     pub(crate) fn read_constant_array_v2(&self, ptr: u64) -> OleanResult<Vec<ParsedConstant>> {
         self.read_constant_array_v2_opts(ptr, false)
     }
@@ -63,24 +64,6 @@ impl<'a> CompactedRegion<'a> {
         }
 
         Ok(constants)
-    }
-
-    /// Read a single ConstantInfo (v2)
-    ///
-    /// Structure observed from Init/Prelude.olean:
-    /// - Outer wrapper: tag=1, 1 field (pointing to inner)
-    /// - Inner: tag=0, 4 fields containing:
-    ///   - Field 0: XxxVal (the actual constant data) - tag=0, 3 fields
-    ///   - Field 1: some metadata
-    ///   - Field 2: scalar
-    ///   - Field 3: name reference
-    /// - XxxVal: tag=0, 3 fields:
-    ///   - Field 0: Name (constant name)
-    ///   - Field 1: List Name (level params)
-    ///   - Field 2: Expr (type)
-    ///   - (for defn/thm) Field 3: Expr (value)
-    fn read_constant_info_v2(&self, ptr: u64) -> OleanResult<ParsedConstant> {
-        self.read_constant_info_v2_opts(ptr, false)
     }
 
     /// Read a single ConstantInfo (v2), optionally in TYPES-ONLY mode. See
@@ -320,35 +303,97 @@ impl<'a> CompactedRegion<'a> {
         val_offset: usize,
         val_header: &crate::region::ObjectHeader,
     ) -> OleanResult<Option<ReducibilityHintsData>> {
-        if *kind != ConstantKind::Definition || val_header.other < 3 {
+        if *kind != ConstantKind::Definition {
             return Ok(None);
+        }
+        if val_header.other < 3 {
+            return Err(OleanError::Region(format!(
+                "DefinitionVal at offset {val_offset} has no ReducibilityHints field"
+            )));
         }
         let hints_ptr = self.read_u64_at(val_offset + 24)?;
-        if !is_ptr(hints_ptr) {
-            return Ok(None);
+        // `opaque` and `abbrev` are nullary constructors, so genuine Lean
+        // oleans encode them directly as tagged scalars (1 and 3).  Treating
+        // every non-pointer as "hints absent" silently discarded both cases.
+        if is_scalar(hints_ptr) {
+            return match unbox_scalar(hints_ptr) {
+                0 => Ok(Some(ReducibilityHintsData::Opaque)),
+                1 => Ok(Some(ReducibilityHintsData::Abbrev)),
+                tag => Err(OleanError::Region(format!(
+                    "invalid scalar ReducibilityHints constructor tag {tag} at offset {}",
+                    val_offset + 24
+                ))),
+            };
         }
+        if !is_ptr(hints_ptr) {
+            return Err(OleanError::InvalidPointer {
+                ptr: hints_ptr,
+                offset: val_offset + 24,
+            });
+        }
+
+        // Clean's pre-ABI-parity exporter represented all three constructors
+        // as heap objects with `cs_sz = 0`, and represented regular's `UInt32`
+        // as a tagged scalar word. Preserve that exact legacy shape so old
+        // Clean-produced fixtures continue to round-trip. Genuine Lean uses a
+        // 16-byte tag-2 object with an unboxed UInt32 at +8.
         let hints_off = self.ptr_to_offset(hints_ptr)?;
         let hints_header = self.read_header_at(hints_off)?;
-        Ok(Some(match hints_header.tag {
-            0 => ReducibilityHintsData::Opaque,
-            1 => ReducibilityHintsData::Abbrev,
+        let hints = match hints_header.tag {
+            0 | 1 => {
+                if hints_header.other != 0 || hints_header.cs_sz != 0 {
+                    return Err(OleanError::Region(format!(
+                        "invalid legacy nullary ReducibilityHints object shape \
+                         (tag={}, other={}, cs_sz={}) at offset {hints_off}",
+                        hints_header.tag, hints_header.other, hints_header.cs_sz
+                    )));
+                }
+                if hints_header.tag == 0 {
+                    ReducibilityHintsData::Opaque
+                } else {
+                    ReducibilityHintsData::Abbrev
+                }
+            }
             2 => {
                 let height_raw = self.read_u64_at(hints_off + 8)?;
-                let height = if height_raw & 1 == 1 {
-                    (height_raw >> 1) as u32
-                } else {
-                    0
+                let height = match (hints_header.other, hints_header.cs_sz) {
+                    // Real Lean 4 ABI (`regular (height : UInt32)`): the
+                    // UInt32 is an unboxed little-endian scalar in the first
+                    // four bytes of the eight-byte scalar area. The remaining
+                    // bytes are alignment padding and carry no semantics.
+                    (0, 16) => (height_raw & u64::from(u32::MAX)) as u32,
+                    // Exact legacy Clean-exporter shape.
+                    (0, 0) if is_scalar(height_raw) => u32::try_from(unbox_scalar(height_raw))
+                        .map_err(|_| {
+                            OleanError::Region(format!(
+                                "legacy ReducibilityHints height exceeds UInt32 at offset {}",
+                                hints_off + 8
+                            ))
+                        })?,
+                    _ => {
+                        return Err(OleanError::Region(format!(
+                            "invalid regular ReducibilityHints object shape \
+                             (other={}, cs_sz={}, raw={height_raw:#018x}) at offset {hints_off}",
+                            hints_header.other, hints_header.cs_sz
+                        )));
+                    }
                 };
                 ReducibilityHintsData::Regular(height)
             }
-            _ => ReducibilityHintsData::Regular(0),
-        }))
+            tag => {
+                return Err(OleanError::InvalidObjectTag {
+                    tag,
+                    offset: hints_off,
+                });
+            }
+        };
+        Ok(Some(hints))
     }
 
     /// Read the `DefinitionSafety` flag for a definition constant.
     ///
-    /// Two on-disk `DefnVal` layouts are recognized, discriminated by the
-    /// word at `val_offset + 32`:
+    /// Two on-disk `DefnVal` layouts are recognized, discriminated by their
+    /// exact `(other, cs_sz)` header shape:
     ///
     /// **Real Lean 4 layout** (every Lean-produced `.olean`; verified against
     /// v4.30.0-rc2 `src/Lean/Declaration.lean:120-131`): `DefinitionVal
@@ -359,8 +404,7 @@ impl<'a> CompactedRegion<'a> {
     /// the trailing scalar area at `+40` (= `8 + 8*other`). The on-disk tag
     /// order is Lean's declaration order (`Declaration.lean:116-118`:
     /// `inductive DefinitionSafety where | «unsafe» | safe | «partial»`):
-    /// **0 = unsafe, 1 = safe, 2 = partial** — NOT Clean's
-    /// [`DefinitionSafety::from_tag`] order. Empirically pinned against the
+    /// **0 = unsafe, 1 = safe, 2 = partial**. Empirically pinned against the
     /// v4.30.0-rc2 toolchain: across `Init/Util` and
     /// `Init/Data/ByteArray/Basic` (base + `.olean.private`, 212 definitions)
     /// every known `unsafe def` reads 0, every ordinary/aux def reads 1, and
@@ -372,41 +416,68 @@ impl<'a> CompactedRegion<'a> {
     /// `partial = 2`). Kept for round-trip compatibility with Clean-produced
     /// oleans.
     ///
-    /// Returns `None` for non-definitions, for `DefnVal` objects that
-    /// predate the fourth slot (`other < 4`), or when the header/slot
-    /// matches neither known layout — a malformed or future-version payload
-    /// degrades gracefully to "safety unknown" (treated as safe by callers,
-    /// today's behavior) rather than fabricating a level.
+    /// Returns `None` only for non-definitions. A missing/pre-slot,
+    /// malformed/future modern layout, invalid scalar, or unknown safety tag
+    /// is an error: safety metadata is an authority boundary and must never
+    /// degrade to `safe`.
     pub(crate) fn read_definition_safety(
         &self,
         kind: &ConstantKind,
         val_offset: usize,
         val_header: &crate::region::ObjectHeader,
     ) -> OleanResult<Option<DefinitionSafety>> {
-        if *kind != ConstantKind::Definition || val_header.other < 4 {
+        if *kind != ConstantKind::Definition {
             return Ok(None);
         }
-        let raw = self.read_u64_at(val_offset + 32)?;
-        // Legacy Clean-exporter layout: boxed safety scalar at +32, Clean
-        // tag order (safe=0, unsafe=1, partial=2).
-        if is_scalar(raw) {
-            return Ok(DefinitionSafety::from_tag(unbox_scalar(raw)));
+        match (val_header.other, val_header.cs_sz) {
+            // Real Lean layout: +32 is `all : List Name`; safety is the
+            // unboxed u8 at +40 in Lean declaration order.
+            (4, 48) => {
+                let scalar_off = val_offset + 40;
+                let tag = self
+                    .data
+                    .get(scalar_off)
+                    .copied()
+                    .ok_or(OleanError::OutOfBounds {
+                        offset: scalar_off,
+                        size: self.data.len(),
+                    })?;
+                DefinitionSafety::from_tag(u64::from(tag))
+                    .map(Some)
+                    .ok_or_else(|| {
+                        OleanError::Region(format!(
+                            "invalid DefinitionSafety tag {tag} at offset {scalar_off}"
+                        ))
+                    })
+            }
+            // Exact legacy Clean-exporter layout: a boxed scalar at +32 in
+            // the historical Clean order safe=0, unsafe=1, partial=2.
+            (4, 0) => {
+                let raw = self.read_u64_at(val_offset + 32)?;
+                if !is_scalar(raw) {
+                    return Err(OleanError::Region(format!(
+                        "legacy DefinitionSafety at offset {} is not a tagged scalar",
+                        val_offset + 32
+                    )));
+                }
+                let safety = match unbox_scalar(raw) {
+                    0 => DefinitionSafety::Safe,
+                    1 => DefinitionSafety::Unsafe,
+                    2 => DefinitionSafety::Partial,
+                    tag => {
+                        return Err(OleanError::Region(format!(
+                            "invalid legacy DefinitionSafety tag {tag} at offset {}",
+                            val_offset + 32
+                        )));
+                    }
+                };
+                Ok(Some(safety))
+            }
+            (other, cs_sz) => Err(OleanError::Region(format!(
+                "unrecognized DefinitionVal safety layout \
+                 (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+            ))),
         }
-        // Real Lean layout: +32 is the `all : List Name` pointer; safety is
-        // the unboxed u8 at 8 + 8*other, in Lean's on-disk tag order
-        // (unsafe=0, safe=1, partial=2). Guarded by the exact header shape
-        // probed on real v4.30 oleans (other=4, cs_sz=48) so an unknown
-        // future layout degrades to None instead of misreading a byte.
-        if is_ptr(raw) && val_header.other == 4 && val_header.cs_sz == 48 {
-            let scalar_off = val_offset + 8 + 8 * usize::from(val_header.other);
-            return Ok(match self.data.get(scalar_off).copied() {
-                Some(0) => Some(DefinitionSafety::Unsafe),
-                Some(1) => Some(DefinitionSafety::Safe),
-                Some(2) => Some(DefinitionSafety::Partial),
-                _ => None,
-            });
-        }
-        Ok(None)
     }
 
     /// Read InductiveVal extra data
@@ -725,6 +796,144 @@ impl<'a> CompactedRegion<'a> {
 }
 
 #[cfg(test)]
+mod reducibility_hints_layout_tests {
+    //! Exact dual-layout pins for `ReducibilityHints`.
+    //!
+    //! Genuine Lean uses tagged scalars for the two nullary constructors and
+    //! a 16-byte object with an unboxed `UInt32` for `regular`. Older Clean
+    //! exports used heap objects with `cs_sz = 0` and a tagged height word.
+    //! No other shape may silently mint reduction metadata.
+    use super::super::{ConstantKind, ReducibilityHintsData};
+    use crate::region::{CompactedRegion, ObjectHeader};
+
+    const HINTS_OFFSET: usize = 40;
+
+    fn definition_header() -> ObjectHeader {
+        ObjectHeader {
+            rc: 0,
+            cs_sz: 40,
+            other: 3,
+            tag: 0,
+        }
+    }
+
+    fn scalar_hints(tagged_constructor: u64) -> Vec<u8> {
+        let mut bytes = vec![0u8; 32];
+        bytes[24..32].copy_from_slice(&tagged_constructor.to_le_bytes());
+        bytes
+    }
+
+    fn object_hints(tag: u8, other: u8, cs_sz: u16, payload: Option<u64>) -> Vec<u8> {
+        let len = if payload.is_some() {
+            HINTS_OFFSET + 16
+        } else {
+            HINTS_OFFSET + 8
+        };
+        let mut bytes = vec![0u8; len];
+        bytes[24..32].copy_from_slice(&(HINTS_OFFSET as u64).to_le_bytes());
+        bytes[HINTS_OFFSET + 4..HINTS_OFFSET + 6].copy_from_slice(&cs_sz.to_le_bytes());
+        bytes[HINTS_OFFSET + 6] = other;
+        bytes[HINTS_OFFSET + 7] = tag;
+        if let Some(payload) = payload {
+            bytes[HINTS_OFFSET + 8..HINTS_OFFSET + 16].copy_from_slice(&payload.to_le_bytes());
+        }
+        bytes
+    }
+
+    fn decode(bytes: &[u8]) -> crate::error::OleanResult<Option<ReducibilityHintsData>> {
+        CompactedRegion::new(bytes, 0).read_reducibility_hints(
+            &ConstantKind::Definition,
+            0,
+            &definition_header(),
+        )
+    }
+
+    #[test]
+    fn genuine_nullary_scalar_constructors_decode_exactly() {
+        assert_eq!(
+            decode(&scalar_hints(1)).expect("opaque scalar must decode"),
+            Some(ReducibilityHintsData::Opaque)
+        );
+        assert_eq!(
+            decode(&scalar_hints(3)).expect("abbrev scalar must decode"),
+            Some(ReducibilityHintsData::Abbrev)
+        );
+    }
+
+    #[test]
+    fn genuine_regular_unboxed_uint32_decodes_without_scalar_shift() {
+        let bytes = object_hints(2, 0, 16, Some(17));
+        assert_eq!(
+            decode(&bytes).expect("real regular object must decode"),
+            Some(ReducibilityHintsData::Regular(17))
+        );
+
+        // Bytes above the UInt32 are ABI padding, not part of the height.
+        let bytes = object_hints(2, 0, 16, Some(0xa5a5_a5a5_0000_0011));
+        assert_eq!(
+            decode(&bytes).expect("padding must not change the UInt32"),
+            Some(ReducibilityHintsData::Regular(17))
+        );
+    }
+
+    #[test]
+    fn exact_legacy_clean_shapes_remain_readable() {
+        assert_eq!(
+            decode(&object_hints(0, 0, 0, None)).expect("legacy opaque"),
+            Some(ReducibilityHintsData::Opaque)
+        );
+        assert_eq!(
+            decode(&object_hints(1, 0, 0, None)).expect("legacy abbrev"),
+            Some(ReducibilityHintsData::Abbrev)
+        );
+        assert_eq!(
+            decode(&object_hints(2, 0, 0, Some((17 << 1) | 1))).expect("legacy regular"),
+            Some(ReducibilityHintsData::Regular(17))
+        );
+    }
+
+    #[test]
+    fn malformed_or_unknown_hints_fail_closed() {
+        let mut missing_field = definition_header();
+        missing_field.other = 2;
+        assert!(
+            CompactedRegion::new(&scalar_hints(1), 0)
+                .read_reducibility_hints(&ConstantKind::Definition, 0, &missing_field)
+                .is_err(),
+            "a definition without reducibility metadata must fail closed"
+        );
+        assert!(decode(&scalar_hints(5)).is_err(), "tag-2 needs its UInt32");
+        assert!(decode(&scalar_hints(0)).is_err(), "null is not a hint");
+        assert!(
+            decode(&object_hints(7, 0, 8, None)).is_err(),
+            "unknown heap constructor must not fabricate Regular(0)"
+        );
+        assert!(
+            decode(&object_hints(2, 1, 16, Some(17))).is_err(),
+            "regular has no pointer fields"
+        );
+        assert!(
+            decode(&object_hints(2, 0, 8, Some(17))).is_err(),
+            "unknown compact size must fail"
+        );
+        assert!(
+            decode(&object_hints(2, 0, 0, Some(34))).is_err(),
+            "legacy height must be a tagged scalar"
+        );
+        assert!(
+            decode(&object_hints(0, 0, 8, None)).is_err(),
+            "only the exact legacy heap-nullary shape is accepted"
+        );
+    }
+
+    #[test]
+    fn truncated_regular_payload_fails_closed() {
+        let bytes = object_hints(2, 0, 16, None);
+        assert!(decode(&bytes).is_err());
+    }
+}
+
+#[cfg(test)]
 mod inline_scalar_bool_tests {
     //! WS7 regression: inline scalar `Bool` fields (e.g. `RecursorVal.k`) are
     //! stored as raw bytes in the object's scalar area, NOT as boxed tagged
@@ -792,9 +1001,9 @@ mod definition_safety_layout_tests {
     //! UNBOXED u8 at +40, with Lean's on-disk tag order `| «unsafe» | safe |
     //! «partial»` (`Declaration.lean:116-118`): 0=unsafe, 1=safe, 2=partial.
     //! Clean's own exporter writes a legacy layout instead: a BOXED safety
-    //! scalar at +32 in Clean's tag order (safe=0). Both must decode; an
-    //! unrecognized shape must degrade to `None` (treated as safe — the
-    //! pre-existing behavior), never guess.
+    //! scalar at +32 in Clean's tag order (safe=0). Both exact layouts decode;
+    //! every unknown shape or tag is rejected rather than gaining safe
+    //! definitional authority.
     use super::super::{ConstantKind, DefinitionSafety};
     use crate::region::{CompactedRegion, ObjectHeader};
 
@@ -804,8 +1013,7 @@ mod definition_safety_layout_tests {
     fn real_lean_defn_val(safety_byte: u8) -> Vec<u8> {
         let mut b = vec![0u8; 48];
         // +8 toConstantVal, +16 value, +24 hints, +32 all — plausible even,
-        // non-null "pointers" (never dereferenced by the safety reader; +32
-        // only needs `is_ptr` to hold, exactly as in a real compacted region).
+        // non-null pointers (never dereferenced by the safety reader).
         for (i, off) in [8usize, 16, 24, 32].iter().enumerate() {
             let fake_ptr = 0x1000u64 + (i as u64) * 0x100;
             b[*off..*off + 8].copy_from_slice(&fake_ptr.to_le_bytes());
@@ -824,11 +1032,12 @@ mod definition_safety_layout_tests {
         }
     }
 
-    fn decode(bytes: &[u8], header: &ObjectHeader) -> Option<DefinitionSafety> {
+    fn decode(
+        bytes: &[u8],
+        header: &ObjectHeader,
+    ) -> crate::error::OleanResult<Option<DefinitionSafety>> {
         let region = CompactedRegion::new(bytes, 0);
-        region
-            .read_definition_safety(&ConstantKind::Definition, 0, header)
-            .expect("in-bounds safety read must not error")
+        region.read_definition_safety(&ConstantKind::Definition, 0, header)
     }
 
     #[test]
@@ -837,32 +1046,30 @@ mod definition_safety_layout_tests {
         // 2=partial. E.g. `ptrEqList` (unsafe def) stores 0; a `._unsafe_rec`
         // twin (partial) stores 2.
         assert_eq!(
-            decode(&real_lean_defn_val(0), &real_lean_header()),
+            decode(&real_lean_defn_val(0), &real_lean_header()).expect("real unsafe"),
             Some(DefinitionSafety::Unsafe),
             "on-disk 0 must decode as unsafe (Lean declaration order)"
         );
         assert_eq!(
-            decode(&real_lean_defn_val(1), &real_lean_header()),
+            decode(&real_lean_defn_val(1), &real_lean_header()).expect("real safe"),
             Some(DefinitionSafety::Safe),
             "on-disk 1 must decode as safe"
         );
         assert_eq!(
-            decode(&real_lean_defn_val(2), &real_lean_header()),
+            decode(&real_lean_defn_val(2), &real_lean_header()).expect("real partial"),
             Some(DefinitionSafety::Partial),
             "on-disk 2 must decode as partial"
         );
-        assert_eq!(
-            decode(&real_lean_defn_val(3), &real_lean_header()),
-            None,
-            "an unknown on-disk tag must degrade to None, never guess"
+        assert!(
+            decode(&real_lean_defn_val(3), &real_lean_header()).is_err(),
+            "an unknown on-disk tag must fail closed"
         );
     }
 
     #[test]
     fn test_real_lean_layout_requires_probed_header_shape() {
-        // A pointer at +32 with a header that matches NEITHER known layout
-        // (e.g. a hypothetical 5-boxed-field future DefnVal) must return
-        // None (safety unknown => treated safe) instead of misreading a byte.
+        // A header that matches neither known layout (e.g. a hypothetical
+        // 5-boxed-field future DefnVal) must fail instead of misreading a byte.
         let bytes = real_lean_defn_val(0);
         let five_fields = ObjectHeader {
             rc: 1,
@@ -870,10 +1077,33 @@ mod definition_safety_layout_tests {
             other: 5,
             tag: 0,
         };
+        assert!(
+            decode(&bytes, &five_fields).is_err(),
+            "unknown header shape must fail closed"
+        );
+
+        let missing_safety = ObjectHeader {
+            rc: 1,
+            cs_sz: 32,
+            other: 3,
+            tag: 0,
+        };
+        assert!(
+            decode(&bytes, &missing_safety).is_err(),
+            "a DefinitionVal without safety metadata must fail closed"
+        );
+    }
+
+    #[test]
+    fn test_real_layout_all_nil_is_not_misclassified_as_legacy_safety() {
+        // `all : List Name` is a boxed field, but `List.nil` itself is the
+        // tagged scalar 1. Header-first discrimination must still read the
+        // real safety byte at +40.
+        let mut bytes = real_lean_defn_val(2);
+        bytes[32..40].copy_from_slice(&1u64.to_le_bytes());
         assert_eq!(
-            decode(&bytes, &five_fields),
-            None,
-            "unknown header shape must fail closed to None"
+            decode(&bytes, &real_lean_header()).expect("real all=nil layout"),
+            Some(DefinitionSafety::Partial)
         );
     }
 
@@ -892,10 +1122,36 @@ mod definition_safety_layout_tests {
             let boxed = (tag << 1) | 1;
             b[32..40].copy_from_slice(&boxed.to_le_bytes());
             assert_eq!(
-                decode(&b, &real_lean_header()),
+                decode(
+                    &b,
+                    &ObjectHeader {
+                        rc: 1,
+                        cs_sz: 0,
+                        other: 4,
+                        tag: 0,
+                    },
+                )
+                .expect("legacy safety"),
                 Some(expected),
-                "legacy boxed scalar tag {tag} must decode via Clean's from_tag"
+                "legacy boxed scalar tag {tag} must decode in historical order"
             );
         }
+    }
+
+    #[test]
+    fn test_legacy_unknown_or_non_scalar_safety_fails_closed() {
+        let header = ObjectHeader {
+            rc: 1,
+            cs_sz: 0,
+            other: 4,
+            tag: 0,
+        };
+        let mut unknown = vec![0u8; 48];
+        unknown[32..40].copy_from_slice(&((7u64 << 1) | 1).to_le_bytes());
+        assert!(decode(&unknown, &header).is_err());
+
+        let mut pointer = vec![0u8; 48];
+        pointer[32..40].copy_from_slice(&0x1000u64.to_le_bytes());
+        assert!(decode(&pointer, &header).is_err());
     }
 }

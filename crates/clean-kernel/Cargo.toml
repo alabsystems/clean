@@ -7,6 +7,21 @@ description = "Clean trusted type checker kernel"
 readme.workspace = true
 repository.workspace = true
 
+[package.metadata.clean.feature-contracts.farkas-constructive]
+# This is a production trust boundary, not documentation: the
+# `farkas_feature_contract` integration test compares this whitelist against
+# the cfg-gated modules in `src/env/mod.rs`.
+dependencies = []
+modules = [
+    "nn_verify_farkas_order",
+    "nn_verify_foundation_theorems_farkas_constructive",
+    "nn_verify_foundation_theorems_farkas_constructive_proofs",
+    "nn_verify_ibp_linear_add_le",
+    "nn_verify_ibp_linear_mul_le",
+    "nn_verify_rat_ordering",
+    "nn_verify_rat_ordering_proofs",
+]
+
 [lints]
 workspace = true
 
@@ -45,6 +60,7 @@ clean-parser.workspace = true
 clean-ck0.workspace = true
 serial_test.workspace = true
 sysinfo = "0.39"
+toml.workspace = true
 # Also needed as dev-dep: env/tests.rs, cert/tests/streaming.rs use tempfile in #[cfg(test)]
 # without the test-utils feature gate. Do not remove — see #1830.
 tempfile.workspace = true
@@ -84,11 +100,17 @@ debug-infer = []
 # Usage: cargo test --features debug-def-eq
 debug-def-eq = []
 
-# Compile 15 pure-overlay math modules (~6.4K LOC) whose functions are
-# only called from tests or other gated modules. Without this feature,
-# these modules are excluded from `cargo check` builds, reducing LLVM IR
-# generation. Always compiled in test builds via cfg(test). (#1432)
+# Compile the full experimental math/NN overlay surface. This intentionally
+# carries hundreds of modules and is unsuitable for consumers that need only
+# a specific production proof anchor. Always compiled in test builds via
+# cfg(test). (#1432)
 math-overlays = []
+
+# Minimal production closure for the in-process constructive Farkas anchor.
+# TrustIR needs only `Environment::init_nn_verify_farkas_constructive`, not
+# the hundreds of experimental overlays carried by `math-overlays`. Keep this
+# exact module whitelist guarded by `tests/farkas_feature_contract.rs`.
+farkas-constructive = []
 
 # Gate cert geometry application modules (benchmark, derivation, geometry,
 # problem) so they are excluded from the default trusted kernel build (#2183).
@@ -157,6 +179,11 @@ required-features = ["math-overlays"]
 name = "verify_axiom_audit_integration"
 path = "tests/verify_axiom_audit_integration.rs"
 required-features = ["math-overlays"]
+
+[[test]]
+name = "farkas_constructive_feature"
+path = "tests/farkas_constructive_feature.rs"
+required-features = ["farkas-constructive"]
 
 [[bin]]
 name = "clean_cert"

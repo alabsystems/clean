@@ -85,7 +85,7 @@ impl Environment {
         self.discharge_axiom_for_redefinition(&testbit_name);
 
         let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-        let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+        let _nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
         let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
         let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
         let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);

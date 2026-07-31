@@ -44,7 +44,7 @@ fn p2sn_n(c: &StepConsts, n: &Expr) -> Expr {
 
 /// `Rat.add_le_add a b c d h_ab h_cd : a+c ≤ b+d`.
 fn add_le_add(
-    c: &StepConsts,
+    _c: &StepConsts,
     a: &Expr,
     bv: &Expr,
     cc: &Expr,
@@ -59,7 +59,7 @@ fn add_le_add(
 }
 
 /// `0 ≤ (1+1)` : `le_trans 0 1 2 (0≤1) (1≤2)`.
-fn step_zero_le_two(c: &StepConsts) -> Expr {
+fn step_zero_le_two(_c: &StepConsts) -> Expr {
     let hc = crate::env::boolean_analysis_hc_bounds_proofs::HcBoundsConsts::new();
     hc.zero_le_two()
 }
@@ -155,6 +155,7 @@ fn step_s2_pointwise(
     let proof = c.subst_le_left(&b, two_sq, rhs_sum.clone(), lhs_sum.clone(), heq_sym, tpb);
     b.finish_child(b.mk_lam(k_id, BinderInfo::Default, c.fin_of(&p2n), proof))
 }
+#[cfg(test)]
 fn lhs_sum_clone(c: &StepConsts, a: &Expr, b: &Expr) -> Expr {
     c.add(a.clone(), b.clone())
 }
@@ -215,7 +216,7 @@ fn step_s45_r_bound(
     big_r: &Expr,
     sq_g: &Expr,
     sq_h: &Expr,
-    pow4_g: &Expr,
+    _pow4_g: &Expr,
     pow4_h: &Expr,
     r_summand: &Expr,
     sg: &Expr,

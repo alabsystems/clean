@@ -3,7 +3,7 @@
   "tool": "mathverse_shard verify-kernel --corpus",
   "clean_version": "1.2.0",
   "created_at": "2026-06-22T19:39:53Z",
-  "shard_dir": "$HOME/everest-corpus/shards-def",
+  "shard_dir": "everest-corpus/shards-def",
   "shards_loaded": 2,
   "total_constants": 88313,
   "kernel_verified": 2779,

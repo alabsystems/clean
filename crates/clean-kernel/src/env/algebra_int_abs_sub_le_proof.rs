@@ -71,13 +71,19 @@
 //! `env.axiom_deps("Int.abs_sub_le")` is empty and
 //! `env.proof_quality("Int.abs_sub_le") == ProofQuality::Constructive`.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[cfg(test)]
 struct AbsSubLeConsts {
     int_type: Expr,
     int_abs: Expr,
@@ -90,7 +96,9 @@ struct AbsSubLeConsts {
     eq_subst: Expr,
 }
 
+#[cfg(test)]
 impl AbsSubLeConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -106,18 +114,23 @@ impl AbsSubLeConsts {
         }
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
+    #[cfg(test)]
     fn neg(&self, x: Expr) -> Expr {
         Expr::app(self.int_neg.clone(), x)
     }
+    #[cfg(test)]
     fn iadd(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_add.clone(), [x, y])
     }
+    #[cfg(test)]
     fn isub(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_sub.clone(), [x, y])
     }
+    #[cfg(test)]
     fn ile(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_le.clone(), [x, y])
     }
@@ -125,6 +138,7 @@ impl AbsSubLeConsts {
 
 /// `∀ a b : Int,
 ///    Int.le (Int.abs (Int.sub a b)) (Int.add (Int.abs a) (Int.abs b))`.
+#[cfg(test)]
 fn build_abs_sub_le_type(c: &AbsSubLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -147,6 +161,7 @@ fn build_abs_sub_le_type(c: &AbsSubLeConsts) -> Expr {
 ///     (Int.abs_neg b)
 ///     (Int.abs_add_le a (Int.neg b))
 /// ```
+#[cfg(test)]
 fn build_abs_sub_le_value(c: &AbsSubLeConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -185,6 +200,7 @@ fn build_abs_sub_le_value(c: &AbsSubLeConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Int.abs_sub_le` as a kernel-checked `Declaration::Theorem`.
     ///
@@ -198,6 +214,7 @@ impl Environment {
     ///          with `proof_quality == Constructive`.
     /// ENSURES: Idempotent — guarded by `get_const`; dependencies are
     ///          themselves idempotent.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_sub_le(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

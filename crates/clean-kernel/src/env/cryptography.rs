@@ -12,11 +12,16 @@
 //! - Key exchange protocols
 //! - Zero-knowledge proofs
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Cryptography module
     ///
@@ -36,6 +41,7 @@ impl Environment {
     /// ENSURES: On success, `self.cryptography_init == true`
     /// ENSURES: On success, required dependencies (`eq`, `nat`, `number_theory`, `computability`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_cryptography(&mut self) -> Result<(), EnvError> {
         if self.cryptography_init {
             return Ok(());
@@ -307,6 +313,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_cryptography` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_cryptography(&self) -> bool {
         self.cryptography_init
     }

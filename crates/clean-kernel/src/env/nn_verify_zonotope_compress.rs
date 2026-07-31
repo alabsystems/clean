@@ -447,6 +447,7 @@ struct T10Consts {
     rat_one: Expr,
     rat_add: Expr,
     rat_mul: Expr,
+    #[cfg(test)]
     rat_neg: Expr,
     /// `Eq.symm.{1}`.
     eq_symm: Expr,
@@ -481,6 +482,7 @@ impl T10Consts {
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
+            #[cfg(test)]
             rat_neg: Expr::const_(Name::from_string("Rat.neg"), vec![]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
@@ -738,7 +740,7 @@ fn build_t10_eqx(
     gens: &Expr,
     eps0: &Expr,
 ) -> Expr {
-    let vec_n = c.vec_of(n.clone());
+    let _vec_n = c.vec_of(n.clone());
     let fin_n = Expr::app(h.fin.clone(), n.clone());
     let rhs = rhs_of_eqx(c, h, n, k, center, gens, eps0);
 

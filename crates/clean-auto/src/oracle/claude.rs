@@ -105,7 +105,7 @@ impl ClaudeOracle {
             .config
             .endpoint_url
             .as_deref()
-            .unwrap_or("https://api.example.com")
+            .unwrap_or("https://api.AI Provider.com")
             .trim_end_matches('/');
         format!("{base}/v1/messages")
     }

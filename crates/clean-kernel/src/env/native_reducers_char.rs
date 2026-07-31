@@ -19,9 +19,10 @@ pub(crate) mod names {
 
     pub(crate) static CHAR_OF_NAT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("Char.ofNat"));
+    #[cfg(test)]
+    pub(crate) static CHAR_VAL: LazyLock<Name> = LazyLock::new(|| Name::from_string("Char.val"));
     pub(crate) static CHAR_TO_NAT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("Char.toNat"));
-    pub(crate) static CHAR_VAL: LazyLock<Name> = LazyLock::new(|| Name::from_string("Char.val"));
     pub(crate) static CHAR_DEC_EQ: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("Char.decEq"));
     pub(crate) static CHAR_DEC_LE: LazyLock<Name> =

@@ -18,6 +18,9 @@ use super::expr_builders;
 use super::expr_builders_arith::{self, CmpOp};
 use super::theory_lemma_lra_additive::mk_int_add;
 
+mod identical_suffix;
+#[cfg(test)]
+mod identical_suffix_tests;
 #[cfg(test)]
 mod tests;
 mod transport;
@@ -307,6 +310,12 @@ pub(super) fn try_close_int_additive_nf(
     acc_rhs: &Expr,
     acc_proof: &Expr,
 ) -> Option<Expr> {
+    if let Some(false_proof) =
+        identical_suffix::try_close_identical_raw_add_suffix(op, acc_lhs, acc_rhs, acc_proof)
+    {
+        return Some(false_proof);
+    }
+
     let lhs_nf = IntAddNf::from_expr(acc_lhs);
     let rhs_nf = IntAddNf::from_expr(acc_rhs);
     let shape = build_close_shape(&lhs_nf, &rhs_nf);

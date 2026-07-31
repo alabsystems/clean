@@ -2085,7 +2085,12 @@ fn is_universe_collapse_rejection_via_whnf(
 /// True iff `a` and `b` are equal modulo universe levels after weak-head-
 /// normalizing (delta+beta through `tc`) at every level of a fuel-bounded
 /// congruence descent. See [`is_universe_collapse_rejection_via_whnf`].
-fn reconciles_modulo_universe_via_whnf(tc: &TypeChecker, a: &Expr, b: &Expr, fuel: u32) -> bool {
+fn reconciles_modulo_universe_via_whnf(
+    tc: &TypeChecker<'_>,
+    a: &Expr,
+    b: &Expr,
+    fuel: u32,
+) -> bool {
     use clean_kernel::expr::ExprKind as K;
     if fuel == 0 {
         return false;
@@ -2229,7 +2234,7 @@ const INT63_RECONCILE_FUEL: u32 = 64;
 /// an argument. Bounded by `fuel` (and returns `false` when exhausted — the
 /// term is then conservatively treated as NOT primitive-stuck).
 fn subterm_stuck_on_native_primitive(
-    tc: &TypeChecker,
+    tc: &TypeChecker<'_>,
     env: &Environment,
     e: &Expr,
     fuel: u32,
@@ -2286,7 +2291,7 @@ fn subterm_stuck_on_native_primitive(
 /// the two sides SHARE (that part matches and is never scanned) is not
 /// laundered.
 fn types_reconcile_modulo_stuck_primitive(
-    tc: &TypeChecker,
+    tc: &TypeChecker<'_>,
     env: &Environment,
     a: &Expr,
     b: &Expr,

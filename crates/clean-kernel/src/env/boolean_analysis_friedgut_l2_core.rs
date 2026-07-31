@@ -164,6 +164,7 @@ impl L2Consts {
         )
     }
     /// `natCast m := Rat.mk (Int.ofNat m) 1` (byte-match high_degree's `natcast`).
+    #[cfg(test)]
     fn natcast(&self, m: &Expr) -> Expr {
         Expr::apps(
             self.rat_mk.clone(),
@@ -245,6 +246,7 @@ impl L2Consts {
             [self.bool_.clone(), a, b],
         )
     }
+    #[cfg(test)]
     fn refl_rat(&self, a: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.refl"), vec![self.l1.clone()]),
@@ -384,7 +386,7 @@ impl Environment {
         self.register_fin_sum_add_theorem()?;
 
         let c = L2Consts::new();
-        let g_ty = |b: &EnvDeclBuilder, n: &Expr| c.hcpoint_to_rat(n);
+        let g_ty = |_b: &EnvDeclBuilder, n: &Expr| c.hcpoint_to_rat(n);
 
         let ty = {
             let mut b = EnvDeclBuilder::new();

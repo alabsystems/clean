@@ -138,6 +138,7 @@ impl Cofib {
     /// Restrict by substituting `var := value` (`false`=0, `true`=1), simplifying
     /// the DNF: a satisfied atom is absorbed (`⊤`), a falsified atom kills its
     /// conjunct (`⊥`).
+    #[cfg(test)]
     pub(crate) fn restrict(&self, var: u32, value: bool) -> Cofib {
         let mut disjuncts = Vec::new();
         for conj in &self.disjuncts {

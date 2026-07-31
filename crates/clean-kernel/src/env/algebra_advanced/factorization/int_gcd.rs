@@ -4,10 +4,16 @@
 
 //! Int GCD/LCM axioms and divisibility.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(test)]
+use crate::env::{Declaration, EnvError};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
@@ -27,6 +33,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_gcd_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_gcd(&mut self) -> Result<(), EnvError> {
         if self.int_gcd_init {
             return Ok(());
@@ -263,6 +270,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_gcd_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_gcd(&self) -> bool {
         self.int_gcd_init
     }

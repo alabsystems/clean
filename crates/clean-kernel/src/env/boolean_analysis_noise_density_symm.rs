@@ -121,6 +121,7 @@ impl DensitySymmConsts {
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(Expr::const_(Name::from_string("Fin"), vec![]), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }

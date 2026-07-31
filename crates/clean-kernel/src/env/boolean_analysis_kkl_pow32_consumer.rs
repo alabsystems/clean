@@ -90,6 +90,7 @@ struct Pow32ConsumerConsts {
     finsum_smul: Expr,
     finsum_ofrat: Expr,
     // logic.
+    #[cfg(test)]
     eq1: Expr,
     eq_trans1: Expr,
     eq_subst1: Expr,
@@ -124,6 +125,7 @@ impl Pow32ConsumerConsts {
             finsum_le: k("NNReal.finSum_le"),
             finsum_smul: k("NNReal.finSum_smul"),
             finsum_ofrat: k("NNReal.finSum_ofRat"),
+            #[cfg(test)]
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans1: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
@@ -180,6 +182,7 @@ impl Pow32ConsumerConsts {
         Expr::apps(self.fin_sum.clone(), [n.clone(), g])
     }
     /// `@Eq.{1} NNReal a b`.
+    #[cfg(test)]
     fn eq_nnreal(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nnreal.clone(), a, b])
     }

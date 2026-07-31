@@ -393,6 +393,7 @@ impl RatPolyProver {
 
     /// Parse an `Expr` into a `Poly` (no proof). Used to detect identities and
     /// to drive coefficient bookkeeping.
+    #[cfg(test)]
     pub(crate) fn parse(&self, e: &Expr) -> Result<Poly, PolyProveError> {
         use crate::expr::ExprKind;
         // atom match first

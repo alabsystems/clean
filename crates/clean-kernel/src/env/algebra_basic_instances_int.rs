@@ -30,6 +30,7 @@ impl Environment {
     /// ENSURES: On success, `self.int_zero_inst_init == true`
     /// ENSURES: On success, required dependencies (`zero`, `int`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_zero_inst(&mut self) -> Result<(), EnvError> {
         if self.int_zero_inst_init {
             return Ok(());
@@ -67,6 +68,7 @@ impl Environment {
     }
 
     /// Check if Int Zero instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_zero_inst(&self) -> bool {
         self.int_zero_inst_init
     }
@@ -79,6 +81,7 @@ impl Environment {
     /// ENSURES: On success, `self.int_one_inst_init == true`
     /// ENSURES: On success, required dependencies (`one`, `int`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_one_inst(&mut self) -> Result<(), EnvError> {
         if self.int_one_inst_init {
             return Ok(());
@@ -119,6 +122,7 @@ impl Environment {
     }
 
     /// Check if Int One instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_one_inst(&self) -> bool {
         self.int_one_inst_init
     }
@@ -131,6 +135,7 @@ impl Environment {
     /// ENSURES: On success, `self.int_add_inst_init == true`
     /// ENSURES: On success, required dependencies (`add`, `int_arith`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_add_inst(&mut self) -> Result<(), EnvError> {
         if self.int_add_inst_init {
             return Ok(());
@@ -164,6 +169,7 @@ impl Environment {
     }
 
     /// Check if Int Add instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_add_inst(&self) -> bool {
         self.int_add_inst_init
     }
@@ -176,6 +182,7 @@ impl Environment {
     /// ENSURES: On success, `self.int_mul_inst_init == true`
     /// ENSURES: On success, required dependencies (`mul`, `int_arith`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_mul_inst(&mut self) -> Result<(), EnvError> {
         if self.int_mul_inst_init {
             return Ok(());
@@ -209,6 +216,7 @@ impl Environment {
     }
 
     /// Check if Int Mul instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_mul_inst(&self) -> bool {
         self.int_mul_inst_init
     }
@@ -280,6 +288,7 @@ impl Environment {
     }
 
     /// Check if Int Neg instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_neg_inst(&self) -> bool {
         self.int_neg_inst_init
     }
@@ -292,6 +301,7 @@ impl Environment {
     /// ENSURES: On success, `self.int_sub_inst_init == true`
     /// ENSURES: On success, required dependencies (`sub`, `int_arith`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_sub_inst(&mut self) -> Result<(), EnvError> {
         if self.int_sub_inst_init {
             return Ok(());
@@ -325,6 +335,7 @@ impl Environment {
     }
 
     /// Check if Int Sub instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_sub_inst(&self) -> bool {
         self.int_sub_inst_init
     }

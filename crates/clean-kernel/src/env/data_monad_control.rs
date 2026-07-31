@@ -33,6 +33,7 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_except_t(&self) -> bool {
         self.except_t_init
     }
@@ -48,6 +49,7 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_option_t(&self) -> bool {
         self.option_t_init
     }

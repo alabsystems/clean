@@ -9,7 +9,7 @@
 
 use super::super::ProofCert;
 use crate::env::Environment;
-use crate::expr::{Expr, ExprKind};
+use crate::expr::{stack_safe, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 use serde::{Deserialize, Serialize};
@@ -601,6 +601,14 @@ impl GeometryCertGenerator {
     /// ENSURES: Conversion preserves type information for supported cases
     /// ENSURES: Deterministic - same inputs yield same outputs
     pub fn to_micro_cert(
+        &self,
+        cert: &ProofCert,
+        expr: &Expr,
+    ) -> Option<(crate::micro::MicroCert, crate::micro::MicroExpr)> {
+        stack_safe(|| self.to_micro_cert_impl(cert, expr))
+    }
+
+    fn to_micro_cert_impl(
         &self,
         cert: &ProofCert,
         expr: &Expr,

@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(dead_code)] // Reserved for library_search integration.
-
 //! Extensions for `library_search`.
 
 use std::collections::{BTreeMap, VecDeque};

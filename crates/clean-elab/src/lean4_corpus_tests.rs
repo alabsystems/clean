@@ -36,6 +36,44 @@ fn elab_file(
         .collect()
 }
 
+#[test]
+fn test_r159_omega_mod_lt_does_not_claim_unrelated_overloads_or_f_of_zero() {
+    // The dedicated lane must disengage before reconstruction when `%`, `<`,
+    // or the apparent zero is not definitionally the canonical Nat operation.
+    // In particular, an arbitrary application ending in literal zero is not
+    // itself zero. The remainder of omega may solve or reject the theorem, but
+    // it must not be preempted by this lane's reconstruction error.
+    for (label, code) in [
+        (
+            "custom HMod",
+            "def customHMod : HMod Nat Nat Nat := ⟨fun _ _ => 0⟩\n\
+             theorem t (n k : Nat) (h : 0 < k) : \
+               @LT.lt Nat instLTNat (@HMod.hMod Nat Nat Nat customHMod n k) k := by omega\n",
+        ),
+        (
+            "custom LT",
+            "def customLT : LT Nat := ⟨fun _ _ => True⟩\n\
+             theorem t (n k : Nat) (h : 0 < k) : \
+               @LT.lt Nat customLT (n % k) k := by omega\n",
+        ),
+        (
+            "application ending in zero",
+            "def f (n : Nat) : Nat := n + 1\n\
+             theorem t (n k : Nat) (h : f 0 < k) : n % k < k := by omega\n",
+        ),
+    ] {
+        let results = elab_file_prelude(code).1;
+        assert!(
+            results.first().is_some_and(Result::is_ok),
+            "{label}: setup declaration must elaborate: {results:?}",
+        );
+        assert!(
+            !format!("{results:?}").contains("nat-mod bound: kernel rejected"),
+            "{label}: the Nat.mod_lt lane claimed a noncanonical goal or hypothesis: {results:?}",
+        );
+    }
+}
+
 /// Convenience wrapper: fresh prelude env + fresh file context.
 fn elab_file_prelude(code: &str) -> (Environment, Vec<Result<ElabResult, crate::ElabError>>) {
     let mut env = Environment::with_prelude();
@@ -10684,4 +10722,938 @@ fn test_r154_function_comp_soundness() {
             "wrong Function.comp result / order must be rejected: {code}",
         );
     }
+}
+
+#[test]
+fn test_r155_flip_elaborates() {
+    // R155: `flip : {α : Sort u} → {β : Sort v} → {γ : Sort w} →
+    // (α → β → γ) → β → α → γ := fun f b a => f a b` — the core argument-flip
+    // combinator, registered as a reducible axiom-free kernel-prelude Def
+    // mirroring Function.comp / Lean core. Clean desugars only the partial
+    // `flip g` form at the surface; the fully named, fully applied
+    // `flip f b a` (and a bare `flip` by name) fell through to UnknownIdent.
+    // Now every arity resolves through ordinary application + kernel reduction.
+    let code = "\
+def h (f : Nat → Nat → Nat) : Nat → Nat → Nat := flip f\n\
+def k : Nat := flip Nat.sub 1 5\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`flip f` and `flip Nat.sub 1 5` elaborate",
+    );
+
+    // Value pins: flip f b a = f a b, so `flip Nat.sub 1 5 = Nat.sub 5 1 = 4`.
+    // A user lambda flips the same way. Both reduce by rfl.
+    for pin in [
+        "theorem t : flip Nat.sub 1 5 = 4 := rfl\n",
+        "theorem t : flip (fun a b => a - b) 1 5 = 4 := rfl\n",
+    ] {
+        assert_all_ok(&elab_file_prelude(pin).1, "flip reduces (f a b) by rfl");
+    }
+}
+
+#[test]
+fn test_r155_flip_soundness() {
+    // SOUNDNESS (value-distinguishing / order): flip must swap the two
+    // arguments — `flip Nat.sub 1 5` is `Nat.sub 5 1 = 4`, NOT the un-flipped
+    // `Nat.sub 1 5 = 0` (which would slip through a no-op / identity mistake),
+    // and not any other value. The 0 pin is the crucial one: it catches a flip
+    // that failed to actually flip.
+    for code in [
+        "theorem bad : flip Nat.sub 1 5 = 0 := rfl",
+        "theorem bad : flip Nat.sub 1 5 = 6 := rfl",
+        "theorem bad : flip Nat.sub 1 5 = 2 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong flip result / order must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r156_function_const_elaborates() {
+    // R156: `Function.const : {α : Sort u} → (β : Sort v) → α → β → α :=
+    // fun {α} β a => fun _ => a` — the core constant function (β explicit, the
+    // domain of the ignored argument), registered as a reducible axiom-free
+    // kernel-prelude Def mirroring Function.comp / flip / Lean core. Clean
+    // desugars only the one/two-argument forms at the surface; the fully named,
+    // fully applied `Function.const β a x` (and a bare `Function.const` by name)
+    // fell through to UnknownIdent. Now every arity resolves through ordinary
+    // application + kernel reduction.
+    let code = "\
+def c (a : Nat) : Bool → Nat := Function.const Bool a\n\
+def d : Nat := Function.const Bool 5 true\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`Function.const Bool a` and `Function.const Bool 5 true` elaborate",
+    );
+
+    // Value pins: `Function.const β a x = a` (the trailing β-typed argument is
+    // ignored). The parenthesised applied form stays defeq. All reduce by rfl.
+    for pin in [
+        "theorem t : Function.const Bool 5 true = 5 := rfl\n",
+        "theorem t : Function.const Nat 7 0 = 7 := rfl\n",
+        "theorem t : (Function.const Bool 5) true = 5 := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "Function.const reduces (ignores its last arg, returns a) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r156_function_const_soundness() {
+    // SOUNDNESS (value-distinguishing): `Function.const β a x` must return `a`,
+    // never the ignored argument `x`. `Function.const Nat 7 9` is 7 (not 9), and
+    // `Function.const Bool 5 true` is 5 (not 6). A const that returned its last
+    // argument, or the wrong value, must be rejected by the kernel.
+    for code in [
+        "theorem bad : Function.const Bool 5 true = 6 := rfl",
+        "theorem bad : Function.const Nat 7 9 = 9 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Function.const result (returning the ignored arg) must be rejected: {code}",
+        );
+    }
+}
+#[test]
+fn test_r158_nat_mod_div_literal_reduces() {
+    // R158: real elaborated Nat `%` / `/` goals carry the homogeneous instances
+    // `instHModNat` / `instHDivNat` (which wrap `Nat.mod` / `Nat.div`), but the
+    // native HMod/HDiv reducers only recognized the olean triple-Nat instances,
+    // so `HMod.hMod .. instHModNat 7 3` stalled in whnf and neither `rfl` nor
+    // `omega` could close `7 % 3 = 1`. The reducers now also delegate the
+    // homogeneous instances to `Nat.mod` / `Nat.div` (faithful def-unfolding,
+    // mirroring the existing `instHAddNat` arm). Literal `%` / `/` now reduce.
+    for pin in [
+        "theorem t : (7 : Nat) % 3 = 1 := rfl\n",
+        "theorem t : (10 : Nat) % 4 = 2 := rfl\n",
+        "theorem t : (6 : Nat) % 3 = 0 := rfl\n",
+        "theorem t : (10 : Nat) / 3 = 3 := rfl\n",
+        "theorem t : (9 : Nat) / 3 = 3 := rfl\n",
+        "theorem t : (5 : Nat) / 1 = 5 := rfl\n",
+        // omega closes them too (its opening reduce_eq now sees through %/÷).
+        "theorem t : (7 : Nat) % 3 = 1 := by omega\n",
+        "theorem t : (10 : Nat) / 3 = 3 := by omega\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "literal Nat %/÷ reduces (via instHModNat/instHDivNat → Nat.mod/Nat.div)",
+        );
+    }
+}
+
+#[test]
+fn test_r158_nat_mod_div_soundness() {
+    // SOUNDNESS (value-distinguishing, and CRITICAL because the native reducer
+    // is trusted / not re-checked): the reducer must compute the TRUE Nat
+    // mod/div value — 7 % 3 is 1 (not 2, not 0), 10 / 3 is 3 (not 4). A wrong
+    // `rfl` pin in either direction must be rejected by the kernel, proving the
+    // native reduction agrees with the structural Nat.mod/Nat.div semantics.
+    for code in [
+        "theorem bad : (7 : Nat) % 3 = 2 := rfl",
+        "theorem bad : (7 : Nat) % 3 = 0 := rfl",
+        "theorem bad : (10 : Nat) / 3 = 4 := rfl",
+        "theorem bad : (10 : Nat) / 3 = 2 := rfl",
+        // omega must also reject the false div/mod goals (fail-closed).
+        "theorem bad : (7 : Nat) % 3 = 2 := by omega",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Nat %/÷ value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r159_omega_mod_lt() {
+    // R159: omega now proves the modulo bound `a % k < k` when `0 < k` is in
+    // context, via a new nat_div_mod lane emitting the proven Nat.mod_lt lemma
+    // (re-checked by close_goal). Previously the mod atom was dropped by the
+    // linear relaxation and the goal fell through to the failing linarith
+    // delegate. Symbolic and literal-with-hypothesis divisors both work.
+    for pin in [
+        "theorem t (n k : Nat) (h : 0 < k) : n % k < k := by omega\n",
+        "theorem t (a b : Nat) (hb : 0 < b) : a % b < b := by omega\n",
+        "theorem t (n : Nat) (h : 0 < 3) : n % 3 < 3 := by omega\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "omega proves a % k < k from a 0 < k hypothesis",
+        );
+    }
+}
+
+#[test]
+fn test_r159_omega_mod_lt_soundness() {
+    // SOUNDNESS (fail-closed): the lane must fire ONLY on the real bound with a
+    // genuine 0 < k. Without the hypothesis, `n % k < k` is FALSE (k = 0 gives
+    // 0 % 0 = 0, not < 0) and omega must reject it. And a wrong-shape goal
+    // (`n % k = 0`) must not be closed by this lane. Every reconstruction is
+    // kernel-re-checked, so a spurious match fails closed.
+    for code in [
+        "theorem bad (n k : Nat) : n % k < k := by omega",
+        "theorem bad (n k : Nat) (h : 0 < k) : n % k = 0 := by omega",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "omega must reject the unsound / wrong-shape mod goal: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r160_omega_div_add_mod() {
+    // R160: omega now proves the Euclidean division identity
+    // (a / k) * k + a % k = a, via a new nat_div_mod lane emitting the proven
+    // Nat.div_add_mod lemma (re-checked by close_goal, no side condition).
+    // Previously the div/mod atoms were dropped by the linear relaxation and the
+    // goal fell through to the failing linarith delegate.
+    for pin in [
+        "theorem t (a k : Nat) : (a / k) * k + a % k = a := by omega\n",
+        "theorem t (m n : Nat) : (m / n) * n + m % n = m := by omega\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "omega proves the Euclidean division identity via Nat.div_add_mod",
+        );
+    }
+}
+
+#[test]
+fn test_r160_omega_div_add_mod_soundness() {
+    // SOUNDNESS (fail-closed): the lane must emit Nat.div_add_mod ONLY for the
+    // true identity. A wrong RHS (`= a + 1`) or a wrong RHS entirely (`= k`) is
+    // FALSE and must be rejected — close_goal re-checks the reconstructed term,
+    // so a spurious match cannot slip through.
+    for code in [
+        "theorem bad (a k : Nat) : (a / k) * k + a % k = a + 1 := by omega",
+        "theorem bad (a k : Nat) : (a / k) * k + a % k = k := by omega",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "omega must reject the false div/mod identity: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r161_omega_mod_lt_literal() {
+    // R161: omega now proves n % k < k for a positive LITERAL divisor with no
+    // hypothesis — the mod-bound lane synthesizes the 0 < k side proof as
+    // Nat.zero_lt_succ (k-1) (def-eq to 0 < k), feeding Nat.mod_lt. This closes
+    // the common n % 3 < 3 that R159 (hypothesis-only) could not.
+    for pin in [
+        "theorem t (n : Nat) : n % 3 < 3 := by omega\n",
+        "theorem t (n : Nat) : n % 7 < 7 := by omega\n",
+        "theorem t (n : Nat) : n % 1 < 1 := by omega\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "omega proves n % k < k for a positive literal k",
+        );
+    }
+}
+
+#[test]
+fn test_r161_omega_mod_lt_literal_soundness() {
+    // SOUNDNESS (fail-closed): the synthesized 0 < k must be genuine. A tighter
+    // false bound `n % 3 < 2` is FALSE (n % 3 can be 2) and must be rejected. And
+    // `n % 0 < 0` is FALSE (n % 0 = n, never < 0); k = 0 makes synth_pos_lit
+    // return None so the lane disengages and omega correctly fails. close_goal
+    // re-checks every reconstructed term.
+    for code in [
+        "theorem bad (n : Nat) : n % 3 < 2 := by omega",
+        "theorem bad (n : Nat) : n % 0 < 0 := by omega",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "omega must reject the false literal mod bound: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r162_option_is_some_none_elaborates() {
+    // R162: Option.isSome / Option.isNone — Bool-valued Option predicates,
+    // registered as reducible axiom-free Option.rec folds. Both `o.isSome` and
+    // `o.isNone` had failed UnknownIdent. Now they elaborate and reduce in both
+    // recursor cases (some → true/false, none → false/true) by rfl.
+    let code = "\
+def a (o : Option Nat) : Bool := o.isSome\n\
+def b (o : Option Nat) : Bool := o.isNone\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`o.isSome` and `o.isNone` elaborate for a variable Option",
+    );
+    for pin in [
+        "theorem t : (some 5).isSome = true := rfl\n",
+        "theorem t : (none : Option Nat).isSome = false := rfl\n",
+        "theorem t : (some 5).isNone = false := rfl\n",
+        "theorem t : (none : Option Nat).isNone = true := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "Option.isSome/isNone reduce (some/none cases) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r162_option_is_some_none_soundness() {
+    // SOUNDNESS (value-distinguishing across BOTH recursor arms): isSome is true
+    // exactly on `some`, isNone is true exactly on `none`. A rfl pin to the
+    // wrong Bool in any of the four (predicate × constructor) cases must be
+    // rejected — a swapped none/some fold cannot slip through.
+    for code in [
+        "theorem bad : (some 5).isSome = false := rfl",
+        "theorem bad : (none : Option Nat).isSome = true := rfl",
+        "theorem bad : (some 5).isNone = true := rfl",
+        "theorem bad : (none : Option Nat).isNone = false := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Option.isSome/isNone value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r163_bool_to_nat_elaborates() {
+    // R163: Bool.toNat — the Bool→Nat coercion, registered as a reducible
+    // axiom-free Bool.rec fold (false ↦ 0, true ↦ 1). `(b : Bool).toNat` had
+    // failed UnknownIdent. Now it elaborates and reduces in both cases by rfl.
+    let code = "def f (b : Bool) : Nat := b.toNat\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`b.toNat` elaborates for a variable Bool",
+    );
+    for pin in [
+        "theorem t : (true : Bool).toNat = 1 := rfl\n",
+        "theorem t : (false : Bool).toNat = 0 := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "Bool.toNat reduces (true ↦ 1, false ↦ 0) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r163_bool_to_nat_soundness() {
+    // SOUNDNESS (value-distinguishing across both recursor arms): toNat maps
+    // true to 1 and false to 0 — the reverse (true ↦ 0, false ↦ 1) is what a
+    // swapped minor-premise order would give, and must be rejected.
+    for code in [
+        "theorem bad : (true : Bool).toNat = 0 := rfl",
+        "theorem bad : (false : Bool).toNat = 1 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Bool.toNat value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r164_option_orelse_elaborates() {
+    // R164: Option.orElse — the fallback combinator, registered as a reducible
+    // axiom-free Option.rec fold. The second argument is a THUNK
+    // (`Unit → Option α`), forced only in the `none` case: `some a` keeps `a`,
+    // `none` runs the thunk. `o.orElse (fun _ => …)` had failed UnknownIdent.
+    let code = "def f (o : Option Nat) : Option Nat := o.orElse (fun _ => some 9)\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`o.orElse thunk` elaborates for a variable Option",
+    );
+    for pin in [
+        "theorem t : (some 5).orElse (fun _ => some 9) = some 5 := rfl\n",
+        "theorem t : (none : Option Nat).orElse (fun _ => some 9) = some 9 := rfl\n",
+        "theorem t : (none : Option Nat).orElse (fun _ => none) = none := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "Option.orElse reduces (some keeps value, none forces thunk) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r164_option_orelse_soundness() {
+    // SOUNDNESS (value-distinguishing across both recursor arms): on `some a`
+    // the fallback thunk is NEVER forced (`some 5` stays `some 5`, not the
+    // thunk's `some 9`); on `none` the result is exactly the thunk's value
+    // (`some 9`, not `none`). A rfl pin to the wrong branch value must be
+    // rejected — a swapped none/some fold or an eagerly-forced thunk cannot
+    // slip through.
+    for code in [
+        "theorem bad : (some 5).orElse (fun _ => some 9) = some 9 := rfl",
+        "theorem bad : (none : Option Nat).orElse (fun _ => some 9) = none := rfl",
+        "theorem bad : (some 5).orElse (fun _ => some 9) = some 14 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Option.orElse value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r165_prod_map_elaborates() {
+    // R165: Prod.map — map a function over each component of a pair, registered
+    // as a reducible axiom-free projection fold: `Prod.map f g p = (f p.1, g p.2)`.
+    // `p.map f g` / `Prod.map f g p` had failed (missing const). Now it
+    // elaborates and reduces both components by rfl.
+    let code = "def f (p : Nat × Nat) : Nat × Nat := p.map (fun a => a + 10) (fun b => b + 20)\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`p.map f g` elaborates for a variable pair",
+    );
+    for pin in [
+        "theorem t : Prod.map (fun (a : Nat) => a + 10) (fun (b : Nat) => b + 20) ((3, 4) : Nat × Nat) = (13, 24) := rfl\n",
+        "theorem t : (((3, 4) : Nat × Nat).map (fun (a : Nat) => a + 10) (fun (b : Nat) => b + 20)) = (13, 24) := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "Prod.map reduces (f on .1, g on .2) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r165_prod_map_soundness() {
+    // SOUNDNESS (value-distinguishing across BOTH components + projection order):
+    // with f = (·+10), g = (·+20) on (3, 4) the only correct result is (13, 24).
+    // Wrong-fst, wrong-snd, and swapped-projection (f on .2, g on .1 → (14, 23))
+    // rfl pins must all be rejected.
+    for code in [
+        "theorem bad : Prod.map (fun (a : Nat) => a + 10) (fun (b : Nat) => b + 20) ((3, 4) : Nat × Nat) = (14, 24) := rfl",
+        "theorem bad : Prod.map (fun (a : Nat) => a + 10) (fun (b : Nat) => b + 20) ((3, 4) : Nat × Nat) = (13, 25) := rfl",
+        "theorem bad : Prod.map (fun (a : Nat) => a + 10) (fun (b : Nat) => b + 20) ((3, 4) : Nat × Nat) = (14, 23) := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Prod.map value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r166_option_filter_elaborates() {
+    // R166: Option.filter — keep `some a` iff `p a`, registered as a reducible
+    // axiom-free Option.rec fold whose some-case nests a Bool.rec testing `p a`
+    // (false ↦ none, true ↦ some a). `o.filter p` had failed UnknownIdent.
+    let code = "def f (o : Option Nat) : Option Nat := o.filter (fun n => Nat.ble 3 n)\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`o.filter p` elaborates for a variable Option",
+    );
+    for pin in [
+        // 3 ≤ 5 → true → keep
+        "theorem t : (some 5).filter (fun n => Nat.ble 3 n) = some 5 := rfl\n",
+        // 3 ≤ 2 → false → drop
+        "theorem t : (some 2).filter (fun n => Nat.ble 3 n) = none := rfl\n",
+        // none stays none (never touches the predicate)
+        "theorem t : (none : Option Nat).filter (fun n => Nat.ble 3 n) = none := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "Option.filter reduces (keep-on-true, drop-on-false, none↦none) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r166_option_filter_soundness() {
+    // SOUNDNESS (value-distinguishing across the some/none arms AND both Bool
+    // branches of the nested test): a passing element is kept unchanged, a
+    // failing one becomes none, and none is untouched. Wrong-branch rfl pins —
+    // including a swapped Bool minor order (keep-on-false / drop-on-true) — must
+    // be rejected.
+    for code in [
+        "theorem bad : (some 2).filter (fun n => Nat.ble 3 n) = some 2 := rfl",
+        "theorem bad : (some 5).filter (fun n => Nat.ble 3 n) = none := rfl",
+        "theorem bad : (none : Option Nat).filter (fun n => Nat.ble 3 n) = some 5 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong Option.filter value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r169_list_head_i_elaborates() {
+    // R169: List.headI — head of a list, or the Inhabited default on `[]`,
+    // registered as a reducible axiom-free `List.headD l default` fold (the same
+    // body as List.head!). `l.headI` had failed UnknownIdent. (Kernel Def gated
+    // via the corpus here — env::data was blocked by a co-tenant kernel-test
+    // compile breakage; the corpus builds with_prelude and kernel-re-checks the
+    // reductions below.)
+    let code = "def f (l : List Nat) : Nat := l.headI\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.headI` elaborates for a variable List",
+    );
+    for pin in [
+        "theorem t : [7, 8, 9].headI = 7 := rfl\n",
+        "theorem t : ([] : List Nat).headI = 0 := rfl\n",
+        "theorem t : [42].headI = 42 := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.headI reduces (head on cons, default on nil) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r169_list_head_i_soundness() {
+    // SOUNDNESS (value-distinguishing across the cons/nil arms): headI returns
+    // the FIRST element on a non-empty list (not the second, not the default)
+    // and the Inhabited default (0 for Nat) on the empty list. Wrong-value rfl
+    // pins must be rejected by the kernel.
+    for code in [
+        "theorem bad : [7, 8, 9].headI = 8 := rfl",
+        "theorem bad : [7, 8, 9].headI = 0 := rfl",
+        "theorem bad : ([] : List Nat).headI = 7 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.headI value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r170_list_contains_elaborates() {
+    // R170: List.contains — `as.contains a` is `true` iff some element BEq-equals
+    // `a`, registered as a reducible axiom-free `List.rec`→Bool fold whose cons
+    // test is `a == hd` via the `[BEq α]` instance (same shape as List.any, but
+    // comparing the fixed query element rather than a predicate). `l.contains a`
+    // had failed UnknownIdent. (Kernel Def gated via the corpus — env::data was
+    // blocked by a co-tenant kernel-test compile breakage.)
+    let code = "def f (l : List Nat) (a : Nat) : Bool := l.contains a\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.contains a` elaborates for variable List/element",
+    );
+    for pin in [
+        "theorem t : [1, 2, 3].contains 2 = true := rfl\n",
+        "theorem t : [1, 2, 3].contains 5 = false := rfl\n",
+        "theorem t : ([] : List Nat).contains 1 = false := rfl\n",
+        "theorem t : [7].contains 7 = true := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.contains reduces (member↦true, non-member↦false, nil↦false) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r170_list_contains_soundness() {
+    // SOUNDNESS (value-distinguishing): contains is true EXACTLY on membership —
+    // `2` is in `[1,2,3]` (must not be false), `5` is not (must not be true),
+    // and nothing is in `[]`. Wrong-value rfl pins must be rejected by the kernel.
+    for code in [
+        "theorem bad : [1, 2, 3].contains 2 = false := rfl",
+        "theorem bad : [1, 2, 3].contains 5 = true := rfl",
+        "theorem bad : ([] : List Nat).contains 1 = true := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.contains value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r171_list_count_elaborates() {
+    // R171: List.count — number of elements BEq-equal to `a`, registered as a
+    // reducible axiom-free `List.rec`→Nat fold reusing the R163 `Bool.toNat`
+    // (`Nat.add (Bool.toNat (hd == a)) ih`, base Nat.zero). `l.count a` had
+    // failed UnknownIdent. (Kernel Def gated via the corpus — env::data was
+    // blocked by a co-tenant kernel-test compile breakage.)
+    let code = "def f (l : List Nat) (a : Nat) : Nat := l.count a\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.count a` elaborates for variable List/element",
+    );
+    for pin in [
+        "theorem t : [1, 2, 2, 3].count 2 = 2 := rfl\n",
+        "theorem t : [1, 2, 3].count 5 = 0 := rfl\n",
+        "theorem t : ([] : List Nat).count 1 = 0 := rfl\n",
+        "theorem t : [2, 2, 2].count 2 = 3 := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.count reduces (counts BEq-matches; 0 on nil/non-member) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r171_list_count_soundness() {
+    // SOUNDNESS (value-distinguishing): the count is the EXACT number of matches
+    // — `2` occurs twice in `[1,2,2,3]` (not once), `5` occurs zero times in
+    // `[1,2,3]` (not one), and nothing occurs in `[]`. Wrong-count rfl pins must
+    // be rejected by the kernel.
+    for code in [
+        "theorem bad : [1, 2, 2, 3].count 2 = 1 := rfl",
+        "theorem bad : [1, 2, 3].count 5 = 1 := rfl",
+        "theorem bad : ([] : List Nat).count 1 = 1 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.count value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r172_list_elem_elaborates() {
+    // R172: List.elem — `true` iff some element BEq-equals the query `a` (the
+    // primitive List.contains delegates to), registered as a reducible axiom-free
+    // List.rec→Bool fold `Bool.or (a == hd) ih` with the query `a` as the FIRST
+    // explicit arg. `l.elem a` / `List.elem a l` had failed UnknownIdent.
+    // (Kernel Def gated via the corpus — env::data blocked by a co-tenant
+    // kernel-test compile breakage.)
+    let code = "def f (l : List Nat) (a : Nat) : Bool := l.elem a\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.elem a` elaborates for variable List/element",
+    );
+    for pin in [
+        "theorem t : List.elem 2 [1, 2, 3] = true := rfl\n",
+        "theorem t : [1, 2, 3].elem 2 = true := rfl\n",
+        "theorem t : [1, 2, 3].elem 5 = false := rfl\n",
+        "theorem t : ([] : List Nat).elem 1 = false := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.elem reduces (member↦true, non-member↦false, nil↦false) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r172_list_elem_soundness() {
+    // SOUNDNESS (value-distinguishing): elem is true EXACTLY on membership — `2`
+    // is in `[1,2,3]` (not false), `5` is not (not true), nothing is in `[]`.
+    // Wrong-value rfl pins must be rejected by the kernel.
+    for code in [
+        "theorem bad : [1, 2, 3].elem 2 = false := rfl",
+        "theorem bad : [1, 2, 3].elem 5 = true := rfl",
+        "theorem bad : ([] : List Nat).elem 1 = true := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.elem value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r173_list_index_of_elaborates() {
+    // R173: List.indexOf — 0-based position of the first BEq-match, or the list
+    // length if none. Registered as a reducible axiom-free List.rec→Nat fold
+    // (cons `if hd == a then 0 else Nat.succ ih` via Bool.rec, base Nat.zero).
+    // `l.indexOf a` had failed UnknownIdent. (Kernel Def gated via the corpus —
+    // env::data blocked by a co-tenant kernel-test compile breakage.)
+    let code = "def f (l : List Nat) (a : Nat) : Nat := l.indexOf a\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.indexOf a` elaborates for variable List/element",
+    );
+    for pin in [
+        "theorem t : [10, 20, 30].indexOf 20 = 1 := rfl\n",
+        "theorem t : [10, 20, 30].indexOf 10 = 0 := rfl\n",
+        "theorem t : [10, 20, 30].indexOf 99 = 3 := rfl\n",
+        "theorem t : ([] : List Nat).indexOf 1 = 0 := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.indexOf reduces (first-match position; length if absent) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r173_list_index_of_soundness() {
+    // SOUNDNESS (value-distinguishing): the position is EXACT — `20` is at index
+    // 1 (not 0), an absent `99` yields the length 3 (not 0), and `10` is at 0
+    // (not 1). Wrong-position rfl pins must be rejected by the kernel.
+    for code in [
+        "theorem bad : [10, 20, 30].indexOf 20 = 0 := rfl",
+        "theorem bad : [10, 20, 30].indexOf 99 = 0 := rfl",
+        "theorem bad : [10, 20, 30].indexOf 10 = 1 := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.indexOf value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r174_list_drop_elaborates() {
+    // R174: List.drop — drop the first `n` elements, registered as a reducible
+    // axiom-free `Nat.rec`-into-`(List α → List α)` fold (drop 0 ↦ id, drop (k+1)
+    // ↦ ih ∘ tail), all fundamental primitives. `l.drop n` had failed
+    // UnknownIdent. (Kernel Def gated via the corpus — env::data blocked by a
+    // co-tenant kernel-test compile breakage.)
+    let code = "def f (l : List Nat) : List Nat := l.drop 2\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.drop n` elaborates for a variable List",
+    );
+    for pin in [
+        "theorem t : [10, 20, 30].drop 2 = [30] := rfl\n",
+        "theorem t : [10, 20, 30].drop 0 = [10, 20, 30] := rfl\n",
+        "theorem t : [10, 20, 30].drop 5 = [] := rfl\n",
+        "theorem t : [10, 20, 30].drop 1 = [20, 30] := rfl\n",
+        "theorem t : ([] : List Nat).drop 3 = [] := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.drop reduces (drops n heads; empty past the end) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r174_list_drop_soundness() {
+    // SOUNDNESS (value-distinguishing): dropping 2 of [10,20,30] leaves exactly
+    // [30] (not [20,30]), dropping 0 leaves the whole list, and dropping past the
+    // end leaves []. Wrong-tail rfl pins must be rejected by the kernel.
+    for code in [
+        "theorem bad : [10, 20, 30].drop 2 = [20, 30] := rfl",
+        "theorem bad : [10, 20, 30].drop 0 = [20, 30] := rfl",
+        "theorem bad : [10, 20, 30].drop 5 = [10] := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.drop value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r175_list_take_elaborates() {
+    // R175: List.take — keep the first `n` elements, registered as a reducible
+    // axiom-free `Nat.rec`-into-`(List α → List α)` fold (take 0 ↦ [], take (k+1)
+    // ↦ λ x => match x with [] => [] | a::l => a :: ih l), all fundamental
+    // primitives. `l.take n` had failed UnknownIdent. (Kernel Def gated via the
+    // corpus — env::data blocked by a co-tenant kernel-test compile breakage.)
+    let code = "def f (l : List Nat) : List Nat := l.take 2\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.take n` elaborates for a variable List",
+    );
+    for pin in [
+        "theorem t : [10, 20, 30].take 2 = [10, 20] := rfl\n",
+        "theorem t : [10, 20, 30].take 0 = [] := rfl\n",
+        "theorem t : [10, 20, 30].take 5 = [10, 20, 30] := rfl\n",
+        "theorem t : [10, 20, 30].take 1 = [10] := rfl\n",
+        "theorem t : ([] : List Nat).take 3 = [] := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.take reduces (keeps n heads; whole list past the end) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r175_list_take_soundness() {
+    // SOUNDNESS (value-distinguishing): taking 2 of [10,20,30] keeps exactly
+    // [10,20] (not [20,30]), taking 0 keeps [], and taking past the end keeps the
+    // whole list. Wrong-prefix rfl pins must be rejected by the kernel.
+    for code in [
+        "theorem bad : [10, 20, 30].take 2 = [20, 30] := rfl",
+        "theorem bad : [10, 20, 30].take 0 = [10] := rfl",
+        "theorem bad : [10, 20, 30].take 5 = [10, 20] := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.take value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r176_list_filtermap_elaborates() {
+    // R176: List.filterMap — map each element to an Option and keep the `some`s,
+    // registered as a reducible axiom-free `List.rec` fold over `List α` (Type u)
+    // into the motive `λ _ => List β` (Type v), with a nested `Option.rec` on
+    // `f hd` in the cons case (none ↦ drop, some b ↦ b :: ih). `List.rec.{succ v,
+    // u}` outer, `Option.rec.{succ v, v}` inner, two universe params. `l.filterMap
+    // f` had failed UnknownIdent. (Kernel Def gated via the corpus — env::data
+    // blocked by a co-tenant kernel-test compile breakage.)
+    let code = "def f (l : List Nat) : List Nat := l.filterMap (fun n => some (n + 1))\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "`l.filterMap f` elaborates for a variable List",
+    );
+    for pin in [
+        // always-some ⇒ pure map (pins order + the per-element transform)
+        "theorem t : [1, 2, 3].filterMap (fun n => some (n + 10)) = [11, 12, 13] := rfl\n",
+        // empty list ⇒ empty
+        "theorem t : ([] : List Nat).filterMap (fun n => some n) = [] := rfl\n",
+        // all-none ⇒ every element dropped
+        "theorem t : [1, 2].filterMap (fun _ => (none : Option Nat)) = [] := rfl\n",
+        // mixed: keep+transform only n ≥ 3 (1,2 dropped; 3↦13, 4↦14)
+        "theorem t : [1, 2, 3, 4].filterMap (fun n => if Nat.ble 3 n then some (n + 10) else none) = [13, 14] := rfl\n",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(pin).1,
+            "List.filterMap reduces (keeps/transforms the some-mapped elements) by rfl",
+        );
+    }
+}
+
+#[test]
+fn test_r176_list_filtermap_soundness() {
+    // SOUNDNESS (value-distinguishing): filterMap threads the transform through in
+    // order, drops exactly the `none`-mapped elements, and preserves length only
+    // for all-some. Wrong-value rfl pins must be rejected by the kernel. (All use
+    // always-some / all-none forms so any failure is a genuine value mismatch, not
+    // an elaboration gap.)
+    for code in [
+        "theorem bad : [1, 2, 3].filterMap (fun n => some (n + 10)) = [11, 12] := rfl",
+        "theorem bad : [1, 2, 3].filterMap (fun n => some (n + 10)) = [12, 13, 14] := rfl",
+        "theorem bad : [1, 2].filterMap (fun _ => (none : Option Nat)) = [1, 2] := rfl",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "wrong List.filterMap value must be rejected: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r177_omega_add_sub_cancel_proves() {
+    // R177: omega Nat-sub lane — the add-commuted truncation shape
+    // `b + (a - b) = a` given `b ≤ a` (or `b < a`). The existing `sub_add_cancel`
+    // lane only spelled `(a - b) + b = a`; the sibling commutes via the proven
+    // axiom-clean `Nat.add_comm` and chains with `Eq.trans`, kernel-re-checked by
+    // `close_goal`. (clean-elab lane; corpus-gated — env::data co-tenant-blocked.)
+    for code in [
+        // the new orientation, from a `≤` hypothesis
+        "theorem t (a b : Nat) (h : b ≤ a) : b + (a - b) = a := by omega",
+        // from a `<` hypothesis (weakened via Nat.le_of_lt)
+        "theorem t (a b : Nat) (h : b < a) : b + (a - b) = a := by omega",
+        // concrete subtrahend
+        "theorem t (n : Nat) (h : 3 ≤ n) : 3 + (n - 3) = n := by omega",
+        // the ORIGINAL orientation must still work (no regression to sub_add_cancel)
+        "theorem t (a b : Nat) (h : b ≤ a) : a - b + b = a := by omega",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(code).1,
+            "omega proves the add-commuted Nat truncation `b + (a - b) = a`",
+        );
+    }
+}
+
+#[test]
+fn test_r177_omega_add_sub_cancel_soundness() {
+    // SOUNDNESS: the lane fires ONLY on `b + (a - b) = a` with a matching
+    // `b ≤ a` / `b < a` hypothesis, and every synthesized term is kernel-re-checked
+    // — so it must NOT prove any of these false / unwarranted goals. Each isolates
+    // one guard: missing hypothesis, wrong RHS, wrong left-addend (add_l ≠ b), and
+    // wrong hypothesis direction.
+    for code in [
+        // no hypothesis: false whenever b > a
+        "theorem bad (a b : Nat) : b + (a - b) = a := by omega",
+        // off-by-one RHS
+        "theorem bad (a b : Nat) (h : b ≤ a) : b + (a - b) = a + 1 := by omega",
+        // left addend is `a`, not the subtrahend `b` (a + (a - b) = a ⇒ a ≤ b, not given)
+        "theorem bad (a b : Nat) (h : b ≤ a) : a + (a - b) = a := by omega",
+        // hypothesis is the wrong direction (a ≤ b): false unless a = b
+        "theorem bad (a b : Nat) (h : a ≤ b) : b + (a - b) = a := by omega",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "omega must NOT prove the false/unwarranted goal: {code}",
+        );
+    }
+}
+
+#[test]
+fn test_r178_omega_add_sub_cancel_left_proves() {
+    // R178: omega Nat-sub lane — the UNCONDITIONAL left-cancellation
+    // `(a + b) - a = b` (holds for all a, b; no hypothesis). Nat truncation makes
+    // it true but the linear relaxation drops the `- a` atom, so it fell through
+    // to the failing linarith delegate. `try_nat_add_sub_cancel_left` closes it
+    // with the single proven, axiom-clean term
+    // `@Nat.ulpRound.add_sub_cancel_left a b`, kernel-re-checked by `close_goal`.
+    // (clean-elab lane; corpus-gated.)
+    for code in [
+        "theorem t (a b : Nat) : a + b - a = b := by omega",
+        "theorem t (x y : Nat) : x + y - x = y := by omega",
+        // concrete left addend
+        "theorem t (n : Nat) : 3 + n - 3 = n := by omega",
+        // the right-cancellation sibling `(a + b) - b = a` must still work too
+        "theorem t (a b : Nat) : a + b - b = a := by omega",
+    ] {
+        assert_all_ok(
+            &elab_file_prelude(code).1,
+            "omega proves the unconditional Nat left-cancellation `(a + b) - a = b`",
+        );
+    }
+}
+
+#[test]
+fn test_r178_omega_add_sub_cancel_left_soundness() {
+    // SOUNDNESS: the lane fires ONLY on `(a + b) - a = b` (subtracted term = left
+    // addend, RHS = right addend); every term is kernel-re-checked — so it must
+    // NOT prove any of these false / unwarranted goals. Each isolates one guard:
+    // wrong RHS (= a not b), the right-cancel shape mis-stated (= b not a),
+    // off-by-one, and a subtracted term that is neither addend.
+    for code in [
+        "theorem bad (a b : Nat) : a + b - a = a := by omega",
+        "theorem bad (a b : Nat) : a + b - b = b := by omega",
+        "theorem bad (a b : Nat) : a + b - a = b + 1 := by omega",
+        "theorem bad (a b c : Nat) : a + b - c = b := by omega",
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "omega must NOT prove the false/unwarranted goal: {code}",
+        );
+    }
+}
+
+/// `elab ... : term` must stay registered for LATER declarations in the file.
+///
+/// `ElabCtx` is rebuilt per declaration, and `user_term_elabs` lived only on
+/// that context, so a term elaborator was registered and then dropped before
+/// the next declaration could call it — `def v : Nat := myone` failed with
+/// `UnknownIdentWithSuggestions { name: "myone", .. }`. It is now persisted
+/// through `FileContext`, exactly like the tactic registry and macro context.
+#[test]
+fn test_b203_user_term_elab_persists_across_declarations() {
+    let code = r#"
+elab "myone" : term => Nat.succ Nat.zero
+def v : Nat := myone
+theorem v_is_one : v = 1 := rfl
+def w : Nat := myone + myone
+"#;
+    let results = elab_file_prelude(code).1;
+    assert_all_ok(&results, "user term elaborator across declarations");
+}
+
+/// The elaborator must produce the real term, not a placeholder that merely
+/// type-checks: `v_is_one` closes by `rfl`, which only holds if `myone`
+/// elaborated to `Nat.succ Nat.zero`.
+#[test]
+fn test_b203_user_term_elab_produces_the_declared_body() {
+    let code = r#"
+elab "mytwo" : term => Nat.succ (Nat.succ Nat.zero)
+theorem mytwo_is_two : mytwo = 2 := rfl
+"#;
+    let results = elab_file_prelude(code).1;
+    assert_all_ok(&results, "user term elaborator body fidelity");
 }

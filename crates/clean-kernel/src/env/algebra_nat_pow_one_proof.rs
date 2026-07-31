@@ -48,12 +48,18 @@
 //! - `algebra_nat_one_pow_proof.rs` (#3604, induction via `Nat.mul_one`).
 //! - `algebra_int_sub_self_proof.rs` (#3604, one-liner `λ a => <thm> a`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Register `Nat.pow_one` as a kernel-checked `Declaration::Theorem`.
     ///
@@ -74,6 +80,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Nat.pow_one` is already registered with
     ///          any declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_nat_pow_one_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.pow_one");
         if self.get_const(&name).is_some() {

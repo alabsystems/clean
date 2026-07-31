@@ -6,8 +6,6 @@
 // and payoff theorems below are wired into `init_rat` / `init_rat_arith` /
 // `init_rat_ord` incrementally. Until every builder is wired, some helpers are
 // staged but not yet called; the allow keeps the staged-but-green steps clean.
-#![allow(dead_code)]
-
 //! A NORMALIZED rational type built as a `Quot` makes the
 //! structural-equality axioms that are FALSE over the free `Rat.mk : Int → Nat`
 //! carrier into GENUINE kernel-checked theorems.
@@ -97,6 +95,7 @@ pub(crate) struct RatRawConsts {
     // Int lemmas for the additive / distributive / order theorems.
     int_add: Expr,
     int_neg: Expr,
+    #[cfg(test)]
     int_zero_2: Expr,
     int_add_comm: Expr,
     int_add_assoc: Expr,
@@ -105,7 +104,9 @@ pub(crate) struct RatRawConsts {
     int_mul_zero: Expr,
     int_neg_mul_left: Expr,
     int_neg_mul_right: Expr,
+    #[cfg(test)]
     int_add_le_add_left: Expr,
+    #[cfg(test)]
     int_mul_le_mul_of_nonneg_right: Expr,
     int_neg_add_self: Expr,
     int_add_neg_self: Expr,
@@ -204,6 +205,7 @@ impl RatRawConsts {
             ),
             int_add: Expr::const_(Name::from_string("Int.add"), vec![]),
             int_neg: Expr::const_(Name::from_string("Int.neg"), vec![]),
+            #[cfg(test)]
             int_zero_2: Expr::const_(Name::from_string("Int.zero"), vec![]),
             int_add_comm: Expr::const_(Name::from_string("Int.add_comm"), vec![]),
             int_add_assoc: Expr::const_(Name::from_string("Int.add_assoc"), vec![]),
@@ -212,7 +214,9 @@ impl RatRawConsts {
             int_mul_zero: Expr::const_(Name::from_string("Int.mul_zero"), vec![]),
             int_neg_mul_left: Expr::const_(Name::from_string("Int.neg_mul_left"), vec![]),
             int_neg_mul_right: Expr::const_(Name::from_string("Int.neg_mul_right"), vec![]),
+            #[cfg(test)]
             int_add_le_add_left: Expr::const_(Name::from_string("Int.add_le_add_left"), vec![]),
+            #[cfg(test)]
             int_mul_le_mul_of_nonneg_right: Expr::const_(
                 Name::from_string("Int.mul_le_mul_of_nonneg_right"),
                 vec![],
@@ -1591,7 +1595,7 @@ impl RatRawConsts {
                 };
                 // inner zero leaf: w = ofNat 0 ; inner rep = Quot.mk raw_zero.
                 let nn_zero = {
-                    let mut zb = EnvDeclBuilder::child_of(&ob);
+                    let zb = EnvDeclBuilder::child_of(&ob);
                     let w0z = self.of_nat(self.nat_zero.clone());
                     let nat_one = self.nsucc(self.nat_zero.clone());
                     let wr0 = self.quot_mk(self.raw_mk(self.int_zero.clone(), nat_one));
@@ -1713,7 +1717,7 @@ impl RatRawConsts {
             };
             // outer zero leaf: np = ofNat 0; zr0 = Quot.mk raw_zero.
             let mm_zero = {
-                let mut zb = EnvDeclBuilder::child_of(&ob);
+                let zb = EnvDeclBuilder::child_of(&ob);
                 let z0 = self.of_nat(self.nat_zero.clone());
                 let nat_one = self.nsucc(self.nat_zero.clone());
                 let zr0 = self.quot_mk(self.raw_mk(self.int_zero.clone(), nat_one));
@@ -3502,6 +3506,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance.
     /// ENSURES: On success, all `Qat.*` constants above are registered and
     /// kernel-checked; idempotent (skip-if-present on the carrier).
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(crate) fn init_rat_quotient_poc(&mut self) -> Result<(), EnvError> {
         self.ensure_rat_quotient_deps()?;
 
@@ -3650,6 +3655,7 @@ impl Environment {
     /// the quotient ops/payoff are built — NOT here — so this stays a cheap,
     /// dependency-light additive step callable from the foundational `init_rat`
     /// (which guarantees `init_eq` ran first).
+    #[cfg(test)]
     pub(crate) fn register_rat_raw_carrier(&mut self, c: &RatRawConsts) -> Result<(), EnvError> {
         self.register_rat_raw(c)?;
         self.register_rat_raw_projections(c)?;
@@ -4220,7 +4226,7 @@ impl Environment {
                 ch.finish_child(lam)
             };
             // g := fun w => z * w (congrArg on the right factor).
-            let mul_left = |z: Expr| -> Expr {
+            let _mul_left = |z: Expr| -> Expr {
                 let mut ch = EnvDeclBuilder::child_of(&b);
                 let (w_id, w) = ch.fresh_local(c.int.clone());
                 let body = c.mul(z, w);
@@ -5888,7 +5894,7 @@ impl Environment {
                     let minor_c = {
                         let mut bs = EnvDeclBuilder::child_of(&bq);
                         let (s_id, s) = bs.fresh_local(c.raw.clone());
-                        let mk_s = c.quot_mk(s.clone());
+                        let _mk_s = c.quot_mk(s.clone());
                         let le_pq = Expr::apps(ratq_le.clone(), [mk_p.clone(), mk_q.clone()]);
                         let (h_id, h) = bs.fresh_local(le_pq.clone());
 
@@ -8082,8 +8088,8 @@ impl Environment {
                     let np_nq = c.mul(np.clone(), nq.clone());
                     let neg_npnq = c.neg(np_nq.clone());
                     let ep_eq = c.mul(ep.clone(), eq.clone());
-                    let lhs = c.mul(np_negnq.clone(), ep_eq.clone());
-                    let rhs = c.mul(neg_npnq.clone(), ep_eq.clone());
+                    let _lhs = c.mul(np_negnq.clone(), ep_eq.clone());
+                    let _rhs = c.mul(neg_npnq.clone(), ep_eq.clone());
                     // h_num : np·(neg nq) = neg(np·nq)  [symm (neg_mul_right np nq)].
                     let h_num = c.symm_int(
                         neg_npnq.clone(),

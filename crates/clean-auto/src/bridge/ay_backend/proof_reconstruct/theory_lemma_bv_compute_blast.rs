@@ -499,7 +499,7 @@ pub(crate) fn clause_props(refl: &Reflection, lits: &[Lit]) -> Vec<Expr> {
 /// the BV4 gate definitions — nothing assumed.
 fn prove_gate_clause(
     refl: &Reflection,
-    eval: &Evaluator,
+    eval: &Evaluator<'_>,
     clause_id: u32,
     lits: &[Lit],
 ) -> Result<Expr, BvComputeBlastError> {
@@ -524,7 +524,7 @@ fn prove_gate_clause(
 /// literal and inject its `Eq.refl Bool.true` proof into the `Or`-chain.
 fn split_and_prove(
     refl: &Reflection,
-    eval: &Evaluator,
+    eval: &Evaluator<'_>,
     clause_id: u32,
     lits: &[Lit],
     props: &[Expr],

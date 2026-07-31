@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(unsafe_op_in_unsafe_fn)]
-
 //! Typed scalar field accessors for clean constructor objects.
 //!
 //! These functions read/write scalar fields within a constructor's scalar
@@ -27,8 +25,11 @@ use super::{ctor_scalar_ptr, LeanObj};
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_uint8(o: *mut LeanObj, offset: usize) -> u8 {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    ctor_scalar_ptr(o).add(offset).read()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        ctor_scalar_ptr(o).add(offset).read()
+    }
 }
 
 /// Read a `u16` from the scalar region at byte `offset`.
@@ -38,8 +39,11 @@ pub unsafe fn ctor_get_uint8(o: *mut LeanObj, offset: usize) -> u8 {
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_uint16(o: *mut LeanObj, offset: usize) -> u16 {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *const u16).read_unaligned()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *const u16).read_unaligned()
+    }
 }
 
 /// Read a `u32` from the scalar region at byte `offset`.
@@ -49,8 +53,11 @@ pub unsafe fn ctor_get_uint16(o: *mut LeanObj, offset: usize) -> u16 {
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_uint32(o: *mut LeanObj, offset: usize) -> u32 {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *const u32).read_unaligned()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *const u32).read_unaligned()
+    }
 }
 
 /// Read a `u64` from the scalar region at byte `offset`.
@@ -60,8 +67,11 @@ pub unsafe fn ctor_get_uint32(o: *mut LeanObj, offset: usize) -> u32 {
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_uint64(o: *mut LeanObj, offset: usize) -> u64 {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *const u64).read_unaligned()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *const u64).read_unaligned()
+    }
 }
 
 /// Read a `usize` from the scalar region at byte `offset`.
@@ -71,8 +81,11 @@ pub unsafe fn ctor_get_uint64(o: *mut LeanObj, offset: usize) -> u64 {
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_usize(o: *mut LeanObj, offset: usize) -> usize {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *const usize).read_unaligned()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *const usize).read_unaligned()
+    }
 }
 
 /// Read an `f64` from the scalar region at byte `offset`.
@@ -82,8 +95,11 @@ pub unsafe fn ctor_get_usize(o: *mut LeanObj, offset: usize) -> usize {
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_float(o: *mut LeanObj, offset: usize) -> f64 {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *const f64).read_unaligned()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *const f64).read_unaligned()
+    }
 }
 
 /// Read an `f32` from the scalar region at byte `offset`.
@@ -93,8 +109,11 @@ pub unsafe fn ctor_get_float(o: *mut LeanObj, offset: usize) -> f64 {
 #[inline]
 #[must_use]
 pub unsafe fn ctor_get_float32(o: *mut LeanObj, offset: usize) -> f32 {
-    // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *const f32).read_unaligned()
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *const f32).read_unaligned()
+    }
 }
 
 // -- Setters ------------------------------------------------------------------
@@ -105,8 +124,11 @@ pub unsafe fn ctor_get_float32(o: *mut LeanObj, offset: usize) -> f32 {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + 1`.
 #[inline]
 pub unsafe fn ctor_set_uint8(o: *mut LeanObj, offset: usize, v: u8) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    ctor_scalar_ptr(o).add(offset).write(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        ctor_scalar_ptr(o).add(offset).write(v);
+    }
 }
 
 /// Write a `u16` to the scalar region at byte `offset`.
@@ -115,8 +137,11 @@ pub unsafe fn ctor_set_uint8(o: *mut LeanObj, offset: usize, v: u8) {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + 2`.
 #[inline]
 pub unsafe fn ctor_set_uint16(o: *mut LeanObj, offset: usize, v: u16) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *mut u16).write_unaligned(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *mut u16).write_unaligned(v);
+    }
 }
 
 /// Write a `u32` to the scalar region at byte `offset`.
@@ -125,8 +150,11 @@ pub unsafe fn ctor_set_uint16(o: *mut LeanObj, offset: usize, v: u16) {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + 4`.
 #[inline]
 pub unsafe fn ctor_set_uint32(o: *mut LeanObj, offset: usize, v: u32) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *mut u32).write_unaligned(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *mut u32).write_unaligned(v);
+    }
 }
 
 /// Write a `u64` to the scalar region at byte `offset`.
@@ -135,8 +163,11 @@ pub unsafe fn ctor_set_uint32(o: *mut LeanObj, offset: usize, v: u32) {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + 8`.
 #[inline]
 pub unsafe fn ctor_set_uint64(o: *mut LeanObj, offset: usize, v: u64) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *mut u64).write_unaligned(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *mut u64).write_unaligned(v);
+    }
 }
 
 /// Write a `usize` to the scalar region at byte `offset`.
@@ -145,8 +176,11 @@ pub unsafe fn ctor_set_uint64(o: *mut LeanObj, offset: usize, v: u64) {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + size_of::<usize>()`.
 #[inline]
 pub unsafe fn ctor_set_usize(o: *mut LeanObj, offset: usize, v: usize) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *mut usize).write_unaligned(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *mut usize).write_unaligned(v);
+    }
 }
 
 /// Write an `f64` to the scalar region at byte `offset`.
@@ -155,8 +189,11 @@ pub unsafe fn ctor_set_usize(o: *mut LeanObj, offset: usize, v: usize) {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + 8`.
 #[inline]
 pub unsafe fn ctor_set_float(o: *mut LeanObj, offset: usize, v: f64) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *mut f64).write_unaligned(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *mut f64).write_unaligned(v);
+    }
 }
 
 /// Write an `f32` to the scalar region at byte `offset`.
@@ -165,8 +202,11 @@ pub unsafe fn ctor_set_float(o: *mut LeanObj, offset: usize, v: f64) {
 /// `o` must be a uniquely owned Ctor with `scalar_sz >= offset + 4`.
 #[inline]
 pub unsafe fn ctor_set_float32(o: *mut LeanObj, offset: usize, v: f32) {
-    // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
-    (ctor_scalar_ptr(o).add(offset) as *mut f32).write_unaligned(v);
+    // SAFETY: The caller provides a valid constructor allocation; the documented offset and scalar type identify an in-bounds, properly aligned payload slot.
+    unsafe {
+        // SAFETY: Caller guarantees valid Ctor, unique ownership, and offset within scalar_sz.
+        (ctor_scalar_ptr(o).add(offset) as *mut f32).write_unaligned(v);
+    }
 }
 
 // -- Tests --------------------------------------------------------------------
@@ -178,7 +218,10 @@ mod tests {
 
     /// Helper: allocate a ctor with 0 object fields and `scalar_sz` scalar bytes.
     unsafe fn make_scalar_ctor(scalar_sz: u8) -> *mut LeanObj {
-        alloc_ctor_uninit(0, 0, scalar_sz)
+        // SAFETY: This helper requests an empty constructor with a valid
+        // scalar payload size and transfers ownership of the allocation to
+        // its test caller.
+        unsafe { alloc_ctor_uninit(0, 0, scalar_sz) }
     }
 
     #[test]

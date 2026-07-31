@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! AI proof candidate verification loop for kernel goals.
-#![allow(dead_code)]
-
 use crate::env::{ConstantInfo, ConstantKind, Declaration, EnvError, Environment};
 use crate::expr::Expr;
 use crate::level::Level;

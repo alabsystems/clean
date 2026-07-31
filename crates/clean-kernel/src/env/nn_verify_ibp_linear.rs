@@ -200,10 +200,12 @@ impl Environment {
         // ordering. See #3366 / soundness-certificate capstone.
         super::nn_verify_interval_arith_t09_t10_proof::register_rat_min_max_lemmas(self)?;
 
+        let order = super::nn_verify_farkas_order::RatOrderConsts::new();
+        self.register_mul_nonneg_le_left(&order)?;
+
         let c = IbpLinearConsts::new();
-        self.register_mul_nonneg_le_left(&c)?;
         self.register_mul_nonpos_le_left(&c)?;
-        self.register_add_le_add(&c)?;
+        self.register_add_le_add(&order)?;
         self.register_le_of_eq_of_le(&c)?;
         self.register_le_of_le_of_eq(&c)?;
         self.register_w_decomp()?;
@@ -212,56 +214,6 @@ impl Environment {
 
         self.nn_verify_ibp_linear_init = true;
         Ok(())
-    }
-
-    /// `NNVerify.mul_nonneg_le_left`:
-    /// `forall (w a b : Rat), LE.le Rat.zero w -> LE.le a b -> LE.le (Rat.mul w a) (Rat.mul w b)`
-    ///
-    /// Multiplication by a nonnegative scalar preserves order.
-    ///
-    /// **Constructive proof (#3490 T3, unblocked by #3503):** Built from
-    /// `Rat.sub_nonneg_of_le`, `Rat.mul_nonneg`, `Rat.mul_sub`,
-    /// `Eq.subst`, and `Rat.le_of_sub_nonneg`. Zero `sorry` in the proof
-    /// term; transitive closure contains only honest Rat ordered-field
-    /// axioms. Previously sorry-inhabited `Declaration::Opaque` (#3366).
-    ///
-    /// Proof sketch: `w*a ≤ w*b ⟺ 0 ≤ w*b - w*a = w*(b-a)`, and the
-    /// RHS is non-negative by `Rat.mul_nonneg` applied to `h_w_nn` and
-    /// `Rat.sub_nonneg_of_le a b h_ab`.
-    ///
-    /// See `nn_verify_ibp_linear_mul_le::build_mul_nonneg_le_left_proof`
-    /// for the proof term builder.
-    fn register_mul_nonneg_le_left(&mut self, c: &IbpLinearConsts) -> Result<(), EnvError> {
-        if self
-            .get_const(&Name::from_string("NNVerify.mul_nonneg_le_left"))
-            .is_some()
-        {
-            return Ok(());
-        }
-        let ty = {
-            let mut b = EnvDeclBuilder::new();
-            let (w_id, w) = b.fresh_local(c.rat.clone());
-            let (a_id, a) = b.fresh_local(c.rat.clone());
-            let (bv_id, bv) = b.fresh_local(c.rat.clone());
-            let h_nonneg = c.rat_le(c.rat_zero.clone(), w.clone());
-            let h_le = c.rat_le(a.clone(), bv.clone());
-            let concl = c.rat_le(c.mul(w.clone(), a), c.mul(w, bv));
-            let (h2_id, _) = b.fresh_local(h_le.clone());
-            let (h1_id, _) = b.fresh_local(h_nonneg.clone());
-            let e = b.mk_pi(h2_id, BinderInfo::Default, h_le, concl);
-            let e = b.mk_pi(h1_id, BinderInfo::Default, h_nonneg, e);
-            let e = b.mk_pi(bv_id, BinderInfo::Default, c.rat.clone(), e);
-            let e = b.mk_pi(a_id, BinderInfo::Default, c.rat.clone(), e);
-            let e = b.mk_pi(w_id, BinderInfo::Default, c.rat.clone(), e);
-            b.finish(e)
-        };
-        let value = super::nn_verify_ibp_linear_mul_le::build_mul_nonneg_le_left_proof(c);
-        self.add_decl(Declaration::Theorem {
-            name: Name::from_string("NNVerify.mul_nonneg_le_left"),
-            level_params: vec![],
-            type_: ty,
-            value,
-        })
     }
 
     /// `NNVerify.mul_nonpos_le_left`:
@@ -299,61 +251,6 @@ impl Environment {
         let value = super::nn_verify_ibp_linear_mul_nonpos_le::build_mul_nonpos_le_left_proof(c);
         self.add_decl(Declaration::Theorem {
             name: Name::from_string("NNVerify.mul_nonpos_le_left"),
-            level_params: vec![],
-            type_: ty,
-            value,
-        })
-    }
-
-    /// `NNVerify.add_le_add`:
-    /// `forall (a1 b1 a2 b2 : Rat), LE.le a1 b1 -> LE.le a2 b2 ->
-    ///     LE.le (Rat.add a1 a2) (Rat.add b1 b2)`
-    ///
-    /// Addition preserves order on both arguments.
-    ///
-    /// **Constructive proof (#3490 Batch 0):** Built from the foundational
-    /// order axiom `Rat.add_le_add_left`, the field axiom `Rat.add_comm`,
-    /// the transitive axiom `Rat.le_trans`, and `Eq.subst`. Zero `sorry`
-    /// in the proof term; transitive closure references only honest Rat
-    /// ordered-field axioms. Previously sorry-inhabited `Declaration::Opaque`
-    /// (#3366).
-    ///
-    /// Proof sketch: chain
-    /// `a1+a2 = a2+a1 ≤ a2+b1 = b1+a2 ≤ b1+b2` via `Rat.add_le_add_left`
-    /// at both ends + `Rat.add_comm`-driven `Eq.subst` rewrites +
-    /// `Rat.le_trans` to collapse the two inequalities.
-    ///
-    /// See `nn_verify_ibp_linear_add_le::build_add_le_add_proof` for the
-    /// proof term builder.
-    fn register_add_le_add(&mut self, c: &IbpLinearConsts) -> Result<(), EnvError> {
-        if self
-            .get_const(&Name::from_string("NNVerify.add_le_add"))
-            .is_some()
-        {
-            return Ok(());
-        }
-        let ty = {
-            let mut b = EnvDeclBuilder::new();
-            let (a1_id, a1) = b.fresh_local(c.rat.clone());
-            let (b1_id, b1v) = b.fresh_local(c.rat.clone());
-            let (a2_id, a2) = b.fresh_local(c.rat.clone());
-            let (b2_id, b2v) = b.fresh_local(c.rat.clone());
-            let h1 = c.rat_le(a1.clone(), b1v.clone());
-            let h2 = c.rat_le(a2.clone(), b2v.clone());
-            let concl = c.rat_le(c.add(a1, a2), c.add(b1v, b2v));
-            let (h2_id, _) = b.fresh_local(h2.clone());
-            let (h1_id, _) = b.fresh_local(h1.clone());
-            let e = b.mk_pi(h2_id, BinderInfo::Default, h2, concl);
-            let e = b.mk_pi(h1_id, BinderInfo::Default, h1, e);
-            let e = b.mk_pi(b2_id, BinderInfo::Default, c.rat.clone(), e);
-            let e = b.mk_pi(a2_id, BinderInfo::Default, c.rat.clone(), e);
-            let e = b.mk_pi(b1_id, BinderInfo::Default, c.rat.clone(), e);
-            let e = b.mk_pi(a1_id, BinderInfo::Default, c.rat.clone(), e);
-            b.finish(e)
-        };
-        let value = super::nn_verify_ibp_linear_add_le::build_add_le_add_proof(c);
-        self.add_decl(Declaration::Theorem {
-            name: Name::from_string("NNVerify.add_le_add"),
             level_params: vec![],
             type_: ty,
             value,

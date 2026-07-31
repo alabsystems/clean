@@ -113,7 +113,7 @@ impl Specification {
     /// (`recrule_in_rules` / `recrules_for` / `defval_for`): match on the list
     /// structure, self-call as a plain argument to a helper (`Bool.and`), so
     /// the kernel whnf-evaluates them over any concrete env.
-    fn add_env_closed_checker_defs(&mut self) -> Result<(), SpecError> {
+    pub(super) fn add_env_closed_checker_defs(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             r"def rec_rules_closed_b (rs : RecRules) : Bool := match rs with
 | RecRules.nil => Bool.true

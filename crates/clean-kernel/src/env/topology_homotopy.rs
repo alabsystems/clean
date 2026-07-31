@@ -71,6 +71,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_path_connected_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_path_connected(&self) -> bool {
         self.topology_path_connected_init
     }
@@ -135,6 +136,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_simply_connected_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_simply_connected(&self) -> bool {
         self.topology_simply_connected_init
     }
@@ -175,6 +177,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_contractible_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_contractible(&mut self) -> Result<(), EnvError> {
         if self.topology_contractible_init {
             return Ok(());
@@ -207,6 +210,7 @@ impl Environment {
         self.topology_contractible_init
     }
 
+    #[cfg(test)]
     pub(crate) fn init_topology_covering_space(&mut self) -> Result<(), EnvError> {
         if self.topology_covering_space_init {
             return Ok(());
@@ -237,6 +241,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_covering_space_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_covering_space(&self) -> bool {
         self.topology_covering_space_init
     }

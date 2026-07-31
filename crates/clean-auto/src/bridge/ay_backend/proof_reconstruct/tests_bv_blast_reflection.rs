@@ -856,7 +856,7 @@ fn proved_gate_live_raw_and_leaf_kernel_rechecks_to_empty_domain() {
 // `symbolic_machine_output`), so the proof clean re-checks here is byte-shape-
 // identical to the one the gate attaches as `ProvenEvidence::KernelRecheckable`.
 // The trust-cg-bridge test `gate_emits_proved_for_real_add` pins the matching
-// (clauses, steps) = (1522, 11228) so the two sides cannot silently drift.
+// (clauses, steps) = (1522, 17854) so the two sides cannot silently drift.
 // ===========================================================================
 
 /// The W-register operand wrapper the live gate emits for argument `n`:
@@ -883,13 +883,13 @@ fn gate_live_raw_add_leaf_machine_out() -> BvExpr {
 /// add(i32,i32) (the EXACT shape `verify_output_preserved` attaches as
 /// `ProvenEvidence::KernelRecheckable`) is a genuine zero-trust bit-blast
 /// certificate: it self-validates (the producer-side kernel-data re-derivation),
-/// and its shape is pinned (clauses=1522, steps=11228) to the trust-cg-bridge
+/// and its shape is pinned (clauses=1522, steps=17854) to the trust-cg-bridge
 /// gate test `gate_emits_proved_for_real_add`, so the artifact this re-checks is
 /// byte-shape-identical to the one the gate hands out.
 ///
 /// The FULL clean KERNEL reflection of THIS live shape is exercised by the opt-in
 /// `proved_gate_live_raw_add_leaf_kernel_reflection_optin` below: the live
-/// obligation's refutation has 11228 steps, which the O(steps²)
+/// obligation's refutation has 17854 steps, which the O(steps²)
 /// `certify_unsat_by_reflection` OOMs on (>100 GB) and which even the PROVEN
 /// SUB-QUADRATIC `certify_unsat3_by_reflection` kernel-reduces only slowly (many
 /// minutes), so the always-on test pins the artifact and the SMALLER-but-genuine
@@ -910,9 +910,9 @@ fn proved_gate_live_raw_add_leaf_artifact_self_validates_and_shape_matches_gate(
     // artifact this confirms IS the one the live gate emits.
     assert_eq!(
         (proof.clauses.len(), proof.refutation.steps.len()),
-        (1522, 11228),
+        (1522, 17854),
         "live-gate raw add-leaf proof shape must match the gate's emitted proof \
-         (clauses=1522, steps=11228)"
+         (clauses=1522, steps=17854)"
     );
 
     // Opt-in: the FULL clean KERNEL reflection of the live shape (slow — minutes).
@@ -925,7 +925,7 @@ fn proved_gate_live_raw_add_leaf_artifact_self_validates_and_shape_matches_gate(
 /// sub-quadratic trie checker (`checkRefutes3_sound`, axiom closure ⊆
 /// FOUNDATIONAL), on a big-stack thread (the deep ι-reduction overflows the 2 MiB
 /// default). Asserts the assembled `Unsat` term carries ZERO domain axioms.
-/// Gated behind `TRUST_LIVE_KERNEL_RECHECK` because the 11228-step reduction runs
+/// Gated behind `TRUST_LIVE_KERNEL_RECHECK` because the 17854-step reduction runs
 /// for many minutes; not suitable for the always-on suite.
 fn live_kernel_reflect_and_assert_empty_domain(proof: &ay_proof::bv_blast_export::BvBlastProof) {
     let proof = proof.clone();

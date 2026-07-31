@@ -34,7 +34,7 @@ use crate::mutual::{add_inductive_mutual, MutableMutualEnv, MutualBlock};
 use crate::name::Name;
 use crate::positivity::term_mentions;
 use crate::rawexpr::BinderInfo;
-use crate::term::{ConstRef, Term, TermKind};
+use crate::term::{Term, TermKind};
 use crate::validate::Env;
 
 /// Errors specific to nested-inductive admission. Every variant is a *reject*.

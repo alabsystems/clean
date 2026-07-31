@@ -204,7 +204,7 @@ pub struct CacheMetrics {
 
 impl CacheMetrics {
     /// Record cache metrics from a type checker instance.
-    pub fn record_type_checker(&self, tc: &TypeChecker) {
+    pub fn record_type_checker(&self, tc: &TypeChecker<'_>) {
         if let Some(stats) = tc.type_cache_stats() {
             self.type_cache_hits
                 .fetch_add(stats.hits, Ordering::Relaxed);

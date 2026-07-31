@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Foundation types: Eq, ProdType, Nat, Bool, AndType (PARTs 1, 1.5, 2, 3, 3.5)

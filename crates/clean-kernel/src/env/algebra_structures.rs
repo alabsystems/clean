@@ -72,6 +72,7 @@ const MUL_MONOID_FLAVOR: MonoidFlavor = MonoidFlavor {
     identity_projection_name: "Monoid.one",
 };
 
+#[cfg(test)]
 const ADD_MONOID_FLAVOR: MonoidFlavor = MonoidFlavor {
     class_name: "AddMonoid",
     ctor_name: "AddMonoid.mk",
@@ -242,6 +243,7 @@ impl Environment {
     }
 
     /// Check if Semigroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_semigroup(&self) -> bool {
         self.semigroup_init
     }
@@ -258,6 +260,7 @@ impl Environment {
     }
 
     /// Check if AddSemigroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_add_semigroup(&self) -> bool {
         self.add_semigroup_init
     }
@@ -495,11 +498,13 @@ impl Environment {
     }
 
     /// Check if Monoid typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_monoid(&self) -> bool {
         self.monoid_init
     }
 
     /// Initialize the AddMonoid typeclass
+    #[cfg(test)]
     pub(crate) fn init_add_monoid(&mut self) -> Result<(), EnvError> {
         if self.add_monoid_init {
             return Ok(());
@@ -512,6 +517,7 @@ impl Environment {
     }
 
     /// Check if AddMonoid typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_add_monoid(&self) -> bool {
         self.add_monoid_init
     }

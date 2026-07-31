@@ -209,6 +209,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_and()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_and(&self) -> bool {
         self.and_init
     }
@@ -403,6 +404,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_exists()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_exists(&self) -> bool {
         self.exists_init
     }

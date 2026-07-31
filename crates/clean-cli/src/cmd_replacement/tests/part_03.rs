@@ -38,8 +38,8 @@ fn replacement_status_accounts_python_wrappers_and_certification_gate() {
             .filter(|row| row.launch_blocking)
             .count()
     );
-    assert_eq!(accounting.replacement_critical_python_wrapper_count, 4);
-    assert_eq!(accounting.rust_owned_python_wrapper_count, 4);
+    assert_eq!(accounting.replacement_critical_python_wrapper_count, 3);
+    assert_eq!(accounting.rust_owned_python_wrapper_count, 3);
     assert_eq!(accounting.demoted_python_reference_count, 3);
     assert_eq!(accounting.certification_python_dependency_count, 0);
     assert!(accounting.certification_python_dependency_ids.is_empty());
@@ -105,7 +105,6 @@ fn replacement_status_accounts_python_wrappers_and_certification_gate() {
         "benchmark-publication-check",
         "benchmark-publication-launch",
         "release-issue-hygiene",
-        "mathverse-download-pytest",
     ] {
         assert!(
             wrapper_ids.contains(&required),

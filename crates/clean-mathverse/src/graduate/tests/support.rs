@@ -155,7 +155,8 @@ fn pilot_request() -> GraduationRequest {
         residual_risk: "fixture".to_string(),
         clean_commit: Some("fixture-commit".to_string()),
         shard_filename: None,
-        decided_at_epoch_s: None,
+        // Stable fixture shards make digest-based failures reproducible.
+        decided_at_epoch_s: Some(1_700_000_000),
         env_provenance: None,
         score_identity: false,
         score_defeq: false,

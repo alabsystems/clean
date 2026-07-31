@@ -178,6 +178,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_preorder_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_preorder(&self) -> bool {
         self.nat_preorder_init
     }
@@ -238,6 +239,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_partial_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_partial_order(&self) -> bool {
         self.nat_partial_order_init
     }
@@ -302,6 +304,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_linear_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_linear_order(&self) -> bool {
         self.nat_linear_order_init
     }
@@ -318,6 +321,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_le_reflexive_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_le_reflexive(&mut self) -> Result<(), EnvError> {
         if self.nat_le_reflexive_init {
             return Ok(());
@@ -361,6 +365,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_le_reflexive_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_le_reflexive(&self) -> bool {
         self.nat_le_reflexive_init
     }
@@ -450,6 +455,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_lt_irrefl_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_irrefl(&self) -> bool {
         self.nat_lt_irrefl_init
     }
@@ -468,6 +474,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_lt_asymm_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_lt_asymm(&mut self) -> Result<(), EnvError> {
         if self.nat_lt_asymm_init {
             return Ok(());
@@ -551,6 +558,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_lt_asymm_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_asymm(&self) -> bool {
         self.nat_lt_asymm_init
     }
@@ -700,6 +708,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_lt_trans_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_trans(&self) -> bool {
         self.nat_lt_trans_init
     }
@@ -718,6 +727,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_le_antisymm_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_le_antisymm(&mut self) -> Result<(), EnvError> {
         if self.nat_le_antisymm_init {
             return Ok(());
@@ -769,6 +779,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_le_antisymm_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_le_antisymm(&self) -> bool {
         self.nat_le_antisymm_init
     }
@@ -789,6 +800,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_le_trans_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_le_trans(&mut self) -> Result<(), EnvError> {
         if self.nat_le_trans_init {
             return Ok(());
@@ -862,6 +874,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_le_trans_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_le_trans(&self) -> bool {
         self.nat_le_trans_init
     }

@@ -27,7 +27,7 @@
 //!
 //! - drat-trim: <https://github.com/marijnheule/drat-trim>
 //! - "Efficient Certified RAT Verification" (Heule et al.)
-//! - ay SAT/SMT solver: <https://github.com/alabsystems/ay>
+//! - ay SAT/SMT solver (formerly ay): <https://github.com/alabsystems/ay>
 //! - Policy: `reports/research/2026-02-01-drat-lrat-policy.md`
 
 mod drat_verifier;

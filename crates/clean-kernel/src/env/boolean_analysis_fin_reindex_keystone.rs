@@ -52,6 +52,7 @@ struct KeystoneConsts {
     fin_last_cases: Expr, // Fin.lastCases.{0}
     fixed_step: Expr,
     twocycle_step: Expr,
+    #[cfg(test)]
     nat_rec1: Expr, // Nat.rec.{1} — motive M : Nat → Prop wrapped (returns Prop, but recursion on Nat is Sort 1 elimination → level of motive is 0; use Nat.rec.{0})
     nat_rec0: Expr, // Nat.rec.{0}
     nat_not_succ_le_zero: Expr,
@@ -79,6 +80,7 @@ impl KeystoneConsts {
             fin_last_cases: Expr::const_(Name::from_string("Fin.lastCases"), vec![l0.clone()]),
             fixed_step: k("Fin.sum_reindex_fixed_step"),
             twocycle_step: k("Fin.sum_reindex_twocycle_step"),
+            #[cfg(test)]
             nat_rec1: Expr::const_(Name::from_string("Nat.rec"), vec![l1.clone()]),
             nat_rec0: Expr::const_(Name::from_string("Nat.rec"), vec![l0.clone()]),
             nat_not_succ_le_zero: k("Nat.not_succ_le_zero"),

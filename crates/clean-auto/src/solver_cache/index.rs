@@ -75,7 +75,7 @@ const NO_BEST_WALL: u64 = u64::MAX;
 /// Errors building or loading a `VCIDX01` index. Every load-side variant is a
 /// fail-closed rejection: a malformed/tampered index never serves a lookup.
 #[derive(Debug, Error)]
-pub(crate) enum IndexError {
+pub enum IndexError {
     /// An I/O error reading or writing the index file.
     #[error("solver index I/O: {0}")]
     Io(String),

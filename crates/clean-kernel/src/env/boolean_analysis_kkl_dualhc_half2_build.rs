@@ -157,7 +157,7 @@ impl Environment {
                 d.finish_child(d.mk_lam(ap_id, BinderInfo::Default, bool_c.clone(), body))
             };
             let inner_rec = |av_c: Expr, parent: &EnvDeclBuilder| -> Expr {
-                let mut d = EnvDeclBuilder::child_of(parent);
+                let d = EnvDeclBuilder::child_of(parent);
                 let motive_b = {
                     let mut e = EnvDeclBuilder::child_of(&d);
                     let (bp_id, bp) = e.fresh_local(bool_c.clone());

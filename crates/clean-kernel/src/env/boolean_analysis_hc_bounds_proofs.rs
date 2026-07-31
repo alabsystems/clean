@@ -83,9 +83,11 @@ impl HcBoundsConsts {
     pub(super) fn le(&self, a: Expr, b: Expr) -> Expr {
         self.o.rat_le(a, b)
     }
+    #[cfg(test)]
     pub(super) fn add_c(&self) -> Expr {
         self.o.rat_add.clone()
     }
+    #[cfg(test)]
     pub(super) fn mul_c(&self) -> Expr {
         self.o.rat_mul.clone()
     }

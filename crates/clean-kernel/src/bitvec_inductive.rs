@@ -188,6 +188,7 @@ fn eq_trans_list(a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
     )
 }
 /// `@Eq.symm.{1} (List Bool) a b h`.
+#[cfg(test)]
 fn eq_symm_list(a: Expr, b: Expr, h: Expr) -> Expr {
     Expr::apps(
         Expr::const_(

@@ -25,8 +25,11 @@
 //!
 //! Part of #3259.
 
+#[cfg(test)]
 use super::nn_verify_proof_guided_nas::ProofGuidedNasConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -37,6 +40,7 @@ use crate::expr::{BinderInfo, Expr};
 ///
 /// Describes a complete network architecture: sequence of layer specs with
 /// dimension constraints between adjacent layers.
+#[cfg(test)]
 pub(super) fn build_architecture_type(c: &ProofGuidedNasConsts) -> Expr {
     c.type0.clone()
 }
@@ -44,6 +48,7 @@ pub(super) fn build_architecture_type(c: &ProofGuidedNasConsts) -> Expr {
 /// `NNVerify.LayerSpec : Type`
 ///
 /// Single layer specification: input dimension, output dimension, activation.
+#[cfg(test)]
 pub(super) fn build_layer_spec_type(c: &ProofGuidedNasConsts) -> Expr {
     c.type0.clone()
 }
@@ -51,6 +56,7 @@ pub(super) fn build_layer_spec_type(c: &ProofGuidedNasConsts) -> Expr {
 /// `NNVerify.ActivationKind : Type`
 ///
 /// Activation function kind: ReLU, sigmoid, tanh, identity.
+#[cfg(test)]
 pub(super) fn build_activation_kind_type(c: &ProofGuidedNasConsts) -> Expr {
     c.type0.clone()
 }
@@ -60,6 +66,7 @@ pub(super) fn build_activation_kind_type(c: &ProofGuidedNasConsts) -> Expr {
 /// Parameterized metric on architectures. For a given architecture and a
 /// natural number parameter (e.g., perturbation budget), produces a type
 /// representing the metric value.
+#[cfg(test)]
 pub(super) fn build_architecture_metric_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (arch_id, _) = b.fresh_local(c.architecture.clone());
@@ -73,6 +80,7 @@ pub(super) fn build_architecture_metric_type(c: &ProofGuidedNasConsts) -> Expr {
 ///
 /// Certificate size for a given architecture. Measures the total number of
 /// proof steps/nodes in the minimal verification certificate.
+#[cfg(test)]
 pub(super) fn build_cert_objective_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.architecture.clone(), c.nat.clone())
 }
@@ -81,6 +89,7 @@ pub(super) fn build_cert_objective_type(c: &ProofGuidedNasConsts) -> Expr {
 ///
 /// Bound tightness for a given architecture. Ratio of the certified bound
 /// to the optimal bound; closer to 1 is tighter.
+#[cfg(test)]
 pub(super) fn build_cert_tightness_fn_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.architecture.clone(), c.rat.clone())
 }
@@ -90,6 +99,7 @@ pub(super) fn build_cert_tightness_fn_type(c: &ProofGuidedNasConsts) -> Expr {
 /// Pareto optimality predicate: an architecture is Pareto optimal when no
 /// other architecture has both strictly smaller certificate size and strictly
 /// better tightness.
+#[cfg(test)]
 pub(super) fn build_pareto_optimal_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.architecture.clone(), c.prop.clone())
 }
@@ -97,6 +107,7 @@ pub(super) fn build_pareto_optimal_type(c: &ProofGuidedNasConsts) -> Expr {
 /// `NNVerify.has_residual : Architecture -> Prop`
 ///
 /// Predicate: whether an architecture has residual/skip connections.
+#[cfg(test)]
 pub(super) fn build_has_residual_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.architecture.clone(), c.prop.clone())
 }
@@ -104,6 +115,7 @@ pub(super) fn build_has_residual_type(c: &ProofGuidedNasConsts) -> Expr {
 /// `NNVerify.residual_sub_cert : Architecture -> Nat`
 ///
 /// Certificate size for the sub-network within a residual block.
+#[cfg(test)]
 pub(super) fn build_residual_sub_cert_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.architecture.clone(), c.nat.clone())
 }
@@ -122,6 +134,7 @@ pub(super) fn build_residual_sub_cert_type(c: &ProofGuidedNasConsts) -> Expr {
 /// For architectures of increasing depth (measured by cert_objective), the
 /// certificate size is monotonically non-decreasing. Deeper networks require
 /// larger certificates because each layer adds verification constraints.
+#[cfg(test)]
 pub(super) fn build_deeper_larger_cert_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a1_id, a1) = b.fresh_local(c.architecture.clone());
@@ -149,6 +162,7 @@ pub(super) fn build_deeper_larger_cert_type(c: &ProofGuidedNasConsts) -> Expr {
 /// Wider layers reduce the per-neuron bound looseness since IBP intervals
 /// are distributed over more neurons, reducing individual activation
 /// range overestimation.
+#[cfg(test)]
 pub(super) fn build_wider_tighter_bounds_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a1_id, a1) = b.fresh_local(c.architecture.clone());
@@ -180,6 +194,7 @@ pub(super) fn build_wider_tighter_bounds_type(c: &ProofGuidedNasConsts) -> Expr 
 /// the full block is bounded by the product of the main path certificate
 /// and the residual sub-certificate. This enables modular verification
 /// where each residual block can be certified independently.
+#[cfg(test)]
 pub(super) fn build_residual_cert_composition_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.architecture.clone());

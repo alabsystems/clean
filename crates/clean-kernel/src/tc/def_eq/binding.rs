@@ -20,13 +20,31 @@ impl<'env> TypeChecker<'env> {
                 ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
                     (ty.as_ref(), body.as_ref())
                 }
-                _ => unreachable!("is_def_eq_binding: lhs is not Lam/Pi"),
+                // Caller-enforced invariant: `is_def_eq_core` dispatches here
+                // only for Lam/Pi heads. FAIL CLOSED instead of panicking —
+                // `false` means "not definitionally equal", the incomplete-but-
+                // SOUND direction (wrongly accepting would be unsound; wrongly
+                // rejecting is not). A panic inside the trusted comparator is
+                // both a robustness hazard on untrusted input and ill-typed for
+                // the total-function correspondence statement Phase 2 needs.
+                // `debug_assert!` keeps the loud signal in development builds.
+                // Note the ctx_truncate_to: every exit from this function must
+                // restore the context, exactly like the paths below.
+                _ => {
+                    debug_assert!(false, "is_def_eq_binding: lhs is not Lam/Pi");
+                    self.ctx_truncate_to(save_len);
+                    return false;
+                }
             };
             let (bi2, ty2, body2) = match b.kind() {
                 ExprKind::Lam(bi, ty, body) | ExprKind::Pi(bi, ty, body) => {
                     (*bi, ty.as_ref(), body.as_ref())
                 }
-                _ => unreachable!("is_def_eq_binding: rhs is not Lam/Pi"),
+                _ => {
+                    debug_assert!(false, "is_def_eq_binding: rhs is not Lam/Pi");
+                    self.ctx_truncate_to(save_len);
+                    return false;
+                }
             };
 
             // Syntactic pre-check: skip full def_eq comparison when domains

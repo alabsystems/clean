@@ -23,12 +23,18 @@
 //!     many restarts and bounded-width resolution";
 //!   Impagliazzo & Paturi (2001), "On the complexity of k-SAT" (ETH).
 
+#[cfg(test)]
 use super::bounded_width_automatizability::BoundedWidthConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: (k+1)-consistency detects unsatisfiability
@@ -42,6 +48,7 @@ impl Environment {
     /// (k+1)-consistent. The helper encodes:
     ///   has_tree_width_le f k -> Not (k_consistency f (k+1))
     /// (the unsatisfiability hypothesis is baked into the helper).
+    #[cfg(test)]
     pub(super) fn register_bw_consistency_detects_unsat(
         &mut self,
         c: &BoundedWidthConsts,
@@ -99,6 +106,7 @@ impl Environment {
     ///   Not (k_consistency f (k+1)) ->
     ///     Exists (p : ResProof), res_refutes p f /\
     ///       res_proof_width p <= k+1 /\ res_proof_size p <= poly_bound |f| k
+    #[cfg(test)]
     pub(super) fn register_bw_consistency_to_refutation(
         &mut self,
         c: &BoundedWidthConsts,
@@ -156,6 +164,7 @@ impl Environment {
     ///   has_tree_width_le f k ->
     ///     Exists (p : ResProof), res_refutes p f /\
     ///       res_proof_width p <= k+1 /\ res_proof_size p <= poly_bound |f| k
+    #[cfg(test)]
     pub(super) fn register_bw_automatizability(
         &mut self,
         c: &BoundedWidthConsts,
@@ -212,6 +221,7 @@ impl Environment {
     /// bounded in the shortest refutation. The helper encodes:
     ///   ETH -> Not (Exists algo, forall f, ...)
     /// where ETH is the Exponential Time Hypothesis.
+    #[cfg(test)]
     pub(super) fn register_bw_non_automatizability_general(
         &mut self,
         c: &BoundedWidthConsts,
@@ -253,6 +263,7 @@ impl Environment {
     /// polynomial in |p|. The helper encodes:
     ///   res_refutes p f -> res_proof_width p <= k+1 ->
     ///     Exists (t : CDCLTrace), cdcl_simulates t p
+    #[cfg(test)]
     pub(super) fn register_bw_cdcl_simulates_bounded_width(
         &mut self,
         c: &BoundedWidthConsts,

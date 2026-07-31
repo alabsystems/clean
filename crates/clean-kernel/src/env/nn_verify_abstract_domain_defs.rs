@@ -26,8 +26,11 @@
 //!
 //! Part of #3261.
 
+#[cfg(test)]
 use super::nn_verify_abstract_domain::AbstractDomainConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -38,6 +41,7 @@ use crate::expr::{BinderInfo, Expr};
 ///
 /// An abstract domain for dimension d is a type-level entity that represents
 /// sets of concrete vectors. Parameterized by dimension.
+#[cfg(test)]
 pub(super) fn build_abstract_domain_type(c: &AbstractDomainConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.nat.clone(), c.type0.clone())
 }
@@ -48,6 +52,7 @@ pub(super) fn build_abstract_domain_type(c: &AbstractDomainConsts) -> Expr {
 /// A Galois connection between concrete sets (predicates on NNVec d) and
 /// abstract elements (predicates on abstract_domain d). Encodes the
 /// adjunction: alpha(S) <= a  iff  S <= gamma(a).
+#[cfg(test)]
 pub(super) fn build_galois_connection_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -70,6 +75,7 @@ pub(super) fn build_galois_connection_type(c: &AbstractDomainConsts) -> Expr {
 ///
 /// Predicate asserting that an abstract function is a sound transformer for
 /// a concrete function (the abstract output over-approximates the concrete).
+#[cfg(test)]
 pub(super) fn build_abstract_transformer_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());
@@ -98,6 +104,7 @@ pub(super) fn build_abstract_transformer_type(c: &AbstractDomainConsts) -> Expr 
 ///
 /// Precision metric: measures the gap between an abstract element and the
 /// tightest interval enclosure. Lower values mean less over-approximation.
+#[cfg(test)]
 pub(super) fn build_domain_precision_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -115,6 +122,7 @@ pub(super) fn build_domain_precision_type(c: &AbstractDomainConsts) -> Expr {
 ///
 /// Product domain composition: combines two abstract domains into a reduced
 /// product, yielding a more precise domain.
+#[cfg(test)]
 pub(super) fn build_domain_composition_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -157,6 +165,7 @@ pub(super) fn build_domain_composition_type(c: &AbstractDomainConsts) -> Expr {
 /// ```
 /// (The real content is in the axiom; the theorem type captures the
 /// soundness interface.)
+#[cfg(test)]
 pub(super) fn build_galois_soundness_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -195,6 +204,7 @@ pub(super) fn build_galois_soundness_type(c: &AbstractDomainConsts) -> Expr {
 ///
 /// If f_abs is a sound abstract transformer for f, and x is contained in
 /// gamma(a), then f(x) is contained in gamma(f_abs(a)).
+#[cfg(test)]
 pub(super) fn build_transformer_soundness_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.nat.clone());
@@ -261,6 +271,7 @@ pub(super) fn build_transformer_soundness_type(c: &AbstractDomainConsts) -> Expr
 ///
 /// Soundness of product domain: if x is in both gamma(a1) and gamma(a2),
 /// then x is in the composed domain.
+#[cfg(test)]
 pub(super) fn build_composition_soundness_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -303,6 +314,7 @@ pub(super) fn build_composition_soundness_type(c: &AbstractDomainConsts) -> Expr
 ///
 /// Simplified: if precision(gamma1) <= precision(gamma2), then gamma1 is
 /// at least as tight as gamma2. This captures the partial order on domains.
+#[cfg(test)]
 pub(super) fn build_precision_monotone_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -338,6 +350,7 @@ pub(super) fn build_precision_monotone_type(c: &AbstractDomainConsts) -> Expr {
 /// witnesses the correspondence: IBP containment = interval domain containment.
 /// The real mathematical content (that IBP computes a Galois connection) is in
 /// the backing axiom.
+#[cfg(test)]
 pub(super) fn build_ibp_is_interval_domain_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -368,6 +381,7 @@ pub(super) fn build_ibp_is_interval_domain_type(c: &AbstractDomainConsts) -> Exp
 /// contained in the zonotope concretization is also contained in the
 /// interval concretization. This captures that zonotopes are more precise
 /// than intervals (they track correlations between dimensions).
+#[cfg(test)]
 pub(super) fn build_zonotope_refines_interval_type(c: &AbstractDomainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());

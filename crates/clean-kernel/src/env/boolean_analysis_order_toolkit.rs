@@ -350,6 +350,7 @@ impl Environment {
     }
 
     /// Check if the order toolkit has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_order_toolkit(&self) -> bool {
         self.boolean_analysis_order_toolkit_init
     }

@@ -52,8 +52,10 @@ pub(crate) struct SqConsts {
     nat: Expr,
     rat: Expr,
     rat_zero: Expr,
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_val: Expr,
+    #[cfg(test)]
     nnrat_mul: Expr,
     nnrat_property: Expr,
     causeq: Expr,
@@ -67,6 +69,7 @@ pub(crate) struct SqConsts {
     rat_le: Expr,
     nat_le: Expr,
     // Rat lemmas.
+    #[cfg(test)]
     rat_mul_comm: Expr,
     rat_left_distrib: Expr,
     rat_right_distrib: Expr,
@@ -91,6 +94,7 @@ pub(crate) struct SqConsts {
     exists_c: Expr,
     exists_intro: Expr,
     exists_elim: Expr,
+    #[cfg(test)]
     eq_rat: Expr,
     eq_trans: Expr,
     eq_symm: Expr,
@@ -108,8 +112,10 @@ impl SqConsts {
             nat: k("Nat"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_val: k("NNRat.val"),
+            #[cfg(test)]
             nnrat_mul: k("NNRat.mul"),
             nnrat_property: k("NNRat.property"),
             causeq: k("NNReal.CauSeq"),
@@ -122,6 +128,7 @@ impl SqConsts {
             rat_lt: k("Rat.lt"),
             rat_le: k("Rat.le"),
             nat_le: k("Nat.le"),
+            #[cfg(test)]
             rat_mul_comm: k("Rat.mul_comm"),
             rat_left_distrib: k("Rat.left_distrib"),
             rat_right_distrib: k("Rat.right_distrib"),
@@ -145,6 +152,7 @@ impl SqConsts {
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
@@ -223,6 +231,7 @@ impl SqConsts {
     fn lt_of_lt_of_le(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.rat_lt_of_lt_of_le.clone(), [a, b, cc, h1, h2])
     }
+    #[cfg(test)]
     fn eq_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq_rat.clone(), [self.rat.clone(), a, b])
     }
@@ -269,6 +278,7 @@ impl SqConsts {
             [self.causeq.clone(), self.causeq_equiv.clone(), l],
         )
     }
+    #[cfg(test)]
     fn nnmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nnrat_mul.clone(), [a, b])
     }
@@ -670,13 +680,13 @@ fn build_lt_of_sq_lt_sq(c: &SqConsts) -> Expr {
         // Transport hsq : x·x < z·z to z·z < z·z by rewriting x·x → z·z via
         //   xx_eq_zz : x·x = z·z. Build xx_eq_zz from x_eq_z.
         //   xx_eq_xz : x·x = x·z  (congr (x··) x_eq_z) ; xz_eq_zz : x·z = z·z (congr (·z) x_eq_z).
-        let mul_xleft = |t: &Expr| -> Expr {
+        let mul_xleft = |_t: &Expr| -> Expr {
             let mut fb = EnvDeclBuilder::child_of(&nb);
             let (v_id, v) = fb.fresh_local(c.rat.clone());
             let body = c.rmul(x.clone(), v);
             fb.finish_child(fb.mk_lam(v_id, BinderInfo::Default, c.rat.clone(), body))
         };
-        let mul_zright = |t: &Expr| -> Expr {
+        let mul_zright = |_t: &Expr| -> Expr {
             let mut fb = EnvDeclBuilder::child_of(&nb);
             let (v_id, v) = fb.fresh_local(c.rat.clone());
             let body = c.rmul(v, z.clone());

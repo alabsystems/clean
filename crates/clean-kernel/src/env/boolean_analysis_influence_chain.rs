@@ -52,6 +52,7 @@ pub(crate) struct InflConsts {
     subset_sum_smul: Expr,
     ind_mul_self: Expr,
     rat_mmmc: Expr,
+    #[cfg(test)]
     influence: Expr,
     fourier_coeff: Expr,
     inversion_core: Expr,
@@ -74,6 +75,7 @@ pub(crate) struct InflConsts {
     nat_le_refl: Expr,
     nat_le_step: Expr,
     fin: Expr,
+    #[cfg(test)]
     fin_sum: Expr,
     fin_sum_congr: Expr,
     eq1: Expr,
@@ -113,6 +115,7 @@ impl InflConsts {
             subset_sum_smul: Expr::const_(Name::from_string("BoolAnalysis.subsetSum_smul"), vec![]),
             ind_mul_self: Expr::const_(Name::from_string("BoolAnalysis.ind_mul_self"), vec![]),
             rat_mmmc: Expr::const_(Name::from_string("Rat.mul_mul_mul_comm"), vec![]),
+            #[cfg(test)]
             influence: Expr::const_(Name::from_string("BoolAnalysis.Influence"), vec![]),
             fourier_coeff: Expr::const_(
                 Name::from_string("BoolAnalysis.FourierCoefficient"),
@@ -156,6 +159,7 @@ impl InflConsts {
             nat_le_refl: Expr::const_(Name::from_string("Nat.le.refl"), vec![]),
             nat_le_step: Expr::const_(Name::from_string("Nat.le.step"), vec![]),
             fin: Expr::const_(Name::from_string("Fin"), vec![]),
+            #[cfg(test)]
             fin_sum: Expr::const_(Name::from_string("Fin.sum"), vec![]),
             fin_sum_congr: Expr::const_(Name::from_string("Fin.sum_congr"), vec![]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
@@ -302,6 +306,7 @@ impl InflConsts {
         self.ssum(n, f)
     }
 
+    #[cfg(test)]
     fn fsum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [n.clone(), g])
     }
@@ -376,6 +381,7 @@ impl InflConsts {
         Expr::apps(self.rat_mul_assoc.clone(), [a, b, cc])
     }
     /// `Influence n f i`.
+    #[cfg(test)]
     fn influence_(&self, n: &Expr, f: &Expr, i: &Expr) -> Expr {
         Expr::apps(self.influence.clone(), [n.clone(), f.clone(), i.clone()])
     }

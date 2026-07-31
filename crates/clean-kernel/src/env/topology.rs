@@ -111,6 +111,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_fiber_bundle_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_fiber_bundle(&self) -> bool {
         self.topology_fiber_bundle_init
     }
@@ -329,6 +330,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_higher_homotopy_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_higher_homotopy(&self) -> bool {
         self.topology_higher_homotopy_init
     }

@@ -82,6 +82,7 @@ pub(crate) struct MulMonoConsts {
     rat_deltamul_mul_eq: Expr,
     rat_mul_close: Expr,
     // Nat lemmas.
+    #[cfg(test)]
     nat_le_trans: Expr,
     // Logic.
     and_c: Expr,
@@ -142,6 +143,7 @@ impl MulMonoConsts {
             rat_deltamul_pos: k("Rat.deltaMul_pos"),
             rat_deltamul_mul_eq: k("Rat.deltaMul_mul_eq"),
             rat_mul_close: k("Rat.mul_close_of_close"),
+            #[cfg(test)]
             nat_le_trans: k("Nat.le_trans"),
             and_c: k("And"),
             and_left: k("And.left"),
@@ -159,6 +161,7 @@ impl MulMonoConsts {
         }
     }
 
+    #[cfg(test)]
     fn at(&self, f: &Expr, n: &Expr) -> Expr {
         Expr::app(f.clone(), n.clone())
     }
@@ -213,6 +216,7 @@ impl MulMonoConsts {
     fn nnmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nnrat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn nat_le_trans(&self, a: Expr, b: Expr, cc: Expr, hab: Expr, hbc: Expr) -> Expr {
         Expr::apps(self.nat_le_trans.clone(), [a, b, cc, hab, hbc])
     }

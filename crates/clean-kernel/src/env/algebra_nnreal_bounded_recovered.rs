@@ -136,6 +136,7 @@ impl BoundedConsts {
         }
     }
 
+    #[cfg(test)]
     fn seq_ty(&self) -> Expr {
         Expr::pi(BinderInfo::Default, self.nat.clone(), self.nnrat.clone())
     }
@@ -386,7 +387,7 @@ fn build_bounded_forall(
     c: &BoundedConsts,
     parent: &EnvDeclBuilder,
     f: &Expr,
-    one: &Expr,
+    _one: &Expr,
     n_cap: &Expr,
     hn: &Expr,
     anchor_plus: &Expr,

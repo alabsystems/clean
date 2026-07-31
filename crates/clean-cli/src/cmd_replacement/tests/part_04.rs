@@ -63,10 +63,7 @@ fn replacement_status_tracks_rust_first_python_migration_inventory() {
         .expect("docs metrics migration row");
     assert_eq!(docs_metrics_row.status, ToolMigrationStatus::Demoted);
     assert!(!docs_metrics_row.replacement_critical);
-    assert_eq!(
-        docs_metrics_row.source_artifact,
-        "README.md; docs/DESIGN.md; docs/VERIFICATION_METRICS.md"
-    );
+    assert_eq!(docs_metrics_row.source_artifact, "docs/SOURCE_INVENTORY.md");
     assert!(docs_metrics_row
         .planned_rust_surface
         .contains("non-launch diagnostic"));
@@ -91,10 +88,10 @@ fn replacement_status_tracks_rust_first_python_migration_inventory() {
         .contains("local Rust toolchain availability"));
     assert!(system_health_row
         .removal_condition
-        .contains("sibling ay path reachability"));
+        .contains("committed AY Git-graph validation"));
     assert!(system_health_row
         .removal_condition
-        .contains("ay update freshness"));
+        .contains("remote-main freshness"));
     assert!(system_health_row
         .blocker
         .contains("no longer launch evidence"));

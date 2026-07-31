@@ -63,6 +63,7 @@ struct MinflConsts {
     nat_pow: Expr,
     nat_mul: Expr,
     int_of_nat: Expr,
+    #[cfg(test)]
     int_mul_one: Expr,
     rat_mk: Expr,
     rat_mul: Expr,
@@ -119,6 +120,7 @@ impl MinflConsts {
             nat_pow: k("Nat.pow"),
             nat_mul: k("Nat.mul"),
             int_of_nat: k("Int.ofNat"),
+            #[cfg(test)]
             int_mul_one: k("Int.mul_one"),
             rat_mk: k("Rat.mk"),
             rat_mul: k("Rat.mul"),
@@ -166,6 +168,7 @@ impl MinflConsts {
     fn nat_two(&self) -> Expr {
         Expr::app(self.nat_succ.clone(), self.nat_one())
     }
+    #[cfg(test)]
     fn nsucc(&self, k: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), k.clone())
     }

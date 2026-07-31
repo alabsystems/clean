@@ -12,7 +12,7 @@ use tree_sitter::Node;
 
 impl CParser {
     /// Parse an expression
-    pub(super) fn parse_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    pub(super) fn parse_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         match node.kind() {
             "number_literal" => {
                 let text = node_text(node, source);
@@ -66,7 +66,7 @@ impl CParser {
     }
 
     /// Parse function call expression
-    fn parse_call_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_call_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut func = None;
         let mut args = Vec::new();
 
@@ -94,7 +94,7 @@ impl CParser {
     }
 
     /// Parse argument list
-    fn parse_arg_list(&self, node: Node, source: &str) -> ParseResult<Vec<CExpr>> {
+    fn parse_arg_list(&self, node: Node<'_>, source: &str) -> ParseResult<Vec<CExpr>> {
         let mut args = Vec::new();
 
         for i in 0..node.child_count() {
@@ -109,7 +109,7 @@ impl CParser {
     }
 
     /// Parse cast expression
-    fn parse_cast_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_cast_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut ty = CType::Void;
         let mut expr = None;
 
@@ -137,7 +137,7 @@ impl CParser {
     }
 
     /// Parse type descriptor
-    fn parse_type_descriptor(&self, node: Node, source: &str) -> ParseResult<CType> {
+    fn parse_type_descriptor(&self, node: Node<'_>, source: &str) -> ParseResult<CType> {
         let mut ty = CType::Void;
         let mut pointer_count = 0;
         // Array bounds, outermost-first in source order (e.g. `int[2][3]` ->
@@ -194,12 +194,12 @@ impl CParser {
     /// outermost-first source order.
     fn collect_abstract_array_dims(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
         dims: &mut Vec<Option<usize>>,
     ) -> ParseResult<()> {
         let mut bound: Option<usize> = None;
-        let mut nested: Option<Node> = None;
+        let mut nested: Option<Node<'_>> = None;
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
                 match child.kind() {
@@ -228,7 +228,7 @@ impl CParser {
     ///
     /// For an array type with an unspecified bound (`(int[]){1,2,3}`), the size
     /// is inferred from the number of top-level initializers, per 6.7.9p22.
-    fn parse_compound_literal(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_compound_literal(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut ty: Option<CType> = None;
         let mut init: Option<Vec<Initializer>> = None;
 
@@ -267,7 +267,7 @@ impl CParser {
     }
 
     /// Count pointer levels
-    fn count_pointers(&self, node: Node) -> usize {
+    fn count_pointers(&self, node: Node<'_>) -> usize {
         let mut count = 0;
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
@@ -286,7 +286,7 @@ impl CParser {
     }
 
     /// Parse subscript expression (array access)
-    fn parse_subscript_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_subscript_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut array = None;
         let mut index = None;
 
@@ -316,7 +316,7 @@ impl CParser {
     }
 
     /// Parse field expression (struct.field or struct->field)
-    fn parse_field_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_field_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut base = None;
         let mut field = String::new();
         let mut is_ptr = false;
@@ -357,7 +357,7 @@ impl CParser {
     }
 
     /// Parse pointer expression (& or *)
-    fn parse_pointer_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_pointer_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut op = None;
         let mut operand = None;
 
@@ -386,7 +386,7 @@ impl CParser {
     }
 
     /// Parse sizeof expression
-    fn parse_sizeof_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_sizeof_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
                 match child.kind() {
@@ -423,7 +423,7 @@ impl CParser {
     /// either `_Alignof` or its `alignof` macro spelling. The result is an
     /// `AlignOf(CType)` node whose alignment the evaluator computes from the
     /// type model (`CType::align`).
-    fn parse_alignof_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_alignof_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
                 match child.kind() {
@@ -471,7 +471,7 @@ impl CParser {
     /// right-associative tree. We instead flatten the full operand sequence in
     /// source order and fold it left-associatively, yielding the C-correct
     /// `BinOp(Comma, BinOp(Comma, 1, 2), 3)`.
-    fn parse_comma_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    fn parse_comma_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut operands = Vec::new();
         self.collect_comma_operands(node, source, &mut operands)?;
 
@@ -503,7 +503,7 @@ impl CParser {
     /// instead of `[1, (2, 3)]`.
     fn collect_comma_operands(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
         operands: &mut Vec<CExpr>,
     ) -> ParseResult<()> {

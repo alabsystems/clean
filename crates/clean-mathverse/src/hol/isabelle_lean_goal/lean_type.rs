@@ -154,6 +154,31 @@ pub fn is_set_typed(t: &IsaTerm) -> bool {
     matches!(term_type(t), Some(IsaType::Type { n, .. }) if n == "Set.set")
 }
 
+/// Whether a **type** (not a term) is the set type `Set.set _`. Used to guard the
+/// nullary lattice constants (`bot`/`top`) — which carry no argument to inspect —
+/// on their *own* (already-instantiated) head-constant type.
+#[must_use]
+pub fn is_set_type(ty: &IsaType) -> bool {
+    matches!(ty, IsaType::Type { n, .. } if n == "Set.set")
+}
+
+/// Whether a term's result type is a set **of sets** (`Set.set [Set.set _]`) —
+/// the `Set`-instance carrier of the complete-lattice `Sup`/`Inf` (where
+/// `Sup :: 'a set ⇒ 'a` specializes to `(β set) set ⇒ β set` = `⋃`/`sSup`).
+#[must_use]
+pub fn is_set_of_sets(t: &IsaTerm) -> bool {
+    matches!(term_type(t), Some(IsaType::Type { n, a }) if n == "Set.set" && a.len() == 1
+        && matches!(&a[0], IsaType::Type { n: inner, .. } if inner == "Set.set"))
+}
+
+/// Whether a term's result type is exactly `ℕ` (`Nat.nat`). Guards `gcd`/`lcm`,
+/// which render to `Nat.gcd`/`Nat.lcm` only on the `ℕ` instance (Lean's
+/// `Int.gcd : ℤ → ℤ → ℕ` changes the result type off `ℕ`).
+#[must_use]
+pub fn is_nat_typed(t: &IsaTerm) -> bool {
+    matches!(term_type(t), Some(IsaType::Type { n, a }) if a.is_empty() && n == "Nat.nat")
+}
+
 /// Whether a term's result type is a *concrete* (variable-free head) numeric
 /// type Lean orders unambiguously (`ℕ`, `ℤ`, `ℚ`, `ℝ`). Bare type variables and
 /// unknown formers are excluded so [`crate::hol::isabelle_lean_goal`] declines

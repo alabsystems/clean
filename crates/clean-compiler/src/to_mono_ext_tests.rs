@@ -42,23 +42,6 @@ fn two_param_fn(fname: &str, ty0: IRType, ty1: IRType) -> IRDecl {
     }
 }
 
-fn caller_fn(caller_name: &str, target: &str, param_ty: IRType) -> IRDecl {
-    IRDecl {
-        name: name(caller_name),
-        params: vec![(var(10), param_ty)],
-        return_type: IRType::Object,
-        body: IRBody::VDecl {
-            var: var(11),
-            ty: IRType::Object,
-            value: IRExpr::Apply {
-                fn_id: fn_id(target),
-                args: vec![IRArg::Var(var(10))],
-            },
-            rest: Box::new(IRBody::Ret(IRArg::Var(var(11)))),
-        },
-    }
-}
-
 fn erased_caller_fn(caller_name: &str, target: &str) -> IRDecl {
     IRDecl {
         name: name(caller_name),

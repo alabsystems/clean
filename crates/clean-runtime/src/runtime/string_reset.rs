@@ -59,6 +59,7 @@ pub(crate) fn string_len(o: LeanObjPtr) -> usize {
 ///
 /// # Panics
 /// Panics if the string is not valid UTF-8.
+#[cfg(test)]
 pub(crate) unsafe fn string_as_str(o: LeanObjPtr) -> &'static str {
     // SAFETY: caller guarantees `o` is alive; string_data safety delegated.
     std::str::from_utf8(unsafe { string_data(o) }).expect("clean string is not valid UTF-8")

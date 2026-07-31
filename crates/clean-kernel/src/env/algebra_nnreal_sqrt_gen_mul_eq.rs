@@ -296,7 +296,7 @@ struct Telescope {
 /// `(id, ty)` in binder order for the final wrap.
 fn telescope(c: &MulEqConsts, b: &mut EnvDeclBuilder) -> Telescope {
     let mut ids: Vec<(FVarId, Expr)> = Vec::new();
-    let mut rat_binder = |b: &mut EnvDeclBuilder, ids: &mut Vec<(FVarId, Expr)>| {
+    let rat_binder = |b: &mut EnvDeclBuilder, ids: &mut Vec<(FVarId, Expr)>| {
         let (id, v) = b.fresh_local(c.rat.clone());
         ids.push((id, c.rat.clone()));
         v
@@ -310,7 +310,7 @@ fn telescope(c: &MulEqConsts, b: &mut EnvDeclBuilder) -> Telescope {
     let sxy = rat_binder(b, &mut ids);
     let rxy = rat_binder(b, &mut ids);
 
-    let mut hyp_binder = |b: &mut EnvDeclBuilder, ids: &mut Vec<(FVarId, Expr)>, ty: Expr| {
+    let hyp_binder = |b: &mut EnvDeclBuilder, ids: &mut Vec<(FVarId, Expr)>, ty: Expr| {
         let (id, v) = b.fresh_local(ty.clone());
         ids.push((id, ty));
         v

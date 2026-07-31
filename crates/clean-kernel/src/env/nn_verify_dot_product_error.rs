@@ -110,6 +110,7 @@ use crate::name::Name;
 /// Marker recording that the dot-product bound is built ENTIRELY on the
 /// correctly-rounded per-op half-ulp bound (no transcendental term): the
 /// products and sums of a dot product are `×` and `+`, both correctly rounded.
+#[cfg(test)]
 pub(crate) const DOT_PRODUCT_SCOPE: &str =
     "Higham dot-product accumulated rounding bound (Thm 3.1); built on the \
      correctly-rounded per-op half-ulp bound for + and ×; u carried as a \

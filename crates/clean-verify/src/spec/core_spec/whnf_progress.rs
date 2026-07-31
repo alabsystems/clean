@@ -379,6 +379,7 @@ impl Specification {
         self.add_reduce_once_preserves_closed()?;
         self.add_whnf_fuel_capstone()?;
         self.add_reduce_once_red()?;
+        self.add_reduce_once_red_head_facts()?;
 
         Ok(())
     }
@@ -397,6 +398,125 @@ impl Specification {
     /// plus the fuel loop over it and full step soundness against
     /// whnf_red_step. Classification/preservation (the EnvsGood ι-half) are
     /// the next rungs.
+    /// Head-behaviour facts about the reflected one-step reducer.
+    ///
+    /// MUST be registered AFTER `add_reduce_once_red` — these reference
+    /// `reduce_once_red` itself, and registering them alongside the MIR
+    /// dispatch witnesses (which run 16 registrations earlier) fails with
+    /// `Unknown identifier: reduce_once_red`.
+    fn add_reduce_once_red_head_facts(&mut self) -> Result<(), SpecError> {
+        // ── THE BEHAVIOURAL COUNTERPART ─────────────────────────────────────
+        //
+        // The two witnesses above are STRUCTURAL: they pin which ExprKind
+        // variants the real dispatches list, and say nothing about what those
+        // arms DO. These next facts are behavioural, about the reflected
+        // reducer, and together with the structural half they make a
+        // correspondence rather than two unrelated observations.
+        //
+        // `reduce_once_red` is a KExpr.rec whose arms are, in constructor order:
+        //   sort -> none        app  -> reduce_app_head_red     let_ -> SOME (zeta)
+        //   bvar -> none        pi   -> none                    proj -> opt_proj_lift
+        //   lam  -> none        const-> defval_for              lit  -> none
+        //
+        // So the heads that are UNCONDITIONALLY irreducible — none for EVERY
+        // RedEnv — are exactly {sort, bvar, lam, pi, lit}. That is precisely the
+        // real kernel's identity set {2, 0, 5, 6, 8} pinned by
+        // mir_dispatch_reflection_whnf_impl above: the reflected reducer takes no
+        // step on exactly the heads the real whnf_impl returns unchanged.
+        //
+        // The distinction matters and is why "unconditionally" is load-bearing:
+        // const and proj can ALSO yield none (a constant absent from the env, a
+        // stuck projection), but only for some environments/subterms, so they are
+        // not irreducible heads. Only these five are none independent of renv.
+        //
+        // Each is proved by KERNEL COMPUTATION: applying a KExpr.rec to a
+        // constructor iota-reduces, so Eq.refl suffices and the kernel must do
+        // the reduction to accept it.
+        let irreducible: [(&str, &str, &str); 5] = [
+            ("sort", "(n : Level)", "KExpr.sort n"),
+            ("bvar", "(i : Nat)", "KExpr.bvar i"),
+            ("lam", "(ty : KExpr) (b : KExpr)", "KExpr.lam ty b"),
+            ("pi", "(ty : KExpr) (b : KExpr)", "KExpr.pi ty b"),
+            ("lit", "(v : Nat)", "KExpr.lit v"),
+        ];
+        for (head, binders, ctor) in irreducible {
+            let binder_names: Vec<&str> = binders
+                .split(')')
+                .filter_map(|b| b.trim().strip_prefix('('))
+                .map(|b| b.split(':').next().unwrap_or("").trim())
+                .collect();
+            self.add_definition(SpecDefinition {
+                name: format!("reduce_once_red_none_{head}"),
+                type_src: format!(
+                    "forall (renv : RedEnv) {binders}, \
+                     Eq (OptionType KExpr) (reduce_once_red renv ({ctor})) (OptionType.none KExpr)"
+                ),
+                value_src: Some(format!(
+                    "fun (renv : RedEnv) {binders} => \
+                     Eq.refl (OptionType KExpr) (OptionType.none KExpr)"
+                )),
+                is_axiom: false,
+                description: format!(
+                    "reduce_once_red_none_{head}: the reflected one-step reducer takes NO step on \
+                     a `{head}` head, for EVERY RedEnv — so `{head}` is an unconditionally \
+                     irreducible (weak-head-normal) head. Behavioural counterpart to the \
+                     structural dispatch witnesses: {{sort,bvar,lam,pi,lit}} is exactly the real \
+                     kernel's identity set {{0,2,5,6,8}} pinned by \
+                     mir_dispatch_reflection_whnf_impl. Contrast const/proj, which can also yield \
+                     none but only for some environments/subterms. Proved by KERNEL COMPUTATION \
+                     (KExpr.rec applied to a constructor iota-reduces; binders {binder_names:?}). \
+                     DerivedProved, zero axiom_deps."
+                ),
+                category: AxiomCategory::DerivedLemma,
+                proof_status: ProofStatus::DerivedProved,
+                elaborated_type: None,
+                elaborated_value: None,
+                dependencies: Some(HashSet::from([
+                    "reduce_once_red".to_string(),
+                    "OptionType".to_string(),
+                ])),
+                axiom_deps: HashSet::new(),
+            })?;
+        }
+
+        // NON-VACUITY, in-spec. Without this the five lemmas above could be read
+        // as "the reducer never steps at all". `let_` unconditionally DOES step
+        // (zeta), so the family genuinely discriminates reducible heads from
+        // irreducible ones.
+        self.add_definition(SpecDefinition {
+            name: "reduce_once_red_some_let".to_string(),
+            type_src: "forall (renv : RedEnv) (ty : KExpr) (v : KExpr) (b : KExpr), \
+                       Eq (OptionType KExpr) (reduce_once_red renv (KExpr.let_ ty v b)) \
+                       (OptionType.some KExpr (instantiate b v))"
+                .to_string(),
+            value_src: Some(
+                "fun (renv : RedEnv) (ty : KExpr) (v : KExpr) (b : KExpr) => \
+                 Eq.refl (OptionType KExpr) (OptionType.some KExpr (instantiate b v))"
+                    .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "reduce_once_red_some_let: the reflected reducer ALWAYS steps on a `let_` head, ",
+                "by zeta, to `instantiate b v`. This is the deliberate non-vacuity control for ",
+                "the reduce_once_red_none_* family — without a head that provably DOES step, ",
+                "those five lemmas would be consistent with a reducer that never reduces ",
+                "anything. Proved by KERNEL COMPUTATION. DerivedProved, zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "reduce_once_red".to_string(),
+                "instantiate".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        Ok(())
+    }
+
     fn add_reduce_once_red(&mut self) -> Result<(), SpecError> {
         // The ι-aware application lift: a silent head attempts the WHOLE-SPINE
         // recursor ι at the current application node (the model's
@@ -5146,6 +5266,33 @@ impl Specification {
                  (ih (Nat.succ v)))) a) l lo"
                     .to_string(),
             ),
+            // A WILDCARD-terminated dispatch (whnf_core_inner) needs a different
+            // predicate: its explicit arms are plain variants with no
+            // identity/conditional distinction, so `mir_arm_ok`'s "non-identity
+            // implies v = 1" rule — correct for whnf_impl — would wrongly reject
+            // them. Same in-range + STRICTLY-INCREASING check over a bare
+            // `ListType Nat`.
+            (
+                "mir_variants_ok_from",
+                "Nat -> Nat -> ListType Nat -> Bool",
+                "fun (bound : Nat) (lo : Nat) (l : ListType Nat) => \
+                 ListType.rec Nat (fun (_ : ListType Nat) => Nat -> Bool) \
+                 (fun (_ : Nat) => Bool.true) \
+                 (fun (v : Nat) (rest : ListType Nat) (ih : Nat -> Bool) => \
+                 fun (lo2 : Nat) => mir_band (mir_nat_ltb v bound) \
+                 (mir_band (mir_nat_ltb lo2 (Nat.succ v)) (ih (Nat.succ v)))) l lo"
+                    .to_string(),
+            ),
+            // Length, so a capstone can pin HOW MANY variants are handled
+            // explicitly — and therefore how many the wildcard absorbs.
+            (
+                "mir_nat_len",
+                "ListType Nat -> Nat",
+                "fun (l : ListType Nat) => \
+                 ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero \
+                 (fun (_ : Nat) (_ : ListType Nat) (ih : Nat) => Nat.succ ih) l"
+                    .to_string(),
+            ),
         ];
         for (name, ty, value) in defs {
             self.add_definition_reducible(SpecDefinition {
@@ -5164,6 +5311,159 @@ impl Specification {
                 axiom_deps: HashSet::new(),
             })?;
         }
+
+        // THE CAPSTONE. Until now this module registered the dispatch-arm
+        // vocabulary but asserted NOTHING with it — the partition was
+        // kernel-checkABLE and never kernel-CHECKED. This closes that gap for
+        // `whnf_impl`'s identity pre-match (clean-kernel/src/tc/whnf.rs:145-165).
+        //
+        // The reflected arm list, in the real match's variant order:
+        //   0 BVar  identity      2 Sort  identity      6 Pi   identity
+        //   1 FVar  CONDITIONAL   5 Lam   identity      8 Lit  identity
+        // `ExprKind` has 25 variants (expr/kind.rs), so bound = 25.
+        //
+        // FVar is the one non-identity arm, and `mir_arm_ok` enforces exactly
+        // that: an arm with `ident = false` must have `v = 1`. That is faithful
+        // to the source — FVar returns early only for NON-let FVars, because a
+        // let-FVar still needs zeta reduction, so it cannot be an unconditional
+        // identity. `mir_is_identity_variant` independently pins the identity set
+        // to {0,2,5,6,8}, which is precisely the source's unconditional arm
+        // `Sort | Pi | Lam | Lit | BVar => return e.clone()`.
+        //
+        // `mir_arms_ok_from` additionally forces the values to be STRICTLY
+        // INCREASING, so this witnesses a genuine partition — no duplicated and
+        // no out-of-range variant can satisfy it.
+        //
+        // Proved by KERNEL COMPUTATION: `Eq.refl` forces the kernel to evaluate
+        // `mir_arms_ok_from` (hence `mir_arm_ok`, `mir_is_identity_variant`,
+        // `mir_nat_ltb`, `mir_nat_eqb`) on the encoding down to `Bool.true`.
+        //
+        // SCOPE, stated honestly: this is a structural fact about a SWITCH — no
+        // recursion, no cache, no heartbeat, no state. It does NOT certify
+        // `whnf_impl`'s behaviour, and the encoder's fidelity to the real MIR is
+        // pinned on the trust-certify side, exactly as for the payload witness
+        // above. See docs/plans/PHASE2_CHECKER_SPINE_SCOPE_2026-07-25.md.
+        let arms = {
+            let mut acc = "(ListType.nil MirArm)".to_string();
+            for (variant, ident) in [
+                (8, true),
+                (6, true),
+                (5, true),
+                (2, true),
+                (1, false),
+                (0, true),
+            ] {
+                acc = format!(
+                    "(ListType.cons MirArm (MirArm.mk {v} {flag}) {acc})",
+                    v = nat_src(variant),
+                    flag = if ident { "Bool.true" } else { "Bool.false" },
+                );
+            }
+            acc
+        };
+        self.add_definition(SpecDefinition {
+            name: "mir_dispatch_reflection_whnf_impl".to_string(),
+            type_src: format!(
+                "Eq Bool (mir_arms_ok_from {bound} Nat.zero {arms}) Bool.true",
+                bound = nat_src(25),
+            ),
+            value_src: Some("Eq.refl Bool Bool.true".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "THE FIRST KERNEL-CHECKED DISPATCH WITNESS ON THE SPINE: the encoded ",
+                "identity pre-match of the real whnf_impl (tc/whnf.rs:145-165) SATISFIES the ",
+                "dispatch-partition predicate — every arm's ExprKind variant is in range ",
+                "(< 25), the identity flags agree with mir_is_identity_variant on {0,2,5,6,8} ",
+                "= {BVar,Sort,Lam,Pi,Lit} (the source's unconditional early-return arm), FVar ",
+                "(1) is the single CONDITIONAL arm (a let-FVar still needs zeta, so it cannot ",
+                "be an unconditional identity), and the variant values are STRICTLY INCREASING ",
+                "so the arm set is a genuine partition. Proved by KERNEL COMPUTATION (Eq.refl: ",
+                "the kernel evaluates mir_arms_ok_from on the encoding to Bool.true). This is a ",
+                "structural fact about a SWITCH — no recursion, cache, heartbeat or state — and ",
+                "does NOT certify whnf_impl's behaviour; encoder fidelity to the real MIR is ",
+                "pinned trust-certify-side. Phase-2 first step. DerivedProved, zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "mir_arms_ok_from".to_string(),
+                "mir_arm_ok".to_string(),
+                "mir_is_identity_variant".to_string(),
+                "mir_nat_ltb".to_string(),
+                "MirArm".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // SECOND SPINE WITNESS: whnf_core_inner's dispatch (tc/whnf.rs:419-582).
+        // Unlike whnf_impl's pre-match this one is WILDCARD-terminated, so the
+        // checkable content is which variants get EXPLICIT arms and, by
+        // complement, how many fall through.
+        //
+        // The 10 explicit arms, canonically sorted (the source's match order is
+        // 4,7,3,1,9,10,18,21,20,19 — Rust match arms over distinct variants are
+        // order-independent, so the SET is the invariant, not the listing order):
+        //   1  FVar            9  Proj              19 CubicalHComp
+        //   3  Const          10  MData             20 CubicalTransp
+        //   4  App            18  CubicalPathApp    21 CubicalCoe
+        //   7  Let
+        // so the wildcard absorbs the other 15 of 25 variants:
+        //   {0,2,5,6,8} u {11..17} u {22,23,24}
+        // — note {0,2,5,6,8} is exactly whnf_impl's identity set above, which is
+        // the consistency one would want between the two dispatches: what the
+        // pre-match early-returns is what the core leaves Done.
+        //
+        // The conjunction pins the arm set EXACTLY: in-range + strictly
+        // increasing (hence distinct) AND a length of 10. Dropping a real arm
+        // still satisfies the ordering check but breaks the length, and adding a
+        // spurious one breaks it the other way — so neither can slip through.
+        let core_variants = {
+            let mut acc = "(ListType.nil Nat)".to_string();
+            for v in [21, 20, 19, 18, 10, 9, 7, 4, 3, 1] {
+                acc = format!("(ListType.cons Nat {v} {acc})", v = nat_src(v));
+            }
+            acc
+        };
+        self.add_definition(SpecDefinition {
+            name: "mir_dispatch_reflection_whnf_core_inner".to_string(),
+            type_src: format!(
+                "Eq Bool (mir_band (mir_variants_ok_from {bound} Nat.zero {core_variants}) \
+                 (mir_nat_eqb (mir_nat_len {core_variants}) {ten})) Bool.true",
+                bound = nat_src(25),
+                ten = nat_src(10),
+            ),
+            value_src: Some("Eq.refl Bool Bool.true".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "SECOND KERNEL-CHECKED DISPATCH WITNESS ON THE SPINE: the encoded explicit-arm ",
+                "set of the real whnf_core_inner (tc/whnf.rs:419-582) is exactly ",
+                "{1 FVar, 3 Const, 4 App, 7 Let, 9 Proj, 10 MData, 18 CubicalPathApp, ",
+                "19 CubicalHComp, 20 CubicalTransp, 21 CubicalCoe} — every variant in range ",
+                "(< 25), strictly increasing (hence distinct), and EXACTLY 10 of them, so the ",
+                "wildcard provably absorbs the remaining 15. The length conjunct is what makes ",
+                "this pin the set rather than merely a sorted sublist: dropping a real arm keeps ",
+                "the ordering valid but breaks the count. Proved by KERNEL COMPUTATION (Eq.refl ",
+                "forces evaluation of mir_variants_ok_from / mir_nat_len / mir_nat_ltb / ",
+                "mir_nat_eqb on the encoding). Structural fact about a SWITCH — no recursion, ",
+                "cache, heartbeat or state; does NOT certify whnf_core_inner's behaviour, and ",
+                "encoder fidelity to the real MIR stays pinned trust-certify-side. Phase-2 ",
+                "second step. DerivedProved, zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "mir_variants_ok_from".to_string(),
+                "mir_nat_len".to_string(),
+                "mir_nat_ltb".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
 
         Ok(())
     }

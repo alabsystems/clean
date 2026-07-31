@@ -6,6 +6,27 @@
 
 use super::*;
 
+/// Reject trust-core evidence whose gate logic has changed since it was made.
+///
+/// Both trust-core artifacts pin `cmd_replacement.rs`, but that file only holds
+/// `mod`/`use` declarations. Without this the submodules that implement the
+/// gates could change freely while a stale artifact still validated as fresh.
+pub(crate) fn validate_trust_core_module_tree_sha(
+    source_sha256: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let expected_sha =
+        sha256_repo_module_tree(TRUST_CORE_RUST_MODULE_DIR).map_err(|error| error.to_string())?;
+    match source_sha256.get(TRUST_CORE_RUST_MODULE_TREE_KEY) {
+        Some(actual_sha) if actual_sha == &expected_sha => Ok(()),
+        Some(actual_sha) => Err(format!(
+            "source_sha256[{TRUST_CORE_RUST_MODULE_TREE_KEY}] {actual_sha} != current {expected_sha}"
+        )),
+        None => Err(format!(
+            "source_sha256 is missing {TRUST_CORE_RUST_MODULE_TREE_KEY}"
+        )),
+    }
+}
+
 pub(crate) fn validate_kernel_soundness_launch_evidence(
     artifact: &KernelSoundnessLaunchEvidenceArtifact,
     baseline: &Lean4BaselineArtifact,
@@ -143,10 +164,11 @@ pub(crate) fn validate_kernel_soundness_launch_evidence(
             None => return Err(format!("source_sha256 is missing {path}")),
         }
     }
+    validate_trust_core_module_tree_sha(&artifact.source_sha256)?;
 
-    if artifact.source_sha256.len() != 3 {
+    if artifact.source_sha256.len() != 4 {
         return Err(format!(
-            "source_sha256 must contain exactly 3 source artifacts, got {}",
+            "source_sha256 must contain exactly 4 source artifacts, got {}",
             artifact.source_sha256.len()
         ));
     }
@@ -300,10 +322,11 @@ pub(crate) fn validate_deny_sorry_launch_evidence(
             None => return Err(format!("source_sha256 is missing {path}")),
         }
     }
+    validate_trust_core_module_tree_sha(&artifact.source_sha256)?;
 
-    if artifact.source_sha256.len() != 2 {
+    if artifact.source_sha256.len() != 3 {
         return Err(format!(
-            "source_sha256 must contain exactly 2 source artifacts, got {}",
+            "source_sha256 must contain exactly 3 source artifacts, got {}",
             artifact.source_sha256.len()
         ));
     }

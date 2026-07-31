@@ -15,7 +15,7 @@ use crate::emit_base_ext::{
     format_ir_type, generate_decl_comment, generate_module_header, validate_declarations, Backend,
     CollisionReport, EmitConfig, EmitTarget, IssueSeverity, OptLevel, OutputStats,
 };
-use crate::ir::{FnId, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, VarId};
+use crate::ir::{FnId, IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
 
 // ── Helpers ──
 
@@ -465,6 +465,7 @@ fn test_validate_duplicate_name() {
         .collect();
     assert!(!errors.is_empty());
     assert!(errors[0].message.contains("duplicate"));
+    assert_eq!(errors[0].decl_name.as_deref(), Some("f"));
 }
 
 #[test]

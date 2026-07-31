@@ -12,6 +12,10 @@ use serde::{Deserialize, Serialize};
 use super::super::ProofCert;
 use super::compress::compress_cert;
 use super::decompress::decompress_cert;
+use super::limits::{
+    decode_certificate_bincode_limited, MAX_COMPRESSED_ARCHIVE_BYTES,
+    MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+};
 use super::types::CompressedCert;
 
 /// Error during byte-level compression/decompression
@@ -30,13 +34,21 @@ pub enum ByteCompressError {
     /// Failed to deserialize from bincode
     #[error("Deserialization error: {0}")]
     DeserializeError(String),
-    /// Data too large to store in archive format (>4GB uncompressed)
+    /// Data exceeds an archive resource limit.
     #[error("Data size {size} exceeds maximum {max} bytes")]
     SizeOverflow {
         /// Actual data size in bytes
         size: usize,
         /// Maximum allowed size in bytes
         max: u32,
+    },
+    /// Archive format version is unsupported.
+    #[error("Unsupported archive version {found}; expected {expected}")]
+    UnsupportedVersion {
+        /// Version found in the archive.
+        found: u8,
+        /// Version supported by this decoder.
+        expected: u8,
     },
 }
 
@@ -47,6 +59,17 @@ fn usize_to_u32(size: usize) -> Result<u32, ByteCompressError> {
         size,
         max: u32::MAX,
     })
+}
+
+fn ensure_size(size: usize, max: usize) -> Result<(), ByteCompressError> {
+    if size <= max {
+        Ok(())
+    } else {
+        Err(ByteCompressError::SizeOverflow {
+            size,
+            max: max as u32,
+        })
+    }
 }
 
 /// A certificate archive with byte-level LZ4 compression.
@@ -66,7 +89,11 @@ pub struct CertArchive {
 
 impl CertArchive {
     /// Archive format version
-    pub const VERSION: u8 = 1;
+    ///
+    /// Version 2 preserves binder multiplicity and let-binding metadata in
+    /// compressed expressions. Version 1 is rejected rather than decoded
+    /// lossily.
+    pub const VERSION: u8 = 2;
 }
 
 /// Statistics about archive compression
@@ -110,10 +137,12 @@ pub fn archive_cert(cert: &ProofCert) -> Result<CertArchive, ByteCompressError> 
 
     let bincode_bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
         .map_err(|e| ByteCompressError::SerializeError(e.to_string()))?;
+    ensure_size(bincode_bytes.len(), MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
 
     let uncompressed_size = usize_to_u32(bincode_bytes.len())?;
 
     let lz4_bytes = lz4_flex::compress_prepend_size(&bincode_bytes);
+    ensure_size(lz4_bytes.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
 
     Ok(CertArchive {
         compressed_data: lz4_bytes,
@@ -124,13 +153,30 @@ pub fn archive_cert(cert: &ProofCert) -> Result<CertArchive, ByteCompressError> 
 
 /// Restore a certificate from an archive.
 pub fn unarchive_cert(archive: &CertArchive) -> Result<ProofCert, ByteCompressError> {
-    let bincode_bytes = lz4_flex::decompress_size_prepended(&archive.compressed_data)
-        .map_err(|e| ByteCompressError::DecompressError(e.to_string()))?;
+    if archive.version != CertArchive::VERSION {
+        return Err(ByteCompressError::UnsupportedVersion {
+            found: archive.version,
+            expected: CertArchive::VERSION,
+        });
+    }
+    ensure_size(archive.compressed_data.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
+    let prefix = archive
+        .compressed_data
+        .get(..4)
+        .ok_or_else(|| ByteCompressError::DecompressError("missing LZ4 size prefix".to_string()))?;
+    let encoded_size = u32::from_le_bytes(prefix.try_into().expect("four-byte LZ4 size prefix"));
+    if encoded_size != archive.uncompressed_size {
+        return Err(ByteCompressError::DecompressError(format!(
+            "declared size {} does not match LZ4 size prefix {encoded_size}",
+            archive.uncompressed_size
+        )));
+    }
+    ensure_size(encoded_size as usize, MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
 
-    let compressed: CompressedCert =
-        bincode::serde::decode_from_slice(&bincode_bytes, bincode::config::standard())
-            .map(|(__v, _)| __v)
-            .map_err(|e| ByteCompressError::DeserializeError(e.to_string()))?;
+    let bincode_bytes = decompress_canonical_lz4(&archive.compressed_data)?;
+
+    let compressed: CompressedCert = decode_certificate_bincode_limited(&bincode_bytes)
+        .map_err(ByteCompressError::DeserializeError)?;
 
     decompress_cert(&compressed).map_err(|e| ByteCompressError::DeserializeError(e.to_string()))
 }
@@ -147,9 +193,11 @@ pub fn archive_cert_with_stats(
         compress_cert(cert).map_err(|e| ByteCompressError::CompressError(e.to_string()))?;
     let structure_bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
         .map_err(|e| ByteCompressError::SerializeError(e.to_string()))?;
+    ensure_size(structure_bytes.len(), MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
     let structure_shared_bytes = structure_bytes.len();
 
     let lz4_bytes = lz4_flex::compress_prepend_size(&structure_bytes);
+    ensure_size(lz4_bytes.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
     let archive_bytes = lz4_bytes.len();
 
     let archive = CertArchive {
@@ -195,6 +243,25 @@ pub fn lz4_compress(data: &[u8]) -> Vec<u8> {
 
 /// Decompress LZ4-compressed bytes (low-level utility).
 pub fn lz4_decompress(data: &[u8]) -> Result<Vec<u8>, ByteCompressError> {
-    lz4_flex::decompress_size_prepended(data)
-        .map_err(|e| ByteCompressError::DecompressError(e.to_string()))
+    ensure_size(data.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
+    let prefix = data
+        .get(..4)
+        .ok_or_else(|| ByteCompressError::DecompressError("missing LZ4 size prefix".to_string()))?;
+    let encoded_size = u32::from_le_bytes(prefix.try_into().expect("four-byte LZ4 size prefix"));
+    ensure_size(encoded_size as usize, MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
+    decompress_canonical_lz4(data)
+}
+
+fn decompress_canonical_lz4(data: &[u8]) -> Result<Vec<u8>, ByteCompressError> {
+    let output = lz4_flex::decompress_size_prepended(data)
+        .map_err(|e| ByteCompressError::DecompressError(e.to_string()))?;
+    // The block API does not report consumed input.  This carrier is produced
+    // by `compress_prepend_size`, so require its deterministic canonical form
+    // to reject appended or alternate trailing block bytes.
+    if lz4_flex::compress_prepend_size(&output) != data {
+        return Err(ByteCompressError::DecompressError(
+            "non-canonical or trailing LZ4 block bytes".to_string(),
+        ));
+    }
+    Ok(output)
 }

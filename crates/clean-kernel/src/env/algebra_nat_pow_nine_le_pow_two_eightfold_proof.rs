@@ -69,7 +69,9 @@ use crate::name::Name;
 /// Cached kernel constants reused across type and value construction.
 struct PowNineConsts {
     nat: Expr,
+    #[cfg(test)]
     nat_succ: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     pow: Expr,
     mul: Expr,
@@ -120,7 +122,9 @@ impl PowNineConsts {
             pow_mul: Expr::const_(Name::from_string("Nat.pow_mul"), vec![]),
             pow_le_pow_left: Expr::const_(Name::from_string("Nat.pow_le_pow_left"), vec![]),
             le_of_ble_eq_true: Expr::const_(Name::from_string("Nat.le_of_ble_eq_true"), vec![]),
+            #[cfg(test)]
             nat_succ,
+            #[cfg(test)]
             nat_zero,
         }
     }

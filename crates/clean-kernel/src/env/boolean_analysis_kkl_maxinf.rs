@@ -220,6 +220,7 @@ impl MaxInfConsts {
             [n.clone(), g],
         )
     }
+    #[cfg(test)]
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.u1.clone()]),

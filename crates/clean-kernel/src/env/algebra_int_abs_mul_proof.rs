@@ -67,13 +67,19 @@
 //! `Declaration::Axiom`, so the domain-axiom closure of each registered
 //! theorem is empty (`ProofQuality::Constructive`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across the helper and the main proof.
+#[cfg(test)]
 struct IntAbsMulConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -95,7 +101,9 @@ struct IntAbsMulConsts {
     nat_abs_neg_of_nat: Expr,
 }
 
+#[cfg(test)]
 impl IntAbsMulConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -126,54 +134,66 @@ impl IntAbsMulConsts {
         }
     }
 
+    #[cfg(test)]
     fn of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_of_nat.clone(), n)
     }
 
+    #[cfg(test)]
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn neg_of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_of_nat.clone(), n)
     }
 
+    #[cfg(test)]
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
 
+    #[cfg(test)]
     fn nat_abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_nat_abs.clone(), x)
     }
 
+    #[cfg(test)]
     fn mul(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_mul.clone(), [x, y])
     }
 
+    #[cfg(test)]
     fn nat_mul(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.nat_mul.clone(), [x, y])
     }
 
     /// `Eq Nat lhs rhs`.
+    #[cfg(test)]
     fn eq_nat(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const_nat.clone(), [self.nat_type.clone(), lhs, rhs])
     }
 
     /// `Eq Int lhs rhs`.
+    #[cfg(test)]
     fn eq_int(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const_nat.clone(), [self.int_type.clone(), lhs, rhs])
     }
 
     /// `@Eq.refl.{1} Int v`.
+    #[cfg(test)]
     fn refl_int(&self, v: Expr) -> Expr {
         Expr::apps(self.eq_refl_int.clone(), [self.int_type.clone(), v])
     }
 
     /// `@Eq.refl.{1} Nat v`.
+    #[cfg(test)]
     fn refl_nat(&self, v: Expr) -> Expr {
         Expr::apps(self.eq_refl_nat.clone(), [self.nat_type.clone(), v])
     }
@@ -181,6 +201,7 @@ impl IntAbsMulConsts {
     /// `@congrArg.{1,1} Nat Int (natAbs (negOfNat k)) k Int.ofNat
     ///    (Int.natAbs_negOfNat k)`
     ///   : `Eq Int (ofNat (natAbs (negOfNat k))) (ofNat k)`.
+    #[cfg(test)]
     fn congr_of_nat_natabs(&self, k: Expr) -> Expr {
         let lemma = Expr::app(self.nat_abs_neg_of_nat.clone(), k.clone());
         Expr::apps(
@@ -202,6 +223,7 @@ impl IntAbsMulConsts {
 // ---------------------------------------------------------------------------
 
 /// `∀ k : Nat, Eq Nat (Int.natAbs (Int.negOfNat k)) k`.
+#[cfg(test)]
 fn build_natabs_negofnat_type(c: &IntAbsMulConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (k_id, k) = b.fresh_local(c.nat_type.clone());
@@ -218,6 +240,7 @@ fn build_natabs_negofnat_type(c: &IntAbsMulConsts) -> Expr {
 ///     (fun (j : Nat) (_ih : ...) => @Eq.refl.{1} Nat (Nat.succ j))
 ///     k
 /// ```
+#[cfg(test)]
 fn build_natabs_negofnat_value(c: &IntAbsMulConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (k_id, k) = b.fresh_local(c.nat_type.clone());
@@ -258,6 +281,7 @@ fn build_natabs_negofnat_value(c: &IntAbsMulConsts) -> Expr {
 // ---------------------------------------------------------------------------
 
 /// `∀ a b : Int, Eq Int (Int.abs (Int.mul a b)) (Int.mul (Int.abs a) (Int.abs b))`.
+#[cfg(test)]
 fn build_abs_mul_type(c: &IntAbsMulConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -272,6 +296,7 @@ fn build_abs_mul_type(c: &IntAbsMulConsts) -> Expr {
 
 /// Outer motive `fun (x : Int) => Eq Int (abs (mul x b)) (mul (abs x) (abs b))`
 /// for the outer `Int.rec` on `a`, with `b` a fixed parent local.
+#[cfg(test)]
 fn build_outer_motive(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, bv: &Expr) -> Expr {
     let mut mb = EnvDeclBuilder::child_of(parent);
     let (x_id, x) = mb.fresh_local(c.int_type.clone());
@@ -284,6 +309,7 @@ fn build_outer_motive(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, bv: &Expr) -
 
 /// Inner motive `fun (y : Int) => Eq Int (abs (mul a' y)) (mul (abs a') (abs y))`
 /// for the inner `Int.rec` on `b`, with `a'` the constructor form of `a`.
+#[cfg(test)]
 fn build_inner_motive(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, a_ctor: &Expr) -> Expr {
     let mut mb = EnvDeclBuilder::child_of(parent);
     let (y_id, y) = mb.fresh_local(c.int_type.clone());
@@ -303,6 +329,7 @@ fn build_inner_motive(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, a_ctor: &Exp
 ///     (fun (n : Nat) => congrArg ofNat (Int.natAbs_negOfNat (Nat.mul m (succ n))))
 ///     b
 /// ```
+#[cfg(test)]
 fn build_ofnat_branch(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, bv: &Expr) -> Expr {
     let mut ob = EnvDeclBuilder::child_of(parent);
     let (m_id, m) = ob.fresh_local(c.nat_type.clone());
@@ -345,6 +372,7 @@ fn build_ofnat_branch(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, bv: &Expr) -
 ///     (fun (n : Nat) => @Eq.refl.{1} Int (ofNat (Nat.mul (succ m) (succ n))))
 ///     b
 /// ```
+#[cfg(test)]
 fn build_negsucc_branch(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, bv: &Expr) -> Expr {
     let mut nb = EnvDeclBuilder::child_of(parent);
     let (m_id, m) = nb.fresh_local(c.nat_type.clone());
@@ -385,6 +413,7 @@ fn build_negsucc_branch(c: &IntAbsMulConsts, parent: &EnvDeclBuilder, bv: &Expr)
 /// λ (a b : Int) =>
 ///   @Int.rec.{0} outer_motive ofnat_branch negsucc_branch a
 /// ```
+#[cfg(test)]
 fn build_abs_mul_value(c: &IntAbsMulConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -404,6 +433,7 @@ fn build_abs_mul_value(c: &IntAbsMulConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register the constructive helper
     /// `Int.natAbs_negOfNat : ∀ k : Nat, Eq Nat (Int.natAbs (Int.negOfNat k)) k`
@@ -419,6 +449,7 @@ impl Environment {
     /// ENSURES: On success, `Int.natAbs_negOfNat` is a `Declaration::Theorem`
     ///          with `proof_quality == Constructive`.
     /// ENSURES: Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_int_natabs_negofnat_proof(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int
@@ -474,6 +505,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Int.abs_mul` is already registered with any
     ///          declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_mul_proof(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

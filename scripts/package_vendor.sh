@@ -40,13 +40,39 @@ cmd_package() {
   local out_dir="${2:-dist}"
 
   if [[ ! -d vendor ]]; then
-    echo "error: vendor/ not found — run: cargo vendor --versioned-dirs vendor/" >&2
+    echo "error: vendor/ not found — fetch a compatible external-source artifact" >&2
+    echo "       (raw cargo vendor is forbidden while it would copy internal AY/NY)" >&2
     exit 1
   fi
   if [[ ! -f "${MANIFEST}" ]]; then
     echo "error: ${MANIFEST} missing — run: python3 scripts/gen_vendor_manifest.py" >&2
     exit 1
   fi
+
+  # Recompute provenance before archiving. This rejects internal AY/NY sources,
+  # extra/missing crates, checksum drift, and a manifest bound to another
+  # Cargo.lock. Never package a tree merely because vendor/ happens to exist.
+  VENDOR_PACKAGE_TMP="$(mktemp)"
+  trap 'rm -f "${VENDOR_PACKAGE_TMP:-}" vendor/.vendor_manifest.json' EXIT
+  python3 scripts/gen_vendor_manifest.py vendor "${VENDOR_PACKAGE_TMP}"
+  python3 - "${MANIFEST}" "${VENDOR_PACKAGE_TMP}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    expected = json.load(handle)
+with open(sys.argv[2], encoding="utf-8") as handle:
+    actual = json.load(handle)
+
+for field in ("cargo_lock_sha256", "summary", "crates"):
+    if expected.get(field) != actual.get(field):
+        print(
+            f"error: vendor provenance field {field!r} is stale or mismatched; "
+            "refresh only through a third-party-only staging flow",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+PY
 
   mkdir -p "${out_dir}"
   local archive="${out_dir}/vendor-sources-v${version}.tar.zst"

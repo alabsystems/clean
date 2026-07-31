@@ -46,14 +46,21 @@
 //!
 //! Part of #3261.
 
+#[cfg(test)]
 use super::nn_verify_abstract_domain_defs as defs;
+#[cfg(test)]
 use super::nn_verify_abstract_domain_ops_defs as ops_defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for abstract domain formalization.
+#[cfg(test)]
 pub(super) struct AbstractDomainConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -94,7 +101,9 @@ pub(super) struct AbstractDomainConsts {
     pub(super) fin: Expr,
 }
 
+#[cfg(test)]
 impl AbstractDomainConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -184,16 +193,19 @@ impl AbstractDomainConsts {
     }
 
     /// Build `NNVerify.NNVec n`.
+    #[cfg(test)]
     pub(super) fn vec_of(&self, n: Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n)
     }
 
     /// Build `NNVerify.IntervalBounds d`.
+    #[cfg(test)]
     pub(super) fn ib_of(&self, d: Expr) -> Expr {
         Expr::app(self.ib.clone(), d)
     }
 
     /// Build `NNVerify.IntervalBounds.contains d b x`.
+    #[cfg(test)]
     pub(super) fn contains(&self, d: &Expr, b: &Expr, x: &Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.ib_contains.clone(), d.clone()), b.clone()),
@@ -202,6 +214,7 @@ impl AbstractDomainConsts {
     }
 
     /// Build `LE.le @Rat instLERat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -216,16 +229,19 @@ impl AbstractDomainConsts {
     }
 
     /// Build `NNVerify.NNMat m n`.
+    #[cfg(test)]
     pub(super) fn mat_of(&self, m: Expr, n: Expr) -> Expr {
         Expr::app(Expr::app(self.nn_mat.clone(), m), n)
     }
 
     /// Build `abstract_domain d`.
+    #[cfg(test)]
     pub(super) fn abs_dom_of(&self, d: Expr) -> Expr {
         Expr::app(self.abstract_domain.clone(), d)
     }
 
     /// Build `Fin d`.
+    #[cfg(test)]
     pub(super) fn fin_of(&self, d: Expr) -> Expr {
         Expr::app(self.fin.clone(), d)
     }
@@ -235,6 +251,7 @@ impl AbstractDomainConsts {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Initialize abstract domain theory declarations.
     ///
@@ -251,6 +268,7 @@ impl Environment {
     /// - `init_nn_verify_types()` for NNVec, IntervalBounds
     /// - `init_rat()` / `init_rat_ord()` for Rat arithmetic and ordering
     /// - `init_eq()` for equality
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_abstract_domain(&mut self) -> Result<(), EnvError> {
         if self.nn_verify_abstract_domain_init {
             return Ok(());
@@ -291,6 +309,7 @@ impl Environment {
 
     // -- Definitions ----------------------------------------------------------
 
+    #[cfg(test)]
     fn register_ad_abstract_domain(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.abstract_domain"),
@@ -299,6 +318,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ad_galois_connection(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.galois_connection"),
@@ -307,6 +327,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ad_abstract_transformer(
         &mut self,
         c: &AbstractDomainConsts,
@@ -318,6 +339,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ad_domain_precision(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.domain_precision"),
@@ -326,6 +348,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_ad_domain_composition(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.domain_composition"),
@@ -341,6 +364,7 @@ impl Environment {
     ///
     /// Generalized membership predicate for any abstract domain element.
     /// For IBP, this reduces to `IntervalBounds.contains`.
+    #[cfg(test)]
     fn register_ad_contains(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.ad_contains"),
@@ -352,6 +376,7 @@ impl Environment {
     /// `NNVerify.AbstractDomain.sound_linear`:
     /// Soundness of an abstract domain through linear layers.
     /// Generalizes T80 (IBP linear soundness).
+    #[cfg(test)]
     fn register_ad_sound_linear(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         let thm_type = ops_defs::build_ad_sound_linear_type(c);
         self.add_decl(Declaration::Axiom {
@@ -364,6 +389,7 @@ impl Environment {
     /// `NNVerify.AbstractDomain.sound_relu`:
     /// Soundness of an abstract domain through ReLU.
     /// Generalizes T81 (IBP ReLU soundness).
+    #[cfg(test)]
     fn register_ad_sound_relu(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         let thm_type = ops_defs::build_ad_sound_relu_type(c);
         self.add_decl(Declaration::Axiom {
@@ -376,6 +402,7 @@ impl Environment {
     /// `NNVerify.AbstractDomain.sound_compose`:
     /// Soundness of an abstract domain through layer composition.
     /// Generalizes T82 (IBP composition).
+    #[cfg(test)]
     fn register_ad_sound_compose(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         let thm_type = ops_defs::build_ad_sound_compose_type(c);
         self.add_decl(Declaration::Axiom {
@@ -390,6 +417,7 @@ impl Environment {
     ///   ad_contains D1 d a x -> ad_contains D2 d a x
     ///
     /// D1 is at least as tight as D2 — anything D1 certifies, D2 also certifies.
+    #[cfg(test)]
     fn register_ad_tighter_than(&mut self, c: &AbstractDomainConsts) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string("NNVerify.AbstractDomain.tighter_than"),

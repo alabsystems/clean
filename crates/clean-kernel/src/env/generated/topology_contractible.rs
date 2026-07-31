@@ -15,6 +15,7 @@ use crate::name::Name;
 pub(crate) const NAMESPACE: &str = "Topology.Contractible";
 pub(crate) const DECL_COUNT: usize = 12;
 
+#[cfg(test)]
 pub(crate) const DECL_NAMES: [&str; DECL_COUNT] = [
     "Topology.Contraction",
     "Topology.Contraction.homotopy",

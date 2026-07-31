@@ -322,7 +322,7 @@ pub(crate) fn try_specialize_value_with_index(
     value: &LetValue,
     config: &SpecConfig,
     bindings: &HashMap<FVarId, &LetValue>,
-    decl_index: &DeclIndex,
+    decl_index: &DeclIndex<'_>,
 ) -> LetValue {
     match value {
         LetValue::Const { name, levels, args } => {

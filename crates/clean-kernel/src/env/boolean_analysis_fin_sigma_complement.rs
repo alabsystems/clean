@@ -129,6 +129,7 @@ impl SigmaComplementConsts {
     pub(super) fn eq_nat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nat.clone(), l, r])
     }
+    #[cfg(test)]
     pub(super) fn app1(&self, f: &Expr, x: Expr) -> Expr {
         Expr::app(f.clone(), x)
     }

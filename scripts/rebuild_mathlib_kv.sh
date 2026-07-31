@@ -289,7 +289,14 @@ if [ "$RUN_GATE" = 1 ]; then
   # The gate takes the heavy global lock's counterpart via a light admission
   # check; release ours first so it does not perma-skip on our own lock.
   rm -rf "${STAMP_LOCK_DIR:-${TMPDIR:-/tmp}/clean-stamp-verified.lock}" 2>/dev/null
-  "$SCRIPT_DIR/kv_ratchet_gate.sh"
+  # --gate is an EXPLICIT request to gate, so a skip is a failure here: the gate
+  # has six skip-green paths (no binary / no corpus / partial corpus / empty
+  # slice / low RAM) and two of them fire routinely. Without this, `--gate` could
+  # report success having measured nothing — precisely the failure mode the
+  # KV_GATE=<verdict> line exists to make impossible. Override with
+  # KV_GATE_REQUIRE_MEASURED=0 if you deliberately want a best-effort run.
+  KV_GATE_REQUIRE_MEASURED="${KV_GATE_REQUIRE_MEASURED:-1}" \
+    "$SCRIPT_DIR/kv_ratchet_gate.sh"
 fi
 
 echo "[rebuild] DONE. Aggregate: $OUT_BASE/AGGREGATE.json"

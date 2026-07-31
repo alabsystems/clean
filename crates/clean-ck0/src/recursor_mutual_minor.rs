@@ -18,7 +18,10 @@ use crate::term::{ConstRef, Term, TermKind};
 
 /// Minor premise type for one constructor `ci` (multi-motive). The conclusion
 /// uses motive `ci.owner_type_idx`; each IH uses motive `ci.field_motive[i]`.
-pub(crate) fn build_mutual_minor_type(cx: &BlockCx, ci: &BlockCtorInfo) -> Result<Term, String> {
+pub(crate) fn build_mutual_minor_type(
+    cx: &BlockCx<'_>,
+    ci: &BlockCtorInfo,
+) -> Result<Term, String> {
     let np = cx.num_params();
     let nt = cx.num_types();
     let num_fields = ci.num_fields;

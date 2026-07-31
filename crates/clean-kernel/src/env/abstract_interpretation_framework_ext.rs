@@ -11,14 +11,20 @@
 //!
 //! Part of #3189.
 
+#[cfg(test)]
 use super::abstract_interpretation_framework_defs2 as fw_defs2;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // -- Zonotope domain instances -------------------------------------------
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_join(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -30,6 +36,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_meet(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -41,6 +48,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_bot(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -52,6 +60,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_top(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -63,6 +72,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_widening(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -76,6 +86,7 @@ impl Environment {
 
     // -- Transfer functions ---------------------------------------------------
 
+    #[cfg(test)]
     pub(super) fn register_aif_linear_transfer(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -87,6 +98,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_relu_transfer(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -98,6 +110,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_layer_compose_transfer(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -111,6 +124,7 @@ impl Environment {
 
     // -- Domain witness and transfer soundness theorems -----------------------
 
+    #[cfg(test)]
     pub(super) fn register_aif_interval_is_abstract_domain(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -133,6 +147,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_is_abstract_domain(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -155,6 +170,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_interval_zonotope_galois(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -177,6 +193,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_zonotope_refines_interval_galois(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -201,6 +218,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_linear_transfer_sound(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -223,6 +241,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn register_aif_relu_transfer_sound(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,

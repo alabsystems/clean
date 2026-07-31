@@ -832,6 +832,7 @@ fn test_detect_mutual_groups_with_mutual_ref() {
     assert_eq!(groups.len(), 1);
     assert!(groups[0].members.contains(&var(1)));
     assert!(groups[0].members.contains(&var(2)));
+    assert!(groups[0].shared_captures.is_empty());
 }
 
 #[test]
@@ -848,6 +849,7 @@ fn test_detect_mutual_groups_one_way_ref_not_mutual() {
     let groups = detect_mutual_groups(&body);
     // v2 captures v1 (a closure var) so it forms a group {v2, v1}
     assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].shared_captures, vec![var(10)]);
 }
 
 // generate_pap_wrapper tests

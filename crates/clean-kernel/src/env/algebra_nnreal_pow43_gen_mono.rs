@@ -52,6 +52,7 @@ struct Pow43GenMonoConsts {
     rat_le: Expr,
     rat_lt: Expr,
     nnreal_le: Expr,
+    #[cfg(test)]
     nnreal_mul: Expr,
     nnreal_of_rat: Expr,
     nnreal_cbrt_gen: Expr,
@@ -74,6 +75,7 @@ impl Pow43GenMonoConsts {
             rat_le: k("Rat.le"),
             rat_lt: k("Rat.lt"),
             nnreal_le: k("NNReal.le"),
+            #[cfg(test)]
             nnreal_mul: k("NNReal.mul"),
             nnreal_of_rat: k("NNReal.ofRat"),
             nnreal_cbrt_gen: k("NNReal.cbrtGen"),

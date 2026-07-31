@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(unsafe_op_in_unsafe_fn)]
-
 //! Object allocation, reset, and reuse for clean runtime.
 
 use std::alloc;
@@ -34,18 +32,21 @@ type LeanClosure = crate::object_model::ClosureObj;
 /// before sharing the object.
 #[must_use]
 pub(crate) unsafe fn alloc_ctor_uninit(tag: u8, num_objs: u8, scalar_sz: u8) -> *mut LeanObj {
-    let layout = ctor_layout(num_objs, scalar_sz);
-    let ptr = alloc::alloc(layout) as *mut LeanObj;
-    if ptr.is_null() {
-        alloc::handle_alloc_error(layout);
+    // SAFETY: The caller upholds this function’s documented Lean-object validity and ownership contract; checked layouts bound every allocation and pointer access below.
+    unsafe {
+        let layout = ctor_layout(num_objs, scalar_sz);
+        let ptr = alloc::alloc(layout) as *mut LeanObj;
+        if ptr.is_null() {
+            alloc::handle_alloc_error(layout);
+        }
+        // SAFETY: ptr is non-null, layout covers ObjHeader + fields + scalar.
+        (*ptr).header.ref_count = AtomicU32::new(0);
+        (*ptr).header.tag = tag;
+        (*ptr).header.kind = ObjKind::Ctor as u8;
+        (*ptr).header.num_objs = num_objs;
+        (*ptr).header.scalar_sz = scalar_sz;
+        ptr
     }
-    // SAFETY: ptr is non-null, layout covers ObjHeader + fields + scalar.
-    (*ptr).header.ref_count = AtomicU32::new(0);
-    (*ptr).header.tag = tag;
-    (*ptr).header.kind = ObjKind::Ctor as u8;
-    (*ptr).header.num_objs = num_objs;
-    (*ptr).header.scalar_sz = scalar_sz;
-    ptr
 }
 
 /// Allocate a constructor with the given object fields (no scalar payload).
@@ -54,18 +55,21 @@ pub(crate) unsafe fn alloc_ctor_uninit(tag: u8, num_objs: u8, scalar_sz: u8) -> 
 /// All elements of `fields` must be valid clean object pointers or tagged scalars.
 #[must_use]
 pub unsafe fn alloc_ctor(tag: u8, fields: &[*mut LeanObj]) -> *mut LeanObj {
-    expect(
-        fields.len() <= u8::MAX as usize,
-        "alloc_ctor: fields.len() exceeds u8::MAX",
-    );
-    let num_objs = fields.len() as u8;
-    let o = alloc_ctor_uninit(tag, num_objs, 0);
-    // SAFETY: allocation has num_objs pointer slots; i < num_objs.
-    let field_ptr = obj_fields_ptr(o);
-    for (i, &f) in fields.iter().enumerate() {
-        field_ptr.add(i).write(f);
+    // SAFETY: The caller upholds this function’s documented Lean-object validity and ownership contract; checked layouts bound every allocation and pointer access below.
+    unsafe {
+        expect(
+            fields.len() <= u8::MAX as usize,
+            "alloc_ctor: fields.len() exceeds u8::MAX",
+        );
+        let num_objs = fields.len() as u8;
+        let o = alloc_ctor_uninit(tag, num_objs, 0);
+        // SAFETY: allocation has num_objs pointer slots; i < num_objs.
+        let field_ptr = obj_fields_ptr(o);
+        for (i, &f) in fields.iter().enumerate() {
+            field_ptr.add(i).write(f);
+        }
+        o
     }
-    o
 }
 
 /// Allocate a closure.
@@ -84,33 +88,36 @@ pub unsafe fn alloc_closure(fun: *mut (), arity: u16, args: &[*mut LeanObj]) -> 
 /// `o` must be a valid clean heap object (Ctor or Closure).
 #[must_use]
 pub unsafe fn reset(o: *mut LeanObj) -> *mut LeanObj {
-    if !is_unique(o) {
-        dec(o);
-        return std::ptr::null_mut();
-    }
-
-    let kind = ObjKind::from_u8((*o).header.kind);
-    match kind {
-        ObjKind::Ctor => {
-            let num_children = obj_child_count(o);
-            let children = obj_child_ptrs(o);
-            for i in 0..num_children {
-                dec(*children.add(i));
-            }
-            o
-        }
-        ObjKind::Closure | ObjKind::Str => {
-            let num_children = obj_child_count(o);
-            let children = obj_child_ptrs(o);
-            for i in 0..num_children {
-                dec(*children.add(i));
-            }
-            alloc::dealloc(o as *mut u8, object_layout(o));
-            std::ptr::null_mut()
-        }
-        ObjKind::Array | ObjKind::Thunk | ObjKind::Task | ObjKind::External => {
+    // SAFETY: The caller upholds this function’s documented Lean-object validity and ownership contract; checked layouts bound every allocation and pointer access below.
+    unsafe {
+        if !is_unique(o) {
             dec(o);
-            std::ptr::null_mut()
+            return std::ptr::null_mut();
+        }
+
+        let kind = ObjKind::from_u8((*o).header.kind);
+        match kind {
+            ObjKind::Ctor => {
+                let num_children = obj_child_count(o);
+                let children = obj_child_ptrs(o);
+                for i in 0..num_children {
+                    dec(*children.add(i));
+                }
+                o
+            }
+            ObjKind::Closure | ObjKind::Str => {
+                let num_children = obj_child_count(o);
+                let children = obj_child_ptrs(o);
+                for i in 0..num_children {
+                    dec(*children.add(i));
+                }
+                alloc::dealloc(o as *mut u8, object_layout(o));
+                std::ptr::null_mut()
+            }
+            ObjKind::Array | ObjKind::Thunk | ObjKind::Task | ObjKind::External => {
+                dec(o);
+                std::ptr::null_mut()
+            }
         }
     }
 }
@@ -128,44 +135,47 @@ pub unsafe fn reuse(
     fields: &[*mut LeanObj],
     scalar_sz: u8,
 ) -> *mut LeanObj {
-    expect(
-        fields.len() <= u8::MAX as usize,
-        "reuse: fields.len() exceeds u8::MAX",
-    );
-    let o = if !reset_slot.is_null() {
-        // SAFETY: reset_slot is a valid, uniquely-owned Ctor from reset().
-        // Closure-to-Ctor reuse is UB (layout mismatch).
+    // SAFETY: The caller upholds this function’s documented Lean-object validity and ownership contract; checked layouts bound every allocation and pointer access below.
+    unsafe {
         expect(
-            (*reset_slot).header.kind == ObjKind::Ctor as u8,
-            "reuse: reset_slot must be a constructor",
+            fields.len() <= u8::MAX as usize,
+            "reuse: fields.len() exceeds u8::MAX",
         );
-        // Same-inductive-type invariant: num_objs and scalar_sz must match.
-        expect(
-            (*reset_slot).header.num_objs as usize == fields.len(),
-            "reuse: field count must match slot capacity",
-        );
-        expect(
-            (*reset_slot).header.scalar_sz == scalar_sz,
-            "reuse: scalar size must match slot layout",
-        );
-        // SAFETY: uniquely owned after reset(). Writing header is safe.
-        (*reset_slot).header.tag = tag;
-        (*reset_slot)
-            .header
-            .ref_count
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        reset_slot
-    } else {
-        alloc_ctor_uninit(tag, fields.len() as u8, scalar_sz)
-    };
-    // SAFETY: `o` is a valid Ctor allocation (either reused slot or fresh
-    // alloc) with at least fields.len() pointer slots.
-    let field_ptr = obj_fields_ptr(o);
-    for (i, &f) in fields.iter().enumerate() {
-        // SAFETY: i < fields.len() == num_objs, within the allocation.
-        field_ptr.add(i).write(f);
+        let o = if !reset_slot.is_null() {
+            // SAFETY: reset_slot is a valid, uniquely-owned Ctor from reset().
+            // Closure-to-Ctor reuse is UB (layout mismatch).
+            expect(
+                (*reset_slot).header.kind == ObjKind::Ctor as u8,
+                "reuse: reset_slot must be a constructor",
+            );
+            // Same-inductive-type invariant: num_objs and scalar_sz must match.
+            expect(
+                (*reset_slot).header.num_objs as usize == fields.len(),
+                "reuse: field count must match slot capacity",
+            );
+            expect(
+                (*reset_slot).header.scalar_sz == scalar_sz,
+                "reuse: scalar size must match slot layout",
+            );
+            // SAFETY: uniquely owned after reset(). Writing header is safe.
+            (*reset_slot).header.tag = tag;
+            (*reset_slot)
+                .header
+                .ref_count
+                .store(0, std::sync::atomic::Ordering::Relaxed);
+            reset_slot
+        } else {
+            alloc_ctor_uninit(tag, fields.len() as u8, scalar_sz)
+        };
+        // SAFETY: `o` is a valid Ctor allocation (either reused slot or fresh
+        // alloc) with at least fields.len() pointer slots.
+        let field_ptr = obj_fields_ptr(o);
+        for (i, &f) in fields.iter().enumerate() {
+            // SAFETY: i < fields.len() == num_objs, within the allocation.
+            field_ptr.add(i).write(f);
+        }
+        o
     }
-    o
 }
 
 #[cfg(test)]

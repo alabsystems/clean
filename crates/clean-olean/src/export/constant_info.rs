@@ -13,6 +13,17 @@ use clean_kernel::name::Name;
 use clean_kernel::quot::{QuotKind, QuotVal};
 
 impl OleanExporter {
+    /// Historical Clean-only `DefinitionSafety` tag order used by the legacy
+    /// four-boxed-field `DefnVal` writer. Genuine Lean uses unsafe=0, safe=1;
+    /// retain this helper solely so already-produced Clean fixtures round-trip.
+    fn legacy_definition_safety_tag(safety: DefinitionSafety) -> u64 {
+        match safety {
+            DefinitionSafety::Safe => 0,
+            DefinitionSafety::Unsafe => 1,
+            DefinitionSafety::Partial => 2,
+        }
+    }
+
     // =========================================================================
     // ConstantInfo Serialization
     // =========================================================================
@@ -56,6 +67,21 @@ impl OleanExporter {
     /// 2. The XxxVal object (with tag 0, N fields) referencing ConstantVal
     /// 3. The outer ConstantInfo wrapper (with the appropriate tag 0-7)
     pub(crate) fn write_constant_info(&mut self, info: &ConstantInfo) -> OleanResult<u64> {
+        self.write_constant_info_with_definition_safety(info, DefinitionSafety::Safe)
+    }
+
+    /// Serialize a constant while preserving an environment-supplied
+    /// `DefinitionSafety` for definition values.
+    ///
+    /// The plain `ConstantInfo` model does not carry this metadata, so
+    /// standalone callers remain explicitly safe-by-construction. Environment
+    /// export uses this entrypoint and derives the mark from its unsafe/partial
+    /// registries.
+    pub(crate) fn write_constant_info_with_definition_safety(
+        &mut self,
+        info: &ConstantInfo,
+        definition_safety: DefinitionSafety,
+    ) -> OleanResult<u64> {
         let name_offset = self.write_kernel_name(&info.name);
         let name_ptr = self.offset_to_ptr(name_offset);
 
@@ -113,9 +139,8 @@ impl OleanExporter {
                     // Definition is the common case. An Axiom carrying a value
                     // is anomalous (axioms have no value); fall through to the
                     // definition encoding so the value is not silently lost.
-                    ConstantKind::Definition | ConstantKind::Axiom => {
-                        Ok(self.write_definition_inner(info, const_val_ptr, value_ptr))
-                    }
+                    ConstantKind::Definition | ConstantKind::Axiom => Ok(self
+                        .write_definition_inner(info, const_val_ptr, value_ptr, definition_safety)),
                 }
             }
         }
@@ -137,8 +162,8 @@ impl OleanExporter {
     /// Name` as the fourth boxed field (+32) and `safety` as an unboxed u8
     /// at +40 in Lean's tag order (unsafe=0, safe=1, partial=2 —
     /// `Declaration.lean:116-118`). The reader
-    /// (`read_definition_safety`) discriminates both layouts by the +32
-    /// word (boxed scalar = legacy Clean, pointer = real Lean), so
+    /// (`read_definition_safety`) discriminates both layouts by their exact
+    /// object-header shape (`cs_sz=0` legacy, `cs_sz=48` real Lean), so
     /// Clean-exported oleans keep round-tripping; converging this writer on
     /// the real Lean layout is deferred until Clean-exported oleans need to
     /// be consumed by Lean itself.
@@ -147,6 +172,7 @@ impl OleanExporter {
         info: &ConstantInfo,
         const_val_ptr: u64,
         value_ptr: u64,
+        safety: DefinitionSafety,
     ) -> u64 {
         let hints_ptr = self.write_reducibility_hints(&info.reducibility);
 
@@ -156,9 +182,7 @@ impl OleanExporter {
         self.write_u64(const_val_ptr);
         self.write_u64(value_ptr);
         self.write_u64(hints_ptr);
-        // safety = safe (the kernel ConstantInfo carries no safety flag, so
-        // exported definitions are always `safe`).
-        self.write_u64(Self::scalar_ptr(DefinitionSafety::Safe.to_tag()));
+        self.write_u64(Self::scalar_ptr(Self::legacy_definition_safety_tag(safety)));
         let val_ptr = self.offset_to_ptr(val_offset);
 
         // ConstantInfo.defnInfo wrapper (tag 1, 1 field)
@@ -240,10 +264,11 @@ impl OleanExporter {
     /// Write a `defnInfo` `ConstantInfo` with an explicit
     /// [`DefinitionSafety`], returning its pointer.
     ///
-    /// The production [`OleanExporter::write_constant_info`] always emits
-    /// `safety = safe` because the kernel `ConstantInfo` carries no safety
-    /// flag. This test-only helper reproduces the exact `DefnVal` layout
-    /// while varying the `safety` scalar so the loader's
+    /// Standalone [`OleanExporter::write_constant_info`] calls default to
+    /// `safety = safe` because a bare kernel `ConstantInfo` carries no safety
+    /// flag. Whole-environment export supplies the environment's mark through
+    /// `write_constant_info_with_definition_safety`. This test-only helper
+    /// reproduces the exact `DefnVal` layout while varying the scalar so the loader's
     /// [`CompactedRegion::read_definition_safety`] can be exercised across
     /// all three tags without a real Lean toolchain.
     #[cfg(test)]
@@ -282,7 +307,7 @@ impl OleanExporter {
         self.write_u64(const_val_ptr);
         self.write_u64(value_ptr);
         self.write_u64(hints_ptr);
-        self.write_u64(Self::scalar_ptr(safety.to_tag()));
+        self.write_u64(Self::scalar_ptr(Self::legacy_definition_safety_tag(safety)));
         let val_ptr = self.offset_to_ptr(val_offset);
 
         // ConstantInfo.defnInfo wrapper (tag 1, 1 field).
@@ -306,25 +331,18 @@ impl OleanExporter {
         use clean_kernel::env::Reducibility;
         match reducibility {
             Reducibility::Opaque | Reducibility::Irreducible => {
-                // opaque (tag 0, 0 fields)
-                self.align8();
-                let offset = self.current_offset();
-                self.write_header(0, 0, 0);
-                self.offset_to_ptr(offset)
+                // Nullary constructors are represented directly as tagged
+                // scalars by Lean's runtime.
+                Self::scalar_ptr(0)
             }
-            Reducibility::Reducible => {
-                // abbrev (tag 1, 0 fields)
-                self.align8();
-                let offset = self.current_offset();
-                self.write_header(1, 0, 0);
-                self.offset_to_ptr(offset)
-            }
+            Reducibility::Reducible => Self::scalar_ptr(1),
             Reducibility::Regular(height) => {
-                // regular (tag 2, 1 scalar field: height)
+                // Real Lean ABI: `regular (height : UInt32)` is a 16-byte
+                // object with no pointer fields and an unboxed UInt32 at +8.
                 self.align8();
                 let offset = self.current_offset();
-                self.write_header(2, 0, 0);
-                self.write_u64(Self::scalar_ptr(*height as u64));
+                self.write_header(2, 0, 16);
+                self.write_u64(u64::from(*height));
                 self.offset_to_ptr(offset)
             }
         }

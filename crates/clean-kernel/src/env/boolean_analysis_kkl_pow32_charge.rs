@@ -75,6 +75,7 @@ struct Pow32ChargeConsts {
     sq_nonneg: Expr,
     mul_nonneg: Expr,
     cube_le: Expr,
+    #[cfg(test)]
     nnreal: Expr,
     nnreal_le: Expr,
     nnreal_of_rat: Expr,
@@ -92,6 +93,7 @@ impl Pow32ChargeConsts {
             sq_nonneg: k("Rat.sq_nonneg"),
             mul_nonneg: k("Rat.mul_nonneg"),
             cube_le: k("BoolAnalysis.cube_le_eps_sq_mul"),
+            #[cfg(test)]
             nnreal: k("NNReal"),
             nnreal_le: k("NNReal.le"),
             nnreal_of_rat: k("NNReal.ofRat"),

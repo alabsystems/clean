@@ -184,6 +184,7 @@ impl IntLeftDistribConsts {
     }
 
     /// `congrArg Int Int a1 a2 f h : Eq Int (f a1) (f a2)`.
+    #[cfg(test)]
     fn congr_arg_int(&self, a1: Expr, a2: Expr, f: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -209,6 +210,7 @@ impl IntLeftDistribConsts {
         )
     }
 
+    #[cfg(test)]
     fn eq_nat(&self, lhs: Expr, rhs: Expr) -> Expr {
         let type1 = Level::succ(Level::zero());
         let eqn = Expr::const_(Name::from_string("Eq"), vec![type1]);

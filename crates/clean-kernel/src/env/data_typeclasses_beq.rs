@@ -534,6 +534,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_beq` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_beq(&self) -> bool {
         self.beq_init
     }

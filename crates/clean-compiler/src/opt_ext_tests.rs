@@ -8,17 +8,14 @@
 
 use std::time::Duration;
 
-use clean_kernel::{BigNat, Expr, FVarId, Literal, Name};
+use clean_kernel::{Expr, FVarId, Name};
 
-use crate::lcnf::{
-    Alt, Arg, Cases, Code, Decl, DeclValue, ExternAttr, FunDecl, LetDecl, LetValue, Param,
-};
+use crate::lcnf::{Alt, Arg, Cases, Code, Decl, DeclValue, ExternAttr, FunDecl, LetDecl, LetValue};
 use crate::opt::OptConfig;
 use crate::opt_ext::{
     batch_code_size, check_pass_order, count_code_nodes, decl_code_size, detect_fixpoint,
     detect_fixpoint_batch, generate_report, known_pass_dependencies, ExtOptConfig, IrSizeTracker,
-    IterationResult, OptExtError, OptPassId, OptimizationStats, PassAggregateStats, PassConfig,
-    PassDependency, PassProfile,
+    OptPassId, OptimizationStats, PassConfig, PassProfile,
 };
 
 // ---------------------------------------------------------------------------

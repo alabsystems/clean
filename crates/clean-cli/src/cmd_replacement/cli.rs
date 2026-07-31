@@ -225,6 +225,10 @@ pub(crate) enum ReplacementError {
     /// The release issue hygiene gate is intentionally fail-closed when not ready.
     #[error("release issue hygiene gate is not ready: {message}")]
     ReleaseIssueHygieneNotReady { message: String },
+    /// The launch gate ran and reported not-ready. Fail-closed means a nonzero
+    /// exit: `clean replacement status && ...` must not proceed on a red gate.
+    #[error("replacement launch gate is not ready: {message}")]
+    LaunchNotReady { message: String },
     /// Reading a replacement evidence report failed.
     #[error("failed to read replacement report {path}: {source}")]
     ReadReport {

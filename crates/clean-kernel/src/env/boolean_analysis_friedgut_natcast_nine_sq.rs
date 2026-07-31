@@ -125,6 +125,7 @@ impl NineSqConsts {
     fn rmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn eq_nat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),
@@ -137,6 +138,7 @@ impl NineSqConsts {
             [self.rat.clone(), a, b],
         )
     }
+    #[cfg(test)]
     fn symm_nat(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.symm"), vec![self.l1.clone()]),

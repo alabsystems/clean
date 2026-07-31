@@ -91,6 +91,7 @@ struct RatMinMaxConsts {
     rat_ble_eq_true_of_le: Expr,
     rat_le_of_ble_eq_true: Expr,
     // Eq machinery.
+    #[cfg(test)]
     eq_c_int: Expr,
     eq_c_bool: Expr,
     eq_c_rat: Expr,
@@ -152,6 +153,7 @@ impl RatMinMaxConsts {
             rat_le_antisymm: Expr::const_(Name::from_string("Rat.le_antisymm"), vec![]),
             rat_ble_eq_true_of_le: Expr::const_(Name::from_string("Rat.ble_eq_true_of_le"), vec![]),
             rat_le_of_ble_eq_true: Expr::const_(Name::from_string("Rat.le_of_ble_eq_true"), vec![]),
+            #[cfg(test)]
             eq_c_int: Expr::const_(Name::from_string("Eq"), vec![t1.clone()]),
             eq_c_bool: Expr::const_(Name::from_string("Eq"), vec![t1.clone()]),
             eq_c_rat: Expr::const_(Name::from_string("Eq"), vec![t1.clone()]),

@@ -114,6 +114,7 @@ struct BridgeLevelConsts {
     mul_le_right: Expr,
     mul_mul_mul_comm: Expr,
     one_mul: Expr,
+    #[cfg(test)]
     eq1: Expr,
     eq_refl1: Expr,
     eq_symm1: Expr,
@@ -155,6 +156,7 @@ impl BridgeLevelConsts {
             mul_le_right: k("Rat.mul_le_mul_of_nonneg_right"),
             mul_mul_mul_comm: k("Rat.mul_mul_mul_comm"),
             one_mul: k("Rat.one_mul"),
+            #[cfg(test)]
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
@@ -179,6 +181,7 @@ impl BridgeLevelConsts {
     fn le(&self, a: Expr, b: Expr) -> Expr {
         self.order.rat_le(a, b)
     }
+    #[cfg(test)]
     fn le0(&self, a: Expr) -> Expr {
         self.le(self.zero(), a)
     }

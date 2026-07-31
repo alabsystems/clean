@@ -374,7 +374,7 @@ fn build_upper_value(c: &UpperConsts, motive_body: &dyn Fn(&Expr, &Expr) -> Expr
 /// from `h1 : x < 1` and `(ofNat 1)·(ofNat 1) ≡ 1` (defeq: `ofNat 1 ≡ Rat.one`
 /// and `Rat.one · Rat.one ≡ Rat.one` is NOT defeq, so use `Rat.mul_one`).
 fn build_base(c: &UpperConsts, parent: &EnvDeclBuilder, x: &Expr, h1: &Expr) -> Expr {
-    let mut b = EnvDeclBuilder::child_of(parent);
+    let b = EnvDeclBuilder::child_of(parent);
     let one = c.rat_one.clone();
     let of1 = c.rofnat(c.nat_lit(1)); // ofNat 1  (≡ Rat.one defeq)
     let lhs = c.rmul(x.clone(), one.clone()); // x · 1   (4^0 ≡ 1)

@@ -88,7 +88,7 @@ impl Environment {
     /// "NNVerify.LayerNorm.effective_generators")).is_some()`.
     ///
     /// Part of #3500 Phase 1 — faithful-carrier foundation.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_effective_generators(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.LayerNorm.effective_generators");
         if self.get_const(&name).is_some() {

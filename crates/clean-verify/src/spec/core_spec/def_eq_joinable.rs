@@ -185,9 +185,14 @@ impl Specification {
 
         // def_eq_joinable: DefEq e1 e2 -> par_strips_witness_cd_star the_red_env
         // e1 e2, by DefEq.rec. Motive: fun (a b : KExpr) (_ : DefEq a b) =>
-        // par_strips_witness_cd_star the_red_env a b. The eleven arms (refl/symm/
-        // trans/beta/app_cong/lam_cong/pi_cong/delta/iota/zeta/let_cong) each
-        // land a common reduct, as described in the module header.
+        // par_strips_witness_cd_star the_red_env a b. The TWELVE arms (refl/symm/
+        // trans/beta/app_cong/lam_cong/pi_cong/delta/iota/zeta/let_cong/proj_cong)
+        // each land a common reduct, as described in the module header.
+        // (This said "eleven" and omitted proj_cong; DefEq has twelve
+        // constructors — typing_def_eq.rs:74-86. The nearby "all nine
+        // constructors" at typing_def_eq.rs:46 is NOT stale by contrast: it
+        // describes the pre-zeta hand-axiomatized era, where 1 type + 9 arms +
+        // the recursor were 11 separate FoundationalRule axioms.)
         self.add_definition(SpecDefinition {
             name: "def_eq_joinable".to_string(),
             type_src: format!(

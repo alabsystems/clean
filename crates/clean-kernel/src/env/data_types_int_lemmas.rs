@@ -9,9 +9,8 @@
 //! - data_types_int_lemmas.rs: Int lemmas + Int/Nat conversion lemmas (this file)
 //! - data_types_nat_lemmas.rs: Nat arithmetic lemmas
 
-use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::env::{EnvError, Environment};
+use crate::expr::Expr;
 use crate::level::Level;
 use crate::name::Name;
 
@@ -93,17 +92,17 @@ impl Environment {
         self.init_eq()?; // Provides Eq
 
         let int_const = Expr::const_(Name::from_string("Int"), vec![]);
-        let int_add = Expr::const_(Name::from_string("Int.add"), vec![]);
-        let int_mul = Expr::const_(Name::from_string("Int.mul"), vec![]);
-        let int_neg = Expr::const_(Name::from_string("Int.neg"), vec![]);
-        let int_of_nat = Expr::const_(Name::from_string("Int.ofNat"), vec![]);
-        let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
-        let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
-        let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+        let _int_add = Expr::const_(Name::from_string("Int.add"), vec![]);
+        let _int_mul = Expr::const_(Name::from_string("Int.mul"), vec![]);
+        let _int_neg = Expr::const_(Name::from_string("Int.neg"), vec![]);
+        let _int_of_nat = Expr::const_(Name::from_string("Int.ofNat"), vec![]);
+        let _nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
+        let _nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+        let _nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
         let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
 
         // Helper: build Eq Int lhs rhs
-        let mk_int_eq =
+        let _mk_int_eq =
             |lhs: Expr, rhs: Expr| Expr::apps(eq_const.clone(), [int_const.clone(), lhs, rhs]);
 
         // Int.subNatNat_zero_right : ∀ m : Nat, Eq (Int.subNatNat m Nat.zero) (Int.ofNat m)

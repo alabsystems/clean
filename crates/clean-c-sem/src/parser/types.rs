@@ -11,7 +11,7 @@ use tree_sitter::Node;
 
 impl CParser {
     /// Parse a type node
-    pub(super) fn parse_type_node(&self, node: Node, source: &str) -> ParseResult<CType> {
+    pub(super) fn parse_type_node(&self, node: Node<'_>, source: &str) -> ParseResult<CType> {
         match node.kind() {
             "primitive_type" => {
                 let text = node_text(node, source);
@@ -97,7 +97,7 @@ impl CParser {
     }
 
     /// Parse struct specifier
-    fn parse_struct_node(&self, node: Node, source: &str) -> ParseResult<CType> {
+    fn parse_struct_node(&self, node: Node<'_>, source: &str) -> ParseResult<CType> {
         let mut name = None;
         let mut fields = Vec::new();
 
@@ -127,7 +127,7 @@ impl CParser {
     }
 
     /// Parse union specifier
-    fn parse_union_node(&self, node: Node, source: &str) -> ParseResult<CType> {
+    fn parse_union_node(&self, node: Node<'_>, source: &str) -> ParseResult<CType> {
         let mut name = None;
         let mut fields = Vec::new();
 
@@ -155,7 +155,7 @@ impl CParser {
     }
 
     /// Parse enum specifier
-    fn parse_enum_node(&self, node: Node, source: &str) -> ParseResult<CType> {
+    fn parse_enum_node(&self, node: Node<'_>, source: &str) -> ParseResult<CType> {
         let mut name = None;
         let mut variants = Vec::new();
         let mut current_value: i64 = 0;
@@ -189,7 +189,7 @@ impl CParser {
     /// Parse an enumerator
     fn parse_enumerator(
         &self,
-        node: Node,
+        node: Node<'_>,
         source: &str,
         default_value: i64,
     ) -> ParseResult<(String, i64)> {
@@ -215,7 +215,7 @@ impl CParser {
     }
 
     /// Parse field declaration list
-    fn parse_field_list(&self, node: Node, source: &str) -> ParseResult<Vec<StructField>> {
+    fn parse_field_list(&self, node: Node<'_>, source: &str) -> ParseResult<Vec<StructField>> {
         let mut fields = Vec::new();
 
         for i in 0..node.child_count() {
@@ -232,7 +232,7 @@ impl CParser {
     }
 
     /// Parse a field declaration
-    fn parse_field_decl(&self, node: Node, source: &str) -> ParseResult<Option<StructField>> {
+    fn parse_field_decl(&self, node: Node<'_>, source: &str) -> ParseResult<Option<StructField>> {
         let mut ty = CType::Void;
         let mut name = String::new();
         // Bit-field width, if a `: width` clause is present. `Some(0)` denotes
@@ -319,7 +319,7 @@ impl CParser {
     }
 
     /// Parse the width of a `bitfield_clause` (`: expr`) into a bit count.
-    fn parse_bitfield_width(&self, node: Node, source: &str) -> ParseResult<usize> {
+    fn parse_bitfield_width(&self, node: Node<'_>, source: &str) -> ParseResult<usize> {
         for i in 0..node.child_count() {
             if let Some(child) = node.child_at(i) {
                 if child.kind() == "number_literal" {

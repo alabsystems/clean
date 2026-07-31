@@ -238,10 +238,31 @@ fn kernel_soundness_launch_evidence_accepts_strict_current_artifact() {
     .expect("current strict kernel soundness artifact should validate");
 }
 
+/// Canned libtest output for the parity lane, shaped like a real passing run.
+const PARITY_LANE_PASSING_OUTPUT: &str = "running 1 test\n\
+     test lean4_parity_check ... ok\n\n\
+     test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+/// The elaborator gate logs its marker to stderr; the runner merges streams.
+const ELAB_LANE_PASSING_OUTPUT: &str = " INFO soundness_gate: running reject lane\n\
+     INFO soundness_gate: PASS\n";
+
+fn passing_lane_runner(argv: &[&'static str]) -> Result<String, String> {
+    if argv == KERNEL_LEAN4_PARITY_LANE_COMMAND {
+        Ok(PARITY_LANE_PASSING_OUTPUT.to_string())
+    } else if argv == ELAB_SOUNDNESS_GATE_LANE_COMMAND {
+        Ok(ELAB_LANE_PASSING_OUTPUT.to_string())
+    } else {
+        Err(format!("unexpected lane command: {argv:?}"))
+    }
+}
+
 #[test]
 fn rust_kernel_soundness_generator_emits_strict_current_artifact() {
-    let artifact = generate_kernel_soundness_launch_evidence("2026-04-27T00:00:00Z")
-        .expect("kernel soundness artifact");
+    let artifact = generate_kernel_soundness_launch_evidence_with(
+        "2026-04-27T00:00:00Z",
+        &passing_lane_runner,
+    )
+    .expect("kernel soundness artifact");
 
     assert_eq!(artifact.generated_by, KERNEL_SOUNDNESS_RUST_GATE_COMMAND);
     assert_eq!(artifact.gate_command, KERNEL_SOUNDNESS_RUST_GATE_COMMAND);
@@ -251,6 +272,275 @@ fn rust_kernel_soundness_generator_emits_strict_current_artifact() {
     assert!(!artifact
         .source_sha256
         .contains_key(KERNEL_SOUNDNESS_GATE_PATH));
+    assert_eq!(artifact.lanes.len(), KERNEL_SOUNDNESS_EXPECTED_LANES.len());
+    assert!(artifact.lanes.iter().all(|lane| lane.status == "passed"
+        && lane.matched_expected_count
+        && lane.matched_expected_output));
+}
+
+/// No row may be Green while the zero-trust gate that backs it is not passed.
+#[test]
+fn informational_row_cannot_outrank_its_own_zero_trust_gate() {
+    let scorecard = InformationalScorecard::current();
+    let backed: Vec<_> = scorecard
+        .rows
+        .iter()
+        .filter(|row| row.zero_trust_gate.is_some())
+        .collect();
+    assert!(
+        !backed.is_empty(),
+        "expected at least one gate-backed row (kernel-differential, fallback-denial)"
+    );
+
+    for row in backed {
+        match row.zero_trust_gate_status {
+            // Unknown verdict: the trust-core report could not be built, which
+            // this never-fail-closed view tolerates.
+            None => {}
+            Some(ZeroTrustGateStatus::Passed) => {}
+            Some(_) => assert_ne!(
+                row.effective_status,
+                ReplacementStatus::Green,
+                "row {} is Green while its gate {:?} reports {:?}",
+                row.id,
+                row.zero_trust_gate,
+                row.zero_trust_gate_status
+            ),
+        }
+    }
+}
+
+#[test]
+fn gate_verdict_reconciliation_only_ever_downgrades() {
+    use ReplacementStatus::{Blocked, Green, PendingEvidence};
+
+    // An unknown or passing gate leaves the row alone.
+    assert_eq!(reconcile_with_gate_verdict(Green, None), Green);
+    assert_eq!(
+        reconcile_with_gate_verdict(Green, Some(ZeroTrustGateStatus::Passed)),
+        Green
+    );
+    // A red gate overrides a Green row -- the defect this fixes.
+    assert_eq!(
+        reconcile_with_gate_verdict(Green, Some(ZeroTrustGateStatus::Blocked)),
+        Blocked
+    );
+    assert_eq!(
+        reconcile_with_gate_verdict(Green, Some(ZeroTrustGateStatus::PendingEvidence)),
+        PendingEvidence
+    );
+    // Never upgrades: a Blocked row stays Blocked under a weaker gate verdict.
+    assert_eq!(
+        reconcile_with_gate_verdict(Blocked, Some(ZeroTrustGateStatus::PendingEvidence)),
+        Blocked
+    );
+}
+
+/// A gate that reports `launch_ready: false` and exits 0 is not a gate --
+/// `clean replacement status && echo READY` would print READY.
+#[test]
+fn fail_closed_status_exits_nonzero_while_launch_is_not_ready() {
+    let Ok(report) = ReplacementStatusReport::current() else {
+        eprintln!("SKIP: replacement status artifacts not present");
+        return;
+    };
+
+    let result = run_status(ReplacementStatusArgs {
+        json: true,
+        informational: false,
+    });
+
+    if report.launch_ready {
+        assert!(
+            result.is_ok(),
+            "a ready gate must exit 0, got {:?}",
+            result.err()
+        );
+        return;
+    }
+
+    let err = result.expect_err("a gate reporting launch_ready=false must not exit 0");
+    assert!(
+        matches!(err, ReplacementError::LaunchNotReady { .. }),
+        "unexpected error: {err}"
+    );
+    // The error must name what is blocking, not just that something is.
+    let rendered = err.to_string();
+    for row in report
+        .rows
+        .iter()
+        .filter(|row| row.effective_status != ReplacementStatus::Green)
+    {
+        assert!(
+            rendered.contains(row.id),
+            "blocking row {} missing from the error: {rendered}",
+            row.id
+        );
+    }
+}
+
+/// The informational survey is explicitly the never-fail-closed view; scripts
+/// and agents rely on it exiting 0 regardless of gate state.
+#[test]
+fn informational_status_stays_exit_zero_when_launch_is_not_ready() {
+    if ReplacementStatusReport::current().is_err() {
+        eprintln!("SKIP: replacement status artifacts not present");
+        return;
+    }
+
+    run_status(ReplacementStatusArgs {
+        json: true,
+        informational: true,
+    })
+    .expect("informational status must never fail closed");
+}
+
+/// Launch evidence must not be writable by a binary built at another commit.
+/// This is the exact failure that let an 11-day-stale binary "measure HEAD".
+#[test]
+fn build_provenance_accepts_only_a_binary_built_at_head() {
+    let sha = "3a1d13dd5cba99cfd097654520e0642c927e49fb";
+    build_provenance_verdict(Some(sha), Some(sha)).expect("matching commit must pass");
+
+    let err = build_provenance_verdict(Some(sha), Some("7ab1c4caa32a36ad09cb0c032cacea6913ab5c3d"))
+        .expect_err("a binary built at a different commit must refuse");
+    assert!(err.contains("built at"), "unexpected: {err}");
+    assert!(err.contains("but HEAD is"), "unexpected: {err}");
+}
+
+/// Every uncertain case fails closed rather than assuming the binary is fresh.
+#[test]
+fn build_provenance_fails_closed_on_unknown_inputs() {
+    let sha = "3a1d13dd5cba99cfd097654520e0642c927e49fb";
+    // No build stamp at all (built outside the build-script path).
+    build_provenance_verdict(None, Some(sha)).expect_err("missing stamp must refuse");
+    // build.rs could not reach git and recorded its documented fallback.
+    build_provenance_verdict(Some("unknown"), Some(sha)).expect_err("unknown stamp must refuse");
+    // git unavailable at run time, so HEAD cannot be confirmed.
+    build_provenance_verdict(Some(sha), None).expect_err("unreadable HEAD must refuse");
+}
+
+/// The gate logic lives in `cmd_replacement/`, not in `cmd_replacement.rs`.
+/// Evidence produced before a change to that logic must not read as fresh.
+#[test]
+fn kernel_soundness_launch_evidence_rejects_stale_module_tree_sha() {
+    let (baseline, expression_count, expressions_sha256) = current_kernel_soundness_inputs();
+    let mut artifact =
+        valid_kernel_soundness_launch_artifact(&baseline, expression_count, &expressions_sha256);
+    artifact.source_sha256.insert(
+        TRUST_CORE_RUST_MODULE_TREE_KEY.to_string(),
+        "stale".to_string(),
+    );
+
+    let err = validate_kernel_soundness_launch_evidence(
+        &artifact,
+        &baseline,
+        expression_count,
+        &expressions_sha256,
+    )
+    .expect_err("evidence pinned to stale gate logic must not validate");
+
+    assert!(
+        err.contains(TRUST_CORE_RUST_MODULE_TREE_KEY),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn kernel_soundness_launch_evidence_rejects_missing_module_tree_sha() {
+    let (baseline, expression_count, expressions_sha256) = current_kernel_soundness_inputs();
+    let mut artifact =
+        valid_kernel_soundness_launch_artifact(&baseline, expression_count, &expressions_sha256);
+    artifact
+        .source_sha256
+        .remove(TRUST_CORE_RUST_MODULE_TREE_KEY);
+
+    let err = validate_kernel_soundness_launch_evidence(
+        &artifact,
+        &baseline,
+        expression_count,
+        &expressions_sha256,
+    )
+    .expect_err("evidence without a gate-logic pin must not validate");
+
+    assert!(err.contains("missing"), "unexpected error: {err}");
+}
+
+/// Every lane except the in-process preflight must be executable. A lane with
+/// no command could only ever be self-declared.
+#[test]
+fn every_executable_kernel_soundness_lane_declares_a_command() {
+    for lane in KERNEL_SOUNDNESS_EXPECTED_LANES {
+        if lane.id == "differential_artifact_preflight" {
+            assert!(lane.command.is_none());
+        } else {
+            assert!(
+                lane.command.is_some_and(|command| !command.is_empty()),
+                "lane {} must declare a non-empty command",
+                lane.id
+            );
+        }
+    }
+}
+
+#[test]
+fn kernel_soundness_generator_fails_closed_when_a_lane_command_fails() {
+    let runner = |argv: &[&'static str]| -> Result<String, String> {
+        if argv == KERNEL_LEAN4_PARITY_LANE_COMMAND {
+            Err("exited with status: 101".to_string())
+        } else {
+            passing_lane_runner(argv)
+        }
+    };
+
+    let err = generate_kernel_soundness_launch_evidence_with("2026-04-27T00:00:00Z", &runner)
+        .expect_err("a failing lane must not yield a passing artifact");
+
+    assert!(
+        err.to_string().contains("kernel_lean4_parity"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn kernel_soundness_generator_fails_closed_on_wrong_test_count() {
+    let runner = |argv: &[&'static str]| -> Result<String, String> {
+        if argv == KERNEL_LEAN4_PARITY_LANE_COMMAND {
+            // Exit status 0, but zero tests actually ran — the exact shape a
+            // filter typo produces, and the reason exit code alone is not
+            // sufficient evidence.
+            Ok("running 0 tests\n\ntest result: ok. 0 passed; 0 failed\n".to_string())
+        } else {
+            passing_lane_runner(argv)
+        }
+    };
+
+    let err = generate_kernel_soundness_launch_evidence_with("2026-04-27T00:00:00Z", &runner)
+        .expect_err("a zero-test run must not count as parity evidence");
+
+    assert!(
+        err.to_string().contains("matched_expected_count=false"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn kernel_soundness_generator_fails_closed_on_missing_expected_output() {
+    let runner = |argv: &[&'static str]| -> Result<String, String> {
+        if argv == ELAB_SOUNDNESS_GATE_LANE_COMMAND {
+            Ok(" INFO soundness_gate: running reject lane\n".to_string())
+        } else {
+            passing_lane_runner(argv)
+        }
+    };
+
+    let err = generate_kernel_soundness_launch_evidence_with("2026-04-27T00:00:00Z", &runner)
+        .expect_err("a missing PASS marker must not yield a passing artifact");
+
+    assert!(
+        err.to_string().contains("matched_expected_output=false"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]

@@ -269,7 +269,7 @@ fn abi_owned_map(decls: &[Decl]) -> BorrowMap {
     for decl in decls {
         map.insert(
             decl.name.clone(),
-            borrow::FnBorrow {
+            FnBorrow {
                 params: vec![Ownership::Owned; decl.params.len()],
             },
         );

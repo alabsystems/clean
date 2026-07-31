@@ -55,10 +55,10 @@ fn test_cert_nat_lit() {
         .infer_type_with_cert(&e)
         .expect("Nat lit should type-check");
     assert_eq!(ty, nat_ty());
-    match cert {
+    match &cert {
         ProofCert::Lit { lit, type_ } => {
-            assert_eq!(lit, Literal::nat(42));
-            assert_eq!(*type_, nat_ty());
+            assert_eq!(lit, &Literal::nat(42));
+            assert_eq!(type_.as_ref(), &nat_ty());
         }
         other => panic!("expected Lit cert, got {:?}", other),
     }
@@ -73,10 +73,10 @@ fn test_cert_string_lit() {
         .infer_type_with_cert(&e)
         .expect("String lit should type-check");
     assert_eq!(ty, Expr::const_str("String"));
-    match cert {
+    match &cert {
         ProofCert::Lit { lit, type_ } => {
-            assert_eq!(lit, Literal::String("hello".into()));
-            assert_eq!(*type_, Expr::const_str("String"));
+            assert_eq!(lit, &Literal::String("hello".into()));
+            assert_eq!(type_.as_ref(), &Expr::const_str("String"));
         }
         other => panic!("expected Lit cert, got {:?}", other),
     }
@@ -125,15 +125,15 @@ fn test_cert_const_with_axiom() {
         .infer_type_with_cert(&e)
         .expect("const should type-check");
     assert_eq!(result_ty, ty);
-    match cert {
+    match &cert {
         ProofCert::Const {
             name: cert_name,
             levels,
             type_,
         } => {
-            assert_eq!(cert_name, name);
+            assert_eq!(cert_name, &name);
             assert!(levels.is_empty());
-            assert_eq!(*type_, ty);
+            assert_eq!(type_.as_ref(), &ty);
         }
         other => panic!("expected Const cert, got {:?}", other),
     }
@@ -168,16 +168,16 @@ fn test_cert_pi_prop_to_prop() {
         ExprKind::Sort(Level::succ(Level::zero())),
         "(Prop → Prop) : Sort(1)"
     );
-    match cert {
+    match &cert {
         ProofCert::Pi {
             binder_info,
             arg_level,
             body_level,
             ..
         } => {
-            assert_eq!(binder_info, BinderInfo::Default);
-            assert_eq!(arg_level, Level::succ(Level::zero()));
-            assert_eq!(body_level, Level::succ(Level::zero()));
+            assert_eq!(*binder_info, BinderInfo::Default);
+            assert_eq!(arg_level, &Level::succ(Level::zero()));
+            assert_eq!(body_level, &Level::succ(Level::zero()));
         }
         other => panic!("expected Pi cert, got {:?}", other),
     }
@@ -193,19 +193,22 @@ fn test_cert_mdata_transparent() {
         .infer_type_with_cert(&e)
         .expect("MData should type-check");
     assert_eq!(ty.kind, ExprKind::Sort(Level::succ(Level::zero())));
-    match cert {
+    match &cert {
         ProofCert::MData {
             inner_cert,
             result_type,
             ..
         } => {
             assert_eq!(
-                *inner_cert,
-                ProofCert::Sort {
+                inner_cert.as_ref(),
+                &ProofCert::Sort {
                     level: Level::zero()
                 }
             );
-            assert_eq!(result_type.kind, ExprKind::Sort(Level::succ(Level::zero())));
+            assert_eq!(
+                result_type.as_ref().kind,
+                ExprKind::Sort(Level::succ(Level::zero()))
+            );
         }
         other => panic!("expected MData cert, got {:?}", other),
     }
@@ -251,10 +254,10 @@ fn test_cert_known_fvar_returns_type_and_cert() {
         .infer_type_with_cert(&e)
         .expect("known FVar should type-check");
     assert_eq!(ty, nat, "FVar type should be Nat");
-    match cert {
+    match &cert {
         ProofCert::FVar { id, type_ } => {
-            assert_eq!(id, fvar_id, "cert FVar id should match");
-            assert_eq!(*type_, nat, "cert type should be Nat");
+            assert_eq!(*id, fvar_id, "cert FVar id should match");
+            assert_eq!(type_.as_ref(), &nat, "cert type should be Nat");
         }
         other => panic!("expected FVar cert, got {:?}", other),
     }

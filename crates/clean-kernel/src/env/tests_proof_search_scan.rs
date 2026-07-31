@@ -236,7 +236,7 @@ struct FullScanResults {
 /// type-matching declarations, excluding self and transitive axiom dependencies.
 fn try_lookup_for_axiom(
     env: &Environment,
-    tc: &TypeChecker,
+    tc: &TypeChecker<'_>,
     name: &Name,
     type_: &Expr,
 ) -> Option<(String, ConstantKind)> {

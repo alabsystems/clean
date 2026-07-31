@@ -123,7 +123,7 @@ impl VerificationArena {
     ///
     /// ENSURES: After call, `get_result(i).is_some()` for all `i < len()`
     /// ENSURES: `stats().wall_time_ns > 0`
-    pub fn verify_all(&mut self, verifier: &BatchVerifier) {
+    pub fn verify_all(&mut self, verifier: &BatchVerifier<'_>) {
         let wall_start = std::time::Instant::now();
         let results = verifier.batch_check(&self.exprs);
         self.last_wall_time_ns = Some(wall_start.elapsed().as_nanos() as u64);

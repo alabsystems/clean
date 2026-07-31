@@ -39,6 +39,7 @@ struct Rung3aConsts {
     subset_sum: Expr,
     subset_sum_congr: Expr,
     fin: Expr,
+    #[cfg(test)]
     fin_sum: Expr,
     fin_sum_mul_sum: Expr,
     fin_sum_swap: Expr,
@@ -66,6 +67,7 @@ impl Rung3aConsts {
                 vec![],
             ),
             fin: Expr::const_(Name::from_string("Fin"), vec![]),
+            #[cfg(test)]
             fin_sum: Expr::const_(Name::from_string("Fin.sum"), vec![]),
             fin_sum_mul_sum: Expr::const_(Name::from_string("Fin.sum_mul_sum"), vec![]),
             fin_sum_swap: Expr::const_(Name::from_string("Fin.sum_swap"), vec![]),

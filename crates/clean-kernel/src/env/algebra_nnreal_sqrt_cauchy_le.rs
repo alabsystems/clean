@@ -49,12 +49,15 @@ pub(crate) struct LeConsts {
     nat_add: Expr,
     nat_pow: Expr,
     nat_le: Expr,
+    #[cfg(test)]
     nat_le_refl: Expr,
+    #[cfg(test)]
     nat_le_step: Expr,
     nat_le_rec: Expr,
     nat_rec_prop: Expr,
     rat: Expr,
     rat_add: Expr,
+    #[cfg(test)]
     rat_mul: Expr,
     rat_inv: Expr,
     rat_le: Expr,
@@ -89,12 +92,15 @@ impl LeConsts {
             nat_add: k("Nat.add"),
             nat_pow: k("Nat.pow"),
             nat_le: k("Nat.le"),
+            #[cfg(test)]
             nat_le_refl: k("Nat.le.refl"),
+            #[cfg(test)]
             nat_le_step: k("Nat.le.step"),
             nat_le_rec: k("Nat.le.rec"),
             nat_rec_prop: Expr::const_(Name::from_string("Nat.rec"), vec![l0]),
             rat: k("Rat"),
             rat_add: k("Rat.add"),
+            #[cfg(test)]
             rat_mul: k("Rat.mul"),
             rat_inv: k("Rat.inv"),
             rat_le: k("Rat.le"),

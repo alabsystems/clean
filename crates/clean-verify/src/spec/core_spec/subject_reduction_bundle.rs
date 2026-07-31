@@ -4,7 +4,8 @@
 
 //! Subject reduction for the context-indexed declarative-with-conversion
 //! judgment `TypingCtxConv` (Aristotle port, strategy guide
-//! `/tmp/ari-subjred/project_aristotle/SubjRed.lean`, namespace
+//! `scratch/aristotle-harvest/aristotle-subjred/aristotle-subjred_aristotle/
+//! SubjRed.lean`, namespace
 //! `CleanSubjectReduction`, [propext, Quot.sound]-only closure there; explicit
 //! zero-axiom terms here).
 //!
@@ -34,7 +35,8 @@
 //!    `subject_reduction_ctx`.
 //!
 //! LET INCREMENT (let promotion, task #28; strategy guide
-//! `scratch/aristotle-subjred-zeta/SubjRedZeta.lean`): `KExpr.let_` is a
+//! `scratch/aristotle-harvest/aristotle-subjred-zeta/
+//! aristotle-subjred-zeta_aristotle/SubjRedZeta.lean`): `KExpr.let_` is a
 //! genuine 7th constructor, `beta_reduces` gained `zeta`/`let_ty`/`let_val`/
 //! `let_body` (the old bundled alias arm is gone), `DefEq` gained `zeta` +
 //! ternary `let_cong`, and `TypingCtxConv` gains the standard DEPENDENT let

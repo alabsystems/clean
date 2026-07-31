@@ -122,6 +122,7 @@ impl CombineConsts {
     pub(super) fn le(&self, a: Expr, b: Expr) -> Expr {
         self.o.rat_le(a, b)
     }
+    #[cfg(test)]
     pub(super) fn eq(&self, a: Expr, b: Expr) -> Expr {
         self.o.rat_eq(a, b)
     }

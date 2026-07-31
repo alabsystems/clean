@@ -160,6 +160,7 @@ impl<'a> LcnfContext<'a> {
     }
 
     /// Take accumulated let-bindings.
+    #[cfg(test)]
     pub(crate) fn take_lets(&mut self) -> Vec<LetDecl> {
         self.take_pending()
             .into_iter()

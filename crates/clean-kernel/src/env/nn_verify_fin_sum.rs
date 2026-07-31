@@ -612,6 +612,7 @@ impl Environment {
     /// `Fin.sum_le : forall (n : Nat) (f g : Fin n -> Rat),
     ///     (forall (i : Fin n), LE.le @Rat instLERat (f i) (g i)) ->
     ///     LE.le @Rat instLERat (Fin.sum n f) (Fin.sum n g)`
+    #[cfg(test)]
     fn register_fin_sum_le(&mut self, c: &FinSumConsts) -> Result<(), EnvError> {
         let sum_le_type = {
             let mut b = EnvDeclBuilder::new();
@@ -653,6 +654,7 @@ impl Environment {
 
     /// `Fin.sum_add : forall (n : Nat) (f g : Fin n -> Rat),
     ///     Eq @Rat (Fin.sum n (fun i => Rat.add (f i) (g i))) (Rat.add (Fin.sum n f) (Fin.sum n g))`
+    #[cfg(test)]
     fn register_fin_sum_add(&mut self, c: &FinSumConsts) -> Result<(), EnvError> {
         let sum_add_type = {
             let mut b = EnvDeclBuilder::new();
@@ -700,6 +702,7 @@ impl Environment {
     ///
     /// If every summand is non-negative, the total sum is non-negative.
     /// This is T06 in the NN verification proof plan.
+    #[cfg(test)]
     fn register_fin_sum_nonneg(&mut self, c: &FinSumConsts) -> Result<(), EnvError> {
         let sum_nonneg_type = {
             let mut b = EnvDeclBuilder::new();

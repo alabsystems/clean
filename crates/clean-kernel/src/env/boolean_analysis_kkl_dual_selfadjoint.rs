@@ -45,13 +45,19 @@
 //! `Constructive` with empty admitted-axiom closure, so this identity is too. No
 //! axiom is added or removed. Idempotent.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Atoms for the self-adjointness identity.
+#[cfg(test)]
 struct SelfAdjConsts {
     nat: Expr,
     rat: Expr,
@@ -67,7 +73,9 @@ struct SelfAdjConsts {
     eq_trans: Expr,
 }
 
+#[cfg(test)]
 impl SelfAdjConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         Self {
@@ -92,31 +100,39 @@ impl SelfAdjConsts {
         }
     }
 
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn ssum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
+    #[cfg(test)]
     fn density(&self, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         Expr::apps(
             self.noise_density.clone(),
             [rho.clone(), n.clone(), x.clone(), y.clone()],
         )
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
     /// `@congrArg.{1,1} Rat Rat from to motive h : motive from = motive to`.
+    #[cfg(test)]
     fn congr_rat(&self, from: Expr, to: Expr, motive: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -124,6 +140,7 @@ impl SelfAdjConsts {
         )
     }
     /// `subsetSum_congr n G H hyp : subsetSum n G = subsetSum n H`.
+    #[cfg(test)]
     fn ssum_congr(&self, n: &Expr, g: &Expr, h: &Expr, hyp: Expr) -> Expr {
         Expr::apps(
             self.subset_sum_congr.clone(),
@@ -131,6 +148,7 @@ impl SelfAdjConsts {
         )
     }
     /// `noiseDensityW_symm ρ n x y : noiseDensityW ρ n x y = noiseDensityW ρ n y x`.
+    #[cfg(test)]
     fn dens_symm(&self, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         Expr::apps(
             self.noise_density_symm.clone(),
@@ -141,6 +159,7 @@ impl SelfAdjConsts {
     /// The LHS inner integrand `fun y => (g y · h x)·W(x,y)` (⟨T_ρ g, h⟩ form,
     /// `x` free): the `y` is summed, so the coefficient reads `g` at the summed
     /// slot `y` and `h` at the free slot `x`.
+    #[cfg(test)]
     fn lhs_x_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -161,6 +180,7 @@ impl SelfAdjConsts {
         xb.finish_child(xb.mk_lam(y_id, BinderInfo::Default, hcp, body))
     }
     /// The LHS outer integrand `fun x => Σ_y (g y · h x)·W(x,y)`.
+    #[cfg(test)]
     fn lhs_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, g: &Expr, h: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -169,6 +189,7 @@ impl SelfAdjConsts {
         b.finish_child(b.mk_lam(x_id, BinderInfo::Default, hcp, inner))
     }
     /// The RHS outer integrand `fun x => Σ_y (g x · h y)·W(x,y)` (⟨g, T_ρ h⟩).
+    #[cfg(test)]
     fn rhs_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, g: &Expr, h: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -188,6 +209,7 @@ impl SelfAdjConsts {
     /// The post-swap MID outer integrand `fun x => Σ_y (g x · h y)·W(y,x)` (the
     /// `subsetSum_swap` RHS with binders renamed to match `rhs_fn` modulo the
     /// kernel argument order `W(y,x)`).
+    #[cfg(test)]
     fn mid_fn(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, g: &Expr, h: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -206,6 +228,7 @@ impl SelfAdjConsts {
     }
     /// The 2-arg swap kernel `fun x y => (g y · h x)·W(x,y)` for `subsetSum_swap`.
     /// `subsetSum_swap n F : Σ_x Σ_y F x y = Σ_y Σ_x F x y`.
+    #[cfg(test)]
     fn swap_kernel(
         &self,
         parent: &EnvDeclBuilder,
@@ -232,6 +255,7 @@ impl SelfAdjConsts {
 }
 
 /// `∀ (ρ : Rat) (n : Nat) (g h : HCPoint n → Rat), ⟨T_ρ g, h⟩ = ⟨g, T_ρ h⟩`.
+#[cfg(test)]
 fn build_type(c: &SelfAdjConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat.clone());
@@ -250,6 +274,7 @@ fn build_type(c: &SelfAdjConsts) -> Expr {
 }
 
 /// Body: `λ ρ n g h => Eq.trans LHS MID RHS swap symm_congr`.
+#[cfg(test)]
 fn build_value(c: &SelfAdjConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat.clone());
@@ -346,12 +371,14 @@ fn build_value(c: &SelfAdjConsts) -> Expr {
     b.finish(b.mk_lam(rho_id, BinderInfo::Default, c.rat.clone(), val))
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.noise_pairing_self_adjoint` — the self-adjointness
     /// of the noise operator as a bilinear `subsetSum` inner-product identity
     /// `⟨T_ρ g, h⟩ = ⟨g, T_ρ h⟩`. `subsetSum_swap` (Fubini) chained with the
     /// kernel symmetry `noiseDensityW_symm` under a double `subsetSum_congr`.
     /// Kernel-checked, `Constructive`, empty admitted-axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_noise_pairing_self_adjoint(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.noise_pairing_self_adjoint");
         if self.get_const(&name).is_some() {

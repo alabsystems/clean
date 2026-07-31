@@ -122,7 +122,7 @@ fn build_bool_xor_cancel(c: &XiConsts) -> (Expr, Expr) {
 
         // For a fixed concrete `tv`, recurse on `s`; both leaves are ground rfl.
         let inner_rec = |tv: Expr, parent: &EnvDeclBuilder| {
-            let mut d = EnvDeclBuilder::child_of(parent);
+            let d = EnvDeclBuilder::child_of(parent);
             // motive_s : fun (s' : Bool) => goal tv s'
             let motive_s = {
                 let mut e = EnvDeclBuilder::child_of(&d);

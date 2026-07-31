@@ -2,8 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(unsafe_op_in_unsafe_fn)]
-
 //! Boxing, unboxing, string operations, and runtime lifecycle.
 
 use std::mem::size_of;
@@ -22,13 +20,16 @@ use crate::object_model::alloc_string_bytes;
 /// The returned object must be managed via inc/dec.
 #[must_use]
 pub unsafe fn box_uint64(n: u64) -> *mut LeanObj {
-    let o = alloc_ctor_uninit(0, 0, size_of::<u64>() as u8);
-    // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=8.
-    // ctor_scalar_ptr returns a pointer to the 8-byte scalar region.
-    // Writing a u64 (8 bytes) is within the allocated scalar region.
-    let scalar = ctor_scalar_ptr(o);
-    (scalar as *mut u64).write(n);
-    o
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        let o = alloc_ctor_uninit(0, 0, size_of::<u64>() as u8);
+        // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=8.
+        // ctor_scalar_ptr returns a pointer to the 8-byte scalar region.
+        // Writing a u64 (8 bytes) is within the allocated scalar region.
+        let scalar = ctor_scalar_ptr(o);
+        (scalar as *mut u64).write(n);
+        o
+    }
 }
 
 /// Unbox a u64 from a tagged scalar or heap object.
@@ -43,13 +44,16 @@ pub unsafe fn box_uint64(n: u64) -> *mut LeanObj {
 /// `o` must be a boxed u64 (tagged scalar or heap object with scalar_sz=8).
 #[must_use]
 pub unsafe fn unbox_uint64(o: *const LeanObj) -> u64 {
-    if is_scalar(o) {
-        unbox_val(o) as u64
-    } else {
-        // SAFETY: caller guarantees `o` is a boxed u64 (scalar_sz=8).
-        // ctor_scalar_ptr returns a pointer to the 8-byte scalar region.
-        let scalar = ctor_scalar_ptr(o as *mut LeanObj);
-        (scalar as *const u64).read()
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        if is_scalar(o) {
+            unbox_val(o) as u64
+        } else {
+            // SAFETY: caller guarantees `o` is a boxed u64 (scalar_sz=8).
+            // ctor_scalar_ptr returns a pointer to the 8-byte scalar region.
+            let scalar = ctor_scalar_ptr(o as *mut LeanObj);
+            (scalar as *const u64).read()
+        }
     }
 }
 
@@ -59,15 +63,18 @@ pub unsafe fn unbox_uint64(o: *const LeanObj) -> u64 {
 /// If heap-allocated, the returned object must be managed via inc/dec.
 #[must_use]
 pub unsafe fn box_uint32(n: u32) -> *mut LeanObj {
-    if (n as usize) <= MAX_SMALL {
-        box_val(n as usize)
-    } else {
-        let o = alloc_ctor_uninit(0, 0, size_of::<u32>() as u8);
-        // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=4.
-        // Writing a u32 (4 bytes) fits within the scalar region.
-        let scalar = ctor_scalar_ptr(o);
-        (scalar as *mut u32).write(n);
-        o
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        if (n as usize) <= MAX_SMALL {
+            box_val(n as usize)
+        } else {
+            let o = alloc_ctor_uninit(0, 0, size_of::<u32>() as u8);
+            // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=4.
+            // Writing a u32 (4 bytes) fits within the scalar region.
+            let scalar = ctor_scalar_ptr(o);
+            (scalar as *mut u32).write(n);
+            o
+        }
     }
 }
 
@@ -77,12 +84,15 @@ pub unsafe fn box_uint32(n: u32) -> *mut LeanObj {
 /// `o` must be a boxed u32 (tagged scalar or heap-allocated).
 #[must_use]
 pub unsafe fn unbox_uint32(o: *const LeanObj) -> u32 {
-    if is_scalar(o) {
-        unbox_val(o) as u32
-    } else {
-        // SAFETY: caller guarantees `o` is a boxed u32 (scalar_sz=4).
-        let scalar = ctor_scalar_ptr(o as *mut LeanObj);
-        (scalar as *const u32).read()
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        if is_scalar(o) {
+            unbox_val(o) as u32
+        } else {
+            // SAFETY: caller guarantees `o` is a boxed u32 (scalar_sz=4).
+            let scalar = ctor_scalar_ptr(o as *mut LeanObj);
+            (scalar as *const u32).read()
+        }
     }
 }
 
@@ -92,12 +102,15 @@ pub unsafe fn unbox_uint32(o: *const LeanObj) -> u32 {
 /// The returned object must be managed via inc/dec.
 #[must_use]
 pub unsafe fn box_float32(f: f32) -> *mut LeanObj {
-    let o = alloc_ctor_uninit(0, 0, size_of::<f32>() as u8);
-    // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=4.
-    // Writing an f32 (4 bytes) fits within the scalar region.
-    let scalar = ctor_scalar_ptr(o);
-    (scalar as *mut f32).write(f);
-    o
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        let o = alloc_ctor_uninit(0, 0, size_of::<f32>() as u8);
+        // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=4.
+        // Writing an f32 (4 bytes) fits within the scalar region.
+        let scalar = ctor_scalar_ptr(o);
+        (scalar as *mut f32).write(f);
+        o
+    }
 }
 
 /// Unbox an f32.
@@ -106,10 +119,13 @@ pub unsafe fn box_float32(f: f32) -> *mut LeanObj {
 /// `o` must be a boxed f32 object (kind=Ctor, num_objs=0, scalar_sz=4).
 #[must_use]
 pub unsafe fn unbox_float32(o: *const LeanObj) -> f32 {
-    // SAFETY: caller guarantees `o` is a boxed f32 (scalar_sz=4).
-    // ctor_scalar_ptr returns a pointer to the 4-byte scalar region.
-    let scalar = ctor_scalar_ptr(o as *mut LeanObj);
-    (scalar as *const f32).read()
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        // SAFETY: caller guarantees `o` is a boxed f32 (scalar_sz=4).
+        // ctor_scalar_ptr returns a pointer to the 4-byte scalar region.
+        let scalar = ctor_scalar_ptr(o as *mut LeanObj);
+        (scalar as *const f32).read()
+    }
 }
 
 /// Box a f64 (always allocates -- no tagged pointer for floats).
@@ -118,12 +134,15 @@ pub unsafe fn unbox_float32(o: *const LeanObj) -> f32 {
 /// The returned object must be managed via inc/dec.
 #[must_use]
 pub unsafe fn box_float(f: f64) -> *mut LeanObj {
-    let o = alloc_ctor_uninit(0, 0, size_of::<f64>() as u8);
-    // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=8.
-    // Writing an f64 (8 bytes) fits within the scalar region.
-    let scalar = ctor_scalar_ptr(o);
-    (scalar as *mut f64).write(f);
-    o
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        let o = alloc_ctor_uninit(0, 0, size_of::<f64>() as u8);
+        // SAFETY: alloc_ctor_uninit returned a valid Ctor with scalar_sz=8.
+        // Writing an f64 (8 bytes) fits within the scalar region.
+        let scalar = ctor_scalar_ptr(o);
+        (scalar as *mut f64).write(f);
+        o
+    }
 }
 
 /// Unbox a f64.
@@ -132,9 +151,12 @@ pub unsafe fn box_float(f: f64) -> *mut LeanObj {
 /// `o` must be a boxed f64 object.
 #[must_use]
 pub unsafe fn unbox_float(o: *const LeanObj) -> f64 {
-    // SAFETY: caller guarantees `o` is a boxed f64 (scalar_sz=8).
-    let scalar = ctor_scalar_ptr(o as *mut LeanObj);
-    (scalar as *const f64).read()
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        // SAFETY: caller guarantees `o` is a boxed f64 (scalar_sz=8).
+        let scalar = ctor_scalar_ptr(o as *mut LeanObj);
+        (scalar as *const f64).read()
+    }
 }
 
 // ============================================================================
@@ -158,9 +180,12 @@ pub unsafe fn mk_string(s: &[u8]) -> *mut LeanObj {
 /// The returned object must be managed via inc/dec.
 #[must_use]
 pub unsafe fn mk_string_from_str(s: &str) -> *mut LeanObj {
-    // SAFETY: &str guarantees valid UTF-8; as_bytes() is a zero-cost view.
-    // Safety of the allocation is delegated to mk_string.
-    mk_string(s.as_bytes())
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        // SAFETY: &str guarantees valid UTF-8; as_bytes() is a zero-cost view.
+        // Safety of the allocation is delegated to mk_string.
+        mk_string(s.as_bytes())
+    }
 }
 
 /// Get the byte length of a string object.
@@ -169,10 +194,13 @@ pub unsafe fn mk_string_from_str(s: &str) -> *mut LeanObj {
 /// `o` must be a valid String object.
 #[must_use]
 pub unsafe fn string_len(o: *const LeanObj) -> usize {
-    // SAFETY: caller guarantees `o` is a valid String object (kind=String).
-    // The cast to LeanString is valid because the allocation was created
-    // with string_layout and the header kind field confirms String.
-    (*(o as *const LeanString)).len
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        // SAFETY: caller guarantees `o` is a valid String object (kind=String).
+        // The cast to LeanString is valid because the allocation was created
+        // with string_layout and the header kind field confirms String.
+        (*(o as *const LeanString)).len
+    }
 }
 
 /// Get a pointer to the string's UTF-8 data (null-terminated).
@@ -182,10 +210,13 @@ pub unsafe fn string_len(o: *const LeanObj) -> usize {
 /// as long as `o` is alive.
 #[must_use]
 pub unsafe fn string_data(o: *const LeanObj) -> *const u8 {
-    // SAFETY: caller guarantees `o` is a valid String object. The data
-    // region starts immediately after the LeanString struct, within
-    // the same allocation.
-    (o as *const u8).add(size_of::<LeanString>())
+    // SAFETY: The caller provides values encoded by the documented Lean scalar/object ABI; the body checks the representation before reading or writing its payload.
+    unsafe {
+        // SAFETY: caller guarantees `o` is a valid String object. The data
+        // region starts immediately after the LeanString struct, within
+        // the same allocation.
+        (o as *const u8).add(size_of::<LeanString>())
+    }
 }
 
 // ============================================================================

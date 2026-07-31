@@ -59,7 +59,7 @@ impl<'env> CertVerifier<'env> {
         let lifted_ctx_type = ctx_type.lift(lift_amount);
 
         // Verify the certificate's expected_type matches the lifted context type
-        // Use def_eq_impl since we're inside verify_impl (avoid redundant stack_safe)
+        // Use def_eq_impl since we're inside certificate verification (avoid redundant stack_safe)
         if !self.def_eq_impl(expected_type, &lifted_ctx_type) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_type.clone()),
@@ -82,7 +82,7 @@ impl<'env> CertVerifier<'env> {
         }
         // Verify FVar type is in context
         let ctx_ty = self.fvar_types.get(id).ok_or(CertError::UnknownFVar(*id))?;
-        // Use def_eq_impl since we're inside verify_impl (avoid redundant stack_safe)
+        // Use def_eq_impl since we're inside certificate verification (avoid redundant stack_safe)
         if !self.def_eq_impl(type_, ctx_ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(type_.clone()),
@@ -115,7 +115,7 @@ impl<'env> CertVerifier<'env> {
         }
         // Verify against environment
         if let Some(env_type) = self.env.instantiate_type(name, levels) {
-            // Use def_eq_impl since we're inside verify_impl
+            // Use def_eq_impl since we're inside certificate verification
             if !self.def_eq_impl(type_, &env_type) {
                 return Err(CertError::TypeMismatch {
                     expected: Box::new(type_.clone()),
@@ -139,18 +139,18 @@ impl<'env> CertVerifier<'env> {
         a: &Arc<Expr>,
     ) -> Result<Expr, CertError> {
         // Verify function
-        let fn_ty = self.verify_impl(fn_cert, f)?;
+        let fn_ty = self.verify_recurse(fn_cert, f)?;
 
         // Check function type is Pi
-        // Use whnf_impl since we're inside verify_impl (avoid redundant stack_safe)
+        // Use whnf_impl since we're inside certificate verification (avoid redundant stack_safe)
         let fn_type_whnf = self.whnf_impl(&fn_ty);
         match &fn_type_whnf.kind {
             ExprKind::Pi(_, expected_arg_type, body_type) => {
                 // Verify argument
-                let arg_ty = self.verify_impl(arg_cert, a)?;
+                let arg_ty = self.verify_recurse(arg_cert, a)?;
 
                 // Check argument type matches
-                // Use def_eq_impl since we're inside verify_impl
+                // Use def_eq_impl since we're inside certificate verification
                 if !self.def_eq_impl(&arg_ty, expected_arg_type) {
                     return Err(CertError::TypeMismatch {
                         expected: Box::new(expected_arg_type.as_ref().clone()),
@@ -161,7 +161,7 @@ impl<'env> CertVerifier<'env> {
 
                 // Verify result type
                 let expected_result = body_type.instantiate(a);
-                // Use def_eq_impl since we're inside verify_impl
+                // Use def_eq_impl since we're inside certificate verification
                 if !self.def_eq_impl(result_type, &expected_result) {
                     return Err(CertError::TypeMismatch {
                         expected: Box::new(expected_result),
@@ -197,8 +197,8 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify arg type is a type (Sort)
-        let arg_sort = self.verify_impl(arg_type_cert, arg_ty)?;
-        // Use whnf_impl since we're inside verify_impl
+        let arg_sort = self.verify_recurse(arg_type_cert, arg_ty)?;
+        // Use whnf_impl since we're inside certificate verification
         match &self.whnf_impl(&arg_sort).kind {
             ExprKind::Sort(_) => {}
             _ => {
@@ -210,12 +210,13 @@ impl<'env> CertVerifier<'env> {
 
         // Extend context for body verification
         self.context.push(arg_ty.as_ref().clone());
-        let body_ty = self.verify_impl(body_cert, body)?;
+        let body_ty = self.verify_recurse(body_cert, body);
         self.context.pop();
+        let body_ty = body_ty?;
 
         // Build expected Pi type
         let expected_pi = Expr::from_kind(ExprKind::Pi(bi, arg_ty.clone(), body_ty.into()));
-        // Use def_eq_impl since we're inside verify_impl
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(&expected_pi, result_type) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_pi),
@@ -247,8 +248,8 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify arg type
-        let arg_sort = self.verify_impl(arg_type_cert, arg_ty)?;
-        // Use whnf_impl since we're inside verify_impl
+        let arg_sort = self.verify_recurse(arg_type_cert, arg_ty)?;
+        // Use whnf_impl since we're inside certificate verification
         let arg_sort_whnf = self.whnf_impl(&arg_sort);
         let ExprKind::Sort(l1) = &arg_sort_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -266,10 +267,11 @@ impl<'env> CertVerifier<'env> {
 
         // Extend context for body verification
         self.context.push(arg_ty.as_ref().clone());
-        let body_sort = self.verify_impl(body_type_cert, body_ty)?;
+        let body_sort = self.verify_recurse(body_type_cert, body_ty);
         self.context.pop();
+        let body_sort = body_sort?;
 
-        // Use whnf_impl since we're inside verify_impl
+        // Use whnf_impl since we're inside certificate verification
         let body_sort_whnf = self.whnf_impl(&body_sort);
         let ExprKind::Sort(l2) = &body_sort_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -305,16 +307,16 @@ impl<'env> CertVerifier<'env> {
         body: &Expr,
     ) -> Result<Expr, CertError> {
         // Verify type is a type
-        let ty_sort = self.verify_impl(type_cert, ty)?;
-        // Use whnf_impl since we're inside verify_impl
+        let ty_sort = self.verify_recurse(type_cert, ty)?;
+        // Use whnf_impl since we're inside certificate verification
         match &self.whnf_impl(&ty_sort).kind {
             ExprKind::Sort(_) => {}
             _ => return Err(CertError::InvalidCert("Let type is not a type".to_string())),
         }
 
         // Verify value has the type
-        let val_ty = self.verify_impl(value_cert, val)?;
-        // Use def_eq_impl since we're inside verify_impl
+        let val_ty = self.verify_recurse(value_cert, val)?;
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(&val_ty, ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(ty.as_ref().clone()),
@@ -325,12 +327,13 @@ impl<'env> CertVerifier<'env> {
 
         // Extend context for body
         self.context.push(ty.as_ref().clone());
-        let body_ty = self.verify_impl(body_cert, body)?;
+        let body_ty = self.verify_recurse(body_cert, body);
         self.context.pop();
+        let body_ty = body_ty?;
 
         // Result type is body type with value substituted
         let expected_result = body_ty.instantiate(val);
-        // Use def_eq_impl since we're inside verify_impl
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(&expected_result, result_type) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_result),
@@ -361,7 +364,7 @@ impl<'env> CertVerifier<'env> {
             Literal::String(_) => Expr::const_(NAME_STRING.clone(), vec![]),
         };
 
-        // Use def_eq_impl since we're inside verify_impl
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(type_, &expected_type) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_type),
@@ -381,9 +384,9 @@ impl<'env> CertVerifier<'env> {
         actual_type: &Expr,
         expr: &Expr,
     ) -> Result<Expr, CertError> {
-        let actual = self.verify_impl(inner, expr)?;
+        let actual = self.verify_recurse(inner, expr)?;
 
-        // Use def_eq_impl since we're inside verify_impl
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(&actual, actual_type) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(actual_type.clone()),
@@ -392,7 +395,7 @@ impl<'env> CertVerifier<'env> {
             });
         }
 
-        // Use def_eq_impl since we're inside verify_impl
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(actual_type, expected_type) {
             return Err(CertError::DefEqFailed {
                 left: Box::new(actual_type.clone()),
@@ -410,10 +413,10 @@ impl<'env> CertVerifier<'env> {
         result_type: &Expr,
         inner: &Expr,
     ) -> Result<Expr, CertError> {
-        let inner_ty = self.verify_impl(inner_cert, inner)?;
+        let inner_ty = self.verify_recurse(inner_cert, inner)?;
 
         // Result type should match inner type
-        // Use def_eq_impl since we're inside verify_impl
+        // Use def_eq_impl since we're inside certificate verification
         if !self.def_eq_impl(&inner_ty, result_type) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(inner_ty),

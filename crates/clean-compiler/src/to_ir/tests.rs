@@ -652,7 +652,7 @@ fn test_return_position_placeholder_lowers_boxed() {
     // The `_` inference-failure placeholder (lifted casesOn/recOn motive
     // lambdas, `Array.data`-class accessors): boxed in return position…
     assert_eq!(
-        super::types::expr_to_ir_type_return(&Expr::const_str("_"))
+        types::expr_to_ir_type_return(&Expr::const_str("_"))
             .expect("`_` lowers boxed in return position"),
         IRType::Object
     );
@@ -665,7 +665,7 @@ fn test_return_position_placeholder_lowers_boxed() {
         Expr::bvar(0),
     );
     assert_eq!(
-        super::types::expr_to_ir_type_return(&motive_app)
+        types::expr_to_ir_type_return(&motive_app)
             .expect("dependent motive application lowers boxed"),
         IRType::Object
     );
@@ -673,11 +673,11 @@ fn test_return_position_placeholder_lowers_boxed() {
     // Scalar and Sort-valued heads are unchanged by the return-position rules:
     // scalars stay scalar, type-level machinery keeps failing closed.
     assert_eq!(
-        super::types::expr_to_ir_type_return(&Expr::const_str("UInt32")).unwrap(),
+        types::expr_to_ir_type_return(&Expr::const_str("UInt32")).unwrap(),
         IRType::UInt32
     );
     assert!(matches!(
-        super::types::expr_to_ir_type_return(&Expr::sort(clean_kernel::Level::zero())),
+        types::expr_to_ir_type_return(&Expr::sort(clean_kernel::Level::zero())),
         Err(CompilerError::UnsupportedIrType { .. })
     ));
 }
@@ -4437,7 +4437,7 @@ fn test_build_ctor_env_over_full_prelude_no_error() {
 #[test]
 fn test_build_external_arities_counts_pi_telescope() {
     let env = Environment::with_prelude();
-    let arities = super::ctor_env::build_external_arities(&env);
+    let arities = ctor_env::build_external_arities(&env);
     assert_eq!(
         arities.get(&name("Nat.add")).copied(),
         Some(2),
@@ -4481,7 +4481,7 @@ fn test_to_ir_with_env_external_fn_value_is_closure() {
     let mut external_arities: HashMap<Name, u16> = HashMap::new();
     external_arities.insert(name("ext.add2"), 2);
 
-    let output = super::decl::lower_decls_with_env_and_arities(
+    let output = decl::lower_decls_with_env_and_arities(
         &[caller_decl],
         &HashMap::new(),
         &HashMap::new(),
@@ -4544,7 +4544,7 @@ fn nat_lit(v: u64) -> LetValue {
 }
 
 /// Walk an IRBody spine collecting (var, expr) pairs of every VDecl.
-fn vdecls(body: &IRBody) -> Vec<(crate::ir::VarId, IRExpr)> {
+fn vdecls(body: &IRBody) -> Vec<(VarId, IRExpr)> {
     let mut out = Vec::new();
     let mut cur = body;
     loop {

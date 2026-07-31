@@ -354,7 +354,7 @@ struct Abstractor {
     /// Memo: `(node pointer, depth) -> abstraction result`. `None`-valued
     /// entries record "unchanged" (the `ExprFolderOpt` sharing signal) so a
     /// shared unchanged subtree is also visited only once.
-    memo: std::collections::HashMap<(usize, u32), Option<Expr>>,
+    memo: HashMap<(usize, u32), Option<Expr>>,
 }
 
 impl Abstractor {
@@ -362,7 +362,7 @@ impl Abstractor {
         Abstractor {
             id,
             depth,
-            memo: std::collections::HashMap::new(),
+            memo: HashMap::new(),
         }
     }
 }
@@ -470,7 +470,7 @@ impl ExprFolderOpt for FVarSubst<'_> {
 /// the same reduction paths as `FVarSubst` above. Same [`FoldMemo`] discipline,
 /// depth pinned to `0` (no binder-depth dependence).
 struct LevelParamSubst<'a> {
-    subst: &'a std::collections::HashMap<Name, Level>,
+    subst: &'a HashMap<Name, Level>,
     /// Pointer-identity memo (Track XX): see [`FoldMemo`]. Depth pinned to `0`.
     memo: FoldMemo,
 }
@@ -1187,7 +1187,7 @@ impl Expr {
             return self.clone();
         }
         // Build HashMap once for O(1) lookup during recursive traversal
-        let subst_map: std::collections::HashMap<Name, Level> = subst.iter().cloned().collect();
+        let subst_map: HashMap<Name, Level> = subst.iter().cloned().collect();
         self.instantiate_level_params_map(&subst_map)
     }
 
@@ -1213,7 +1213,7 @@ impl Expr {
             };
             self.fold_opt_or_clone(&mut folder)
         } else {
-            let subst_map: std::collections::HashMap<Name, Level> =
+            let subst_map: HashMap<Name, Level> =
                 params.iter().cloned().zip(levels.iter().cloned()).collect();
             self.instantiate_level_params_map(&subst_map)
         }
@@ -1222,10 +1222,7 @@ impl Expr {
     /// Apply level parameter substitution using a pre-built HashMap.
     ///
     /// Public because ZFCSetExpr needs to call this on contained Expr values.
-    pub(crate) fn instantiate_level_params_map(
-        &self,
-        subst: &std::collections::HashMap<Name, Level>,
-    ) -> Expr {
+    pub(crate) fn instantiate_level_params_map(&self, subst: &HashMap<Name, Level>) -> Expr {
         let mut folder = LevelParamSubst {
             subst,
             memo: FoldMemo::default(),

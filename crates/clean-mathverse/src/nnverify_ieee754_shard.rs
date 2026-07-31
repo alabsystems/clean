@@ -109,6 +109,25 @@ pub const NNVERIFY_IEEE754_DECLS: &[&str] = &[
     "NNVerify.FloatRational.rounding_error_bound_discharge_tie",
     "NNVerify.FloatRational.round_discharge_exact",
     "NNVerify.FloatRational.rounding_error_bound_discharge_exact",
+    // --- Higham dot-product accumulated-error development (empty closure) ---
+    // `init_nn_verify_float_rational` pulls `init_nn_verify_dot_product_error`
+    // in, so these are part of the registered float theory and must be
+    // published with it. The accumulation chains reference
+    // `error_accum_step`, so they follow it; the per-op discharges and the
+    // concrete γ_n reductions are self-contained literal proofs.
+    "NNVerify.FloatRational.error_accum_step",
+    "NNVerify.FloatRational.error_accum_step3",
+    "NNVerify.FloatRational.error_accum_step4",
+    "NNVerify.FloatRational.fl_op_rel_error_discharge_f32",
+    "NNVerify.FloatRational.fl_op_rel_error_discharge_f64",
+    "NNVerify.FloatRational.gamma_n_reduces_u8_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_u8_n3",
+    "NNVerify.FloatRational.gamma_n_reduces_u12_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_u12_n3",
+    "NNVerify.FloatRational.gamma_n_reduces_f32_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_f32_n3",
+    "NNVerify.FloatRational.gamma_n_reduces_f64_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_f64_n3",
 ];
 
 /// The subset of [`NNVERIFY_IEEE754_DECLS`] that are kernel-checked `Theorem`s
@@ -130,6 +149,23 @@ pub const NNVERIFY_IEEE754_EMPTY_CLOSURE_THEOREMS: &[&str] = &[
     "NNVerify.FloatRational.rounding_error_bound_discharge_tie",
     "NNVerify.FloatRational.round_discharge_exact",
     "NNVerify.FloatRational.rounding_error_bound_discharge_exact",
+    // The dot-product accumulation development: `init_nn_verify_dot_product_error`
+    // ENSURES every declaration it registers is a `Theorem` with an empty
+    // non-foundational closure (the kernel-side `tests_nn_verify_dot_product_error`
+    // suite asserts that per name), so the whole development belongs here.
+    "NNVerify.FloatRational.error_accum_step",
+    "NNVerify.FloatRational.error_accum_step3",
+    "NNVerify.FloatRational.error_accum_step4",
+    "NNVerify.FloatRational.fl_op_rel_error_discharge_f32",
+    "NNVerify.FloatRational.fl_op_rel_error_discharge_f64",
+    "NNVerify.FloatRational.gamma_n_reduces_u8_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_u8_n3",
+    "NNVerify.FloatRational.gamma_n_reduces_u12_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_u12_n3",
+    "NNVerify.FloatRational.gamma_n_reduces_f32_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_f32_n3",
+    "NNVerify.FloatRational.gamma_n_reduces_f64_n2",
+    "NNVerify.FloatRational.gamma_n_reduces_f64_n3",
 ];
 
 /// Seed a kernel `Environment::with_prelude()` and register the full IEEE-754

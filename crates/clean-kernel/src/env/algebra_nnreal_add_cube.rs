@@ -244,6 +244,7 @@ impl AddCubeConsts {
         self.congr(x, y, f, h)
     }
     /// `congrArg (fun w => fixed · w) h : fixed·x = fixed·y`.
+    #[cfg(test)]
     fn cong_mul_right(
         &self,
         parent: &EnvDeclBuilder,

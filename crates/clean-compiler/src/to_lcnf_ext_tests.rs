@@ -18,10 +18,6 @@ fn nat_ty() -> Expr {
     Expr::const_str("Nat")
 }
 
-fn placeholder_ty() -> Expr {
-    Expr::const_str("_")
-}
-
 fn param(id: u64, name: &str) -> Param {
     Param::new(fvar(id), Name::from_string(name), nat_ty())
 }

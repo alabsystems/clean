@@ -55,6 +55,7 @@ use crate::name::Name;
 /// Cached kernel constants reused across type and value construction.
 struct IntLtOfAddLtAddLeftConsts {
     int_type: Expr,
+    #[cfg(test)]
     int_le: Expr,
     int_lt: Expr,
     int_add: Expr,
@@ -73,6 +74,7 @@ impl IntLtOfAddLtAddLeftConsts {
         let type1 = Level::succ(Level::zero());
         Self {
             int_type: Expr::const_(Name::from_string("Int"), vec![]),
+            #[cfg(test)]
             int_le: Expr::const_(Name::from_string("Int.le"), vec![]),
             int_lt: Expr::const_(Name::from_string("Int.lt"), vec![]),
             int_add: Expr::const_(Name::from_string("Int.add"), vec![]),

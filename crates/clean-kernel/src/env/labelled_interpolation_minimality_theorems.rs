@@ -19,12 +19,18 @@
 //!            Abstract Interpretation", ESOP 2010;
 //!            D'Silva et al. (2010), "Interpolant Strength", VMCAI 2010.
 
+#[cfg(test)]
 use super::labelled_interpolation_minimality::LabelledInterpolationConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Labelled interpolant validity
@@ -32,6 +38,7 @@ impl Environment {
 
     /// Any valid labelling produces a formula satisfying Craig conditions.
     /// Generalizes McMillan's extraction to arbitrary labellings.
+    #[cfg(test)]
     pub(super) fn register_labelled_interpolant_valid(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -96,6 +103,7 @@ impl Environment {
     /// **Main theorem (D'Silva ESOP 2010).** Var(I_McM(pi)) subset Var(I_L(pi))
     /// for all valid labellings L. McMillan's disjunction rule on A-only
     /// pivots introduces no new variables; conjunction on others may.
+    #[cfg(test)]
     pub(super) fn register_mcmillan_support_minimal(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -158,6 +166,7 @@ impl Environment {
 
     /// Extractable interpolants form a complete lattice under |= for fixed
     /// (A, B, pi). Bottom = McMillan, top = reverse McMillan.
+    #[cfg(test)]
     pub(super) fn register_interpolant_lattice_complete(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -216,6 +225,7 @@ impl Environment {
 
     /// McMillan = lattice bottom: interpolant_implies(I_McM, I_L) for all L.
     /// The weakest (most general) extractable interpolant.
+    #[cfg(test)]
     pub(super) fn register_mcmillan_is_lattice_bottom(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -278,6 +288,7 @@ impl Environment {
 
     /// Reverse McMillan = lattice top: interpolant_implies(I_L, I_RMcM) for all L.
     /// The strongest (most specific) extractable interpolant.
+    #[cfg(test)]
     pub(super) fn register_reverse_mcmillan_is_lattice_top(
         &mut self,
         c: &LabelledInterpolationConsts,

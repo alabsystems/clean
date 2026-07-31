@@ -25,9 +25,12 @@ use std::sync::Arc;
 
 /// Reconstructs an expression from a proof certificate.
 ///
-/// Stack-safe: uses `stacker::maybe_grow` to prevent stack overflow
-/// on deeply nested certificate trees. The verifier's `verify()` is
-/// already stack-safe; this brings `replay_cert` to parity.
+/// Stack-safe: every recursive descent re-enters this `stack_safe` boundary so
+/// `stacker::maybe_grow` can allocate another segment before the current one is
+/// exhausted. A single boundary around the root is insufficient because one
+/// grown segment is still finite for adversarially deep certificate trees.
+///
+/// The verifier's `verify()` follows the same guarded-recursion pattern.
 pub fn replay_cert(cert: &ProofCert) -> Expr {
     stack_safe(|| replay_cert_impl(cert))
 }
@@ -73,8 +76,8 @@ fn replay_cert_core(cert: &ProofCert) -> Expr {
         ProofCert::App {
             fn_cert, arg_cert, ..
         } => Expr::from_kind(ExprKind::App(
-            replay_cert_impl(fn_cert).into(),
-            replay_cert_impl(arg_cert).into(),
+            replay_cert(fn_cert).into(),
+            replay_cert(arg_cert).into(),
         )),
         ProofCert::Lam {
             binder_info,
@@ -89,7 +92,7 @@ fn replay_cert_core(cert: &ProofCert) -> Expr {
             Expr::from_kind(ExprKind::Lam(
                 (*binder_info).into(),
                 Arc::new(domain),
-                Arc::new(replay_cert_impl(body_cert)),
+                Arc::new(replay_cert(body_cert)),
             ))
         }
         ProofCert::Pi {
@@ -110,26 +113,26 @@ fn replay_cert_core(cert: &ProofCert) -> Expr {
         } => Expr::let_named(
             Name::anon(),
             extract_type_from_sort_cert(type_cert),
-            replay_cert_impl(value_cert),
-            replay_cert_impl(body_cert),
+            replay_cert(value_cert),
+            replay_cert(body_cert),
             false,
         ),
         ProofCert::Lit { lit, .. } => Expr::from_kind(ExprKind::Lit(lit.clone())),
-        ProofCert::DefEq { inner, .. } => replay_cert_impl(inner),
+        ProofCert::DefEq { inner, .. } => replay_cert(inner),
         ProofCert::MData {
             metadata,
             inner_cert,
             ..
         } => Expr::from_kind(ExprKind::MData(
             metadata.clone(),
-            replay_cert_impl(inner_cert).into(),
+            replay_cert(inner_cert).into(),
         )),
         ProofCert::Proj {
             struct_name,
             idx,
             expr_cert,
             ..
-        } => Expr::proj(struct_name.clone(), *idx, replay_cert_impl(expr_cert)),
+        } => Expr::proj(struct_name.clone(), *idx, replay_cert(expr_cert)),
         _ => unreachable!("replay_cert_core only handles core variants"),
     }
 }
@@ -151,20 +154,20 @@ fn replay_cert_cubical(cert: &ProofCert) -> Expr {
             right_cert,
             ..
         } => Expr::from_kind(ExprKind::CubicalPath {
-            ty: replay_cert_impl(ty_cert).into(),
-            left: replay_cert_impl(left_cert).into(),
-            right: replay_cert_impl(right_cert).into(),
+            ty: replay_cert(ty_cert).into(),
+            left: replay_cert(left_cert).into(),
+            right: replay_cert(right_cert).into(),
         }),
         ProofCert::CubicalPathLam { body_cert, .. } => Expr::from_kind(ExprKind::CubicalPathLam {
-            body: replay_cert_impl(body_cert).into(),
+            body: replay_cert(body_cert).into(),
         }),
         ProofCert::CubicalPathApp {
             path_cert,
             arg_cert,
             ..
         } => Expr::from_kind(ExprKind::CubicalPathApp {
-            path: replay_cert_impl(path_cert).into(),
-            arg: replay_cert_impl(arg_cert).into(),
+            path: replay_cert(path_cert).into(),
+            arg: replay_cert(arg_cert).into(),
         }),
         ProofCert::CubicalHComp {
             ty_cert,
@@ -173,10 +176,10 @@ fn replay_cert_cubical(cert: &ProofCert) -> Expr {
             base_cert,
             ..
         } => Expr::from_kind(ExprKind::CubicalHComp {
-            ty: replay_cert_impl(ty_cert).into(),
-            phi: replay_cert_impl(phi_cert).into(),
-            u: replay_cert_impl(u_cert).into(),
-            base: replay_cert_impl(base_cert).into(),
+            ty: replay_cert(ty_cert).into(),
+            phi: replay_cert(phi_cert).into(),
+            u: replay_cert(u_cert).into(),
+            base: replay_cert(base_cert).into(),
         }),
         ProofCert::CubicalTransp {
             ty_cert,
@@ -184,9 +187,9 @@ fn replay_cert_cubical(cert: &ProofCert) -> Expr {
             base_cert,
             ..
         } => Expr::from_kind(ExprKind::CubicalTransp {
-            ty: replay_cert_impl(ty_cert).into(),
-            phi: replay_cert_impl(phi_cert).into(),
-            base: replay_cert_impl(base_cert).into(),
+            ty: replay_cert(ty_cert).into(),
+            phi: replay_cert(phi_cert).into(),
+            base: replay_cert(base_cert).into(),
         }),
         ProofCert::CubicalCoe {
             ty_cert,
@@ -195,10 +198,10 @@ fn replay_cert_cubical(cert: &ProofCert) -> Expr {
             base_cert,
             ..
         } => Expr::from_kind(ExprKind::CubicalCoe {
-            ty: replay_cert_impl(ty_cert).into(),
-            r: replay_cert_impl(r_cert).into(),
-            s: replay_cert_impl(s_cert).into(),
-            base: replay_cert_impl(base_cert).into(),
+            ty: replay_cert(ty_cert).into(),
+            r: replay_cert(r_cert).into(),
+            s: replay_cert(s_cert).into(),
+            base: replay_cert(base_cert).into(),
         }),
         _ => unreachable!("replay_cert_cubical only handles cubical variants"),
     }
@@ -212,20 +215,20 @@ fn replay_cert_modes(cert: &ProofCert) -> Expr {
             elem_cert,
             set_cert,
         } => Expr::from_kind(ExprKind::ZFCMem {
-            element: replay_cert_impl(elem_cert).into(),
-            set: replay_cert_impl(set_cert).into(),
+            element: replay_cert(elem_cert).into(),
+            set: replay_cert(set_cert).into(),
         }),
         ProofCert::ZFCComprehension {
             var_ty_cert,
             pred_cert,
             ..
         } => Expr::from_kind(ExprKind::ZFCComprehension {
-            domain: replay_cert_impl(var_ty_cert).into(),
-            pred: replay_cert_impl(pred_cert).into(),
+            domain: replay_cert(var_ty_cert).into(),
+            pred: replay_cert(pred_cert).into(),
         }),
         ProofCert::SProp => Expr::from_kind(ExprKind::SProp),
         ProofCert::Squash { inner_cert } => {
-            Expr::from_kind(ExprKind::Squash(replay_cert_impl(inner_cert).into()))
+            Expr::from_kind(ExprKind::Squash(replay_cert(inner_cert).into()))
         }
         _ => unreachable!("replay_cert_modes only handles mode-specific variants"),
     }
@@ -235,31 +238,35 @@ fn replay_zfc_set(kind: &ZFCSetCertKind) -> ZFCSetExpr {
     match kind {
         ZFCSetCertKind::Empty => ZFCSetExpr::Empty,
         ZFCSetCertKind::Infinity => ZFCSetExpr::Infinity,
-        ZFCSetCertKind::Singleton(cert) => ZFCSetExpr::Singleton(replay_cert_impl(cert).into()),
+        ZFCSetCertKind::Singleton(cert) => ZFCSetExpr::Singleton(replay_cert(cert).into()),
         ZFCSetCertKind::Pair(c1, c2) => {
-            ZFCSetExpr::Pair(replay_cert_impl(c1).into(), replay_cert_impl(c2).into())
+            ZFCSetExpr::Pair(replay_cert(c1).into(), replay_cert(c2).into())
         }
-        ZFCSetCertKind::Union(cert) => ZFCSetExpr::Union(replay_cert_impl(cert).into()),
-        ZFCSetCertKind::PowerSet(cert) => ZFCSetExpr::PowerSet(replay_cert_impl(cert).into()),
+        ZFCSetCertKind::Union(cert) => ZFCSetExpr::Union(replay_cert(cert).into()),
+        ZFCSetCertKind::PowerSet(cert) => ZFCSetExpr::PowerSet(replay_cert(cert).into()),
         ZFCSetCertKind::Separation {
             set_cert,
             pred_cert,
         } => ZFCSetExpr::Separation {
-            set: replay_cert_impl(set_cert).into(),
-            pred: replay_cert_impl(pred_cert).into(),
+            set: replay_cert(set_cert).into(),
+            pred: replay_cert(pred_cert).into(),
         },
         ZFCSetCertKind::Replacement {
             set_cert,
             func_cert,
         } => ZFCSetExpr::Replacement {
-            set: replay_cert_impl(set_cert).into(),
-            func: replay_cert_impl(func_cert).into(),
+            set: replay_cert(set_cert).into(),
+            func: replay_cert(func_cert).into(),
         },
-        ZFCSetCertKind::Choice(cert) => ZFCSetExpr::Choice(replay_cert_impl(cert).into()),
+        ZFCSetCertKind::Choice(cert) => ZFCSetExpr::Choice(replay_cert(cert).into()),
     }
 }
 
 fn extract_type_from_sort_cert(cert: &ProofCert) -> Expr {
+    stack_safe(|| extract_type_from_sort_cert_impl(cert))
+}
+
+fn extract_type_from_sort_cert_impl(cert: &ProofCert) -> Expr {
     match cert {
         ProofCert::Sort { level } => Expr::from_kind(ExprKind::Sort(level.clone())),
         ProofCert::BVar { idx, .. } => Expr::from_kind(ExprKind::BVar(*idx)),
@@ -269,7 +276,7 @@ fn extract_type_from_sort_cert(cert: &ProofCert) -> Expr {
         | ProofCert::Lam { .. }
         | ProofCert::Pi { .. }
         | ProofCert::Let { .. }
-        | ProofCert::Proj { .. } => replay_cert_impl(cert),
+        | ProofCert::Proj { .. } => replay_cert(cert),
         ProofCert::Lit { lit, .. } => Expr::from_kind(ExprKind::Lit(lit.clone())),
         ProofCert::DefEq { inner, .. } => extract_type_from_sort_cert(inner),
         ProofCert::MData {
@@ -280,7 +287,7 @@ fn extract_type_from_sort_cert(cert: &ProofCert) -> Expr {
             metadata.clone(),
             extract_type_from_sort_cert(inner_cert).into(),
         )),
-        _ => replay_cert_impl(cert),
+        _ => replay_cert(cert),
     }
 }
 

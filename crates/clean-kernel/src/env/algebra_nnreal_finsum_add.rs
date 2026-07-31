@@ -32,7 +32,7 @@
 
 use super::algebra_nnreal_finsum::NNFinSumConsts;
 use super::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::{EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;

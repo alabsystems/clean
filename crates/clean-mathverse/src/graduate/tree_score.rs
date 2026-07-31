@@ -312,7 +312,11 @@ struct CollisionReport {
 /// [`CollisionForm::LiteralDuplicate`]. Both are confirmed by the kernel — the
 /// digest is never the verdict. Different-form hits are emitted first so they
 /// lead the (capped) `hits` list.
-fn confirm_collisions(tc: &TypeChecker, decls: &[ScoredDecl], max_hits: usize) -> CollisionReport {
+fn confirm_collisions(
+    tc: &TypeChecker<'_>,
+    decls: &[ScoredDecl],
+    max_hits: usize,
+) -> CollisionReport {
     // Group by tree-signature. BTreeMap for deterministic output order.
     let mut buckets: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     for (i, d) in decls.iter().enumerate() {

@@ -278,7 +278,7 @@ fn try_absurd_pair(
 /// ENSURES: On Ok, the current goal is closed
 /// ENSURES: On Err(NoProgress), no matching contradiction pattern found
 /// ENSURES: Search is O(n²) in hypothesis count for the P/¬P pattern
-pub fn eval_contradiction(ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_contradiction(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let goal = ctx
         .state
         .current_goal()
@@ -334,7 +334,7 @@ pub fn eval_contradiction(ctx: &mut TacticCtx) -> TacticResult {
 /// REQUIRES: `False.elim` exists in the environment
 /// ENSURES: On Ok, current goal is replaced with a `False` goal
 /// ENSURES: On Err(EnvironmentMissing), `False.elim` not loaded
-pub fn eval_exfalso(ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_exfalso(ctx: &mut TacticCtx<'_>) -> TacticResult {
     super::connective::exfalso(ctx.state)
 }
 

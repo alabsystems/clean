@@ -195,6 +195,7 @@ impl IntMulAssocConsts {
         )
     }
 
+    #[cfg(test)]
     fn eq_nat(&self, lhs: Expr, rhs: Expr) -> Expr {
         let type1 = Level::succ(Level::zero());
         let eqn = Expr::const_(Name::from_string("Eq"), vec![type1]);

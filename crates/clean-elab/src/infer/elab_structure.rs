@@ -1298,7 +1298,7 @@ impl<'a> ElabCtx<'a> {
         // then locally declared fields. The parent's OWN fields are NOT
         // flattened into the child constructor; they are re-exposed as derived
         // projections after the constructor and direct projections are built.
-        let all_fields: Vec<FieldSpec> = parent_subobjects
+        let all_fields: Vec<FieldSpec<'_>> = parent_subobjects
             .iter()
             .map(|sub| FieldSpec::Inherited {
                 name: sub.to_field.to_string(),

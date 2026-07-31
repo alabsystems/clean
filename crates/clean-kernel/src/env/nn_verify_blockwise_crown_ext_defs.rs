@@ -45,11 +45,16 @@ use crate::name::Name;
 /// (Mirrors the subset of `BlockExtConsts` needed here.)
 struct BlockComplexityConsts {
     nat: Expr,
+    #[cfg(test)]
     rat: Expr,
+    #[cfg(test)]
     ib: Expr,
+    #[cfg(test)]
     eq: Expr,
+    #[cfg(test)]
     le_le: Expr,
     nat_mul: Expr,
+    #[cfg(test)]
     nn_vec: Expr,
 }
 
@@ -57,19 +62,26 @@ impl BlockComplexityConsts {
     fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             ib: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
+            #[cfg(test)]
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+            #[cfg(test)]
             le_le: Expr::const_(Name::from_string("LE.le"), vec![Level::zero()]),
             nat_mul: Expr::const_(Name::from_string("Nat.mul"), vec![]),
+            #[cfg(test)]
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
         }
     }
 
+    #[cfg(test)]
     fn ib_of(&self, d: &Expr) -> Expr {
         Expr::app(self.ib.clone(), d.clone())
     }
 
+    #[cfg(test)]
     fn ib_eq(&self, d: &Expr, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.eq.clone(), self.ib_of(d)), lhs),
@@ -93,6 +105,7 @@ impl BlockComplexityConsts {
         Expr::app(Expr::app(self.nat_mul.clone(), a.clone()), b.clone())
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }

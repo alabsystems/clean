@@ -57,16 +57,14 @@
 //! This is the exact signed/unsigned bug class the campaign turned on, so the
 //! anti-vacuity is genuine, never a structural coincidence.
 //!
-//! # Honest budget (why width 4 is the always-on default)
+//! # Honest budget
 //!
-//! A WIDTH-`n` variable barrel shift bit-blasts to `O(n·log n)` gates. Measured
-//! refutation sizes: width 2 = 66 clauses / 277 steps; width 4 = 172 clauses / 925
-//! steps; width 8 = 430 clauses / 5356 steps. The sub-quadratic trie reflection is
-//! tractable through width-4 shifts (~30 s / ~8 GB). A width-8 shift (5356 steps)
-//! runs for MINUTES and is CAPPED fail-closed here
-//! ([`BvShiftCertifyError::RefutationTooLarge`]) — see [`MAX_REFLECTION_STEPS`].
-//! (This is the shift analogue of milestone 2 keeping wide multiplication out of
-//! the always-on always-certify budget.)
+//! A WIDTH-`n` variable barrel shift bit-blasts to `O(n·log n)` gates. Proof
+//! producer changes can materially change the resolution trace without changing
+//! the clause semantics: the AY 0e35 producer emits the width-8 identity as 430
+//! clauses / 266 steps, which is within the reflection budget and kernel
+//! certifies. Any future or wider trace above [`MAX_REFLECTION_STEPS`] is still
+//! capped and declined before reflection.
 //!
 //! # Fail-closed
 //!
@@ -83,11 +81,10 @@ use clean_kernel::{Environment, LocalContext};
 use super::bv_blast_reflection::{certify_unsat3_by_reflection, ReflectionError};
 use super::certified_proof::{certify_kernel_term, CertifiedPayload, NotCertified};
 
-/// The sub-quadratic trie reflection (`checkRefutes3_sound`) is tractable up to
-/// this many resolution steps for the ALWAYS-ON lane (calibrated: a width-4 barrel
-/// shift is ~925 steps and re-checks in ~30 s / ~8 GB). A width-8 variable shift is
-/// ~5356 steps, whose reflection runs for minutes — CAPPED fail-closed here rather
-/// than hang the router. This is a ROBUSTNESS cap, NOT a soundness relaxation: an
+/// Operational ceiling for the always-on sub-quadratic trie reflection
+/// (`checkRefutes3_sound`). Proof trace sizes are producer-dependent, so this is
+/// enforced on the actual exported trace rather than tied to a particular
+/// operand width. This is a ROBUSTNESS cap, NOT a soundness relaxation: an
 /// over-cap refutation is DECLINED (kept `SmtBacked`), never accepted.
 pub const MAX_REFLECTION_STEPS: usize = 4_096;
 
@@ -149,6 +146,17 @@ pub struct BvShiftCertified {
     pub num_clauses: usize,
     /// Number of resolution steps in the refutation the kernel re-checked.
     pub num_resolution_steps: usize,
+}
+
+fn enforce_reflection_step_cap(steps: usize) -> Result<(), BvShiftCertifyError> {
+    if steps > MAX_REFLECTION_STEPS {
+        Err(BvShiftCertifyError::RefutationTooLarge {
+            steps,
+            cap: MAX_REFLECTION_STEPS,
+        })
+    } else {
+        Ok(())
+    }
 }
 
 /// Build the "identity readout" disequality for a shift node at operand width `w`:
@@ -220,12 +228,7 @@ pub fn certify_bvshift_unsat(
     // (1a) Size cap: the always-on sub-quadratic trie reflection is only tractable
     //      below the cap. An over-cap refutation is DECLINED (kept SmtBacked) — a
     //      robustness cap, never a soundness relaxation.
-    if num_resolution_steps > MAX_REFLECTION_STEPS {
-        return Err(BvShiftCertifyError::RefutationTooLarge {
-            steps: num_resolution_steps,
-            cap: MAX_REFLECTION_STEPS,
-        });
-    }
+    enforce_reflection_step_cap(num_resolution_steps)?;
 
     // (2) NATIVE, OP-AGNOSTIC kernel re-check: encode clauses + refutation as
     //     kernel data, discharge `checkRefutes3 = true` by reflection (`Eq.refl`),

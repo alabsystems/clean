@@ -76,6 +76,7 @@ impl Environment {
     }
 
     /// Check if Tier A `Rat.mul_zero_zero` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_rat_mul_zero_zero(&self) -> bool {
         self.nn_verify_tier_a_rat_mul_zero_zero_init
     }

@@ -10,12 +10,18 @@
 //! proposition body, and the theorem quantifies over its parameters with the
 //! helper applied.
 
+#[cfg(test)]
 use super::bcp_loop_refinement::BCPLoopConsts;
+#[cfg(test)]
 use crate::env::{decl_builder::EnvDeclBuilder, Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
+    #[cfg(test)]
     fn register_bcp_loop_helper_theorem_pair(
         &mut self,
         helper_name: &str,
@@ -82,6 +88,7 @@ impl Environment {
     ///    j_ptr s <= i_ptr s /\ i_ptr s <= watch_len (watches s)`.
     ///
     /// The imperative scan maintains the standard `j <= i <= len` invariant.
+    #[cfg(test)]
     pub(super) fn register_two_pointer_compaction_invariant(
         &mut self,
         c: &BCPLoopConsts,
@@ -103,6 +110,7 @@ impl Environment {
     ///    lit0 e xor lit1 e xor false_lit = xor_other_watched e l`.
     ///
     /// The watched-literal XOR trick recovers the other watched literal.
+    #[cfg(test)]
     pub(super) fn register_xor_identity(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         self.register_bcp_loop_helper_theorem_pair(
             "BCPLoop.xor_identity_helper",
@@ -123,6 +131,7 @@ impl Environment {
     ///    watch_valid s'`.
     ///
     /// Compaction and swap steps preserve watch-list consistency.
+    #[cfg(test)]
     pub(super) fn register_watch_consistency_preserved(
         &mut self,
         c: &BCPLoopConsts,
@@ -145,6 +154,7 @@ impl Environment {
     ///    propagate_imperative s = propagate_abstract a`.
     ///
     /// This is the main imperative/abstract BCP refinement theorem.
+    #[cfg(test)]
     pub(super) fn register_bcp_refinement(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         self.register_bcp_loop_helper_theorem_pair(
             "BCPLoop.bcp_refinement_helper",
@@ -164,6 +174,7 @@ impl Environment {
     ///    keeping e in place cannot miss required propagation`.
     ///
     /// The blocker fast path is sound.
+    #[cfg(test)]
     pub(super) fn register_blocker_soundness(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         self.register_bcp_loop_helper_theorem_pair(
             "BCPLoop.blocker_soundness_helper",
@@ -183,6 +194,7 @@ impl Environment {
     ///    the direct binary-clause path matches the abstract propagation step`.
     ///
     /// Binary clauses are propagated correctly.
+    #[cfg(test)]
     pub(super) fn register_binary_clause_propagation(
         &mut self,
         c: &BCPLoopConsts,
@@ -205,6 +217,7 @@ impl Environment {
     ///    the imperative search finds one`.
     ///
     /// Replacement-literal search is complete.
+    #[cfg(test)]
     pub(super) fn register_replacement_search_complete(
         &mut self,
         c: &BCPLoopConsts,
@@ -227,6 +240,7 @@ impl Environment {
     ///    every surviving watch entry in s is preserved in s'`.
     ///
     /// In-place compaction does not lose watch entries.
+    #[cfg(test)]
     pub(super) fn register_compaction_preserves_watches(
         &mut self,
         c: &BCPLoopConsts,

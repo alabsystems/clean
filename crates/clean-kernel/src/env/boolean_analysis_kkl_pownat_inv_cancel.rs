@@ -57,9 +57,11 @@ struct CancelConsts {
     int_of_nat: Expr,
     rat_mk: Expr,
     rat_one: Expr,
+    #[cfg(test)]
     rat_zero: Expr,
     rat_mul: Expr,
     rat_inv: Expr,
+    #[cfg(test)]
     rat_lt: Expr,
     pow_nat: Expr,
     pow_mul_base: Expr,
@@ -68,7 +70,9 @@ struct CancelConsts {
     mul_inv_cancel: Expr,
     ne_zero_of_pos: Expr,
     int_nonneg_mk: Expr,
+    #[cfg(test)]
     mul_comm: Expr,
+    #[cfg(test)]
     mul_assoc: Expr,
     mul_one: Expr,
     mmmc: Expr,
@@ -91,9 +95,11 @@ impl CancelConsts {
             int_of_nat: k("Int.ofNat"),
             rat_mk: k("Rat.mk"),
             rat_one: k("Rat.one"),
+            #[cfg(test)]
             rat_zero: k("Rat.zero"),
             rat_mul: k("Rat.mul"),
             rat_inv: k("Rat.inv"),
+            #[cfg(test)]
             rat_lt: k("Rat.lt"),
             pow_nat: k("Rat.powNat"),
             pow_mul_base: k("Rat.powNat_mul_base"),
@@ -102,7 +108,9 @@ impl CancelConsts {
             mul_inv_cancel: k("Rat.mul_inv_cancel"),
             ne_zero_of_pos: k("Rat.ne_zero_of_pos"),
             int_nonneg_mk: k("Int.NonNeg.mk"),
+            #[cfg(test)]
             mul_comm: k("Rat.mul_comm"),
+            #[cfg(test)]
             mul_assoc: k("Rat.mul_assoc"),
             mul_one: k("Rat.mul_one"),
             mmmc: k("Rat.mul_mul_mul_comm"),
@@ -135,6 +143,7 @@ impl CancelConsts {
     fn inv(&self, a: Expr) -> Expr {
         Expr::app(self.rat_inv.clone(), a)
     }
+    #[cfg(test)]
     fn lt(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_lt.clone(), [a, b])
     }
@@ -171,10 +180,12 @@ impl CancelConsts {
         Expr::app(self.int_nonneg_mk.clone(), self.nat_lit(k - 1))
     }
     /// `Rat.mul_comm a b : a·b = b·a`.
+    #[cfg(test)]
     fn comm(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.mul_comm.clone(), [a, b])
     }
     /// `Rat.mul_assoc a b c : (a·b)·c = a·(b·c)`.
+    #[cfg(test)]
     fn assoc(&self, a: Expr, b: Expr, cc: Expr) -> Expr {
         Expr::apps(self.mul_assoc.clone(), [a, b, cc])
     }

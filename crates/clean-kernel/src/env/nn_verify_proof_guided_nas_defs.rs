@@ -25,8 +25,11 @@
 //!
 //! Part of #3259.
 
+#[cfg(test)]
 use super::nn_verify_proof_guided_nas::ProofGuidedNasConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -34,16 +37,19 @@ use crate::expr::{BinderInfo, Expr};
 // =============================================================================
 
 /// `NNVerify.architecture_space : Type`
+#[cfg(test)]
 pub(super) fn build_architecture_space_type(c: &ProofGuidedNasConsts) -> Expr {
     c.type0.clone()
 }
 
 /// `NNVerify.verifiability_score : architecture_space -> Rat`
+#[cfg(test)]
 pub(super) fn build_verifiability_score_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.rat.clone())
 }
 
 /// `NNVerify.pareto_front : (architecture_space -> Rat) -> (architecture_space -> Rat) -> architecture_space -> Prop`
+#[cfg(test)]
 pub(super) fn build_pareto_front_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let fn_ty = Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.rat.clone());
@@ -62,11 +68,13 @@ pub(super) fn build_pareto_front_type(c: &ProofGuidedNasConsts) -> Expr {
 }
 
 /// `NNVerify.architecture_transform : Type`
+#[cfg(test)]
 pub(super) fn build_architecture_transform_type(c: &ProofGuidedNasConsts) -> Expr {
     c.type0.clone()
 }
 
 /// `NNVerify.apply_transform : architecture_transform -> architecture_space -> architecture_space`
+#[cfg(test)]
 pub(super) fn build_apply_transform_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (t_id, _) = b.fresh_local(c.arch_transform.clone());
@@ -82,6 +90,7 @@ pub(super) fn build_apply_transform_type(c: &ProofGuidedNasConsts) -> Expr {
 }
 
 /// `NNVerify.verified_accuracy : architecture_space -> Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_verified_accuracy_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (arch_id, _) = b.fresh_local(c.arch_space.clone());
@@ -92,21 +101,25 @@ pub(super) fn build_verified_accuracy_type(c: &ProofGuidedNasConsts) -> Expr {
 }
 
 /// `NNVerify.arch_depth : architecture_space -> Nat`
+#[cfg(test)]
 pub(super) fn build_arch_depth_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.nat.clone())
 }
 
 /// `NNVerify.arch_width : architecture_space -> Nat`
+#[cfg(test)]
 pub(super) fn build_arch_width_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.nat.clone())
 }
 
 /// `NNVerify.standard_accuracy : architecture_space -> Rat`
+#[cfg(test)]
 pub(super) fn build_standard_accuracy_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.rat.clone())
 }
 
 /// `NNVerify.has_skip_connections : architecture_space -> Prop`
+#[cfg(test)]
 pub(super) fn build_has_skip_connections_type(c: &ProofGuidedNasConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.prop.clone())
 }
@@ -122,6 +135,7 @@ pub(super) fn build_has_skip_connections_type(c: &ProofGuidedNasConsts) -> Expr 
 ///   LE.le (arch_width a1) (arch_width a2) ->
 ///   LE.le (verifiability_score a1) (verifiability_score a2)
 /// ```
+#[cfg(test)]
 pub(super) fn build_wider_more_verifiable_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a1_id, a1) = b.fresh_local(c.arch_space.clone());
@@ -151,6 +165,7 @@ pub(super) fn build_wider_more_verifiable_type(c: &ProofGuidedNasConsts) -> Expr
 ///   LE.le (arch_depth a1) (arch_depth a2) ->
 ///   LE.le (verifiability_score a2) (verifiability_score a1)
 /// ```
+#[cfg(test)]
 pub(super) fn build_depth_verifiability_tradeoff_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a1_id, a1) = b.fresh_local(c.arch_space.clone());
@@ -181,6 +196,7 @@ pub(super) fn build_depth_verifiability_tradeoff_type(c: &ProofGuidedNasConsts) 
 ///   pareto_front acc_fn ver_fn a ->
 ///   False
 /// ```
+#[cfg(test)]
 pub(super) fn build_pareto_dominance_sound_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let fn_ty = Expr::pi(BinderInfo::Default, c.arch_space.clone(), c.rat.clone());
@@ -216,6 +232,7 @@ pub(super) fn build_pareto_dominance_sound_type(c: &ProofGuidedNasConsts) -> Exp
 ///   pareto_front acc_fn ver_fn a ->
 ///   pareto_front acc_fn ver_fn (apply_transform t a)
 /// ```
+#[cfg(test)]
 pub(super) fn build_nas_search_monotone_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (t_id, t) = b.fresh_local(c.arch_transform.clone());
@@ -251,6 +268,7 @@ pub(super) fn build_nas_search_monotone_type(c: &ProofGuidedNasConsts) -> Expr {
 ///   has_skip_connections a ->
 ///   LE.le (verifiability_score (without_skip a)) (verifiability_score a)
 /// ```
+#[cfg(test)]
 pub(super) fn build_skip_connections_improve_verifiability_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.arch_space.clone());
@@ -271,6 +289,7 @@ pub(super) fn build_skip_connections_improve_verifiability_type(c: &ProofGuidedN
 ///   0 < epsilon ->
 ///   LE.le (verified_accuracy a epsilon) (standard_accuracy a)
 /// ```
+#[cfg(test)]
 pub(super) fn build_certified_accuracy_bound_type(c: &ProofGuidedNasConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.arch_space.clone());

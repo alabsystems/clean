@@ -200,7 +200,7 @@ pub fn eval_decision_tree_with_guards<F>(
     eval_guard: &F,
 ) -> Result<usize, MatchError>
 where
-    F: Fn(&clean_kernel::Expr, &MatchEnv) -> Result<bool, MatchError>,
+    F: Fn(&Expr, &MatchEnv) -> Result<bool, MatchError>,
 {
     match tree {
         DecisionTree::Leaf(idx) => {

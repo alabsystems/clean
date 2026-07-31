@@ -19,12 +19,18 @@
 //! body, and the theorem quantifies over all parameters with the helper
 //! applied.
 
+#[cfg(test)]
 use super::veripb_checker::VeriPbCheckerConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: CP addition soundness
@@ -35,6 +41,7 @@ impl Environment {
     ///
     /// Encodes: if assignment `a` satisfies `c1` and `c2`, then it satisfies
     /// `cp_add c1 c2`.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_add_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -70,6 +77,7 @@ impl Environment {
     ///
     /// Soundness of the addition rule: adding two valid pseudo-Boolean
     /// inequalities preserves validity over 0/1 assignments.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_add_sound(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -106,6 +114,7 @@ impl Environment {
     ///
     /// Encodes: if assignment `a` satisfies `cst`, then it satisfies
     /// `cp_multiply cst k`.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_multiply_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -141,6 +150,7 @@ impl Environment {
     ///
     /// Soundness of the multiplication rule: scaling a valid constraint by a
     /// natural-number factor preserves validity.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_multiply_sound(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -177,6 +187,7 @@ impl Environment {
     ///
     /// Encodes: if assignment `a` satisfies `cst`, then it satisfies
     /// `cp_divide cst k`.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_divide_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -212,6 +223,7 @@ impl Environment {
     ///
     /// Soundness of the division rule: integer division with rounding used by
     /// VeriPB preserves validity for pseudo-Boolean constraints.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_divide_sound(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -248,6 +260,7 @@ impl Environment {
     ///
     /// Encodes: if assignment `a` satisfies `cst`, then it satisfies
     /// `cp_saturate cst`.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_saturate_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -281,6 +294,7 @@ impl Environment {
     ///
     /// Soundness of saturation: clamping coefficients beyond the threshold is
     /// valid over 0/1 variables.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_saturate_sound(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -315,6 +329,7 @@ impl Environment {
     ///
     /// Encodes: if assignment `a` satisfies `cst`, then it satisfies
     /// `cp_weaken cst v`.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_weaken_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -350,6 +365,7 @@ impl Environment {
     ///
     /// Soundness of weakening: adding a fresh nonnegative literal to the left
     /// side preserves validity.
+    #[cfg(test)]
     pub(super) fn register_veripb_cp_weaken_sound(
         &mut self,
         c: &VeriPbCheckerConsts,

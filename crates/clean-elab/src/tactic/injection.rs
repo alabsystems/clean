@@ -34,7 +34,7 @@ use super::core::TacticResult;
 /// ENSURES: On Ok, new hypotheses `a₁ = b₁`, ..., `aₙ = bₙ` are in context
 /// ENSURES: On Err(HypothesisNotFound), `hyp_name` is not in the local context
 /// ENSURES: On Err(GoalMismatch), the hypothesis is not an equality of same-constructor terms
-pub fn eval_injection(ctx: &mut TacticCtx, hyp_name: &Name) -> TacticResult {
+pub fn eval_injection(ctx: &mut TacticCtx<'_>, hyp_name: &Name) -> TacticResult {
     super::inductive_reasoning::injection(ctx.state, &hyp_name.to_string())
 }
 
@@ -50,7 +50,7 @@ pub fn eval_injection(ctx: &mut TacticCtx, hyp_name: &Name) -> TacticResult {
 /// REQUIRES: `hyp_name` refers to a hypothesis equating two distinct constructors
 /// ENSURES: On Ok, the current goal is closed (contradiction from distinct constructors)
 /// ENSURES: On Err(GoalMismatch), the hypothesis does not match the pattern
-pub fn eval_discriminate(ctx: &mut TacticCtx, hyp_name: &Name) -> TacticResult {
+pub fn eval_discriminate(ctx: &mut TacticCtx<'_>, hyp_name: &Name) -> TacticResult {
     super::inductive_reasoning::discriminate(ctx.state, &hyp_name.to_string())
 }
 
@@ -61,7 +61,7 @@ pub fn eval_discriminate(ctx: &mut TacticCtx, hyp_name: &Name) -> TacticResult {
 ///
 /// REQUIRES: same as [`eval_injection`]
 /// ENSURES: same as [`eval_injection`]
-pub fn eval_injection_str(ctx: &mut TacticCtx, hyp_name: &str) -> TacticResult {
+pub fn eval_injection_str(ctx: &mut TacticCtx<'_>, hyp_name: &str) -> TacticResult {
     super::inductive_reasoning::injection(ctx.state, hyp_name)
 }
 
@@ -72,7 +72,7 @@ pub fn eval_injection_str(ctx: &mut TacticCtx, hyp_name: &str) -> TacticResult {
 ///
 /// REQUIRES: same as [`eval_discriminate`]
 /// ENSURES: same as [`eval_discriminate`]
-pub fn eval_discriminate_str(ctx: &mut TacticCtx, hyp_name: &str) -> TacticResult {
+pub fn eval_discriminate_str(ctx: &mut TacticCtx<'_>, hyp_name: &str) -> TacticResult {
     super::inductive_reasoning::discriminate(ctx.state, hyp_name)
 }
 

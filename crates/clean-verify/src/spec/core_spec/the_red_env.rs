@@ -16,8 +16,8 @@
 //!
 //! `the_red_env` is no longer a toy: its value IS `kernel_core_red_env`, the
 //! MECHANICALLY REFLECTED foundation core of the real kernel environment
-//! (19 recursors / 36 real rules with real RecMeta counts and real rule RHSs,
-//! 50 real definition values; `kernel_core_red_env.rs`), pinned 1:1 to the
+//! (the complete allowlisted recursor/rule metadata and definition values;
+//! `kernel_core_red_env.rs`), pinned 1:1 to the
 //! live kernel env by the fidelity gate
 //! (`tests/kernel_core_red_env_fidelity.rs`) under the three documented trust
 //! edges (injective name interning / level erasure / coverage-with-skips
@@ -44,7 +44,13 @@
 //!    `faithful_checkers.rs`, including the Stage-4
 //!    `the_red_env_faithful` bundle) and the kernel_core_red_env payoff
 //!    witnesses;
-//!  - the fidelity-gate / refutation-gate measurement probes (tests).
+//!  - the fidelity-gate / refutation-gate measurement probes (tests);
+//!  - `hnf_refutation.rs`, which REFUTES a premise about this environment
+//!    (`hnf_is_false`). Refuting a claim about the real reflected env requires
+//!    computing over it, exactly as establishing one does: `cx_whnf_stuck` is a
+//!    single `Eq.refl` whnf-evaluation, and the counterexample's spine is
+//!    PROJECTED out of the Guard-4 iota witness rather than written from interned
+//!    atoms, so it cannot drift when the reflection is regenerated.
 //!
 //! The ~79 carried-hypothesis metatheory decls remain PARAMETRIC in the env
 //! value (the schematic discipline): no metatheory proof term pattern-matches
@@ -69,28 +75,6 @@ use crate::spec::error::SpecError;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 
-// Interned-name atoms of the reflected env (generated/kernel_core_red_env.interning.tsv):
-// real name -> `kcre_name_<tag>` (:= Name.str Name.anonymous <unary tag>).
-const NAT_REC: &str = "kcre_name_25"; // Nat.rec
-const NAT_ZERO: &str = "kcre_name_16"; // Nat.zero
-const DELTA_HEAD: &str = "kcre_name_116"; // def_env_lift_closed_b (outermost DefEnv entry)
-
-// The REAL reflected rule rhs of Nat.rec's Nat.zero rule (extracted verbatim
-// from the generated env term; the fidelity gate pins it to the kernel):
-// λ (motive : Nat -> Sort) (z : motive Nat.zero)
-//   (s : ∀ n, motive n -> motive (Nat.succ n)) => z, level-erased.
-const NAT_ZERO_RHS: &str = "(KExpr.lam (KExpr.pi (KExpr.const kcre_name_1 (ListType.nil Level)) (KExpr.sort Level.zero)) \
-     (KExpr.lam (KExpr.app (KExpr.bvar kcre_nat_0) (KExpr.const kcre_name_16 (ListType.nil Level))) \
-     (KExpr.lam (KExpr.pi (KExpr.const kcre_name_1 (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar kcre_nat_2) (KExpr.bvar kcre_nat_0)) \
-     (KExpr.app (KExpr.bvar kcre_nat_3) (KExpr.app (KExpr.const kcre_name_10 (ListType.nil Level)) (KExpr.bvar kcre_nat_1))))) \
-     (KExpr.bvar kcre_nat_1))))";
-
-// The REAL reflected value of the outermost DefEnv entry
-// (`def_env_lift_closed_b := fun (env : DefEnv) => def_env_closed_b env`):
-// kcre_name_12 = DefEnv, kcre_name_88 = def_env_closed_b.
-const DELTA_VALUE: &str = "(KExpr.lam (KExpr.const kcre_name_12 (ListType.nil Level)) \
-     (KExpr.app (KExpr.const kcre_name_88 (ListType.nil Level)) (KExpr.bvar kcre_nat_0)))";
-
 impl Specification {
     pub(super) fn add_the_red_env(&mut self) -> Result<(), SpecError> {
         // the_red_env : RedEnv — the fixed distinguished env, SWAPPED (Front #1
@@ -102,8 +86,8 @@ impl Specification {
             "def the_red_env : RedEnv := kernel_core_red_env",
             "The single distinguished reduction environment DefEq is relative to (deletion-plan \
              choice 3c) — SWAPPED (Front #1 Stage 3) to kernel_core_red_env, the mechanically \
-             reflected, fidelity-gated foundation core of the REAL kernel environment (19 \
-             recursors / 36 real rules / 50 real definition values; \
+             reflected, fidelity-gated foundation core of the REAL kernel environment (the \
+             complete allowlisted recursors, rules, and definition values; \
              tests/kernel_core_red_env_fidelity.rs pins it 1:1 to the live kernel env). A \
              value-ful Definition (NOT a postulated axiom: Guard 2), non-empty by construction \
              (Guard 4: a real Nat.rec iota fire + a real delta unfold — see the two witnesses). \
@@ -113,34 +97,29 @@ impl Specification {
         )?;
 
         // Guard 4 witness (iota): the_red_env genuinely admits a REAL iota
-        // step. Nat.rec (RecMeta 0/1/2/0, major at spine position 3) applied
-        // to [motive, minor_zero, minor_succ, Nat.zero] reduces by iota_reduct
-        // to the REAL Nat.zero rule rhs applied back to the spine prefix
-        // (rhs motive minor_zero minor_succ). The three prefix arguments are
-        // chosen as (sort 0) placeholders — iota_reduct is a name-keyed spine
-        // surgery and never inspects them. Pure computation: ZERO axiom_deps.
+        // step. Both endpoints are generated from the reflected Nat.rec
+        // RecMeta and Nat.zero rule, so this proof contains no duplicated
+        // parameter/motive/minor/index counts or application-spine shape.
+        // Pure computation: ZERO axiom_deps.
         self.add_definition(SpecDefinition {
             name: "the_red_env_iota_nonvacuous".to_string(),
-            type_src: format!(
+            type_src: concat!(
                 "iota_step (red_rec the_red_env) \
-                 (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const {NAT_REC} (ListType.nil Level)) \
-                 (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) \
-                 (KExpr.const {NAT_ZERO} (ListType.nil Level))) \
-                 (KExpr.app (KExpr.app (KExpr.app {NAT_ZERO_RHS} \
-                 (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero))"
+                 kcre_witness_nat_zero_redex \
+                 kcre_witness_nat_zero_reduct"
+            )
+            .to_string(),
+            value_src: Some(
+                "Eq.refl (OptionType KExpr) \
+                 (OptionType.some KExpr kcre_witness_nat_zero_reduct)"
+                    .to_string(),
             ),
-            value_src: Some(format!(
-                "Eq.refl (OptionType KExpr) (OptionType.some KExpr \
-                 (KExpr.app (KExpr.app (KExpr.app {NAT_ZERO_RHS} \
-                 (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)))"
-            )),
             is_axiom: false,
             description: "Non-vacuity witness (Guard 4, post-swap): the_red_env admits a REAL iota step — \
-                          the reflected Nat.rec (real RecMeta 0 params/1 motive/2 minors/0 indices, major at \
-                          spine position 3) applied to [motive, minor_zero, minor_succ, Nat.zero] reduces by \
-                          the computational iota_reduct to the REAL Nat.zero rule rhs applied to the spine \
-                          prefix. Proof by refl — the kernel whnf-evaluates iota_reduct over the reflected \
-                          env. Zero axiom_deps. Confirms the tightened iota_reduces family is inhabited."
+                          the generator constructs both the closed Nat.rec/Nat.zero redex and reduct directly \
+                          from the reflected RecMeta and real rule RHS. Proof by refl — the kernel whnf-evaluates \
+                          iota_reduct over the reflected env. Zero axiom_deps. Confirms the tightened \
+                          iota_reduces family is inhabited without a hand-maintained spine."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
@@ -161,14 +140,17 @@ impl Specification {
         // computation: ZERO axiom_deps.
         self.add_definition(SpecDefinition {
             name: "the_red_env_delta_nonvacuous".to_string(),
-            type_src: format!(
+            type_src: concat!(
                 "delta_step (red_def the_red_env) \
-                 (KExpr.const {DELTA_HEAD} (ListType.nil Level)) \
-                 {DELTA_VALUE}"
+                 (KExpr.const kcre_witness_delta_head (ListType.nil Level)) \
+                 kcre_witness_delta_value"
+            )
+            .to_string(),
+            value_src: Some(
+                "Eq.refl (OptionType KExpr) \
+                 (OptionType.some KExpr kcre_witness_delta_value)"
+                    .to_string(),
             ),
-            value_src: Some(format!(
-                "Eq.refl (OptionType KExpr) (OptionType.some KExpr {DELTA_VALUE})"
-            )),
             is_axiom: false,
             description: "Non-vacuity witness (Guard 4, post-swap): the_red_env admits a REAL delta step — \
                           the reflected definition def_env_lift_closed_b (the outermost DefEnv entry) unfolds \

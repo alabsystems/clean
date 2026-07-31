@@ -89,6 +89,7 @@ struct DegBandConsts {
     mul_assoc: Expr,
     mul_comm: Expr,
     l1: Level,
+    #[cfg(test)]
     l0: Level,
 }
 
@@ -116,6 +117,7 @@ impl DegBandConsts {
             mul_assoc: k("Rat.mul_assoc"),
             mul_comm: k("Rat.mul_comm"),
             l1,
+            #[cfg(test)]
             l0: Level::zero(),
         }
     }

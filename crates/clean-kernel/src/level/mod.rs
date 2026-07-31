@@ -29,9 +29,103 @@ use std::sync::Arc;
 // Sound: Kani harnesses verify value semantics, not deallocation or
 // thread-safety correctness. Box has identical Deref behavior to Arc.
 #[cfg(not(kani))]
-pub(crate) type LevelArc = Arc<Level>;
+/// Stack-safe shared ownership edge used by recursive [`Level`] variants.
+///
+/// This type is public because it appears in the fields of the public `Level`
+/// enum.  Its representation remains private so an empty edge cannot be
+/// constructed; use the `Level` constructors rather than constructing
+/// recursive variants directly.
+pub struct LevelArc(Option<Arc<Level>>);
 #[cfg(kani)]
-pub(crate) type LevelArc = std::mem::ManuallyDrop<Box<Level>>;
+pub type LevelArc = std::mem::ManuallyDrop<Box<Level>>;
+
+#[cfg(not(kani))]
+impl Clone for LevelArc {
+    fn clone(&self) -> Self {
+        Self(Some(
+            self.0
+                .as_ref()
+                .expect("live LevelArc must contain a level")
+                .clone(),
+        ))
+    }
+}
+
+#[cfg(not(kani))]
+impl std::ops::Deref for LevelArc {
+    type Target = Level;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+            .as_deref()
+            .expect("live LevelArc must contain a level")
+    }
+}
+
+#[cfg(not(kani))]
+impl From<Level> for LevelArc {
+    fn from(level: Level) -> Self {
+        Self(Some(Arc::new(level)))
+    }
+}
+
+#[cfg(not(kani))]
+impl From<Arc<Level>> for LevelArc {
+    fn from(level: Arc<Level>) -> Self {
+        Self(Some(level))
+    }
+}
+
+#[cfg(not(kani))]
+impl AsRef<Level> for LevelArc {
+    fn as_ref(&self) -> &Level {
+        self
+    }
+}
+
+#[cfg(not(kani))]
+impl std::borrow::Borrow<Level> for LevelArc {
+    fn borrow(&self) -> &Level {
+        self
+    }
+}
+
+#[cfg(not(kani))]
+impl PartialEq for LevelArc {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+#[cfg(not(kani))]
+impl Eq for LevelArc {}
+
+#[cfg(not(kani))]
+impl std::hash::Hash for LevelArc {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
+#[cfg(not(kani))]
+impl std::fmt::Debug for LevelArc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&**self, f)
+    }
+}
+
+#[cfg(not(kani))]
+impl Drop for LevelArc {
+    fn drop(&mut self) {
+        let Some(level) = self.0.take() else {
+            return;
+        };
+        // Every recursive ownership edge re-enters the growth boundary. The
+        // Option lets Drop take ownership without a replacement allocation,
+        // while `Level` itself remains a move-friendly public enum.
+        stack_safe(move || drop(level));
+    }
+}
 
 /// Wrap a Level in LevelArc. Under Kani, uses ManuallyDrop<Box<Level>>
 /// to eliminate Arc atomic operations from CBMC analysis.
@@ -39,7 +133,7 @@ pub(crate) type LevelArc = std::mem::ManuallyDrop<Box<Level>>;
 pub(crate) fn level_arc(l: Level) -> LevelArc {
     #[cfg(not(kani))]
     {
-        Arc::new(l)
+        LevelArc::from(l)
     }
     #[cfg(kani)]
     {
@@ -76,8 +170,7 @@ pub(crate) fn level_arc(l: Level) -> LevelArc {
 // recurses through ManuallyDrop<Box<Level>> causing CBMC to unwind
 // Level::eq unboundedly. Clone/Debug work via ManuallyDrop's Deref.
 #[must_use = "levels should be inspected or passed onward"]
-#[cfg_attr(not(kani), derive(Clone, Debug, PartialEq, Eq))]
-#[cfg_attr(kani, derive(Debug))]
+#[cfg_attr(not(kani), derive(Clone))]
 pub enum Level {
     /// Zero (the lowest level)
     Zero,
@@ -89,6 +182,43 @@ pub enum Level {
     IMax(LevelArc, LevelArc),
     /// Universe parameter (polymorphism)
     Param(Name),
+}
+
+impl std::fmt::Debug for Level {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Zero => f.write_str("Zero"),
+            Self::Succ(child) => f
+                .debug_tuple("Succ")
+                .field(&LevelChildDebug(child))
+                .finish(),
+            Self::Max(left, right) => f
+                .debug_tuple("Max")
+                .field(&LevelChildDebug(left))
+                .field(&LevelChildDebug(right))
+                .finish(),
+            Self::IMax(left, right) => f
+                .debug_tuple("IMax")
+                .field(&LevelChildDebug(left))
+                .field(&LevelChildDebug(right))
+                .finish(),
+            Self::Param(name) => f.debug_tuple("Param").field(name).finish(),
+        }
+    }
+}
+
+struct LevelChildDebug<'a>(&'a Level);
+
+impl std::fmt::Debug for LevelChildDebug<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Level::Zero => f.write_str("Zero"),
+            Level::Succ(_) => f.write_str("Succ(..)"),
+            Level::Max(_, _) => f.write_str("Max(..)"),
+            Level::IMax(_, _) => f.write_str("IMax(..)"),
+            Level::Param(name) => f.debug_tuple("Param").field(name).finish(),
+        }
+    }
 }
 
 // Manual serde keeps the exact derived enum wire format while
@@ -139,6 +269,7 @@ impl<'de> Deserialize<'de> for Level {
         // running simplifying constructors (which would change the decoded
         // structural value).
         #[derive(Deserialize)]
+        #[serde(rename = "Level")]
         enum LevelWire {
             Zero,
             Succ(Box<Level>),
@@ -164,15 +295,20 @@ impl<'de> Deserialize<'de> for Level {
 #[cfg(not(kani))]
 impl std::hash::Hash for Level {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::mem::discriminant(self).hash(state);
-        match self {
-            Level::Zero => {}
-            Level::Succ(l) => l.hash(state),
-            Level::Max(l, r) | Level::IMax(l, r) => {
-                l.hash(state);
-                r.hash(state);
+        // Preserve derived Hash's pre-order sequence without recursive
+        // Arc<Level>::hash descent.
+        let mut pending = vec![self];
+        while let Some(level) = pending.pop() {
+            std::mem::discriminant(level).hash(state);
+            match level {
+                Level::Zero => {}
+                Level::Succ(child) => pending.push(child),
+                Level::Max(left, right) | Level::IMax(left, right) => {
+                    pending.push(right);
+                    pending.push(left);
+                }
+                Level::Param(name) => name.hash(state),
             }
-            Level::Param(n) => n.hash(state),
         }
     }
 }
@@ -196,17 +332,8 @@ impl std::hash::Hash for Level {
     }
 }
 
-// Kani PartialEq: iterative comparison to avoid CBMC recursion unwinding.
-// The derived PartialEq recurses through ManuallyDrop<Box<Level>>::eq →
-// Box<Level>::eq → Level::eq for each Succ/Max/IMax child. CBMC generates
-// verification conditions at each recursion level, causing timeouts on
-// harnesses like verify_level_max_symmetric (depth < 4, unwind 6).
-//
-// This impl iterates along the left spine of Succ chains (common case in
-// harnesses: build_level_from_depth creates pure Succ chains). For Max/IMax,
-// the second child is compared via recursive Level::eq (bounded by tree depth)
-// while the first child continues iteratively.
-#[cfg(kani)]
+// Structural comparison is iterative in every build. Besides keeping Kani's
+// model finite, this protects native callers comparing attacker-deep levels.
 impl PartialEq for Level {
     fn eq(&self, other: &Self) -> bool {
         // Fully iterative comparison using an explicit stack to eliminate
@@ -235,7 +362,6 @@ impl PartialEq for Level {
     }
 }
 
-#[cfg(kani)]
 impl Eq for Level {}
 
 /// Iterative Clone for CBMC: strips Succ chain with get_offset, clones the

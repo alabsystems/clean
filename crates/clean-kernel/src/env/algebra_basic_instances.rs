@@ -10,9 +10,14 @@
 //! Int instances are in algebra_basic_instances_int.rs.
 //! Split from algebra_basic.rs for #307.
 
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(test)]
+use crate::env::{Declaration, EnvError};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
@@ -28,6 +33,7 @@ impl Environment {
     /// ENSURES: On success, `self.nat_zero_inst_init == true`
     /// ENSURES: On success, required dependencies (`zero`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_zero_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_zero_inst_init {
             return Ok(());
@@ -61,6 +67,7 @@ impl Environment {
     }
 
     /// Check if Nat Zero instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_zero_inst(&self) -> bool {
         self.nat_zero_inst_init
     }
@@ -73,6 +80,7 @@ impl Environment {
     /// ENSURES: On success, `self.nat_one_inst_init == true`
     /// ENSURES: On success, required dependencies (`one`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_one_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_one_inst_init {
             return Ok(());
@@ -110,6 +118,7 @@ impl Environment {
     }
 
     /// Check if Nat One instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_one_inst(&self) -> bool {
         self.nat_one_inst_init
     }
@@ -122,6 +131,7 @@ impl Environment {
     /// ENSURES: On success, `self.nat_add_inst_init == true`
     /// ENSURES: On success, required dependencies (`add`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_add_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_add_inst_init {
             return Ok(());
@@ -155,6 +165,7 @@ impl Environment {
     }
 
     /// Check if Nat Add instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_add_inst(&self) -> bool {
         self.nat_add_inst_init
     }
@@ -167,6 +178,7 @@ impl Environment {
     /// ENSURES: On success, `self.nat_mul_inst_init == true`
     /// ENSURES: On success, required dependencies (`mul`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_mul_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_mul_inst_init {
             return Ok(());
@@ -200,6 +212,7 @@ impl Environment {
     }
 
     /// Check if Nat Mul instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_mul_inst(&self) -> bool {
         self.nat_mul_inst_init
     }
@@ -212,6 +225,7 @@ impl Environment {
     /// ENSURES: On success, `self.nat_sub_inst_init == true`
     /// ENSURES: On success, required dependencies (`sub`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_sub_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_sub_inst_init {
             return Ok(());
@@ -245,6 +259,7 @@ impl Environment {
     }
 
     /// Check if Nat Sub instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_sub_inst(&self) -> bool {
         self.nat_sub_inst_init
     }

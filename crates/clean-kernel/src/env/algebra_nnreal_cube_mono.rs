@@ -44,6 +44,7 @@ struct CubeMonoConsts {
     nnreal_mul_comm: Expr,
     nnreal_mul_le_mul_left: Expr,
     nnreal_le_trans: Expr,
+    #[cfg(test)]
     eq1: Expr,
     eq_subst1: Expr,
 }
@@ -59,6 +60,7 @@ impl CubeMonoConsts {
             nnreal_mul_comm: k("NNReal.mul_comm"),
             nnreal_mul_le_mul_left: k("NNReal.mul_le_mul_left"),
             nnreal_le_trans: k("NNReal.le.trans"),
+            #[cfg(test)]
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![l1]),
         }

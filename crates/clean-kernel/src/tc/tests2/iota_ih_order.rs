@@ -78,7 +78,7 @@ fn test_iota_reduction_ih_order_rule_structure() {
 
 /// Reduce an expression to a Nat depth (peeling Nat.succ constructors or reading literals).
 /// Returns None if the expression is not in Nat normal form.
-fn nat_depth(tc: &TypeChecker, start: Expr) -> Option<u32> {
+fn nat_depth(tc: &TypeChecker<'_>, start: Expr) -> Option<u32> {
     let mut depth = 0u32;
     let mut current = start;
     loop {

@@ -62,6 +62,7 @@ struct InvConsts {
     fin_prod: Expr,
     fin_sum: Expr,
     fin_sum_diag_collapse: Expr,
+    #[cfg(test)]
     rat_mmmc: Expr,
     rat_mul_comm: Expr,
     rat_mul_zero: Expr,
@@ -114,6 +115,7 @@ impl InvConsts {
             fin_prod: Expr::const_(Name::from_string("Fin.prod"), vec![]),
             fin_sum: Expr::const_(Name::from_string("Fin.sum"), vec![]),
             fin_sum_diag_collapse: Expr::const_(Name::from_string("Fin.sum_diag_collapse"), vec![]),
+            #[cfg(test)]
             rat_mmmc: Expr::const_(Name::from_string("Rat.mul_mul_mul_comm"), vec![]),
             rat_mul_comm: Expr::const_(Name::from_string("Rat.mul_comm"), vec![]),
             rat_mul_zero: Expr::const_(Name::from_string("Rat.mul_zero"), vec![]),
@@ -190,6 +192,7 @@ impl InvConsts {
             [self.rat.clone(), self.rat.clone(), a, b, g, h],
         )
     }
+    #[cfg(test)]
     fn mmmc(&self, a: Expr, bb: Expr, cc: Expr, d: Expr) -> Expr {
         Expr::apps(self.rat_mmmc.clone(), [a, bb, cc, d])
     }

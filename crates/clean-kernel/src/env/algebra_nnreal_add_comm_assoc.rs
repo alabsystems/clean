@@ -84,6 +84,7 @@ pub(crate) struct AddAlgConsts {
     // logic.
     and_c: Expr,
     and_intro: Expr,
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     // Eq.{1} over Rat / NNRat.
@@ -128,6 +129,7 @@ impl AddAlgConsts {
             causeq_add: k("NNReal.CauSeq.add"),
             and_c: k("And"),
             and_intro: k("And.intro"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
@@ -176,6 +178,7 @@ impl AddAlgConsts {
         Expr::apps(self.causeq_equiv.clone(), [a, b])
     }
     /// `@Eq.{1} Rat a b`.
+    #[cfg(test)]
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }

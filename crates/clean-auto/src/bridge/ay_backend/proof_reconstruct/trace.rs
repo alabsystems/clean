@@ -4,8 +4,6 @@
 
 //! Borrowing proof-trace adapter: matches raw ay_core proof payload enums and exposes local
 //! view types for the rest of proof_reconstruct. Design: `designs/2026-03-11-2451-*.md`
-#![allow(dead_code)]
-
 use super::trace_convert::{
     constant_view, farkas_view, lia_annotation_view, rule_view, theory_lemma_view,
 };

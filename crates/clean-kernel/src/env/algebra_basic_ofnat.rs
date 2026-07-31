@@ -183,6 +183,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_ofnat` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_ofnat(&self) -> bool {
         self.ofnat_init
     }
@@ -242,11 +243,32 @@ impl Environment {
             is_reducible: true,
         })?;
 
-        // Register as instance with low priority (default for built-in types)
+        // Lean's INSTANCE priority for `instOfNatNat` is the unannotated
+        // default, 1000 — verified two ways: `Init/Prelude.lean` declares
+        // `@[default_instance 100] instance instOfNatNat (n : Nat) : OfNat Nat n`
+        // (no `(priority := …)` on the `instance`), and the shipped
+        // `Init/Prelude.olean` serializes it into `Lean.Meta.instanceExtension`
+        // as `priority: 1000`.
+        //
+        // Do NOT read the `100` off that `@[default_instance 100]`: those are
+        // two different tables. `default_instance` priority orders TYPE
+        // DEFAULTING for an unresolved numeric literal; instance priority
+        // orders `synthInstance` candidates. Clean tracks defaulting separately
+        // (`ElabCtx::default_instances`, fed by the `@[default_instance]`
+        // handler), so this field is only the latter.
+        //
+        // Registering 100 here (Lean's `low`) inverted Lean's candidate order
+        // against `Zero.toOfNat0`, which `Init/Data/Zero.lean:17` declares at
+        // `(priority := 300)`. Priority dominates candidate ordering, so
+        // `(0 : Nat)` elaborated to `Zero.toOfNat0` where Lean produces
+        // `instOfNatNat 0`. Both are definitionally equal, so nothing was
+        // rejected — but `simp only [Nat.add_zero]` could no longer match its
+        // own imported statement, because syntactic matching sees the two
+        // shapes as different.
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instOfNatNat"),
             class_name: Name::from_string("OfNat"),
-            priority: 100,
+            priority: 1000,
             type_: None,
             value: None,
         });
@@ -261,6 +283,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_ofnat_nat` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_ofnat_nat(&self) -> bool {
         self.ofnat_nat_inst_init
     }

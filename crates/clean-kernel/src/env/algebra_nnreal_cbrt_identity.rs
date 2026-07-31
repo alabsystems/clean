@@ -58,7 +58,9 @@ pub(crate) struct CbrtIdentityConsts {
     nat_succ: Expr,
     nat_pow: Expr,
     nat_le: Expr,
+    #[cfg(test)]
     nat_le_refl: Expr,
+    #[cfg(test)]
     nat_le_step: Expr,
     rat: Expr,
     rat_zero: Expr,
@@ -74,6 +76,7 @@ pub(crate) struct CbrtIdentityConsts {
     rat_add_zero: Expr,
     rat_add_lt_add_left: Expr,
     rat_lt_of_le_of_lt: Expr,
+    #[cfg(test)]
     rat_lt_of_lt_of_le: Expr,
     rat_lt_trans: Expr,
     rat_le_trans: Expr,
@@ -96,6 +99,7 @@ pub(crate) struct CbrtIdentityConsts {
     inv_two_pow_le_of_le: Expr,
     inv_two_pow_succ_add_self: Expr,
     // carrier.
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_of_rat: Expr,
     nnreal: Expr,
@@ -128,7 +132,9 @@ impl CbrtIdentityConsts {
             nat_succ: k("Nat.succ"),
             nat_pow: k("Nat.pow"),
             nat_le: k("Nat.le"),
+            #[cfg(test)]
             nat_le_refl: k("Nat.le.refl"),
+            #[cfg(test)]
             nat_le_step: k("Nat.le.step"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
@@ -143,6 +149,7 @@ impl CbrtIdentityConsts {
             rat_add_zero: k("Rat.add_zero"),
             rat_add_lt_add_left: k("Rat.add_lt_add_left"),
             rat_lt_of_le_of_lt: k("Rat.lt_of_le_of_lt"),
+            #[cfg(test)]
             rat_lt_of_lt_of_le: k("Rat.lt_of_lt_of_le"),
             rat_lt_trans: k("Rat.lt_trans"),
             rat_le_trans: k("Rat.le_trans"),
@@ -162,6 +169,7 @@ impl CbrtIdentityConsts {
             exists_inv_two_pow_lt: k("Rat.exists_inv_two_pow_lt"),
             inv_two_pow_le_of_le: k("Rat.inv_two_pow_le_of_le"),
             inv_two_pow_succ_add_self: k("Rat.inv_two_pow_succ_add_self"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_of_rat: k("NNRat.ofRat"),
             nnreal: k("NNReal"),
@@ -235,6 +243,7 @@ impl CbrtIdentityConsts {
     fn lt_of_le_of_lt(&self, a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.rat_lt_of_le_of_lt.clone(), [a, b, c, h1, h2])
     }
+    #[cfg(test)]
     fn lt_of_lt_of_le(&self, a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.rat_lt_of_lt_of_le.clone(), [a, b, c, h1, h2])
     }

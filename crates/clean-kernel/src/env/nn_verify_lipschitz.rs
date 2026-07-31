@@ -41,6 +41,7 @@ pub(super) struct LipschitzConsts {
     pub(super) prop: Expr,
     pub(super) nn_vec: Expr,
     pub(super) rat_add: Expr,
+    #[cfg(test)]
     pub(super) rat_mul: Expr,
     pub(super) rat_one: Expr,
     pub(super) rat_zero: Expr,
@@ -64,6 +65,7 @@ impl LipschitzConsts {
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
+            #[cfg(test)]
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
             rat_zero: Expr::const_(Name::from_string("Rat.zero"), vec![]),
@@ -122,6 +124,7 @@ impl LipschitzConsts {
     }
 
     /// Build `Rat.mul a b`.
+    #[cfg(test)]
     pub(super) fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }

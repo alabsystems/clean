@@ -91,10 +91,12 @@ pub(crate) use convert_expr_direct::read_and_convert_expr;
 #[cfg(test)]
 pub(crate) use load_parse::parse_load_module;
 #[cfg(test)]
+#[cfg(test)]
 pub(crate) use load_register::load_module_direct_with_cache;
 #[cfg(test)]
 pub(crate) use path::{
-    collect_default_search_paths, discover_lake_package_paths, module_name_from_path,
+    collect_default_search_paths, collect_default_search_paths_with_pinned,
+    discover_lake_package_paths, module_name_from_path,
 };
 
 /// Errors that can arise while importing an .olean module into the kernel environment.

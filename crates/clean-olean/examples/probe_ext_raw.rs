@@ -73,7 +73,7 @@ fn main() {
 
 /// ModuleData ptr-field order: imports(0) constNames(1) constants(2)
 /// extraConstNames(3) entries(4). Fields start at offset+8.
-fn dump_entries(region: &CompactedRegion, root: u64, filter: &str, n: usize) {
+fn dump_entries(region: &CompactedRegion<'_>, root: u64, filter: &str, n: usize) {
     let offset = region.ptr_to_offset(root).expect("root offset");
     let entries_ptr = region.read_u64_at(offset + 8 + 32).expect("entries ptr");
     if !is_ptr(entries_ptr) {
@@ -129,7 +129,7 @@ fn dump_entries(region: &CompactedRegion, root: u64, filter: &str, n: usize) {
 }
 
 /// Print an object's header (tag / #ptr-fields / size) and shallow field info.
-fn describe_object(region: &CompactedRegion, ptr: u64, idx: usize, depth: usize) {
+fn describe_object(region: &CompactedRegion<'_>, ptr: u64, idx: usize, depth: usize) {
     let pad = "    ".repeat(depth);
     let Ok(off) = region.ptr_to_offset(ptr) else {
         println!("{pad}[{idx}] <ptr out of region {ptr:#x}>");

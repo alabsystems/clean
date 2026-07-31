@@ -68,6 +68,7 @@ use crate::name::Name;
 struct ThrConsts {
     nat: Expr,
     rat: Expr,
+    #[cfg(test)]
     bool_: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
@@ -102,6 +103,7 @@ impl ThrConsts {
         Self {
             nat: k("Nat"),
             rat: k("Rat"),
+            #[cfg(test)]
             bool_: k("Bool"),
             nat_zero: k("Nat.zero"),
             nat_succ: k("Nat.succ"),
@@ -299,6 +301,7 @@ impl ThrConsts {
         )
     }
     /// `Rat.le_trans a b c h1 h2 : a ≤ c`.
+    #[cfg(test)]
     fn le_trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.le_trans"), vec![]),
@@ -393,6 +396,7 @@ impl ThrConsts {
     fn add(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("Rat.add"), vec![]), [a, b])
     }
+    #[cfg(test)]
     fn rat_add(&self) -> Expr {
         Expr::const_(Name::from_string("Rat.add"), vec![])
     }
@@ -1780,7 +1784,7 @@ impl Environment {
         let c = ThrConsts::new();
         let nat_succ = c.nat_succ.clone();
         let two_rat = c.rat_two.clone();
-        let mul_comm = Expr::const_(Name::from_string("Rat.mul_comm"), vec![]);
+        let _mul_comm = Expr::const_(Name::from_string("Rat.mul_comm"), vec![]);
         let mul_one = Expr::const_(Name::from_string("Rat.mul_one"), vec![]);
         let one_mul = Expr::const_(Name::from_string("Rat.one_mul"), vec![]);
         let add_zero = Expr::const_(Name::from_string("Rat.add_zero"), vec![]);
@@ -1965,7 +1969,7 @@ impl Environment {
                 zero_lt_two.clone(),
                 h_ak_pos.clone(),
             );
-            let h0_ak = c.le_of_lt(c.rat_zero.clone(), ak.clone(), h_ak_pos.clone()); // 0 ≤ a·K
+            let _h0_ak = c.le_of_lt(c.rat_zero.clone(), ak.clone(), h_ak_pos.clone()); // 0 ≤ a·K
 
             // ── 1 ≤ natCast(2^e) and 1 ≤ a := natCast(9^d) ──
             //   ble_eq_true_of_le k m (Nat.le k m) : Nat.ble k m = true ;
@@ -2634,8 +2638,8 @@ fn case_threshold_build(env: &Environment, for_value: bool) -> Result<Expr, EnvE
         h_qe_eps_pos,
         g_lo.clone(),
     );
-    let hk0 = c.le_of_lt(c.rat_zero.clone(), kk.clone(), hk_pos.clone()); // 0 ≤ K
-                                                                          // 0 < a·K, 0 < den.
+    let _hk0 = c.le_of_lt(c.rat_zero.clone(), kk.clone(), hk_pos.clone()); // 0 ≤ K
+                                                                           // 0 < a·K, 0 < den.
     let h_ak_pos = c.mul_pos(a.clone(), kk.clone(), ha_pos, hk_pos.clone());
     let h_den_pos = c.mul_pos(c.rat_two.clone(), ak.clone(), zero_lt_two.clone(), h_ak_pos);
     let _ = (div_pos.clone(), zero_lt_two);
@@ -2768,7 +2772,7 @@ fn case_threshold_build(env: &Environment, for_value: bool) -> Result<Expr, EnvE
     // STEP A : Nat.le (succ(2^(e+2))) (48·2^e).
     let pow_e2_plus_pe2 = nmul(c.nat_lit(2), dexp.clone()); // 2·2^(e+2)  (used as add-pair below)
     let _ = pow_e2_plus_pe2;
-    let add_pe2_1 = Expr::apps(
+    let _add_pe2_1 = Expr::apps(
         Expr::const_(Name::from_string("Nat.add"), vec![]),
         [dexp.clone(), one_nat.clone()],
     ); // 2^(e+2)+1

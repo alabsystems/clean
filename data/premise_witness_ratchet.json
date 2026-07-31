@@ -1,0 +1,1876 @@
+{
+  "_comment": "Premise-satisfiability ratchet (vacuity firewall item 9). Predicates ASSUMED as a hypothesis somewhere in the clean-verify spec that NO registered definition concludes. Constructors and recursors are excluded from the supply side on purpose: a constructor builds P only if something supplies its fields. See crates/clean-verify/src/premise_witness.rs. This list may only shrink.\n\nWHY IT EXISTS: def_eq_fuel_complete passed a census of 0 axioms / 0 domain axioms / 0 DerivedProved debt and proved nothing, because its hnf premise is false (hnf_is_false). Zero axioms is not zero assumptions.\n\nIT WOULD HAVE CAUGHT THAT: hnf concludes nf_head r, and before nf_head_neutral_app_witness nothing in the tree concluded nf_head.\n\nTWO KNOWN LIMITS. (1) Head-only: iota_immune PASSES because iota_immune_sort_witness concludes it at a SORT, while nf_head.neutral needs it at an APPLICATION. A green run is not a non-vacuity proof. (2) Noisy: ordinary Type-valued DATA (BinderData, Char, CtorDecl, ImplEnv, BinderInfo ...) is reported next to genuine open obligations, because both conclude in a Sort. Nothing constructs a BinderData by definition and nothing should have to. Discriminating them (a judgment head is APPLIED to indices in hypothesis position; a data parameter is not) is an unmade refinement.\n\nGENUINE OPEN OBLIGATIONS IN THIS LIST, worth attention: red_env_good (discharged nowhere in the tree), def_env_good, typing_is_def_eq, const_whnf (still unwitnessed even after iota_neutral_of_dead_const, which concludes iota_neutral rather than const_whnf), CandModel, CtxTyping, CtorsWellTyped, DefEnvWellformed.",
+  "carriers": [
+    {
+      "assumed_by": [
+        "AppInferDecomp.mk",
+        "AppInferWitness.casesOn",
+        "AppInferWitness.noConfusion",
+        "AppInferWitness.noConfusionType",
+        "AppInferWitness.rec",
+        "AppInferWitness.recOn",
+        "KernelInferAccepts.app"
+      ],
+      "predicate": "AppInferWitness"
+    },
+    {
+      "assumed_by": [
+        "BCPComplete",
+        "BCPComplete.casesOn",
+        "BCPComplete.rec",
+        "BCPComplete.recOn",
+        "BCPComplete.skip",
+        "BCPComplete.unit",
+        "BCPStep.casesOn",
+        "BCPStep.noConfusion",
+        "BCPStep.noConfusionType",
+        "BCPStep.rec",
+        "BCPStep.recOn",
+        "BCPStep.skip",
+        "BCPStep.unit",
+        "cdcl_s05_propagation_completeness"
+      ],
+      "predicate": "BCPStep"
+    },
+    {
+      "assumed_by": [
+        "BacktrackOp.casesOn",
+        "BacktrackOp.done",
+        "BacktrackOp.noConfusion",
+        "BacktrackOp.noConfusionType",
+        "BacktrackOp.pop",
+        "BacktrackOp.rec",
+        "BacktrackOp.recOn",
+        "BacktrackValid",
+        "BacktrackValid.casesOn",
+        "BacktrackValid.done",
+        "BacktrackValid.pop",
+        "BacktrackValid.rec",
+        "BacktrackValid.recOn",
+        "cdcl_s04_backtrack_correctness"
+      ],
+      "predicate": "BacktrackOp"
+    },
+    {
+      "assumed_by": [
+        "BinderData.casesOn",
+        "BinderData.noConfusion",
+        "BinderData.noConfusionType",
+        "BinderData.rec",
+        "BinderData.recOn",
+        "ImplExpr.lam",
+        "ImplExpr.pi",
+        "ImplInfer.lam",
+        "ImplInfer.pi",
+        "LocalDecl.mk"
+      ],
+      "predicate": "BinderData"
+    },
+    {
+      "assumed_by": [
+        "BinderData.mk",
+        "BinderInfo.casesOn",
+        "BinderInfo.noConfusion",
+        "BinderInfo.noConfusionType",
+        "BinderInfo.rec",
+        "BinderInfo.recOn"
+      ],
+      "predicate": "BinderInfo"
+    },
+    {
+      "assumed_by": [
+        "BoolAnalysis.FourierCoefficient",
+        "BoolAnalysis.FourierTransform",
+        "BoolAnalysis.Influence",
+        "BoolAnalysis.TotalInfluence",
+        "BoolAnalysis.Variance",
+        "BoolAnalysis.bonami_beckner",
+        "BoolAnalysis.bonami_beckner_helper",
+        "BoolAnalysis.deg_band_rhs_eq_pow4_mass",
+        "BoolAnalysis.deriv_pow4_sum_eq_four_sq",
+        "BoolAnalysis.deriv_sq_sum_eq_four_disagree",
+        "BoolAnalysis.derivative_4norm_eq_4_influence",
+        "BoolAnalysis.dualhc_m_pow2_eq_4pow_influence",
+        "BoolAnalysis.dualhc_per_coord",
+        "BoolAnalysis.dualhc_per_coord_uncond",
+        "BoolAnalysis.dualhc_step2_holder_inst",
+        "BoolAnalysis.dualhc_step2_m_eq_disagree_mass",
+        "BoolAnalysis.dualhc_step4_sq_le",
+        "BoolAnalysis.expect_pm_sq_eq_fourier_mass",
+        "BoolAnalysis.fourier_empty_eq_mean",
+        "BoolAnalysis.fourier_sq_nonneg",
+        "BoolAnalysis.fourier_sq_regroup",
+        "BoolAnalysis.influence_fourier",
+        "BoolAnalysis.influence_fourier_helper",
+        "BoolAnalysis.kkl_conditional_var_bound",
+        "BoolAnalysis.kkl_deriv_two_norm_sum_le",
+        "BoolAnalysis.kkl_exists_max_influence",
+        "BoolAnalysis.kkl_exists_max_influence_uncond",
+        "BoolAnalysis.kkl_inequality",
+        "BoolAnalysis.kkl_inequality_helper",
+        "BoolAnalysis.kkl_lowband_le_wnorm_sum",
+        "BoolAnalysis.kkl_pow4_mass_le_summed_deriv",
+        "BoolAnalysis.kkl_sum_pow32_influence_le",
+        "BoolAnalysis.kkl_summed_deriv_le_wnorm_sum",
+        "BoolAnalysis.kkl_threshold_influence",
+        "BoolAnalysis.kkl_threshold_mass_le",
+        "BoolAnalysis.kkl_variance_pinch_of_lowband_le",
+        "BoolAnalysis.kkl_wnorm_sum_le_rat",
+        "BoolAnalysis.lowband_double_count_le",
+        "BoolAnalysis.parseval_identity",
+        "BoolAnalysis.parseval_identity_helper",
+        "BoolAnalysis.subsetSum_disagree_side",
+        "BoolAnalysis.subsetSum_influence_unnorm",
+        "BoolAnalysis.subsetSum_pm_eq_pow2_fourier",
+        "BoolAnalysis.subsetSum_pm_sq_eq_pow4_fourier",
+        "BoolAnalysis.total_influence_identity",
+        "BoolAnalysis.total_influence_identity_helper",
+        "BoolAnalysis.total_influence_nonneg",
+        "BoolAnalysis.total_influence_spectral",
+        "BoolAnalysis.variance_eq_nonempty_mass",
+        "BoolAnalysis.variance_high_mass_complement",
+        "BoolAnalysis.variance_le_one",
+        "BoolAnalysis.variance_low_band_influence"
+      ],
+      "predicate": "BoolAnalysis.BoolFn"
+    },
+    {
+      "assumed_by": [
+        "BoolAnalysis.bonami_beckner"
+      ],
+      "predicate": "BoolAnalysis.bonami_beckner_conditions"
+    },
+    {
+      "assumed_by": [
+        "BootstrapStage.casesOn",
+        "BootstrapStage.noConfusion",
+        "BootstrapStage.noConfusionType",
+        "BootstrapStage.rec",
+        "BootstrapStage.recOn"
+      ],
+      "predicate": "BootstrapStage"
+    },
+    {
+      "assumed_by": [
+        "BootstrapTrustLevel.casesOn",
+        "BootstrapTrustLevel.noConfusion",
+        "BootstrapTrustLevel.noConfusionType",
+        "BootstrapTrustLevel.rec",
+        "BootstrapTrustLevel.recOn"
+      ],
+      "predicate": "BootstrapTrustLevel"
+    },
+    {
+      "assumed_by": [
+        "CDCLStep.casesOn",
+        "CDCLStep.learn",
+        "CDCLStep.noConfusion",
+        "CDCLStep.noConfusionType",
+        "CDCLStep.rec",
+        "CDCLStep.recOn",
+        "CDCLStep.restart",
+        "CDCLTerminates",
+        "CDCLTerminates.casesOn",
+        "CDCLTerminates.learn",
+        "CDCLTerminates.rec",
+        "CDCLTerminates.recOn",
+        "CDCLTerminates.restart",
+        "cdcl_s06_termination"
+      ],
+      "predicate": "CDCLStep"
+    },
+    {
+      "assumed_by": [
+        "CPSimResolvSound",
+        "CPSimResolvSound.casesOn",
+        "CPSimResolvSound.rec",
+        "CPSimResolvSound.recOn",
+        "CPSimResolvSound.sim_resolve",
+        "CPSimResolvStep.casesOn",
+        "CPSimResolvStep.noConfusion",
+        "CPSimResolvStep.noConfusionType",
+        "CPSimResolvStep.rec",
+        "CPSimResolvStep.recOn",
+        "CPSimResolvStep.sim_resolve",
+        "pc04_cp_subsumes_resolution"
+      ],
+      "predicate": "CPSimResolvStep"
+    },
+    {
+      "assumed_by": [
+        "CPSound",
+        "CPSound.addition",
+        "CPSound.casesOn",
+        "CPSound.division",
+        "CPSound.rec",
+        "CPSound.recOn",
+        "CPSound.scalar_mul",
+        "CPStep.addition",
+        "CPStep.casesOn",
+        "CPStep.division",
+        "CPStep.noConfusion",
+        "CPStep.noConfusionType",
+        "CPStep.rec",
+        "CPStep.recOn",
+        "CPStep.scalar_mul",
+        "pc03_cp_soundness"
+      ],
+      "predicate": "CPStep"
+    },
+    {
+      "assumed_by": [
+        "CR1",
+        "CR2",
+        "CR3",
+        "CandModel.casesOn",
+        "CandModel.noConfusion",
+        "CandModel.noConfusionType",
+        "CandModel.rec",
+        "CandModel.recOn",
+        "MinorUseW",
+        "Models",
+        "RedAbstraction",
+        "RedLet",
+        "RedNatRec",
+        "RedRecGen",
+        "RedRecIdx",
+        "RedRecMut",
+        "RedRecW",
+        "RedTypeStep",
+        "WMajor",
+        "WMajor.canon",
+        "WMajor.casesOn",
+        "WMajor.rec",
+        "WMajor.recOn",
+        "WMajor.stuck",
+        "candmodel_red_sort_cr1_witness",
+        "cm_Red",
+        "fundamental_app",
+        "fundamental_const",
+        "fundamental_general",
+        "fundamental_lam",
+        "fundamental_let",
+        "fundamental_pi",
+        "fundamental_sort",
+        "fundamental_var",
+        "idx_adequacy_canon_of_red",
+        "minorUseW_minor_step",
+        "minorUseW_motive_step",
+        "models_extend",
+        "models_idsubst",
+        "mut_adequacy",
+        "natRec_adequacy_numeral",
+        "pi_elim",
+        "pi_intro",
+        "redAbstraction_holds",
+        "redConst",
+        "redLet_holds",
+        "redNatRec_holds",
+        "redRecGen_holds",
+        "redRecIdx_holds",
+        "redRecMut_holds",
+        "redRecW_holds",
+        "redTypeStep_holds",
+        "red_numeral",
+        "red_sort",
+        "red_var",
+        "roseLeaf_sn",
+        "wMajor_bvar",
+        "w_adequacy",
+        "w_adequacy_canon",
+        "w_adequacy_stuck",
+        "w_stuck_major_case",
+        "w_stuck_minor_case",
+        "w_stuck_motive_case",
+        "w_stuck_node",
+        "whnf_terminates_well_typed_dependent",
+        "whnf_terminates_well_typed_gen",
+        "whnf_terminates_well_typed_idx",
+        "whnf_terminates_well_typed_mut",
+        "whnf_terminates_well_typed_nat",
+        "whnf_terminates_well_typed_rose",
+        "whnf_terminates_well_typed_w"
+      ],
+      "predicate": "CandModel"
+    },
+    {
+      "assumed_by": [
+        "Char.beq",
+        "Char.casesOn",
+        "Char.decEq",
+        "Char.noConfusion",
+        "Char.noConfusionType",
+        "Char.rec",
+        "Char.recOn",
+        "Char.toNat",
+        "Char.val",
+        "Char.valid"
+      ],
+      "predicate": "Char"
+    },
+    {
+      "assumed_by": [
+        "ClausePolyEncoding.casesOn",
+        "ClausePolyEncoding.extend_neg",
+        "ClausePolyEncoding.extend_pos",
+        "ClausePolyEncoding.noConfusion",
+        "ClausePolyEncoding.noConfusionType",
+        "ClausePolyEncoding.rec",
+        "ClausePolyEncoding.recOn",
+        "ClausePolySoundness",
+        "ClausePolySoundness.casesOn",
+        "ClausePolySoundness.extend_neg",
+        "ClausePolySoundness.extend_pos",
+        "ClausePolySoundness.rec",
+        "ClausePolySoundness.recOn",
+        "gf01_clause_poly_soundness"
+      ],
+      "predicate": "ClausePolyEncoding"
+    },
+    {
+      "assumed_by": [
+        "ConstExtensionKind.casesOn",
+        "ConstExtensionKind.noConfusion",
+        "ConstExtensionKind.noConfusionType",
+        "ConstExtensionKind.rec",
+        "ConstExtensionKind.recOn",
+        "ConstantExtension.mk",
+        "KEnv.addConst"
+      ],
+      "predicate": "ConstExtensionKind"
+    },
+    {
+      "assumed_by": [
+        "ConstFreeUnit.casesOn",
+        "ConstFreeUnit.noConfusion",
+        "ConstFreeUnit.noConfusionType",
+        "ConstFreeUnit.rec",
+        "ConstFreeUnit.recOn"
+      ],
+      "predicate": "ConstFreeUnit"
+    },
+    {
+      "assumed_by": [
+        "ConstantExtension.casesOn",
+        "ConstantExtension.rec",
+        "ConstantExtension.recOn",
+        "DefinitionalExtension.const_",
+        "KernelAddDeclAccepts.const_case",
+        "constant_extension_preserves_soundness"
+      ],
+      "predicate": "ConstantExtension"
+    },
+    {
+      "assumed_by": [
+        "CtorDecl.casesOn",
+        "CtorDecl.noConfusion",
+        "CtorDecl.noConfusionType",
+        "CtorDecl.rec",
+        "CtorDecl.recOn",
+        "CtorDecls.cons",
+        "ctor_decl_type",
+        "ctor_wf_b"
+      ],
+      "predicate": "CtorDecl"
+    },
+    {
+      "assumed_by": [
+        "CtorDecls.casesOn",
+        "CtorDecls.cons",
+        "CtorDecls.noConfusion",
+        "CtorDecls.noConfusionType",
+        "CtorDecls.rec",
+        "CtorDecls.recOn",
+        "CtorsWellTyped",
+        "CtorsWellTyped.casesOn",
+        "CtorsWellTyped.cons",
+        "CtorsWellTyped.rec",
+        "CtorsWellTyped.recOn",
+        "InductiveExtension.mk",
+        "KEnv.addInductive",
+        "StrictlyPositiveCtorDecls",
+        "WellFormedCtorDecls",
+        "WellFormedCtorDecls.casesOn",
+        "WellFormedCtorDecls.mk",
+        "WellFormedCtorDecls.noConfusion",
+        "WellFormedCtorDecls.noConfusionType",
+        "WellFormedCtorDecls.rec",
+        "WellFormedCtorDecls.recOn",
+        "ctor_decls_wf_b",
+        "strictly_positive_ctors_b"
+      ],
+      "predicate": "CtorDecls"
+    },
+    {
+      "assumed_by": [
+        "CtorsWellTyped.casesOn",
+        "CtorsWellTyped.cons",
+        "CtorsWellTyped.rec",
+        "CtorsWellTyped.recOn",
+        "WellFormedCtorDecls.mk"
+      ],
+      "predicate": "CtorsWellTyped"
+    },
+    {
+      "assumed_by": [
+        "CtxLookup.casesOn",
+        "CtxLookup.rec",
+        "CtxLookup.recOn",
+        "CtxLookup.there",
+        "CtxTyping.var",
+        "ctx_lookup_not_nil"
+      ],
+      "predicate": "CtxLookup"
+    },
+    {
+      "assumed_by": [
+        "CtorsWellTyped.cons",
+        "CtxTyping.app",
+        "CtxTyping.casesOn",
+        "CtxTyping.lam",
+        "CtxTyping.let_",
+        "CtxTyping.pi",
+        "CtxTyping.rec",
+        "CtxTyping.recOn",
+        "FieldsBounded.field",
+        "FieldsBounded.param",
+        "ctx_canonical_forms_pi",
+        "ctx_canonical_forms_pi_is_lam",
+        "ctx_typing_normal_canonical"
+      ],
+      "predicate": "CtxTyping"
+    },
+    {
+      "assumed_by": [
+        "CtxWk.casesOn",
+        "CtxWk.rec",
+        "CtxWk.recOn",
+        "CtxWk.succ",
+        "ctx_wk_lookup",
+        "weaken_gen"
+      ],
+      "predicate": "CtxWk"
+    },
+    {
+      "assumed_by": [
+        "DefEnvWellformed.casesOn",
+        "DefEnvWellformed.noConfusion",
+        "DefEnvWellformed.noConfusionType",
+        "DefEnvWellformed.rec",
+        "DefEnvWellformed.recOn",
+        "DefEq.delta_gen",
+        "KernelWhnfPreservesTyping",
+        "TypePreservation",
+        "beta_expansion",
+        "beta_preservation",
+        "beta_reduces_preserves_typing",
+        "beta_reduces_preserves_typing_ctx",
+        "beta_reduces_typed_def_eq",
+        "beta_subst_commutes",
+        "beta_subst_commutes_at",
+        "def_eq_instantiate_both",
+        "def_eq_preserves_typing",
+        "def_eq_respects_subst",
+        "def_eq_respects_subst_at",
+        "def_eq_typing_iff",
+        "delta_subst_preserves_def_eq_at",
+        "delta_type_preservation_bwd",
+        "delta_type_preservation_fwd",
+        "lam_typing_body_subst",
+        "srb_beta_redex_preserves",
+        "subject_reduction_ctx",
+        "substitution_typing",
+        "substitution_typing_gen",
+        "tc_subject_reduction",
+        "typing_same_term_types_def_eq",
+        "whnf_step_preserves_typing",
+        "whnf_to_preserves_typing"
+      ],
+      "predicate": "DefEnvWellformed"
+    },
+    {
+      "assumed_by": [
+        "DefEqJoinable.casesOn",
+        "DefEqJoinable.noConfusion",
+        "DefEqJoinable.noConfusionType",
+        "DefEqJoinable.rec",
+        "DefEqJoinable.recOn",
+        "KernelDefEqAccepts.mk",
+        "def_eq_joinable_reflects"
+      ],
+      "predicate": "DefEqJoinable"
+    },
+    {
+      "assumed_by": [
+        "DivisionRing.add",
+        "DivisionRing.casesOn",
+        "DivisionRing.inv",
+        "DivisionRing.mul",
+        "DivisionRing.neg",
+        "DivisionRing.noConfusion",
+        "DivisionRing.noConfusionType",
+        "DivisionRing.one",
+        "DivisionRing.rec",
+        "DivisionRing.recOn",
+        "DivisionRing.zero"
+      ],
+      "predicate": "DivisionRing"
+    },
+    {
+      "assumed_by": [
+        "FamNamesDistinct.casesOn",
+        "FamNamesDistinct.noConfusion",
+        "FamNamesDistinct.noConfusionType",
+        "FamNamesDistinct.rec",
+        "FamNamesDistinct.recOn",
+        "famNamesDistinct_fact",
+        "mutREnv_ok",
+        "mut_adequacy"
+      ],
+      "predicate": "FamNamesDistinct"
+    },
+    {
+      "assumed_by": [
+        "FamSpec.casesOn",
+        "FamSpec.noConfusion",
+        "FamSpec.noConfusionType",
+        "FamSpec.rec",
+        "FamSpec.recOn",
+        "famSpecName",
+        "famSpecSig"
+      ],
+      "predicate": "FamSpec"
+    },
+    {
+      "assumed_by": [
+        "CtorsWellTyped.cons",
+        "FieldsBounded.casesOn",
+        "FieldsBounded.field",
+        "FieldsBounded.param",
+        "FieldsBounded.rec",
+        "FieldsBounded.recOn"
+      ],
+      "predicate": "FieldsBounded"
+    },
+    {
+      "assumed_by": [
+        "ConstantExtension.mk",
+        "InductiveExtension.mk"
+      ],
+      "predicate": "FreshDeclName"
+    },
+    {
+      "assumed_by": [
+        "GroebnerStep.add_to_basis",
+        "GroebnerStep.casesOn",
+        "GroebnerStep.noConfusion",
+        "GroebnerStep.noConfusionType",
+        "GroebnerStep.rec",
+        "GroebnerStep.recOn",
+        "GroebnerStep.s_reduce",
+        "GroebnerTerminates",
+        "GroebnerTerminates.add_to_basis",
+        "GroebnerTerminates.casesOn",
+        "GroebnerTerminates.rec",
+        "GroebnerTerminates.recOn",
+        "GroebnerTerminates.s_reduce",
+        "gf03_boolean_groebner_termination"
+      ],
+      "predicate": "GroebnerStep"
+    },
+    {
+      "assumed_by": [
+        "HeadConstBox.casesOn",
+        "HeadConstBox.noConfusion",
+        "HeadConstBox.noConfusionType",
+        "HeadConstBox.rec",
+        "HeadConstBox.recOn"
+      ],
+      "predicate": "HeadConstBox"
+    },
+    {
+      "assumed_by": [
+        "IGenRecContract.casesOn",
+        "IGenRecContract.rec",
+        "IGenRecContract.recOn"
+      ],
+      "predicate": "IGenRecContract"
+    },
+    {
+      "assumed_by": [
+        "ImplConstInfo.casesOn",
+        "ImplConstInfo.noConfusion",
+        "ImplConstInfo.noConfusionType",
+        "ImplConstInfo.rec",
+        "ImplConstInfo.recOn",
+        "ImplEnv.snoc",
+        "impl_const_info_name"
+      ],
+      "predicate": "ImplConstInfo"
+    },
+    {
+      "assumed_by": [
+        "ImplEnv.casesOn",
+        "ImplEnv.noConfusion",
+        "ImplEnv.noConfusionType",
+        "ImplEnv.rec",
+        "ImplEnv.recOn",
+        "ImplEnv.snoc",
+        "ImplInfer",
+        "ImplInfer.casesOn",
+        "ImplInfer.const",
+        "ImplInfer.fvar",
+        "ImplInfer.lam",
+        "ImplInfer.mdata",
+        "ImplInfer.pi",
+        "ImplInfer.rec",
+        "ImplInfer.recOn",
+        "ImplInfer.sort",
+        "impl_get_const",
+        "implinfer_bvar_rejects"
+      ],
+      "predicate": "ImplEnv"
+    },
+    {
+      "assumed_by": [
+        "DefinitionalExtension.inductive_",
+        "InductiveExtension.casesOn",
+        "InductiveExtension.rec",
+        "InductiveExtension.recOn",
+        "KernelAddDeclAccepts.inductive_case",
+        "inductive_extension_preserves_soundness"
+      ],
+      "predicate": "InductiveExtension"
+    },
+    {
+      "assumed_by": [
+        "CraigWitness",
+        "CraigWitness.casesOn",
+        "CraigWitness.rec",
+        "CraigWitness.recOn",
+        "CraigWitness.resolve_a_pivot",
+        "CraigWitness.resolve_b_pivot",
+        "CraigWitness.resolve_shared",
+        "InterpNode.casesOn",
+        "InterpNode.noConfusion",
+        "InterpNode.noConfusionType",
+        "InterpNode.rec",
+        "InterpNode.recOn",
+        "InterpNode.resolve_a_pivot",
+        "InterpNode.resolve_b_pivot",
+        "InterpNode.resolve_shared",
+        "McMillanExtracted",
+        "McMillanExtracted.casesOn",
+        "McMillanExtracted.rec",
+        "McMillanExtracted.recOn",
+        "McMillanExtracted.resolve_a_pivot",
+        "McMillanExtracted.resolve_b_pivot",
+        "McMillanExtracted.resolve_shared",
+        "PudlakWitness",
+        "PudlakWitness.casesOn",
+        "PudlakWitness.rec",
+        "PudlakWitness.recOn",
+        "PudlakWitness.resolve_a_pivot",
+        "PudlakWitness.resolve_b_pivot",
+        "PudlakWitness.resolve_shared",
+        "SharedVarsWitness",
+        "SharedVarsWitness.casesOn",
+        "SharedVarsWitness.rec",
+        "SharedVarsWitness.recOn",
+        "SharedVarsWitness.resolve_a_pivot",
+        "SharedVarsWitness.resolve_b_pivot",
+        "SharedVarsWitness.resolve_shared",
+        "interp_i01_craig_existence",
+        "interp_i02_mcmillan_extraction",
+        "interp_i03_shared_variables",
+        "interp_i04_pudlak_rule"
+      ],
+      "predicate": "InterpNode"
+    },
+    {
+      "assumed_by": [
+        "const_subject_untypable"
+      ],
+      "predicate": "IsConst"
+    },
+    {
+      "assumed_by": [
+        "IsNumeral.casesOn",
+        "IsNumeral.rec",
+        "IsNumeral.recOn",
+        "IsNumeral.succ",
+        "natRec_adequacy_numeral",
+        "neutral_numeral",
+        "numeral_no_beta",
+        "numeral_no_delta",
+        "numeral_no_step",
+        "red_numeral",
+        "whnfAcc_numeral"
+      ],
+      "predicate": "IsNumeral"
+    },
+    {
+      "assumed_by": [
+        "IvAlgebraOp.casesOn",
+        "IvAlgebraOp.noConfusion",
+        "IvAlgebraOp.noConfusionType",
+        "IvAlgebraOp.rec",
+        "IvAlgebraOp.recOn",
+        "IvAlgebraSound",
+        "IvAlgebraSound.casesOn",
+        "IvAlgebraSound.rec",
+        "IvAlgebraSound.recOn"
+      ],
+      "predicate": "IvAlgebraOp"
+    },
+    {
+      "assumed_by": [
+        "IvArithOp.casesOn",
+        "IvArithOp.noConfusion",
+        "IvArithOp.noConfusionType",
+        "IvArithOp.rec",
+        "IvArithOp.recOn",
+        "IvContainSound",
+        "IvContainSound.casesOn",
+        "IvContainSound.rec",
+        "IvContainSound.recOn"
+      ],
+      "predicate": "IvArithOp"
+    },
+    {
+      "assumed_by": [
+        "IvStructOp.casesOn",
+        "IvStructOp.noConfusion",
+        "IvStructOp.noConfusionType",
+        "IvStructOp.rec",
+        "IvStructOp.recOn",
+        "IvStructSound",
+        "IvStructSound.casesOn",
+        "IvStructSound.rec",
+        "IvStructSound.recOn"
+      ],
+      "predicate": "IvStructOp"
+    },
+    {
+      "assumed_by": [
+        "IvWidthOp.casesOn",
+        "IvWidthOp.noConfusion",
+        "IvWidthOp.noConfusionType",
+        "IvWidthOp.rec",
+        "IvWidthOp.recOn",
+        "IvWidthSound",
+        "IvWidthSound.casesOn",
+        "IvWidthSound.rec",
+        "IvWidthSound.recOn"
+      ],
+      "predicate": "IvWidthOp"
+    },
+    {
+      "assumed_by": [
+        "ConstantExtension",
+        "ConstantExtension.casesOn",
+        "ConstantExtension.mk",
+        "ConstantExtension.rec",
+        "ConstantExtension.recOn",
+        "DefinitionalExtension",
+        "DefinitionalExtension.casesOn",
+        "DefinitionalExtension.const_",
+        "DefinitionalExtension.inductive_",
+        "DefinitionalExtension.rec",
+        "DefinitionalExtension.recOn",
+        "DefinitionalExtension.refl",
+        "DefinitionalExtension.trans",
+        "EnvSound",
+        "FreshDeclName",
+        "InductiveExtension",
+        "InductiveExtension.casesOn",
+        "InductiveExtension.mk",
+        "InductiveExtension.rec",
+        "InductiveExtension.recOn",
+        "KEnv.addConst",
+        "KEnv.addInductive",
+        "KEnv.casesOn",
+        "KEnv.noConfusion",
+        "KEnv.noConfusionType",
+        "KEnv.rec",
+        "KEnv.recOn",
+        "KernelAddDeclAccepts",
+        "KernelAddDeclAccepts.casesOn",
+        "KernelAddDeclAccepts.const_case",
+        "KernelAddDeclAccepts.inductive_case",
+        "KernelAddDeclAccepts.noConfusion",
+        "KernelAddDeclAccepts.noConfusionType",
+        "KernelAddDeclAccepts.rec",
+        "KernelAddDeclAccepts.recOn",
+        "KernelAddDeclChain",
+        "KernelAddDeclChain.casesOn",
+        "KernelAddDeclChain.rec",
+        "KernelAddDeclChain.recOn",
+        "KernelAddDeclChain.refl",
+        "KernelAddDeclChain.step",
+        "KernelAddDeclChainPreservesState",
+        "KernelAddDeclChainSound",
+        "KernelAddDeclPreservesEnvSound",
+        "KernelAddDeclPreservesEnvValid",
+        "KernelAddDeclPreservesState",
+        "KernelAddDeclSound",
+        "KernelCheckSound_chain",
+        "KernelDefEqSound_chain",
+        "KernelEnvValid",
+        "KernelInferSound_chain",
+        "KernelLocalCtxWellFormed",
+        "KernelLocalCtxWellFormed.casesOn",
+        "KernelLocalCtxWellFormed.cons",
+        "KernelLocalCtxWellFormed.nil",
+        "KernelLocalCtxWellFormed.rec",
+        "KernelLocalCtxWellFormed.recOn",
+        "KernelState.mk",
+        "KernelWhnfSound_chain",
+        "WellFormedCtorDecls",
+        "WellFormedCtorDecls.casesOn",
+        "WellFormedCtorDecls.mk",
+        "WellFormedCtorDecls.noConfusion",
+        "WellFormedCtorDecls.noConfusionType",
+        "WellFormedCtorDecls.rec",
+        "WellFormedCtorDecls.recOn",
+        "constant_extension_preserves_soundness",
+        "definitional_extension_sound",
+        "inductive_extension_preserves_soundness",
+        "kenv_fresh",
+        "kernel_add_decl_extends_env",
+        "kernel_add_decl_preserves_env_valid_raw",
+        "kernel_add_decl_preserves_local_ctx_wf",
+        "kernel_add_decl_preserves_local_ctx_wf_raw"
+      ],
+      "predicate": "KEnv"
+    },
+    {
+      "assumed_by": [
+        "KExprEqT.casesOn",
+        "KExprEqT.rec",
+        "KExprEqT.recOn"
+      ],
+      "predicate": "KExprEqT"
+    },
+    {
+      "assumed_by": [
+        "KernelAddDeclAccepts.casesOn",
+        "KernelAddDeclAccepts.noConfusion",
+        "KernelAddDeclAccepts.noConfusionType",
+        "KernelAddDeclAccepts.rec",
+        "KernelAddDeclAccepts.recOn",
+        "KernelAddDeclChain.step",
+        "KernelAddDeclPreservesEnvSound",
+        "KernelAddDeclPreservesEnvValid",
+        "KernelAddDeclPreservesState",
+        "KernelAddDeclSound",
+        "kernel_add_decl_extends_env",
+        "kernel_add_decl_preserves_env_valid_raw",
+        "kernel_add_decl_preserves_local_ctx_wf",
+        "kernel_add_decl_preserves_local_ctx_wf_raw"
+      ],
+      "predicate": "KernelAddDeclAccepts"
+    },
+    {
+      "assumed_by": [
+        "KernelAddDeclChain.casesOn",
+        "KernelAddDeclChain.rec",
+        "KernelAddDeclChain.recOn",
+        "KernelAddDeclChain.step",
+        "KernelAddDeclChainPreservesState",
+        "KernelAddDeclChainSound",
+        "KernelCheckSound_chain",
+        "KernelDefEqSound_chain",
+        "KernelInferSound_chain",
+        "KernelWhnfSound_chain"
+      ],
+      "predicate": "KernelAddDeclChain"
+    },
+    {
+      "assumed_by": [
+        "AppInferDecomp.mk",
+        "KernelInferAccepts.app",
+        "KernelInferAccepts.casesOn",
+        "KernelInferAccepts.lam",
+        "KernelInferAccepts.rec",
+        "KernelInferAccepts.recOn",
+        "KernelInferSound",
+        "KernelInferSound_chain",
+        "KernelInferSound_summary",
+        "LamInferDecomp.mk",
+        "infer_preserves_closed",
+        "infer_result_self_admissible",
+        "kernel_infer_app_decomposition",
+        "kernel_infer_app_sound",
+        "kernel_infer_bvar_empty",
+        "kernel_infer_const_sound",
+        "kernel_infer_inversion",
+        "kernel_infer_lam_decomposition",
+        "kernel_infer_lam_sound",
+        "kernel_infer_pi_decomposition",
+        "kernel_infer_pi_sound",
+        "kernel_infer_returns_well_typed",
+        "kernel_infer_sort_result",
+        "kernel_infer_sort_sound",
+        "tc_infer_soundness",
+        "tc_infer_type_correct",
+        "tc_infer_type_rule"
+      ],
+      "predicate": "KernelInferAccepts"
+    },
+    {
+      "assumed_by": [
+        "KernelAddDeclChainPreservesState",
+        "KernelAddDeclChainSound",
+        "KernelAddDeclPreservesEnvValid",
+        "KernelAddDeclPreservesState",
+        "KernelAddDeclSound",
+        "KernelCheckSound_chain",
+        "KernelDefEqSound_chain",
+        "KernelInferSound_chain",
+        "KernelLocalCtx.casesOn",
+        "KernelLocalCtx.cons",
+        "KernelLocalCtx.noConfusion",
+        "KernelLocalCtx.noConfusionType",
+        "KernelLocalCtx.rec",
+        "KernelLocalCtx.recOn",
+        "KernelLocalCtxWellFormed",
+        "KernelLocalCtxWellFormed.casesOn",
+        "KernelLocalCtxWellFormed.cons",
+        "KernelLocalCtxWellFormed.rec",
+        "KernelLocalCtxWellFormed.recOn",
+        "KernelState.mk",
+        "KernelWhnfSound_chain",
+        "kernel_add_decl_preserves_local_ctx_wf",
+        "kernel_add_decl_preserves_local_ctx_wf_raw"
+      ],
+      "predicate": "KernelLocalCtx"
+    },
+    {
+      "assumed_by": [
+        "KernelLocalCtx.cons",
+        "KernelLocalDecl.casesOn",
+        "KernelLocalDecl.noConfusion",
+        "KernelLocalDecl.noConfusionType",
+        "KernelLocalDecl.rec",
+        "KernelLocalDecl.recOn"
+      ],
+      "predicate": "KernelLocalDecl"
+    },
+    {
+      "assumed_by": [
+        "AppInferDecomp",
+        "AppInferDecomp.casesOn",
+        "AppInferDecomp.mk",
+        "AppInferDecomp.noConfusion",
+        "AppInferDecomp.noConfusionType",
+        "AppInferDecomp.rec",
+        "AppInferDecomp.recOn",
+        "AppInferWitness",
+        "AppInferWitness.casesOn",
+        "AppInferWitness.mk",
+        "AppInferWitness.noConfusion",
+        "AppInferWitness.noConfusionType",
+        "AppInferWitness.rec",
+        "AppInferWitness.recOn",
+        "CheckDecomp",
+        "CheckDecomp.casesOn",
+        "CheckDecomp.mk",
+        "CheckDecomp.noConfusion",
+        "CheckDecomp.noConfusionType",
+        "CheckDecomp.rec",
+        "CheckDecomp.recOn",
+        "InferInversionAt",
+        "KernelBinaryInputAdmissible",
+        "KernelCheckAccepts",
+        "KernelCheckAccepts.casesOn",
+        "KernelCheckAccepts.mk",
+        "KernelCheckAccepts.noConfusion",
+        "KernelCheckAccepts.noConfusionType",
+        "KernelCheckAccepts.rec",
+        "KernelCheckAccepts.recOn",
+        "KernelCheckSound",
+        "KernelCheckSound_summary",
+        "KernelDefEqAccepts",
+        "KernelDefEqAccepts.casesOn",
+        "KernelDefEqAccepts.mk",
+        "KernelDefEqAccepts.noConfusion",
+        "KernelDefEqAccepts.noConfusionType",
+        "KernelDefEqAccepts.rec",
+        "KernelDefEqAccepts.recOn",
+        "KernelDefEqSound",
+        "KernelDefEqSound_summary",
+        "KernelInferAccepts",
+        "KernelInferAccepts.app",
+        "KernelInferAccepts.casesOn",
+        "KernelInferAccepts.const",
+        "KernelInferAccepts.lam",
+        "KernelInferAccepts.pi",
+        "KernelInferAccepts.rec",
+        "KernelInferAccepts.recOn",
+        "KernelInferAccepts.sort",
+        "KernelInferSound",
+        "KernelInferSound_summary",
+        "KernelInputAdmissible",
+        "KernelState.casesOn",
+        "KernelState.noConfusion",
+        "KernelState.noConfusionType",
+        "KernelState.rec",
+        "KernelState.recOn",
+        "KernelStateEnvValid",
+        "KernelStateLocalCtxWellFormed",
+        "KernelStateMatchesSpec",
+        "KernelStateMatchesSpec.ctxWellFormed",
+        "KernelStateMatchesSpec.envValid",
+        "KernelStateMatchesSpec.mk",
+        "KernelWhnfAccepts",
+        "KernelWhnfAccepts.casesOn",
+        "KernelWhnfAccepts.rec",
+        "KernelWhnfAccepts.recOn",
+        "KernelWhnfAccepts.refl",
+        "KernelWhnfAccepts.step",
+        "KernelWhnfPreservesTyping",
+        "KernelWhnfSound",
+        "KernelWhnfSound_summary",
+        "LamInferDecomp",
+        "LamInferDecomp.casesOn",
+        "LamInferDecomp.mk",
+        "LamInferDecomp.noConfusion",
+        "LamInferDecomp.noConfusionType",
+        "LamInferDecomp.rec",
+        "LamInferDecomp.recOn",
+        "infer_preserves_closed",
+        "infer_result_self_admissible",
+        "kernel_check_returns_well_typed",
+        "kernel_check_returns_well_typed_from_infer",
+        "kernel_def_eq_reflects_spec",
+        "kernel_infer_app_decomposition",
+        "kernel_infer_app_sound",
+        "kernel_infer_bvar_empty",
+        "kernel_infer_const_sound",
+        "kernel_infer_inversion",
+        "kernel_infer_lam_decomposition",
+        "kernel_infer_lam_sound",
+        "kernel_infer_pi_decomposition",
+        "kernel_infer_pi_sound",
+        "kernel_infer_returns_well_typed",
+        "kernel_infer_sort_result",
+        "kernel_infer_sort_sound",
+        "kernel_input_admissible_app_arg",
+        "kernel_input_admissible_app_fun",
+        "kernel_input_admissible_lam_type",
+        "kernel_input_admissible_pi_type",
+        "kernel_whnf_reduces_to_spec_whnf",
+        "kernel_whnf_returns_def_eq",
+        "tc_check_completeness",
+        "tc_check_type_rule",
+        "tc_infer_soundness",
+        "tc_infer_type_correct",
+        "tc_infer_type_rule",
+        "tc_is_def_eq_reflexive",
+        "tc_is_def_eq_rule",
+        "tc_is_def_eq_symmetric",
+        "tc_whnf_idempotent",
+        "whnf_preserves_closed"
+      ],
+      "predicate": "KernelState"
+    },
+    {
+      "assumed_by": [
+        "ImplInfer",
+        "ImplInfer.casesOn",
+        "ImplInfer.const",
+        "ImplInfer.fvar",
+        "ImplInfer.lam",
+        "ImplInfer.mdata",
+        "ImplInfer.pi",
+        "ImplInfer.rec",
+        "ImplInfer.recOn",
+        "ImplInfer.sort",
+        "LCtx.casesOn",
+        "LCtx.noConfusion",
+        "LCtx.noConfusionType",
+        "LCtx.rec",
+        "LCtx.recOn",
+        "LCtx.snoc",
+        "impl_lctx_lookup",
+        "implinfer_bvar_rejects"
+      ],
+      "predicate": "LCtx"
+    },
+    {
+      "assumed_by": [
+        "KernelInferAccepts.lam",
+        "LamInferDecomp.mk",
+        "LamInferWitness.casesOn",
+        "LamInferWitness.noConfusion",
+        "LamInferWitness.noConfusionType",
+        "LamInferWitness.rec",
+        "LamInferWitness.recOn"
+      ],
+      "predicate": "LamInferWitness"
+    },
+    {
+      "assumed_by": [
+        "LiftP.casesOn",
+        "LiftP.noConfusion",
+        "LiftP.noConfusionType",
+        "LiftP.rec",
+        "LiftP.recOn"
+      ],
+      "predicate": "LiftP"
+    },
+    {
+      "assumed_by": [
+        "ImplExpr.lit",
+        "Lit.casesOn",
+        "Lit.noConfusion",
+        "Lit.noConfusionType",
+        "Lit.rec",
+        "Lit.recOn"
+      ],
+      "predicate": "Lit"
+    },
+    {
+      "assumed_by": [
+        "LCtx.snoc",
+        "LocalDecl.casesOn",
+        "LocalDecl.noConfusion",
+        "LocalDecl.noConfusionType",
+        "LocalDecl.rec",
+        "LocalDecl.recOn",
+        "impl_local_decl_id",
+        "impl_local_decl_type"
+      ],
+      "predicate": "LocalDecl"
+    },
+    {
+      "assumed_by": [
+        "MicroCert.app",
+        "MicroCert.casesOn",
+        "MicroCert.lam",
+        "MicroCert.let_",
+        "MicroCert.noConfusion",
+        "MicroCert.noConfusionType",
+        "MicroCert.pi",
+        "MicroCert.rec",
+        "MicroCert.recOn",
+        "micro_verify",
+        "micro_verify_sound",
+        "micro_verify_sound_app",
+        "micro_verify_sound_lam",
+        "micro_verify_sound_let",
+        "micro_verify_sound_pi"
+      ],
+      "predicate": "MicroCert"
+    },
+    {
+      "assumed_by": [
+        "MirArm.casesOn",
+        "MirArm.noConfusion",
+        "MirArm.noConfusionType",
+        "MirArm.rec",
+        "MirArm.recOn",
+        "mir_arm_ok"
+      ],
+      "predicate": "MirArm"
+    },
+    {
+      "assumed_by": [
+        "MirBlock.casesOn",
+        "MirBlock.noConfusion",
+        "MirBlock.noConfusionType",
+        "MirBlock.rec",
+        "MirBlock.recOn",
+        "PayloadBody.mk2",
+        "mir_block_call_ok",
+        "mir_block_ret_ok"
+      ],
+      "predicate": "MirBlock"
+    },
+    {
+      "assumed_by": [
+        "MirNode.casesOn",
+        "MirNode.noConfusion",
+        "MirNode.noConfusionType",
+        "MirNode.rec",
+        "MirNode.recOn"
+      ],
+      "predicate": "MirNode"
+    },
+    {
+      "assumed_by": [
+        "MirStmt.casesOn",
+        "MirStmt.noConfusion",
+        "MirStmt.noConfusionType",
+        "MirStmt.rec",
+        "MirStmt.recOn",
+        "mir_stmt_unpack_ok"
+      ],
+      "predicate": "MirStmt"
+    },
+    {
+      "assumed_by": [
+        "MirBlock.mk",
+        "MirTerm.casesOn",
+        "MirTerm.noConfusion",
+        "MirTerm.noConfusionType",
+        "MirTerm.rec",
+        "MirTerm.recOn",
+        "mir_term_calls",
+        "mir_term_is_ret"
+      ],
+      "predicate": "MirTerm"
+    },
+    {
+      "assumed_by": [
+        "BinderData.mk",
+        "Mult.casesOn",
+        "Mult.noConfusion",
+        "Mult.noConfusionType",
+        "Mult.rec",
+        "Mult.recOn"
+      ],
+      "predicate": "Mult"
+    },
+    {
+      "assumed_by": [
+        "MutRecContract.casesOn",
+        "MutRecContract.rec",
+        "MutRecContract.recOn"
+      ],
+      "predicate": "MutRecContract"
+    },
+    {
+      "assumed_by": [
+        "NatRecContract.casesOn",
+        "NatRecContract.rec",
+        "NatRecContract.recOn",
+        "natContract_to_gen",
+        "natRecContract_steps"
+      ],
+      "predicate": "NatRecContract"
+    },
+    {
+      "assumed_by": [
+        "Classical.choice",
+        "Nonempty.casesOn",
+        "Nonempty.rec",
+        "Nonempty.recOn"
+      ],
+      "predicate": "Nonempty"
+    },
+    {
+      "assumed_by": [
+        "Option.beq",
+        "Option.casesOn",
+        "Option.noConfusion",
+        "Option.noConfusionType",
+        "Option.rec",
+        "Option.recOn"
+      ],
+      "predicate": "Option"
+    },
+    {
+      "assumed_by": [
+        "OrType.casesOn",
+        "OrType.noConfusion",
+        "OrType.noConfusionType",
+        "OrType.rec",
+        "OrType.recOn"
+      ],
+      "predicate": "OrType"
+    },
+    {
+      "assumed_by": [
+        "PayloadBody.casesOn",
+        "PayloadBody.noConfusion",
+        "PayloadBody.noConfusionType",
+        "PayloadBody.rec",
+        "PayloadBody.recOn",
+        "mir_payload_check"
+      ],
+      "predicate": "PayloadBody"
+    },
+    {
+      "assumed_by": [
+        "Rat.Raw.Equiv",
+        "Rat.Raw.Equiv.refl",
+        "Rat.Raw.Equiv.symm",
+        "Rat.Raw.Equiv.trans",
+        "Rat.Raw.casesOn",
+        "Rat.Raw.denom",
+        "Rat.Raw.effDenom",
+        "Rat.Raw.noConfusion",
+        "Rat.Raw.noConfusionType",
+        "Rat.Raw.num",
+        "Rat.Raw.rec",
+        "Rat.Raw.recOn"
+      ],
+      "predicate": "Rat.Raw"
+    },
+    {
+      "assumed_by": [
+        "RecEnvCtorRecDisjoint.casesOn",
+        "RecEnvCtorRecDisjoint.noConfusion",
+        "RecEnvCtorRecDisjoint.noConfusionType",
+        "RecEnvCtorRecDisjoint.rec",
+        "RecEnvCtorRecDisjoint.recOn",
+        "iota_app_major_not_rec",
+        "par_strips_c_app_struct_disjoint",
+        "par_strips_c_full",
+        "par_strips_c_iota_app_disjoint",
+        "par_strips_iota_app_source_disjoint",
+        "par_strips_iota_source_disjoint",
+        "recenv_ctor_rec_disjoint_major"
+      ],
+      "predicate": "RecEnvCtorRecDisjoint"
+    },
+    {
+      "assumed_by": [
+        "DefEq.iota_gen",
+        "KernelWhnfPreservesTyping",
+        "RecEnvWellformed.casesOn",
+        "RecEnvWellformed.noConfusion",
+        "RecEnvWellformed.noConfusionType",
+        "RecEnvWellformed.rec",
+        "RecEnvWellformed.recOn",
+        "TypePreservation",
+        "beta_expansion",
+        "beta_preservation",
+        "beta_reduces_preserves_typing",
+        "beta_reduces_preserves_typing_ctx",
+        "beta_reduces_typed_def_eq",
+        "beta_subst_commutes",
+        "beta_subst_commutes_at",
+        "def_eq_instantiate_both",
+        "def_eq_preserves_typing",
+        "def_eq_respects_subst",
+        "def_eq_respects_subst_at",
+        "def_eq_typing_iff",
+        "iota_subst_preserves_def_eq_at",
+        "iota_type_preservation_bwd",
+        "iota_type_preservation_fwd",
+        "lam_typing_body_subst",
+        "srb_beta_redex_preserves",
+        "subject_reduction_ctx",
+        "substitution_typing",
+        "substitution_typing_gen",
+        "tc_subject_reduction",
+        "typing_same_term_types_def_eq",
+        "whnf_step_preserves_typing",
+        "whnf_to_preserves_typing"
+      ],
+      "predicate": "RecEnvWellformed"
+    },
+    {
+      "assumed_by": [
+        "RecRule.casesOn",
+        "RecRule.noConfusion",
+        "RecRule.noConfusionType",
+        "RecRule.rec",
+        "RecRule.recOn",
+        "RecRules.cons",
+        "fre_cname_eq_ctor",
+        "fre_rule_eq_rule",
+        "iota_reduct_inst_eq",
+        "iota_reduct_lift_eq",
+        "iota_reduct_par_app_recon",
+        "iota_reduct_recon_general",
+        "par_reduces_c_reduct_cong",
+        "par_reduces_p_app_redex",
+        "par_reduces_p_reduct_cong",
+        "par_reduces_p_reduct_cong_spine",
+        "rec_rules_closed_b2_sound",
+        "rec_rules_closed_b_sound",
+        "rec_rules_no_defval_b_sound",
+        "rec_rules_no_recmeta_b_sound",
+        "rec_rules_rnr_b_sound",
+        "recenv_closed_rhs",
+        "recenv_ctor_no_defval_cname",
+        "recenv_ctor_no_recmeta_cname",
+        "recenv_ctor_rec_disjoint_major",
+        "recenv_lift_closed_rhs",
+        "recrule_ctor_name",
+        "recrule_for_rnr",
+        "recrule_num_fields",
+        "recrule_rhs"
+      ],
+      "predicate": "RecRule"
+    },
+    {
+      "assumed_by": [
+        "ResolutionSound",
+        "ResolutionSound.casesOn",
+        "ResolutionSound.rec",
+        "ResolutionSound.recOn",
+        "ResolutionSound.resolve",
+        "ResolutionStep.casesOn",
+        "ResolutionStep.noConfusion",
+        "ResolutionStep.noConfusionType",
+        "ResolutionStep.rec",
+        "ResolutionStep.recOn",
+        "ResolutionStep.resolve",
+        "cdcl_s03_learned_clause_sound"
+      ],
+      "predicate": "ResolutionStep"
+    },
+    {
+      "assumed_by": [
+        "ResolvSound",
+        "ResolvSound.casesOn",
+        "ResolvSound.rec",
+        "ResolvSound.recOn",
+        "ResolvSound.resolve",
+        "ResolvStep.casesOn",
+        "ResolvStep.noConfusion",
+        "ResolvStep.noConfusionType",
+        "ResolvStep.rec",
+        "ResolvStep.recOn",
+        "ResolvStep.resolve",
+        "pc01_resolution_soundness"
+      ],
+      "predicate": "ResolvStep"
+    },
+    {
+      "assumed_by": [
+        "RestartOptimal",
+        "RestartOptimal.casesOn",
+        "RestartOptimal.continue_narrow",
+        "RestartOptimal.rec",
+        "RestartOptimal.recOn",
+        "RestartOptimal.restart_wide",
+        "RestartSatPreserving",
+        "RestartSatPreserving.casesOn",
+        "RestartSatPreserving.continue_narrow",
+        "RestartSatPreserving.rec",
+        "RestartSatPreserving.recOn",
+        "RestartSatPreserving.restart_wide",
+        "RestartSeq.casesOn",
+        "RestartSeq.continue_narrow",
+        "RestartSeq.noConfusion",
+        "RestartSeq.noConfusionType",
+        "RestartSeq.rec",
+        "RestartSeq.recOn",
+        "RestartSeq.restart_wide",
+        "pg02_restart_optimality",
+        "pg04_restart_sat_preserving"
+      ],
+      "predicate": "RestartSeq"
+    },
+    {
+      "assumed_by": [
+        "Ring.add",
+        "Ring.casesOn",
+        "Ring.mul",
+        "Ring.neg",
+        "Ring.noConfusion",
+        "Ring.noConfusionType",
+        "Ring.one",
+        "Ring.rec",
+        "Ring.recOn",
+        "Ring.zero"
+      ],
+      "predicate": "Ring"
+    },
+    {
+      "assumed_by": [
+        "RoseFresh.casesOn",
+        "RoseFresh.noConfusion",
+        "RoseFresh.noConfusionType",
+        "RoseFresh.rec",
+        "RoseFresh.recOn"
+      ],
+      "predicate": "RoseFresh"
+    },
+    {
+      "assumed_by": [
+        "RoseRecContract.casesOn",
+        "RoseRecContract.rec",
+        "RoseRecContract.recOn",
+        "rose_recContract_steps"
+      ],
+      "predicate": "RoseRecContract"
+    },
+    {
+      "assumed_by": [
+        "Semiring.add",
+        "Semiring.casesOn",
+        "Semiring.mul",
+        "Semiring.noConfusion",
+        "Semiring.noConfusionType",
+        "Semiring.one",
+        "Semiring.rec",
+        "Semiring.recOn",
+        "Semiring.zero"
+      ],
+      "predicate": "Semiring"
+    },
+    {
+      "assumed_by": [
+        "SpaceWidth.add_clause",
+        "SpaceWidth.casesOn",
+        "SpaceWidth.noConfusion",
+        "SpaceWidth.noConfusionType",
+        "SpaceWidth.rec",
+        "SpaceWidth.recOn",
+        "SpaceWidth.remove_clause",
+        "SpaceWidthValid",
+        "SpaceWidthValid.add_clause",
+        "SpaceWidthValid.casesOn",
+        "SpaceWidthValid.rec",
+        "SpaceWidthValid.recOn",
+        "SpaceWidthValid.remove_clause",
+        "pg03_space_width_inequality"
+      ],
+      "predicate": "SpaceWidth"
+    },
+    {
+      "assumed_by": [
+        "InductiveExtension.mk"
+      ],
+      "predicate": "StrictlyPositiveCtorDecls"
+    },
+    {
+      "assumed_by": [
+        "Subtype.casesOn",
+        "Subtype.noConfusion",
+        "Subtype.noConfusionType",
+        "Subtype.property",
+        "Subtype.rec",
+        "Subtype.recOn",
+        "Subtype.val"
+      ],
+      "predicate": "Subtype"
+    },
+    {
+      "assumed_by": [
+        "TrailConsistent",
+        "TrailConsistent.backtrack",
+        "TrailConsistent.casesOn",
+        "TrailConsistent.decide",
+        "TrailConsistent.propagate",
+        "TrailConsistent.rec",
+        "TrailConsistent.recOn",
+        "TrailOp.backtrack",
+        "TrailOp.casesOn",
+        "TrailOp.decide",
+        "TrailOp.noConfusion",
+        "TrailOp.noConfusionType",
+        "TrailOp.propagate",
+        "TrailOp.rec",
+        "TrailOp.recOn",
+        "cdcl_s01_trail_consistency"
+      ],
+      "predicate": "TrailOp"
+    },
+    {
+      "assumed_by": [
+        "True.casesOn",
+        "True.rec",
+        "True.recOn"
+      ],
+      "predicate": "True"
+    },
+    {
+      "assumed_by": [
+        "TseitinVertex.casesOn",
+        "TseitinVertex.extend",
+        "TseitinVertex.noConfusion",
+        "TseitinVertex.noConfusionType",
+        "TseitinVertex.rec",
+        "TseitinVertex.recOn"
+      ],
+      "predicate": "TseitinVertex"
+    },
+    {
+      "assumed_by": [
+        "TypedDefEq.app_cong",
+        "TypedDefEq.casesOn",
+        "TypedDefEq.lam_cong",
+        "TypedDefEq.pi_cong",
+        "TypedDefEq.rec",
+        "TypedDefEq.recOn",
+        "TypedDefEq.symm",
+        "TypedDefEq.trans",
+        "typed_def_eq_to_def_eq"
+      ],
+      "predicate": "TypedDefEq"
+    },
+    {
+      "assumed_by": [
+        "TypingEnvCoherent.casesOn",
+        "TypingEnvCoherent.noConfusion",
+        "TypingEnvCoherent.noConfusionType",
+        "TypingEnvCoherent.rec",
+        "TypingEnvCoherent.recOn",
+        "beta_reduces_preserves_typing_ctx",
+        "delta_preserves_typing_ctx",
+        "srb_beta_redex_preserves",
+        "subject_reduction_ctx",
+        "subst_typing_up",
+        "substitution_general",
+        "substitution_typing_ctx",
+        "tec_defval_typed",
+        "tec_delta_psubst",
+        "tec_iota_psubst",
+        "tec_iota_typed",
+        "tec_tenv_lift_closed",
+        "tec_tenv_psubst_closed",
+        "weaken1",
+        "weaken_gen"
+      ],
+      "predicate": "TypingEnvCoherent"
+    },
+    {
+      "assumed_by": [
+        "WRecContract.casesOn",
+        "WRecContract.rec",
+        "WRecContract.recOn"
+      ],
+      "predicate": "WRecContract"
+    },
+    {
+      "assumed_by": [
+        "WatchInvariant",
+        "WatchInvariant.casesOn",
+        "WatchInvariant.propagate",
+        "WatchInvariant.rec",
+        "WatchInvariant.recOn",
+        "WatchInvariant.update",
+        "WatchOp.casesOn",
+        "WatchOp.noConfusion",
+        "WatchOp.noConfusionType",
+        "WatchOp.propagate",
+        "WatchOp.rec",
+        "WatchOp.recOn",
+        "WatchOp.update",
+        "cdcl_s02_two_watched"
+      ],
+      "predicate": "WatchOp"
+    },
+    {
+      "assumed_by": [
+        "WidthBound.casesOn",
+        "WidthBound.narrow",
+        "WidthBound.noConfusion",
+        "WidthBound.noConfusionType",
+        "WidthBound.rec",
+        "WidthBound.recOn",
+        "WidthBound.wide",
+        "WidthSizeLower",
+        "WidthSizeLower.casesOn",
+        "WidthSizeLower.narrow",
+        "WidthSizeLower.rec",
+        "WidthSizeLower.recOn",
+        "WidthSizeLower.wide",
+        "pg01_width_size_tradeoff"
+      ],
+      "predicate": "WidthBound"
+    },
+    {
+      "assumed_by": [
+        "ZonoContainSound",
+        "ZonoContainSound.casesOn",
+        "ZonoContainSound.rec",
+        "ZonoContainSound.recOn",
+        "ZonoOp.casesOn",
+        "ZonoOp.noConfusion",
+        "ZonoOp.noConfusionType",
+        "ZonoOp.rec",
+        "ZonoOp.recOn"
+      ],
+      "predicate": "ZonoOp"
+    },
+    {
+      "assumed_by": [
+        "subexpr_step_acc_inv"
+      ],
+      "predicate": "childAcc"
+    },
+    {
+      "assumed_by": [
+        "HeadMatch.const",
+        "IotaNeutral.const",
+        "IsNeutral.const",
+        "iota_neutral.const",
+        "is_neutral.const"
+      ],
+      "predicate": "const_whnf"
+    },
+    {
+      "assumed_by": [
+        "ctx_lookup_not_nil",
+        "ctx_typing_normal_canonical"
+      ],
+      "predicate": "ctx_is_nil"
+    },
+    {
+      "assumed_by": [
+        "reduce_once_preserves_closed",
+        "reduce_once_preserves_defined",
+        "whnf_fuel_classifies"
+      ],
+      "predicate": "def_env_good"
+    },
+    {
+      "assumed_by": [
+        "bvar_not_closed"
+      ],
+      "predicate": "is_closed"
+    },
+    {
+      "assumed_by": [
+        "ctx_canonical_forms_pi",
+        "ctx_canonical_forms_pi_is_lam",
+        "ctx_typing_normal_canonical"
+      ],
+      "predicate": "is_normal_bd"
+    },
+    {
+      "assumed_by": [
+        "normal_c_star_eq",
+        "unique_normal_forms_c",
+        "unique_normal_forms_c_faithful"
+      ],
+      "predicate": "is_normal_c"
+    },
+    {
+      "assumed_by": [
+        "par_strips_c",
+        "par_strips_c_app_struct",
+        "par_strips_iota_source_c",
+        "par_strips_iota_target_c"
+      ],
+      "predicate": "minimal_or_inner"
+    },
+    {
+      "assumed_by": [
+        "iota_reduct_defined_red",
+        "iota_reduct_red_closed",
+        "reduce_app_ilift_closed",
+        "reduce_app_ilift_defined",
+        "reduce_once_red_preserves_closed",
+        "reduce_once_red_preserves_defined",
+        "whnf_fuel_red_classifies",
+        "whnf_fuel_red_classifies_gen"
+      ],
+      "predicate": "red_env_good"
+    },
+    {
+      "assumed_by": [
+        "TypePreservation",
+        "def_eq_preserves_typing",
+        "def_eq_typing_iff",
+        "type_conversion"
+      ],
+      "predicate": "typing_is_def_eq"
+    }
+  ],
+  "count": 103,
+  "unwitnessed": [
+    "AppInferWitness",
+    "BCPStep",
+    "BacktrackOp",
+    "BinderData",
+    "BinderInfo",
+    "BoolAnalysis.BoolFn",
+    "BoolAnalysis.bonami_beckner_conditions",
+    "BootstrapStage",
+    "BootstrapTrustLevel",
+    "CDCLStep",
+    "CPSimResolvStep",
+    "CPStep",
+    "CandModel",
+    "Char",
+    "ClausePolyEncoding",
+    "ConstExtensionKind",
+    "ConstFreeUnit",
+    "ConstantExtension",
+    "CtorDecl",
+    "CtorDecls",
+    "CtorsWellTyped",
+    "CtxLookup",
+    "CtxTyping",
+    "CtxWk",
+    "DefEnvWellformed",
+    "DefEqJoinable",
+    "DivisionRing",
+    "FamNamesDistinct",
+    "FamSpec",
+    "FieldsBounded",
+    "FreshDeclName",
+    "GroebnerStep",
+    "HeadConstBox",
+    "IGenRecContract",
+    "ImplConstInfo",
+    "ImplEnv",
+    "InductiveExtension",
+    "InterpNode",
+    "IsConst",
+    "IsNumeral",
+    "IvAlgebraOp",
+    "IvArithOp",
+    "IvStructOp",
+    "IvWidthOp",
+    "KEnv",
+    "KExprEqT",
+    "KernelAddDeclAccepts",
+    "KernelAddDeclChain",
+    "KernelInferAccepts",
+    "KernelLocalCtx",
+    "KernelLocalDecl",
+    "KernelState",
+    "LCtx",
+    "LamInferWitness",
+    "LiftP",
+    "Lit",
+    "LocalDecl",
+    "MicroCert",
+    "MirArm",
+    "MirBlock",
+    "MirNode",
+    "MirStmt",
+    "MirTerm",
+    "Mult",
+    "MutRecContract",
+    "NatRecContract",
+    "Nonempty",
+    "Option",
+    "OrType",
+    "PayloadBody",
+    "Rat.Raw",
+    "RecEnvCtorRecDisjoint",
+    "RecEnvWellformed",
+    "RecRule",
+    "ResolutionStep",
+    "ResolvStep",
+    "RestartSeq",
+    "Ring",
+    "RoseFresh",
+    "RoseRecContract",
+    "Semiring",
+    "SpaceWidth",
+    "StrictlyPositiveCtorDecls",
+    "Subtype",
+    "TrailOp",
+    "True",
+    "TseitinVertex",
+    "TypedDefEq",
+    "TypingEnvCoherent",
+    "WRecContract",
+    "WatchOp",
+    "WidthBound",
+    "ZonoOp",
+    "childAcc",
+    "const_whnf",
+    "ctx_is_nil",
+    "def_env_good",
+    "is_closed",
+    "is_normal_bd",
+    "is_normal_c",
+    "minimal_or_inner",
+    "red_env_good",
+    "typing_is_def_eq"
+  ]
+}

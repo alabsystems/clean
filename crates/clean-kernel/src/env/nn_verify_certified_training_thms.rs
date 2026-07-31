@@ -28,11 +28,17 @@
 //!
 //! Part of #3257.
 
+#[cfg(test)]
 use super::nn_verify_certified_training::CertTrainConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 // =============================================================================
@@ -43,6 +49,7 @@ use crate::name::Name;
 ///
 /// Opaque configuration type for one training run.
 /// Semantically contains: learning rate (Rat), epsilon schedule, batch size (Nat).
+#[cfg(test)]
 pub(super) fn build_training_config_type() -> Expr {
     Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))
 }
@@ -51,6 +58,7 @@ pub(super) fn build_training_config_type() -> Expr {
 ///
 /// Certified loss for a network with n_in inputs and n_out outputs.
 /// Combines standard cross-entropy loss with IBP-based robust loss bound.
+#[cfg(test)]
 pub(super) fn build_cert_loss_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, _) = b.fresh_local(c.nat.clone());
@@ -68,6 +76,7 @@ pub(super) fn build_cert_loss_type(c: &CertTrainConsts) -> Expr {
 /// One training step: given a network and input bounds, produces the
 /// updated network. The step implicitly includes gradient computation
 /// on the certified loss and weight update.
+#[cfg(test)]
 pub(super) fn build_train_step_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -96,6 +105,7 @@ pub(super) fn build_train_step_type(c: &CertTrainConsts) -> Expr {
 /// Tracks certificate tightness (IBP bound gap) after k training steps.
 /// cert_evolution net B 0 = bound_tightness of initial network on B
 /// cert_evolution net B (k+1) = bound_tightness after step k+1
+#[cfg(test)]
 pub(super) fn build_cert_evolution_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -138,6 +148,7 @@ pub(super) fn build_cert_evolution_type(c: &CertTrainConsts) -> Expr {
 /// The soundness follows because IBP bounds are recomputed from
 /// scratch on the updated weights — they are not incrementally
 /// adjusted.
+#[cfg(test)]
 pub(super) fn build_train_step_preserves_cert_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let ib_contains = Expr::const_(
@@ -198,6 +209,7 @@ pub(super) fn build_train_step_preserves_cert_type(c: &CertTrainConsts) -> Expr 
 ///   cert_evolution n_in n_out net B (k + 1)
 ///     <= cert_evolution n_in n_out net B k
 /// ```
+#[cfg(test)]
 pub(super) fn build_monotone_cert_loss_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let cert_evo = Expr::const_(
@@ -245,6 +257,7 @@ pub(super) fn build_monotone_cert_loss_type(c: &CertTrainConsts) -> Expr {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Register training step types and soundness theorems.
     ///
@@ -253,7 +266,7 @@ impl Environment {
     ///
     /// Called from `init_nn_verify_certified_training()` after base definitions
     /// are registered.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_certified_training_thms(
         &mut self,
         c: &CertTrainConsts,
@@ -278,7 +291,7 @@ impl Environment {
 
     // -- Types ---------------------------------------------------------------
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_training_config(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.CertTrain.TrainingConfig"))
@@ -293,7 +306,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_cert_loss(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.CertTrain.CertLoss"))
@@ -308,7 +321,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_train_step(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.CertTrain.TrainStep"))
@@ -325,7 +338,7 @@ impl Environment {
 
     // -- Definitions ---------------------------------------------------------
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_cert_evolution(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.CertTrain.cert_evolution"))
@@ -342,7 +355,7 @@ impl Environment {
 
     // -- Theorems (axiom-backed) ---------------------------------------------
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_train_step_preserves_cert(
         &mut self,
         c: &CertTrainConsts,
@@ -373,7 +386,7 @@ impl Environment {
         })
     }
 
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_ct_monotone_cert_loss(&mut self, c: &CertTrainConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.CertTrain.monotone_cert_loss"))

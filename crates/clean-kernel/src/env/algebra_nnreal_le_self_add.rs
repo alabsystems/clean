@@ -79,6 +79,7 @@ pub(crate) struct LeSelfAddConsts {
     rat_le_add_of_nonneg_right: Expr,
     rat_lt_of_le_of_lt: Expr,
     // Logic / Eq.{1}.
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     eq_symm: Expr,
@@ -112,6 +113,7 @@ impl LeSelfAddConsts {
             rat_add_lt_add_left: k("Rat.add_lt_add_left"),
             rat_le_add_of_nonneg_right: k("Rat.le_add_of_nonneg_right"),
             rat_lt_of_le_of_lt: k("Rat.lt_of_le_of_lt"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
@@ -179,6 +181,7 @@ impl LeSelfAddConsts {
         bn.finish_child(bn.mk_lam(n_id, BinderInfo::Default, self.nat.clone(), inner))
     }
     /// `∃ N, pred_n a b eps N : Prop`.
+    #[cfg(test)]
     fn exists_pred(&self, parent: &EnvDeclBuilder, a: &Expr, b: &Expr, eps: &Expr) -> Expr {
         Expr::apps(
             self.exists_c.clone(),

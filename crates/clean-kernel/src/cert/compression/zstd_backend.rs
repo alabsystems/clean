@@ -8,11 +8,17 @@
 //! compression/decompression speed. Ideal when storage size matters
 //! more than latency.
 
+use std::io::Read;
+
 use serde::{Deserialize, Serialize};
 
 use super::super::ProofCert;
 use super::compress::compress_cert;
 use super::decompress::decompress_cert;
+use super::limits::{
+    decode_certificate_bincode_limited, read_declared_bounded, read_unknown_bounded,
+    MAX_COMPRESSED_ARCHIVE_BYTES, MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+};
 use super::types::CompressedCert;
 
 /// Error during zstd compression/decompression
@@ -31,13 +37,21 @@ pub enum ZstdCompressError {
     /// Failed to deserialize from bincode
     #[error("Deserialization error: {0}")]
     DeserializeError(String),
-    /// Data too large to store in archive format (>4GB uncompressed)
+    /// Data exceeds an archive resource limit.
     #[error("Data size {size} exceeds maximum {max} bytes")]
     SizeOverflow {
         /// Actual data size in bytes
         size: usize,
         /// Maximum allowed size in bytes
         max: u32,
+    },
+    /// Archive format version is unsupported.
+    #[error("Unsupported archive version {found}; expected {expected}")]
+    UnsupportedVersion {
+        /// Version found in the archive.
+        found: u8,
+        /// Version supported by this decoder.
+        expected: u8,
     },
 }
 
@@ -48,6 +62,17 @@ fn usize_to_u32_zstd(size: usize) -> Result<u32, ZstdCompressError> {
         size,
         max: u32::MAX,
     })
+}
+
+fn ensure_size(size: usize, max: usize) -> Result<(), ZstdCompressError> {
+    if size <= max {
+        Ok(())
+    } else {
+        Err(ZstdCompressError::SizeOverflow {
+            size,
+            max: max as u32,
+        })
+    }
 }
 
 /// A certificate archive with byte-level zstd compression.
@@ -68,7 +93,11 @@ pub struct ZstdCertArchive {
 
 impl ZstdCertArchive {
     /// Archive format version
-    pub const VERSION: u8 = 1;
+    ///
+    /// Version 2 preserves binder multiplicity and let-binding metadata in
+    /// compressed expressions. Version 1 is rejected rather than decoded
+    /// lossily.
+    pub const VERSION: u8 = 2;
     /// Default compression level (balanced speed/ratio)
     pub const DEFAULT_LEVEL: i32 = 3;
     /// High compression level (better ratio, slower)
@@ -127,11 +156,13 @@ pub fn zstd_archive_cert_level(
 
     let bincode_bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
         .map_err(|e| ZstdCompressError::SerializeError(e.to_string()))?;
+    ensure_size(bincode_bytes.len(), MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
 
     let uncompressed_size = usize_to_u32_zstd(bincode_bytes.len())?;
 
     let zstd_bytes = zstd::encode_all(bincode_bytes.as_slice(), level)
         .map_err(|e| ZstdCompressError::CompressError(e.to_string()))?;
+    ensure_size(zstd_bytes.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
 
     Ok(ZstdCertArchive {
         compressed_data: zstd_bytes,
@@ -143,13 +174,27 @@ pub fn zstd_archive_cert_level(
 
 /// Restore a certificate from a zstd archive.
 pub fn zstd_unarchive_cert(archive: &ZstdCertArchive) -> Result<ProofCert, ZstdCompressError> {
-    let bincode_bytes = zstd::decode_all(archive.compressed_data.as_slice())
+    if archive.version != ZstdCertArchive::VERSION {
+        return Err(ZstdCompressError::UnsupportedVersion {
+            found: archive.version,
+            expected: ZstdCertArchive::VERSION,
+        });
+    }
+    ensure_size(archive.compressed_data.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
+    let mut decoder = zstd::stream::Decoder::new(std::io::Cursor::new(&archive.compressed_data))
         .map_err(|e| ZstdCompressError::DecompressError(e.to_string()))?;
+    decoder = decoder.single_frame();
+    let bincode_bytes = read_declared_bounded(
+        &mut decoder,
+        archive.uncompressed_size as usize,
+        MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+        "zstd certificate archive",
+    )
+    .map_err(ZstdCompressError::DecompressError)?;
+    reject_trailing_zstd_input(&mut decoder)?;
 
-    let compressed: CompressedCert =
-        bincode::serde::decode_from_slice(&bincode_bytes, bincode::config::standard())
-            .map(|(__v, _)| __v)
-            .map_err(|e| ZstdCompressError::DeserializeError(e.to_string()))?;
+    let compressed: CompressedCert = decode_certificate_bincode_limited(&bincode_bytes)
+        .map_err(ZstdCompressError::DeserializeError)?;
 
     decompress_cert(&compressed).map_err(|e| ZstdCompressError::DeserializeError(e.to_string()))
 }
@@ -174,10 +219,12 @@ pub fn zstd_archive_cert_with_stats_level(
         compress_cert(cert).map_err(|e| ZstdCompressError::CompressError(e.to_string()))?;
     let structure_bytes = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())
         .map_err(|e| ZstdCompressError::SerializeError(e.to_string()))?;
+    ensure_size(structure_bytes.len(), MAX_UNCOMPRESSED_ARCHIVE_BYTES)?;
     let structure_shared_bytes = structure_bytes.len();
 
     let zstd_bytes = zstd::encode_all(structure_bytes.as_slice(), level)
         .map_err(|e| ZstdCompressError::CompressError(e.to_string()))?;
+    ensure_size(zstd_bytes.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
     let archive_bytes = zstd_bytes.len();
 
     let archive = ZstdCertArchive {
@@ -230,5 +277,29 @@ pub fn zstd_compress_level(data: &[u8], level: i32) -> Result<Vec<u8>, ZstdCompr
 
 /// Decompress zstd-compressed bytes (low-level utility).
 pub fn zstd_decompress(data: &[u8]) -> Result<Vec<u8>, ZstdCompressError> {
-    zstd::decode_all(data).map_err(|e| ZstdCompressError::DecompressError(e.to_string()))
+    ensure_size(data.len(), MAX_COMPRESSED_ARCHIVE_BYTES)?;
+    let mut decoder = zstd::stream::Decoder::new(std::io::Cursor::new(data))
+        .map_err(|e| ZstdCompressError::DecompressError(e.to_string()))?;
+    decoder = decoder.single_frame();
+    let output = read_unknown_bounded(&mut decoder, MAX_UNCOMPRESSED_ARCHIVE_BYTES, "zstd payload")
+        .map_err(ZstdCompressError::DecompressError)?;
+    reject_trailing_zstd_input(&mut decoder)?;
+    Ok(output)
+}
+
+fn reject_trailing_zstd_input<R: Read>(
+    decoder: &mut zstd::stream::Decoder<'_, std::io::BufReader<R>>,
+) -> Result<(), ZstdCompressError> {
+    let mut trailing = [0_u8; 1];
+    if decoder
+        .get_mut()
+        .read(&mut trailing)
+        .map_err(|error| ZstdCompressError::DecompressError(error.to_string()))?
+        != 0
+    {
+        return Err(ZstdCompressError::DecompressError(
+            "trailing bytes after zstd frame".to_string(),
+        ));
+    }
+    Ok(())
 }

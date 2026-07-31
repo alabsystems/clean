@@ -25,7 +25,7 @@ fn sum_remove_type(c: &RemoveConsts) -> Expr {
 /// The `last`-minor of the `Fin.lastCases` at level `lvl` (`p = last lvl`):
 /// the goal is exactly `Fin.sum_remove_last lvl F`.  Returns a proof term of
 /// `Fin.sum (lvl+1) F = Rat.add (F (last lvl)) (Fin.sum lvl (F∘skipNth lvl (last lvl)))`.
-fn last_minor(c: &RemoveConsts, lvl: &Expr, f: &Expr) -> Expr {
+fn last_minor(_c: &RemoveConsts, lvl: &Expr, f: &Expr) -> Expr {
     let srl = Expr::const_(Name::from_string("Fin.sum_remove_last"), vec![]);
     Expr::apps(srl, [lvl.clone(), f.clone()])
 }
@@ -221,8 +221,8 @@ fn interior_minor(
     //    final conclusion, the kernel folds them.)
     let f_cs_p = Expr::app(f.clone(), cs_p.clone()); // F (castSucc p') (the goal's spelling)
     let goal_rhs_lhs = c.add(f_cs_p.clone(), sum_skip.clone()); // goal RHS as stated
-    let goal_rhs_rhs = c.add(p_term.clone(), qt.clone()); // = mid_c
-                                                          // congrArg (Rat.add (F (castSucc p'))) r_chain : add (F cs p') sum_skip = add (F cs p') qt
+    let _goal_rhs_rhs = c.add(p_term.clone(), qt.clone()); // = mid_c
+                                                           // congrArg (Rat.add (F (castSucc p'))) r_chain : add (F cs p') sum_skip = add (F cs p') qt
     let add_fcsp = Expr::app(c.rat_add.clone(), f_cs_p.clone());
     let r_lift = Expr::apps(
         c.congr_arg.clone(),

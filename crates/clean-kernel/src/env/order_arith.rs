@@ -292,6 +292,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_add_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_add_ord(&self) -> bool {
         self.nat_add_ord_init
     }
@@ -612,6 +613,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_mul_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_mul_ord(&self) -> bool {
         self.nat_mul_ord_init
     }
@@ -631,6 +633,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_sub_ord_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_sub_ord(&mut self) -> Result<(), EnvError> {
         if self.nat_sub_ord_init {
             return Ok(());
@@ -856,6 +859,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_sub_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_sub_ord(&self) -> bool {
         self.nat_sub_ord_init
     }
@@ -875,6 +879,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_pow_ord_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_pow_ord(&mut self) -> Result<(), EnvError> {
         if self.nat_pow_ord_init {
             return Ok(());
@@ -1081,6 +1086,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_pow_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_pow_ord(&self) -> bool {
         self.nat_pow_ord_init
     }
@@ -1301,6 +1307,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.fate_x_order_stubs_init == true`
+    #[cfg(test)]
     pub(crate) fn has_fate_x_order_stubs(&self) -> bool {
         self.fate_x_order_stubs_init
     }

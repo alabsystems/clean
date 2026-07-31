@@ -10,12 +10,18 @@
 //!
 //! Extracted from `algebra_abs.rs` for maintainability.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Int min/max functions
     ///
@@ -34,6 +40,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_minmax_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_minmax(&mut self) -> Result<(), EnvError> {
         if self.int_minmax_init {
             return Ok(());
@@ -216,6 +223,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_minmax_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_minmax(&self) -> bool {
         self.int_minmax_init
     }
@@ -237,6 +245,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_abs_props_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_abs_props(&mut self) -> Result<(), EnvError> {
         if self.int_abs_props_init {
             return Ok(());
@@ -590,6 +599,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_abs_props_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_abs_props(&self) -> bool {
         self.int_abs_props_init
     }

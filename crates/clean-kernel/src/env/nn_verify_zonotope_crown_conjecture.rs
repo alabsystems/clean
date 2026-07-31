@@ -43,13 +43,18 @@
 
 use super::nn_verify_ibp_linear::sorry_inhabit_pi;
 use super::nn_verify_zonotope_crown::ZonotopeCrownConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
+use crate::expr::BinderInfo;
+use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
 use crate::name::Name;
 
 /// Constants for proof construction (Eq combinators at Type level).
+#[cfg(test)]
 struct ProofConsts {
     /// `Eq.symm` at universe level 1 (for `Type 0` inhabitants like `IB n`).
     eq_symm: Expr,
@@ -59,7 +64,9 @@ struct ProofConsts {
     eq_refl: Expr,
 }
 
+#[cfg(test)]
 impl ProofConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let u1 = Level::succ(Level::zero());
         Self {
@@ -70,16 +77,19 @@ impl ProofConsts {
     }
 
     /// `Eq.symm @α @a @b h` — given `a = b`, produce `b = a`.
+    #[cfg(test)]
     fn symm(&self, alpha: Expr, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [alpha, a, b, h])
     }
 
     /// `Eq.trans @α @a @b @c h1 h2` — given `a = b` and `b = c`, produce `a = c`.
+    #[cfg(test)]
     fn trans(&self, alpha: Expr, a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [alpha, a, b, c, h1, h2])
     }
 
     /// `rfl @α @a` — reflexivity proof `a = a`.
+    #[cfg(test)]
     fn refl(&self, alpha: Expr, a: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [alpha, a])
     }
@@ -103,6 +113,7 @@ impl ProofConsts {
 ///       @(ibp_linear_bounds m n W b input)
 ///       (crown_single_linear_eq m n W b input))
 /// ```
+#[cfg(test)]
 pub(super) fn build_single_layer_transitivity_proof(c: &ZonotopeCrownConsts) -> Expr {
     let pc = ProofConsts::new();
     let zono_eq = Expr::const_(
@@ -167,6 +178,7 @@ pub(super) fn build_single_layer_transitivity_proof(c: &ZonotopeCrownConsts) -> 
 /// `(m n : Nat) -> (W : NNMat m n) -> (b : NNVec m) -> (input : IB n) ->
 ///   Eq (IB m) (zonotope_linear_propagate m n W b input)
 ///              (crown_backward_linear m n W b input)`
+#[cfg(test)]
 pub(super) fn build_single_layer_transitivity_type(c: &ZonotopeCrownConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.base.nat.clone());
@@ -216,6 +228,7 @@ pub(super) fn build_single_layer_transitivity_type(c: &ZonotopeCrownConsts) -> E
 ///
 /// where `network_induction` is a helper axiom that encapsulates the
 /// Nat.rec induction step using single_layer_transitivity at each layer.
+#[cfg(test)]
 pub(super) fn build_network_proof(c: &ZonotopeCrownConsts) -> Expr {
     // The network induction helper has exactly the theorem type,
     // so the proof is just applying it to all arguments.

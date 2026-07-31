@@ -117,7 +117,7 @@ fn build_pointwise_equiv(
 // ── I_B : ((a·a)·b)³ = (a³·a³)·b³  (2 carrier variables) ──
 
 impl Environment {
-    pub(super) fn register_reassoc_lhs(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
+    fn register_reassoc_lhs(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_reassoc_lhs");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -147,7 +147,7 @@ impl Environment {
         })
     }
 
-    pub(super) fn register_reassoc_rhs(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
+    fn register_reassoc_rhs(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_reassoc_rhs");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -175,7 +175,7 @@ impl Environment {
         })
     }
 
-    pub(super) fn register_reassoc_lhs_b(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
+    fn register_reassoc_lhs_b(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_reassoc_lhs_b");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -205,7 +205,7 @@ impl Environment {
         })
     }
 
-    pub(super) fn register_reassoc_rhs_b(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
+    fn register_reassoc_rhs_b(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.cube_reassoc_rhs_b");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -233,7 +233,7 @@ impl Environment {
         })
     }
 
-    pub(super) fn register_add27_mono(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
+    fn register_add27_mono(&mut self, c: &ReassocConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNReal.add27_mono");
         if self.get_const(&name).is_some() {
             return Ok(());

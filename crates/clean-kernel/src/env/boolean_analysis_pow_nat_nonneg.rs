@@ -59,7 +59,7 @@ fn build_pow_nat_nonneg() -> (Expr, Expr) {
     let rat = Expr::const_(Name::from_string("Rat"), vec![]);
     let zero = Expr::const_(Name::from_string("Rat.zero"), vec![]);
     let pow_nat = Expr::const_(Name::from_string("Rat.powNat"), vec![]);
-    let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+    let _nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
     let pow = |b: &Expr, k: &Expr| Expr::apps(pow_nat.clone(), [b.clone(), k.clone()]);
     let le0 = |x: Expr| hc.le(zero.clone(), x);
 

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Front #1 Stage 2 generator: reflect the foundation core of the LIVE
-//! `Specification::new()` kernel environment into the `kernel_core_red_env`
+//! foundation-core kernel environment into the `kernel_core_red_env`
 //! generated artifacts (value literal + interning table + skip ledger), and
 //! measure the numbers the stage's budget gate needs.
 //!
@@ -12,13 +12,19 @@
 //!   cargo run --release -p clean-verify --bin red_env_reflect -- --check # drift check only
 //!   cargo run --release -p clean-verify --bin red_env_reflect -- --probe # whnf one-rfl probe
 //!
-//! Always prints the timed `Specification::new()` build (the build-time budget
-//! measurement: run once BEFORE the registration stage lands and once after;
-//! the delta is the stage's cost, gated at 20%).
+//! Normal emission uses an artifact-independent reflection seed, validates the
+//! complete rendered script against both a second seed and a complete
+//! `Specification` built with that fresh script injected in memory, and
+//! publishes each file by a same-directory atomic rename with rollback on
+//! reported I/O failure.
+//! A process/power failure between the three renames can leave artifact drift,
+//! which the byte-exact fidelity gate detects before the set is trusted.
+//! `--check` and `--probe` deliberately build the full live specification.
 //!
 //! Encodings (trust edges) are documented in `clean_verify::red_env_reflect`.
 
-use std::io::Write as _;
+use std::io::{self, Write as _};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clean_kernel::{Expr, TypeChecker};
@@ -55,18 +61,28 @@ fn run() -> i32 {
         }
     }
 
-    eprintln!("[red_env_reflect] building live Specification::new() (timed) ...");
+    let build_full = check_only || probe;
+    let builder = if build_full {
+        "live Specification::new()"
+    } else {
+        "artifact-independent reflection seed"
+    };
+    eprintln!("[red_env_reflect] building {builder} (timed) ...");
     let t0 = Instant::now();
-    let spec = match Specification::new() {
+    let spec = match if build_full {
+        Specification::new()
+    } else {
+        Specification::new_red_env_reflection_seed()
+    } {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[red_env_reflect] Specification::new() FAILED: {e:?}");
+            eprintln!("[red_env_reflect] {builder} FAILED: {e:?}");
             return 1;
         }
     };
     let build = t0.elapsed();
     eprintln!(
-        "[red_env_reflect] Specification::new() built in {:.3}s ({} kernel constants)",
+        "[red_env_reflect] {builder} built in {:.3}s ({} kernel constants)",
         build.as_secs_f64(),
         spec.env().num_constants()
     );
@@ -87,9 +103,21 @@ fn run() -> i32 {
         return 1;
     }
 
-    let script = reflection.def_script();
+    let script = match reflection.def_script() {
+        Ok(script) => script,
+        Err(error) => {
+            eprintln!("[red_env_reflect] FATAL: {error}");
+            return 1;
+        }
+    };
     let interning = reflection.interning_tsv();
-    let ledger = reflection.skip_ledger_md();
+    let ledger = match reflection.skip_ledger_md() {
+        Ok(ledger) => ledger,
+        Err(error) => {
+            eprintln!("[red_env_reflect] FATAL: {error}");
+            return 1;
+        }
+    };
     eprintln!(
         "[red_env_reflect] def script: {} bytes ({} defs, max paren depth {}); interning: {} bytes; ledger: {} bytes",
         script.len(),
@@ -133,24 +161,288 @@ fn run() -> i32 {
         };
     }
 
+    eprintln!("[red_env_reflect] validating every generated def against a fresh seed ...");
+    if let Err(error) = Specification::validate_red_env_reflection_script(&script) {
+        eprintln!(
+            "[red_env_reflect] FATAL: generated script failed parse/elaboration/kernel validation: \
+             {error:?}"
+        );
+        return 1;
+    }
+
+    eprintln!(
+        "[red_env_reflect] validating the generated artifact set through a full \
+         Specification built from the fresh in-memory script ..."
+    );
+    let full_spec = match Specification::new_with_red_env_reflection_script(&script) {
+        Ok(specification) => specification,
+        Err(error) => {
+            eprintln!(
+                "[red_env_reflect] FATAL: fresh script failed complete Specification \
+                 construction: {error:?}"
+            );
+            return 1;
+        }
+    };
+    if let Err(error) = fidelity_check(full_spec.env(), &script, &interning, &ledger) {
+        eprintln!(
+            "[red_env_reflect] FATAL: fresh artifact set does not match the complete \
+             live Specification environment: {error}"
+        );
+        return 1;
+    }
+
     if let Err(e) = std::fs::create_dir_all(dir) {
         eprintln!("[red_env_reflect] cannot create {GENERATED_DIR}: {e}");
         return 1;
     }
-    for (path, content) in [
-        (&script_path, script),
-        (&interning_path, interning),
-        (&ledger_path, ledger),
-    ] {
-        match std::fs::File::create(path).and_then(|mut f| f.write_all(content.as_bytes())) {
-            Ok(()) => eprintln!("[red_env_reflect] wrote {}", path.display()),
-            Err(e) => {
-                eprintln!("[red_env_reflect] cannot write {}: {e}", path.display());
-                return 1;
+    // Publish the script last: it is the runtime-consumed artifact, while the
+    // table and ledger are its audit companions. Every replacement is an
+    // atomic same-directory rename; backups roll the set back if an ordinary
+    // rename or directory-sync operation reports failure. A process crash
+    // between files is detected later by the byte-exact fidelity gate.
+    let artifacts = [
+        (interning_path, interning),
+        (ledger_path, ledger),
+        (script_path, script),
+    ];
+    if let Err(error) = replace_artifact_set(dir, &artifacts) {
+        eprintln!("[red_env_reflect] artifact-set replacement FAILED: {error}");
+        return 1;
+    }
+    for (path, _) in &artifacts {
+        eprintln!("[red_env_reflect] wrote {}", path.display());
+    }
+    0
+}
+
+fn sibling_path(path: &Path, role: &str) -> io::Result<PathBuf> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("artifact path has no UTF-8 file name: {}", path.display()),
+            )
+        })?;
+    Ok(path.with_file_name(format!(".{file_name}.{role}.{}", std::process::id())))
+}
+
+fn write_synced(path: &Path, content: &str) -> io::Result<()> {
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(content.as_bytes())?;
+    file.sync_all()
+}
+
+fn cleanup(paths: impl IntoIterator<Item = PathBuf>) {
+    for path in paths {
+        if let Err(error) = std::fs::remove_file(&path) {
+            if error.kind() != io::ErrorKind::NotFound {
+                eprintln!(
+                    "[red_env_reflect] warning: could not remove {}: {error}",
+                    path.display()
+                );
             }
         }
     }
-    0
+}
+
+/// Replace generated artifacts with per-file same-directory atomic renames and
+/// restore the complete old set if an operation reports failure partway
+/// through.
+fn replace_artifact_set(dir: &Path, artifacts: &[(PathBuf, String)]) -> io::Result<()> {
+    let mut temps = Vec::with_capacity(artifacts.len());
+    let mut backups = Vec::with_capacity(artifacts.len());
+    let existed = artifacts
+        .iter()
+        .map(|(path, _)| path.exists())
+        .collect::<Vec<_>>();
+
+    for (path, content) in artifacts {
+        let prepared = (|| -> io::Result<(PathBuf, PathBuf)> {
+            let temp = sibling_path(path, "tmp")?;
+            let backup = sibling_path(path, "bak")?;
+            cleanup([temp.clone(), backup.clone()]);
+            if let Err(error) = write_synced(&temp, content) {
+                cleanup([temp, backup]);
+                return Err(error);
+            }
+            if path.exists() {
+                if let Err(error) = std::fs::copy(path, &backup)
+                    .and_then(|_| std::fs::File::open(&backup)?.sync_all())
+                {
+                    cleanup([temp, backup]);
+                    return Err(error);
+                }
+            }
+            Ok((temp, backup))
+        })();
+        let (temp, backup) = match prepared {
+            Ok(paths) => paths,
+            Err(error) => {
+                cleanup(temps.into_iter().chain(backups));
+                return Err(error);
+            }
+        };
+        temps.push(temp);
+        backups.push(backup);
+    }
+
+    let publish = (|| -> io::Result<()> {
+        for ((path, _), temp) in artifacts.iter().zip(&temps) {
+            std::fs::rename(temp, path)?;
+        }
+        std::fs::File::open(dir)?.sync_all()
+    })();
+
+    if let Err(error) = publish {
+        let mut rollback_errors = Vec::new();
+        for (((path, _), backup), previously_existed) in
+            artifacts.iter().zip(&backups).zip(&existed)
+        {
+            let restored = if *previously_existed {
+                std::fs::rename(backup, path)
+            } else if path.exists() {
+                std::fs::remove_file(path)
+            } else {
+                Ok(())
+            };
+            if let Err(restore_error) = restored {
+                rollback_errors.push(format!(
+                    "{} (backup retained at {}): {restore_error}",
+                    path.display(),
+                    backup.display()
+                ));
+            }
+        }
+        cleanup(temps);
+        if rollback_errors.is_empty() {
+            cleanup(backups);
+            let _ = std::fs::File::open(dir).and_then(|directory| directory.sync_all());
+            return Err(error);
+        }
+        return Err(io::Error::new(
+            error.kind(),
+            format!(
+                "{error}; rollback also failed for {}",
+                rollback_errors.join("; ")
+            ),
+        ));
+    }
+
+    // The published artifact entries were already made durable by the
+    // directory sync inside `publish`. Backup cleanup is best-effort and cannot
+    // invalidate that committed set, so no later fallible operation is reported
+    // as a failed replacement after rollback authority has been discarded.
+    cleanup(backups);
+    Ok(())
+}
+
+#[cfg(test)]
+mod publication_tests {
+    use super::replace_artifact_set;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEST_DIR: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new() -> Self {
+            let serial = NEXT_TEST_DIR.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "clean-red-env-reflect-{}-{serial}",
+                std::process::id()
+            ));
+            std::fs::create_dir(&path).expect("publication test directory should be unique");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn fixture(dir: &Path) -> Vec<(PathBuf, String)> {
+        ["interning.tsv", "skips.md", "defs.txt"]
+            .into_iter()
+            .map(|name| (dir.join(name), format!("new {name}\n")))
+            .collect()
+    }
+
+    fn seed_old_files(artifacts: &[(PathBuf, String)]) {
+        for (path, _) in artifacts {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("fixture path should have a UTF-8 file name");
+            std::fs::write(path, format!("old {name}\n"))
+                .expect("old publication fixture should be writable");
+        }
+    }
+
+    fn assert_no_transaction_files(dir: &Path) {
+        let leftovers = std::fs::read_dir(dir)
+            .expect("publication fixture directory should remain readable")
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| name.contains(".tmp.") || name.contains(".bak."))
+            .collect::<Vec<_>>();
+        assert!(
+            leftovers.is_empty(),
+            "transaction files must be cleaned after a resolved operation: {leftovers:?}"
+        );
+    }
+
+    #[test]
+    fn successful_publication_replaces_the_complete_set() {
+        let dir = TestDir::new();
+        let artifacts = fixture(dir.path());
+        seed_old_files(&artifacts);
+
+        replace_artifact_set(dir.path(), &artifacts)
+            .expect("complete artifact set should publish successfully");
+
+        for (path, expected) in &artifacts {
+            assert_eq!(
+                std::fs::read_to_string(path).expect("published artifact should be readable"),
+                *expected
+            );
+        }
+        assert_no_transaction_files(dir.path());
+    }
+
+    #[test]
+    fn reported_directory_sync_failure_rolls_back_every_artifact() {
+        let dir = TestDir::new();
+        let artifacts = fixture(dir.path());
+        seed_old_files(&artifacts);
+
+        let error = replace_artifact_set(&dir.path().join("missing-sync-directory"), &artifacts)
+            .expect_err("missing directory must make the reported durability sync fail");
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+
+        for (path, _) in &artifacts {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("fixture path should have a UTF-8 file name");
+            assert_eq!(
+                std::fs::read_to_string(path).expect("rolled-back artifact should be readable"),
+                format!("old {name}\n"),
+                "every old artifact must remain recoverable through the last reported sync"
+            );
+        }
+        assert_no_transaction_files(dir.path());
+    }
 }
 
 /// The one-rfl-at-scale PROBE (Stage-4 feasibility preview): whnf-evaluate
@@ -217,10 +509,18 @@ fn run_probe(spec: &Specification) -> i32 {
     let mut worst = (String::new(), std::time::Duration::ZERO);
     let mut trues = 0usize;
     for (label, term) in &elements {
+        let reflected_term = match reflection.kexpr_term(term) {
+            Ok(term) => term,
+            Err(error) => {
+                eprintln!("[red_env_reflect] element probe {label}: {error}");
+                code = 1;
+                continue;
+            }
+        };
         let e = Expr::apps(
             Expr::const_str("nat_eqb"),
             [
-                Expr::app(Expr::const_str("bvar_ceiling"), reflection.kexpr_term(term)),
+                Expr::app(Expr::const_str("bvar_ceiling"), reflected_term),
                 Expr::const_str("kcre_nat_0"),
             ],
         );

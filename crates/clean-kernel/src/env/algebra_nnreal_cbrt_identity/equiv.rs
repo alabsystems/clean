@@ -71,6 +71,7 @@ impl CbrtIdentityConsts {
     }
 
     /// `(M+1) ≤ (M+2)` phrased as `Nat.le a (succ a)` for `a := succ M`.
+    #[cfg(test)]
     fn nat_le_succ_self(&self, a: Expr) -> Expr {
         let refl = Expr::app(self.nat_le_refl.clone(), a.clone());
         Expr::apps(self.nat_le_step.clone(), [a.clone(), a, refl])

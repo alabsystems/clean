@@ -262,7 +262,7 @@ fn pointwise_merge_eq(
 
     // ── (S i = true, T i = true): signed² = 1 — inner split on x i. ──
     let case_tt = {
-        let mut d = EnvDeclBuilder::child_of(&b);
+        let d = EnvDeclBuilder::child_of(&b);
         // motive_x : fun xb => factor true xb · factor true xb = factor (xor true true) xb.
         let motive_x = {
             let mut e = EnvDeclBuilder::child_of(&d);
@@ -287,7 +287,7 @@ fn pointwise_merge_eq(
 
     // ── (S i = true): split on T i. ──
     let case_s_true = {
-        let mut d = EnvDeclBuilder::child_of(&b);
+        let d = EnvDeclBuilder::child_of(&b);
         // motive_t : fun tb => factor true (x i) · factor tb (x i)
         //              = factor (xor true tb) (x i).
         let motive_t = {

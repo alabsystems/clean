@@ -52,6 +52,7 @@ const MUL_GROUP_FLAVOR: GroupFlavor = GroupFlavor {
     inverse_projection_name: "Group.inv",
 };
 
+#[cfg(test)]
 const ADD_GROUP_FLAVOR: GroupFlavor = GroupFlavor {
     class_name: "AddGroup",
     ctor_name: "AddGroup.mk",
@@ -370,11 +371,13 @@ impl Environment {
     }
 
     /// Check if Group typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_group(&self) -> bool {
         self.group_init
     }
 
     /// Initialize the AddGroup typeclass
+    #[cfg(test)]
     pub(crate) fn init_add_group(&mut self) -> Result<(), EnvError> {
         if self.add_group_init {
             return Ok(());
@@ -387,6 +390,7 @@ impl Environment {
     }
 
     /// Check if AddGroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_add_group(&self) -> bool {
         self.add_group_init
     }
@@ -398,6 +402,7 @@ impl Environment {
     /// Initialize the Int AddGroup instance
     ///
     /// Int forms an AddGroup with Int.add, Int.zero, Int.neg, Int.neg_add_self
+    #[cfg(test)]
     pub(crate) fn init_int_add_group_inst(&mut self) -> Result<(), EnvError> {
         if self.int_add_group_inst_init {
             return Ok(());
@@ -455,6 +460,7 @@ impl Environment {
     }
 
     /// Check if Int AddGroup instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_add_group_inst(&self) -> bool {
         self.int_add_group_inst_init
     }

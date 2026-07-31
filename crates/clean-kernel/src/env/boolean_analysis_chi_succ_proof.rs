@@ -50,6 +50,7 @@ struct ChiSuccConsts {
     rat_mul: Expr,
     rat_sub: Expr,
     rat_two: Expr,
+    #[cfg(test)]
     fin_prod: Expr,
     fin_prod_succ: Expr,
     fin_cast_succ: Expr,
@@ -85,6 +86,7 @@ impl ChiSuccConsts {
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
             rat_sub: Expr::const_(Name::from_string("Rat.sub"), vec![]),
             rat_two,
+            #[cfg(test)]
             fin_prod: Expr::const_(Name::from_string("Fin.prod"), vec![]),
             fin_prod_succ: Expr::const_(Name::from_string("Fin.prod_succ"), vec![]),
             fin_cast_succ: Expr::const_(Name::from_string("Fin.castSucc"), vec![]),
@@ -114,6 +116,7 @@ impl ChiSuccConsts {
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn prod(&self, n: Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_prod.clone(), [n, g])
     }

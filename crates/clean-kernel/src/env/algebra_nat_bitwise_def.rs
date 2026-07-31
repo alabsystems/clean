@@ -67,6 +67,7 @@ use crate::name::Name;
 struct BW {
     nat: Expr,
     zero: Expr,
+    #[cfg(test)]
     succ: Expr,
     one: Expr,
     add: Expr,
@@ -99,6 +100,7 @@ impl BW {
         Self {
             nat,
             zero,
+            #[cfg(test)]
             succ,
             one,
             add: Expr::const_(Name::from_string("Nat.add"), vec![]),

@@ -66,7 +66,7 @@ fn extract_reuse_info(value: &LetValue) -> Option<(FVarId, Vec<Arg>, Option<Name
 ///   with fast/slow dispatch on `is_shared`
 ///
 /// Reference: Lean 4 LCNF ExpandResetReuse.lean:187-236 (processResetCont)
-pub(crate) fn process_reset_cont(code: &Code, ctx: &mut ResetContContext) -> Code {
+pub(crate) fn process_reset_cont(code: &Code, ctx: &mut ResetContContext<'_>) -> Code {
     match code {
         Code::Let(decl, body) => {
             // Convert dec of reset_var to del (Bug 19 parity within JP body)
@@ -142,7 +142,7 @@ pub(crate) fn process_reset_cont(code: &Code, ctx: &mut ResetContContext) -> Cod
 }
 
 /// Recurse into all case alternatives for `process_reset_cont`.
-fn process_reset_cont_cases(cases: &Cases, ctx: &mut ResetContContext) -> Code {
+fn process_reset_cont_cases(cases: &Cases, ctx: &mut ResetContContext<'_>) -> Code {
     let new_alts: Vec<Alt> = cases
         .alts
         .iter()
@@ -196,7 +196,7 @@ fn expand_reuse_as_jp(
     body: &Code,
     remaining_args: &[Arg],
     ctor_name: Option<Name>,
-    ctx: &mut ResetContContext,
+    ctx: &mut ResetContContext<'_>,
 ) -> Code {
     // Process continuation for nested reuse/dec sites
     let processed_body = process_reset_cont(body, ctx);

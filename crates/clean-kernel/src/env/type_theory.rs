@@ -16,11 +16,16 @@
 //! This is foundational for clean as a proof assistant: the kernel itself
 //! is built on dependent type theory with inductives and universes.
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Type Theory module
     ///
@@ -43,6 +48,7 @@ impl Environment {
     /// ENSURES: On success, `self.type_theory_init == true`
     /// ENSURES: On success, required dependencies (`eq`, `nat`, `bool`, `prod`, `sigma`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_type_theory(&mut self) -> Result<(), EnvError> {
         if self.type_theory_init {
             return Ok(());

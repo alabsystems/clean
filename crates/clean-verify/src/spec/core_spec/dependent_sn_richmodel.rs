@@ -22,7 +22,8 @@
 //! - `KExpr` — the guide's transcription matches the live `KExpr`
 //!   (`expr_model.rs`): sort/bvar/app/lam/pi/const PLUS the genuine 7th `let_`
 //!   constructor (let promotion, task #28; SN guide
-//!   `scratch/aristotle-sn-let/SnLet.lean`). Every full KExpr.rec in this file
+//!   `scratch/aristotle-harvest/aristotle-sn-let/aristotle-sn-let_aristotle/SnLet.lean`).
+//!   Every full KExpr.rec in this file
 //!   carries the trailing let_ minor; every beta_reduces case analysis carries
 //!   the zeta + let_ty/let_val/let_body minors (old bundled let_body position,
 //!   iota last); FVRel/TypingCtx/TypingCtxConv carry trailing let_ rules; the
@@ -56,7 +57,7 @@
 //! witnesses, ALONGSIDE (not replacing) the degenerate `Typing`. The census-16
 //! degenerate `whnf_terminates_well_typed` lane is untouched and stays green. The
 //! Girard machinery (`CandModel`, `Neutral`, `psubst`, CR1-3, `fundamental*`,
-//! `whnf_terminates_well_typed_dependent`) is the remaining multi-session port.
+//! `whnf_terminates_well_typed_dependent`) has SINCE LANDED in this same module.
 
 use std::collections::HashSet;
 
@@ -594,10 +595,11 @@ impl Specification {
                 "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
                 "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
                 "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
-                "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)), ",
+                "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
+                "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)), ",
                 "CandModel tenv"
             ),
-            "CandModel tenv (Brick 2 Girard reducibility-candidate interface, guide dependent_sn_modulo_candmodel.lean:781): a single-constructor inductive bundling a reducibility family Red : KExpr -> KExpr -> Type with the candidate laws CR1 (reducible => SN), CR2 (closed under reduction), CR3 (neutral with all reducts reducible is reducible), red_sort (base: SN => reducible at a sort), pi_elim / pi_intro (the dependent-Pi elim/intro where instantiate B a enters and structural recursion breaks), redAbstraction (weak-head-expansion closure), redConst (defined constants inhabit their declared type at every substitution instance) and redLet — the NEW zeta weak-head-expansion closure (let increment, task #28; guide SnLet.lean:908-918): zeta enters the candidates EXACTLY the way beta does, in the same shape as redAbstraction with the redex app (lam A b) a replaced by let_ A a b. Env-parametric guide collapses to the FIXED env (whnf_acc/whnf_step env-fixed); only tenv survives. Lives in Type 1 (stores the Type-valued Red). Its INHABITANT is the isolated Gödel-floor assumption; the STRUCTURE is census-NEUTRAL (Inductive/Constructor/Recursor, zero axioms). Kernel generates CandModel.rec.",
+            "CandModel tenv (Brick 2 Girard reducibility-candidate interface, guide dependent_sn_modulo_candmodel.lean:781): a single-constructor inductive whose mk telescope binds Red plus FOURTEEN laws (15 binders total): cr1, cr2, cr3, red_sort, pi_elim, pi_intro, redAbstraction, redConst, redLet, redRecGen, redRecW, redRecMut, redRecIdx, redTypeStep. Each added law makes CandModel a STRICTLY STRONGER hypothesis, so every CandModel-conditional theorem assumes more without its statement changing. The laws are CR1 (reducible => SN), CR2 (closed under reduction), CR3 (neutral with all reducts reducible is reducible), red_sort (base: SN => reducible at a sort), pi_elim / pi_intro (the dependent-Pi elim/intro where instantiate B a enters and structural recursion breaks), redAbstraction (weak-head-expansion closure), redConst (defined constants inhabit their declared type at every substitution instance) and redLet — the NEW zeta weak-head-expansion closure (let increment, task #28; guide SnLet.lean:908-918): zeta enters the candidates EXACTLY the way beta does, in the same shape as redAbstraction with the redex app (lam A b) a replaced by let_ A a b. Env-parametric guide collapses to the FIXED env (whnf_acc/whnf_step env-fixed); only tenv survives. Lives in Type 1 (stores the Type-valued Red). Its INHABITANT is the isolated Gödel-floor assumption; the STRUCTURE is census-NEUTRAL (Inductive/Constructor/Recursor, zero axioms). Kernel generates CandModel.rec.",
         )?;
 
         // CandModel elaboration + field-projection witness. Given a CandModel, its
@@ -626,7 +628,8 @@ impl Specification {
                     "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
                     "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
                     "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
-                    "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) => ",
+                    "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
+                    "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)) => ",
                     "fun (n : Level) (e : KExpr) (h : whnf_acc e) => cr1 (KExpr.sort n) e (red_sort n e h)) ",
                     "M"
                 ).to_string(),
@@ -2503,7 +2506,8 @@ impl Specification {
             "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
             "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
             "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
-            "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) => {body})"
+            "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
+            "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)) => {body})"
         ), body = body)
         };
 
@@ -2679,6 +2683,159 @@ impl Specification {
             ])),
             axiom_deps: HashSet::new(),
         })?;
+        // W-type (higher-order fields) recursor adequacy. NOT derivable from
+        // RedRecGen: wContractum embeds the recursor-built IH FUNCTION wIhFun
+        // (a minor applied under a binder), which the first-order GenRecContract
+        // cannot express — mutual_schema.rs's mutRecApp_deg/mutContractum_deg_succ
+        // show the degeneracy arrow points from the general shape TO the generic
+        // one, so the generic field is the special case and cannot imply this.
+        // Hence a genuinely NEW CandModel field alongside redRecGen (same as
+        // redLet and redRecGen themselves were): census-NEUTRAL, since it is a
+        // constructor-telescope entry, not an axiom. It does STRENGTHEN the
+        // CandModel hypothesis, which is the honest cost and is already the
+        // labeled Gödel-floor assumption. Guide: AccWTypeSN.lean:1128-1132
+        // (redRecW field) and :1169-1176 (redRecW_holds).
+        self.add_recursive_def(
+            "def RedRecW (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (wRecApp u m mn t)",
+            "RedRecW tenv M: the W-shaped (higher-order-field) object-level-iota weak-head-expansion closure over cm_Red — the wRec analogue of RedRecGen, gated on WFresh/WRecEnvOK so it is vacuous off-target. Not an instance of RedRecGen: the W contractum carries an IH function under a binder. AccWType adequacy Phase 1.",
+        )?;
+        // RedRecMut / redRecMut_holds — the MUTUAL-block analogue of
+        // RedRecW/redRecW_holds. Uses the spec's WhnfAccAll idiom for the
+        // ctor/minor lists, NOT the guide's `forall x, MemL x cs -> ...`:
+        // MemL is registered in the LATE add_snschema (stage 132), so a literal
+        // transcription into a stage-78 telescope fails with "Unknown
+        // identifier: MemL". redRecGen already uses WhnfAccAll for the same
+        // reason (schema.rs documents them as equivalent).
+        self.add_recursive_def(
+            "def RedRecMut (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (mutRecApp msig u i cs ms t)",
+            "RedRecMut tenv M: the mutual-block object-level-iota weak-head-expansion closure over cm_Red, carrying MutFresh/MutRecEnvOK premises. NOTE: denv/renv are quantified INSIDE the field and occur only in those premises, never in the conclusion, so they do NOT restrict which candidate models satisfy it (an instantiator may take denv := DefEnv.empty). Do not describe this as vacuous off-target. Not an instance of RedRecGen: mutRecApp/mutContractum are the K-family generalization of which genRecApp/genContractum are the degenerate single-family case (mutual_schema.rs proves that direction), so the arrow points the wrong way to derive it. MutSchema adequacy Phase 1.",
+        )?;
+        // RedRecIdx / redRecIdx_holds — the INDEXED-family analogue, third and
+        // last of the recursor-adequacy fields (redRecGen first-order,
+        // redRecW higher-order, redRecMut mutual, redRecIdx indexed).
+        // Statable only because the indexed object layer landed in
+        // add_snschema_objects; before that its type had no referents.
+        self.add_recursive_def(
+            "def RedRecIdx (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (iRecApp fam isig u m ms ix t)",
+            "RedRecIdx tenv M: the indexed-family object-level-iota weak-head-expansion closure over cm_Red, carrying IGenFresh/IGenRecEnvOK premises. NOTE: denv/renv are quantified INSIDE the field and occur only in those premises, never in the conclusion, so they do NOT restrict which candidate models satisfy it. Do not describe this as vacuous off-target. Uses WhnfAccAll for the minor/index list SN hypotheses (the guide's MemL phrasing is not in scope at this stage). Indexed adequacy Phase 1.",
+        )?;
+
+        // RedTypeStep / redTypeStep_holds — the conversion-transport law
+        // (guide AccWTypeSN.lean:1136). Candidates respect ONE whnf step of the
+        // TYPE index, in BOTH directions; the guide states it as an Iff and uses
+        // .mp and .mpr in different places, so here it is an AndType of the two
+        // implications (the spec has no Iff).
+        //
+        // TRUST NOTE: this ADDS a clause to CandModel, which is the labeled
+        // Godel-floor hypothesis. CandModel therefore becomes a STRICTLY
+        // STRONGER assumption, and every CandModel-conditional theorem in the
+        // spec now assumes marginally more than it did before, without its
+        // printed statement changing. That is a real (if small) trust cost, paid
+        // deliberately: the law is standard for reducibility candidates
+        // (a whnf-class-indexed model validates it), it is of a piece with the
+        // ten closure fields CandModel already carries (cr1-3, pi_intro/elim,
+        // redAbstraction, redConst, redLet, redRecGen, redRecW), and the guide
+        // carries it as a field for the same reason.
+        self.add_recursive_def(
+            "def RedTypeStep (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (cm_Red tenv M T e -> cm_Red tenv M T2 e) (cm_Red tenv M T2 e -> cm_Red tenv M T e)",
+            "RedTypeStep tenv M: the type of the CandModel FIELD redTypeStep (adding it made CandModel a strictly stronger hypothesis for every CandModel-conditional theorem in the spec) -- the candidates-respect-conversion law over cm_Red — reducibility transports along ONE whnf step of the TYPE index, in both directions. Guide AccWTypeSN.lean:1136 states it as an Iff; encoded here as an AndType of the two implications. Consumed by minorUseW_motive_step and w_adequacy_stuck.",
+        )?;
+
+        // redTypeStep_holds: trivial CandModel.rec projection of the
+        // redTypeStep field, exactly as redRecW_holds projects redRecW.
+        self.add_definition_structural(SpecDefinition {
+            name: "redTypeStep_holds".to_string(),
+            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedTypeStep tenv M".to_string(),
+            value_src: Some(format!(
+                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedTypeStep tenv M0) {tel} M",
+                tel = cm_tel("redTypeStep"),
+            )),
+            is_axiom: false,
+            description: "redTypeStep_holds M : RedTypeStep M := M.redTypeStep. Trivial CandModel.rec projection of the conversion-transport field. Zero axiom_deps.".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "CandModel.rec".to_string(),
+                "RedTypeStep".to_string(),
+                "cm_Red".to_string(),
+                "AndType".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // redRecW_holds: trivial CandModel.rec projection of the redRecW field,
+        // exactly as redRecGen_holds projects redRecGen.
+        self.add_definition_structural(SpecDefinition {
+            name: "redRecW_holds".to_string(),
+            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecW tenv M".to_string(),
+            value_src: Some(format!(
+                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecW tenv M0) {tel} M",
+                tel = cm_tel("redRecW"),
+            )),
+            is_axiom: false,
+            description: "redRecW_holds M : RedRecW M := M.redRecW. Trivial CandModel.rec projection of the W-type recursor-adequacy field — the candidate-model input for higher-order (W/Acc) iota adequacy. AccWType adequacy Phase 1. Zero axiom_deps.".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "CandModel.rec".to_string(),
+                "RedRecW".to_string(),
+                "cm_Red".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+        // redRecMut_holds: trivial CandModel.rec projection of the redRecMut
+        // field, exactly as redRecW_holds projects redRecW. Kept GENERIC over
+        // denv/renv (the spec idiom) rather than specialized to mutREnv like the
+        // guide's version — the concrete env-witness discharge belongs in the
+        // adequacy consumer, which is also where the still-unported mutREnv_ok
+        // will be needed.
+        self.add_definition_structural(SpecDefinition {
+            name: "redRecMut_holds".to_string(),
+            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecMut tenv M".to_string(),
+            value_src: Some(format!(
+                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecMut tenv M0) {tel} M",
+                tel = cm_tel("redRecMut"),
+            )),
+            is_axiom: false,
+            description: "redRecMut_holds M : RedRecMut M := M.redRecMut. Trivial CandModel.rec projection of the mutual-block recursor-adequacy field. Zero axiom_deps.".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "CandModel.rec".to_string(),
+                "RedRecMut".to_string(),
+                "cm_Red".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+        // redRecIdx_holds: CandModel.rec projection of the redRecIdx field,
+        // mirroring redRecW_holds / redRecMut_holds. Generic over denv/renv.
+        self.add_definition_structural(SpecDefinition {
+            name: "redRecIdx_holds".to_string(),
+            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecIdx tenv M".to_string(),
+            value_src: Some(format!(
+                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecIdx tenv M0) {tel} M",
+                tel = cm_tel("redRecIdx"),
+            )),
+            is_axiom: false,
+            description: "redRecIdx_holds M : RedRecIdx M := M.redRecIdx. Trivial CandModel.rec projection of the indexed recursor-adequacy field. Zero axiom_deps.".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "CandModel.rec".to_string(),
+                "RedRecIdx".to_string(),
+                "cm_Red".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
         // redNatRec_holds: RE-BODIED. Same name+type (RedNatRec), but derives the Nat
         // adequacy from the generic redRecGen field at (natName, sigNat, ms=[z,s]).
         self.add_definition_structural(SpecDefinition {

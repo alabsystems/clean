@@ -170,6 +170,7 @@ impl InvConsts {
         // `Bool : Sort 1`, so element equality over it is `Eq.{1} Bool`.
         Expr::apps(self.eq1.clone(), [self.bool_ty.clone(), x, y])
     }
+    #[cfg(test)]
     fn refl_rat(&self, x: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), x])
     }
@@ -321,7 +322,7 @@ fn build_invariant_value(c: &InvConsts, motive_body: &dyn Fn(&Expr, &Expr) -> Ex
 
 /// BASE: `(ofNat 0 · ofNat 0) ≤ x · 1`. (dnum x 0 ≡ 0, dyadicPow4 0 ≡ 1.)
 fn build_base(c: &InvConsts, parent: &EnvDeclBuilder, x: &Expr, h: &Expr) -> Expr {
-    let mut b = EnvDeclBuilder::child_of(parent);
+    let b = EnvDeclBuilder::child_of(parent);
     let of0 = c.rofnat(c.nat_zero.clone());
     let lhs = c.rmul(of0.clone(), of0.clone()); // ofNat 0 · ofNat 0
     let one = Expr::const_(Name::from_string("Rat.one"), vec![]);

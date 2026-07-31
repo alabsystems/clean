@@ -297,7 +297,7 @@ where
 {
     let l1 = Level::succ(Level::zero());
     let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
-    let nat_one = Expr::app(nat_succ.clone(), nat_zero.clone());
+    let _nat_one = Expr::app(nat_succ.clone(), nat_zero.clone());
     let fin_sum_succ = Expr::const_(Name::from_string("Fin.sum_succ"), vec![]);
     let fin_sum_zero = Expr::const_(Name::from_string("Fin.sum_zero"), vec![]);
     let fin_cast_succ = Expr::const_(Name::from_string("Fin.castSucc"), vec![]);

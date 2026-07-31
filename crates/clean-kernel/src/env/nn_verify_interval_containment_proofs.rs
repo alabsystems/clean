@@ -87,6 +87,7 @@ struct CConsts {
     le_refl: Expr,
     ib: Expr,
     ib_name: Name,
+    #[cfg(test)]
     nn_vec: Expr,
     ib_contains: Expr,
     ib_subset: Expr,
@@ -104,6 +105,7 @@ impl CConsts {
             le_refl: Expr::const_(Name::from_string("Rat.le_refl"), vec![]),
             ib: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
             ib_name: Name::from_string("NNVerify.IntervalBounds"),
+            #[cfg(test)]
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             ib_contains: Expr::const_(
                 Name::from_string("NNVerify.IntervalBounds.contains"),
@@ -125,6 +127,7 @@ impl CConsts {
         Expr::app(self.ib.clone(), d.clone())
     }
 
+    #[cfg(test)]
     fn vec_of(&self, d: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), d.clone())
     }

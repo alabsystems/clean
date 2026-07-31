@@ -14,7 +14,9 @@
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::order::{nat_le_relation, nat_le_tc, nat_lt_relation, nat_lt_tc};
-use crate::env::{Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType};
+#[cfg(test)]
+use crate::env::{Constructor, InductiveDecl, InductiveType};
+use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
@@ -117,6 +119,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.strict_order_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_strict_order(&mut self) -> Result<(), EnvError> {
         if self.strict_order_init {
             return Ok(());
@@ -244,6 +247,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.strict_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_strict_order(&self) -> bool {
         self.strict_order_init
     }
@@ -260,6 +264,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_lt_strict_order_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_lt_strict_order(&mut self) -> Result<(), EnvError> {
         if self.nat_lt_strict_order_init {
             return Ok(());
@@ -304,6 +309,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_lt_strict_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_strict_order(&self) -> bool {
         self.nat_lt_strict_order_init
     }
@@ -401,6 +407,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_trans_lt_le_lt_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_trans_lt_le_lt(&self) -> bool {
         self.nat_trans_lt_le_lt_init
     }
@@ -497,6 +504,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_trans_le_lt_lt_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_trans_le_lt_lt(&self) -> bool {
         self.nat_trans_le_lt_lt_init
     }
@@ -664,6 +672,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_trans_lt_lt_le_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_trans_lt_lt_le(&self) -> bool {
         self.nat_trans_lt_lt_le_init
     }
@@ -680,6 +689,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_lt_or_eq_of_le_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(crate) fn init_nat_lt_or_eq_of_le(&mut self) -> Result<(), EnvError> {
         if self.nat_lt_or_eq_of_le_init {
             return Ok(());
@@ -755,6 +765,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_lt_or_eq_of_le_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_or_eq_of_le(&self) -> bool {
         self.nat_lt_or_eq_of_le_init
     }
@@ -771,6 +782,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_lt_of_le_of_ne_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_lt_of_le_of_ne(&mut self) -> Result<(), EnvError> {
         if self.nat_lt_of_le_of_ne_init {
             return Ok(());
@@ -848,6 +860,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_lt_of_le_of_ne_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_lt_of_le_of_ne(&self) -> bool {
         self.nat_lt_of_le_of_ne_init
     }
@@ -953,6 +966,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_not_lt_le_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_not_lt_le(&self) -> bool {
         self.nat_not_lt_le_init
     }

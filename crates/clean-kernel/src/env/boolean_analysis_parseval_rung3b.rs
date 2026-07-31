@@ -181,6 +181,7 @@ impl CoreConsts {
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
+    #[cfg(test)]
     fn symm(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), a, b, h])
     }

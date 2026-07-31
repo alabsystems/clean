@@ -40,10 +40,6 @@ fn lit_u64(val: u64) -> IRExpr {
     IRExpr::Lit(IRLiteral::UInt64(val))
 }
 
-fn lit_bool(val: bool) -> IRExpr {
-    IRExpr::Lit(IRLiteral::Bool(val))
-}
-
 fn vdecl(v: u32, value: IRExpr, rest: IRBody) -> IRBody {
     IRBody::VDecl {
         var: var(v),

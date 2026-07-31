@@ -315,6 +315,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_decidable()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_decidable(&self) -> bool {
         self.decidable_init
     }
@@ -531,6 +532,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_classical()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_classical(&self) -> bool {
         self.classical_init
     }

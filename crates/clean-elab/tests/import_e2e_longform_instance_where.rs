@@ -74,7 +74,7 @@
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_kernel::env::Environment;
 use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
-use clean_kernel::{BinderInfo, Declaration, Expr, ExprKind, KernelClassInfo, Name, TypeChecker};
+use clean_kernel::{BinderInfo, Declaration, Expr, KernelClassInfo, Name, TypeChecker};
 use clean_parser::parse_file;
 
 fn const_(name: &str) -> Expr {
@@ -371,13 +371,9 @@ fn test_widget_kernel_projections_reduce_correctly() {
 fn test_longform_instance_where_override_on_imported_class() {
     let mut env = imported_widget_env();
 
-    // NOTE on field ordering: the `render` value is a `fun … =>` lambda, and the
-    // clean-PARSER's instance-field value parser does not stop a lambda body at
-    // the next field-assignment boundary (an unrelated parser gap, pinned in
-    // `test_longform_instance_where_lambda_field_swallows_next_field_PARSER_PIN`
-    // below). So we put the lambda field LAST — nothing follows it to be
-    // swallowed — which isolates this test to the clean-ELAB long-form import
-    // path under test here. Both fields then parse and the override must win.
+    // Keep the lambda field last here; the dedicated regression below covers
+    // the opposite order and proves the parser terminates the lambda body at the
+    // next field-assignment boundary.
     elaborate_decls_into(
         &mut env,
         "instance instWidgetFoo : Widget Foo where\n  \
@@ -554,55 +550,27 @@ fn test_longform_instance_where_on_native_class_unchanged() {
     );
 }
 
-// =============================================================================
-// PARSER PIN (flip-on-fix): a separate, *parser*-side gap surfaced while
-// implementing the long-form import path. When a long-form `where` field's
-// value is a `fun … =>` lambda and a *further* field follows, the clean-PARSER's
-// instance-field value parser does NOT stop the lambda body at the next
-// field-assignment boundary — it greedily consumes the following field's name as
-// an application argument of the lambda body. So
-//
-//   instance … where
-//     render := fun _ => Nat.succ Nat.zero
-//     tag := 3
-//
-// parses `render` as `fun _ => (Nat.succ Nat.zero tag)` and DROPS the `tag`
-// field entirely (only one field is produced). The elaborator under test here is
-// correct — proven by `test_longform_instance_where_override_on_imported_class`,
-// which orders the lambda field LAST so nothing follows it — but with the lambda
-// field FIRST the wrong parse reaches the elaborator and the `render` field's
-// body type-mismatches (`Nat` is not a function, applied to `tag`).
-//
-// This is a clean-PARSER bug (`instance_field_app_expr` / lambda-body parsing in
-// `crates/clean-parser/src/grammar/decl/class_instance.rs`), NOT a clean-ELAB
-// bug, and is OUT OF SCOPE for this clean-elab-only batch. We pin it: the
-// declaration currently fails to elaborate (because of the mis-parse). If the
-// parser is fixed so a lambda field value stops at the next field boundary, this
-// elaboration will SUCCEED and the assertion flips — at which point this test
-// should be rewritten to assert the override reduces to 3 (lambda-field-first).
+// Parser/elaborator regression: a lambda-valued field followed by another field
+// must stop at the assignment boundary, register both fields, and preserve the
+// explicit override.
 #[test]
-fn test_longform_instance_where_lambda_field_swallows_next_field_parser_pin() {
+fn test_longform_instance_where_lambda_field_before_next_field() {
     let mut env = imported_widget_env();
 
-    // Lambda field FIRST, another field after it: triggers the parser gap.
-    let result = try_elaborate_decls_into(
+    elaborate_decls_into(
         &mut env,
         "instance instWidgetFooLambdaFirst : Widget Foo where\n  \
          render := fun _ => Nat.succ Nat.zero\n  \
          tag := Nat.succ (Nat.succ (Nat.succ Nat.zero))",
     );
 
-    assert!(
-        result.is_err(),
-        "PIN (clean-PARSER, out of scope): a `fun … =>` long-form field value \
-         swallows the following field; with the lambda field FIRST the mis-parse \
-         reaches the elaborator and fails. If the parser is fixed to stop the \
-         lambda body at the next field boundary, this succeeds — flip this test \
-         to assert tag reduces to 3. Got Ok."
+    let tag = Expr::apps(
+        const_("Widget.tag"),
+        [const_("Foo"), const_("instWidgetFooLambdaFirst")],
     );
     assert!(
-        env.get_const(&Name::from_string("instWidgetFooLambdaFirst"))
-            .is_none(),
-        "the mis-parsed instance must not register"
+        def_eq(&env, &tag, &nat_lit(3)),
+        "lambda-first long-form instance must preserve the following tag = 3, got {:?}",
+        TypeChecker::new(&env).whnf(&tag).kind()
     );
 }

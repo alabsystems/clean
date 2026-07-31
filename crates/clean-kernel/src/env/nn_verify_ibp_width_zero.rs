@@ -490,6 +490,7 @@ impl Environment {
     }
 
     /// Check if T4 sub-lemmas have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_ibp_width_zero(&self) -> bool {
         self.nn_verify_ibp_width_zero_init
     }

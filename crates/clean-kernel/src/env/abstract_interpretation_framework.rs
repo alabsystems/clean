@@ -11,17 +11,23 @@
 //!
 //! Part of #3189.
 
+#[cfg(test)]
 use super::abstract_interpretation_framework_defs as fw_defs;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize abstract interpretation framework declarations.
     ///
     /// Depends on:
     /// - `init_abstract_interpretation()` for the shared abstract-state
     ///   carrier and lattice-ordering infrastructure
+    #[cfg(test)]
     pub(crate) fn init_abstract_interpretation_framework(&mut self) -> Result<(), EnvError> {
         if self.abstract_interpretation_framework_init {
             return Ok(());
@@ -76,6 +82,7 @@ impl Environment {
 
     // -- Lattice operations -------------------------------------------------
 
+    #[cfg(test)]
     fn register_aif_join(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -87,6 +94,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_meet(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -98,6 +106,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_bot(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -109,6 +118,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_top(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -122,6 +132,7 @@ impl Environment {
 
     // -- Galois connection --------------------------------------------------
 
+    #[cfg(test)]
     fn register_aif_galois_connection(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -133,6 +144,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_galois_adjunction(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -157,6 +169,7 @@ impl Environment {
 
     // -- Domain instances ---------------------------------------------------
 
+    #[cfg(test)]
     fn register_aif_interval_join(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -168,6 +181,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_interval_meet(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -179,6 +193,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_interval_bot(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -190,6 +205,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_interval_top(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -201,6 +217,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_interval_widening(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -214,6 +231,7 @@ impl Environment {
 
     // -- Theorems -----------------------------------------------------------
 
+    #[cfg(test)]
     fn register_aif_join_upper_bound(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -236,6 +254,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_meet_lower_bound(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -258,6 +277,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_bot_least(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -280,6 +300,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_top_greatest(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,
@@ -302,6 +323,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn register_aif_galois_connection_sound(
         &mut self,
         c: &super::abstract_interpretation::AbstractInterpConsts,

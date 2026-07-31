@@ -6,7 +6,7 @@
 //! depth limits). Part of #3083.
 
 use super::specialize_ext::*;
-use crate::ir::{FnId, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, VarId};
+use crate::ir::{FnId, IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
 use crate::specialize::{SpecKey, SpecializeConfig};
 use clean_kernel::Name;
 use std::collections::HashMap;

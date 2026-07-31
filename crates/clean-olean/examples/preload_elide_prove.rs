@@ -133,7 +133,6 @@ fn run() {
                 def_with_value += usize::from(has_value);
             }
             ConstantKind::Axiom => {}
-            _ => {}
         }
     }
 

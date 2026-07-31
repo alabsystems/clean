@@ -155,28 +155,70 @@ def run_cmd(cmd: list[str]) -> tuple[bool, str]:
     return True, output if output else "ok"
 
 
-def check_ay_updates() -> tuple[bool, str]:
-    """Check for ay (renamed from ay) dependency updates (creates flag if behind)."""
+def check_ay_updates() -> tuple[bool, str, dict[str, object]]:
+    """Validate the committed AY graph and compare its pin with remote main."""
     check_script = ROOT / "scripts" / "check_ay_updates.py"
     if not check_script.exists():
-        return True, "skipped (check script not installed)"
+        return False, "check script not installed", {"pin_status": "invalid"}
     try:
         result = subprocess.run(
-            [sys.executable, str(check_script), "--quiet"],
+            [sys.executable, str(check_script), "--json"],
             capture_output=True,
             text=True,
             timeout=90,
             cwd=ROOT,
         )
-        if result.returncode == 0:
-            return True, "up to date"
-        if result.returncode == 1:
-            return True, "updates available (see .flags/ay_updates)"
-        return False, result.stderr.strip() or f"exit {result.returncode}"
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            message = result.stderr.strip() or result.stdout.strip()
+            return (
+                False,
+                message or f"pin checker exited {result.returncode} without JSON",
+                {"pin_status": "invalid"},
+            )
+        if not isinstance(payload, dict):
+            return False, "pin checker returned non-object JSON", {"pin_status": "invalid"}
+
+        details = {
+            key: value
+            for key, value in payload.items()
+            if key
+            in {
+                "pin_status",
+                "ay_dependency_rev",
+                "ay_lockfile_rev",
+                "ay_lockfile_commit",
+                "ay_manifest_pin_count",
+                "ay_lock_source_count",
+                "ay_remote_rev",
+                "remote_status",
+                "pin_in_sync",
+            }
+        }
+        if result.returncode == 0 and payload.get("status") == "up_to_date":
+            return (
+                True,
+                "committed manifest/lock pin matches AY remote main",
+                details,
+            )
+        if result.returncode == 1 and payload.get("status") == "updates_available":
+            return (
+                False,
+                "committed AY pin is stale relative to remote main "
+                "(see .flags/ay_updates)",
+                details,
+            )
+        error = payload.get("error")
+        return (
+            False,
+            str(error) if error else f"pin checker exited {result.returncode}",
+            details,
+        )
     except subprocess.TimeoutExpired:
-        return False, "timeout checking ay"
+        return False, "timeout checking ay", {"pin_status": "invalid"}
     except Exception as e:
-        return False, str(e)
+        return False, str(e), {"pin_status": "invalid"}
 
 
 def _get_git_commit(repo_root: Path = ROOT) -> str:
@@ -255,26 +297,35 @@ def run_checks() -> list[CheckResult]:
             CheckResult("cargo", CHECK_FAIL, f"cargo --version failed: {msg}")
         )
 
-    if not (ROOT.parent / "ay").exists():
+    ay_ok, ay_msg, ay_details = check_ay_updates()
+    if ay_details.get("pin_status") != "valid":
         results.append(
             CheckResult(
                 "ay_path",
                 CHECK_FAIL,
-                'missing ../ay path dependency (see Cargo.toml ay* = { package = "ay-*", path = "../ay/crates/ay-*" } entries)',
+                f"committed AY Git graph is invalid: {ay_msg}",
+                ay_details,
             )
         )
     else:
         results.append(
-            CheckResult("ay_path", CHECK_PASS, "../ay path dependency present")
+            CheckResult(
+                "ay_path",
+                CHECK_PASS,
+                "committed AY Git graph is coherent "
+                f"({ay_details.get('ay_manifest_pin_count')} manifest pins, "
+                f"{ay_details.get('ay_lock_source_count')} lock sources)",
+                ay_details,
+            )
         )
 
-    # Check ay dependency freshness (non-blocking warning)
-    ay_ok, ay_msg = check_ay_updates()
     if ay_ok:
-        results.append(CheckResult("ay_updates", CHECK_PASS, f"ay: {ay_msg}"))
+        results.append(
+            CheckResult("ay_updates", CHECK_PASS, f"AY: {ay_msg}", ay_details)
+        )
     else:
         results.append(
-            CheckResult("ay_updates", CHECK_WARN, f"ay check failed: {ay_msg}")
+            CheckResult("ay_updates", CHECK_FAIL, f"AY check failed: {ay_msg}", ay_details)
         )
 
     gc_ok, gc_msg = check_worktree_gc_logs()

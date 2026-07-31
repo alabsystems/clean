@@ -32,6 +32,7 @@ use crate::name::Name;
 /// Shared constants used across all Craig interpolation declarations.
 pub(super) struct CraigInterpolationConsts {
     pub(super) nat: Expr,
+    #[cfg(test)]
     pub(super) bool_: Expr,
     pub(super) prop: Expr,
     pub(super) type0: Expr,
@@ -47,6 +48,7 @@ impl CraigInterpolationConsts {
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             bool_: Expr::const_(Name::from_string("Bool"), vec![]),
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             type0: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),

@@ -376,8 +376,13 @@ impl PartialEq for Expr {
             return false;
         }
         // Fall back to structural equality (required for correctness since
-        // hash collisions are possible with 32-bit hash)
-        self.kind == other.kind
+        // hash collisions are possible with 32-bit hash). Every child
+        // comparison re-enters `Expr::eq`, so put the recursive descent behind
+        // the same segmented-stack guard used by the other kernel walks.
+        // Without this boundary, two independently allocated but structurally
+        // equal deep terms can exhaust a normal test-thread stack in
+        // `ExprKind::arc_eq`.
+        stack_safe(|| self.kind == other.kind)
     }
 }
 

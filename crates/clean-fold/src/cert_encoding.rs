@@ -1276,7 +1276,6 @@ mod tests {
     use super::*;
     use clean_kernel::{BigNat, ExprKind};
     use smallvec::smallvec;
-    use std::sync::Arc;
 
     #[test]
     fn test_encode_sort() {
@@ -1304,7 +1303,7 @@ mod tests {
     #[test]
     fn test_encode_sort_succ() {
         let cert = ProofCert::Sort {
-            level: Level::Succ(Arc::new(Level::Zero)),
+            level: Level::succ(Level::Zero),
         };
 
         let encoded = encode_cert_to_r1cs(&cert).expect("encoding should succeed");
@@ -1403,7 +1402,7 @@ mod tests {
         // Create a nested certificate structure
         let inner1 = ProofCert::Sort { level: Level::Zero };
         let inner2 = ProofCert::Sort {
-            level: Level::Succ(Arc::new(Level::Zero)),
+            level: Level::succ(Level::Zero),
         };
 
         let app1 = ProofCert::App {

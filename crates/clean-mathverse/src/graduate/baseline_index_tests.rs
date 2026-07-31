@@ -174,7 +174,7 @@ fn request(release: &str) -> GraduationRequest {
         residual_risk: "none-known".to_string(),
         clean_commit: None,
         shard_filename: None,
-        decided_at_epoch_s: None,
+        decided_at_epoch_s: Some(1_700_000_000),
         env_provenance: None,
         score_identity: false,
         score_defeq: false,

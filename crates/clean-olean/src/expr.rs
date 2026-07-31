@@ -15,11 +15,11 @@
 //!   | const  (declName : Name) (us : List Level)          -- tag 4, 2 fields
 //!   | app    (fn : Expr) (arg : Expr)                     -- tag 5, 2 fields
 //!   | lam    (binderName : Name) (binderType : Expr)
-//!            (body : Expr) (binderInfo : BinderInfo)      -- tag 6, 3 fields + scalar
+//!            (body : Expr) (binderInfo : BinderInfo)      -- tag 6, 3 fields + Data + scalar
 //!   | forallE(binderName : Name) (binderType : Expr)
-//!            (body : Expr) (binderInfo : BinderInfo)      -- tag 7, 3 fields + scalar
+//!            (body : Expr) (binderInfo : BinderInfo)      -- tag 7, 3 fields + Data + scalar
 //!   | letE   (declName : Name) (type : Expr) (value : Expr)
-//!            (body : Expr) (nondep : Bool)                -- tag 8, 4 fields + scalar
+//!            (body : Expr) (nondep : Bool)                -- tag 8, 4 fields + Data + scalar
 //!   | lit    (value : Literal)                            -- tag 9, 1 field
 //!   | mdata  (data : MData) (expr : Expr)                 -- tag 10, 2 fields
 //!   | proj   (typeName : Name) (idx : Nat) (struct : Expr)-- tag 11, 2 fields + scalar
@@ -28,6 +28,7 @@
 use crate::error::{OleanError, OleanResult};
 use crate::level::ParsedLevel;
 use crate::region::{is_ptr, is_scalar, tags, unbox_scalar, CompactedRegion};
+use std::mem::size_of;
 
 /// Expression constructor tags from the .olean format.
 ///
@@ -76,6 +77,17 @@ pub mod expr_tags {
     /// Structure projection.
     pub const PROJ: u8 = 11;
 }
+
+/// Bytes occupied by Lean's cached `Expr.Data` word at the start of the
+/// scalar region for `lam`, `forallE`, and `letE` objects.
+///
+/// The constructor-specific `binderInfo` / `nondep` byte follows this word.
+/// Treating the cached hash byte as constructor data silently corrupts the
+/// imported expression while still producing a structurally valid tree.
+/// This matches the pinned Lean C ABI: `lean_expr_data` reads the first scalar
+/// word, `lean_expr_binder_info` reads byte 40 of a three-pointer binder
+/// object, and `lean_expr_is_have` reads byte 48 of a four-pointer let object.
+pub(crate) const EXPR_DATA_SCALAR_BYTES: usize = size_of::<u64>();
 
 /// Binder information (matches kernel BinderInfo).
 ///
@@ -338,7 +350,8 @@ impl<'a> CompactedRegion<'a> {
                             let type_ptr = self.read_u64_at(field_base + 8)?;
                             let body_ptr = self.read_u64_at(field_base + 16)?;
                             let binder_name = self.resolve_name_ptr(name_ptr)?;
-                            let binder_info_byte = self.bytes_at(scalar_base, 1)?[0] & 0x07;
+                            let binder_info_byte =
+                                self.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0];
                             let binder_info = ParsedBinderInfo::from_u8(binder_info_byte);
                             // Push build, then body, then type (type first on results stack)
                             work.push(ExprWork::BuildLam(binder_name, binder_info));
@@ -351,7 +364,8 @@ impl<'a> CompactedRegion<'a> {
                             let type_ptr = self.read_u64_at(field_base + 8)?;
                             let body_ptr = self.read_u64_at(field_base + 16)?;
                             let binder_name = self.resolve_name_ptr(name_ptr)?;
-                            let binder_info_byte = self.bytes_at(scalar_base, 1)?[0] & 0x07;
+                            let binder_info_byte =
+                                self.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0];
                             let binder_info = ParsedBinderInfo::from_u8(binder_info_byte);
                             work.push(ExprWork::BuildForallE(binder_name, binder_info));
                             work.push(ExprWork::Parse(body_ptr));
@@ -364,7 +378,9 @@ impl<'a> CompactedRegion<'a> {
                             let value_ptr = self.read_u64_at(field_base + 16)?;
                             let body_ptr = self.read_u64_at(field_base + 24)?;
                             let decl_name = self.resolve_name_ptr(name_ptr)?;
-                            let nondep = self.bytes_at(scalar_base, 1)?[0] != 0;
+                            let nondep_byte =
+                                self.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0];
+                            let nondep = nondep_byte != 0;
                             // Order: type, value, body -> results stack has body on top
                             work.push(ExprWork::BuildLetE(decl_name, nondep));
                             work.push(ExprWork::Parse(body_ptr));
@@ -494,9 +510,9 @@ impl<'a> CompactedRegion<'a> {
     /// | 3   | `sort`      | 1 |
     /// | 4   | `const`     | 2 |
     /// | 5   | `app`       | 2 |
-    /// | 6   | `lam`       | 3 (+ `binderInfo` scalar) |
-    /// | 7   | `forallE`   | 3 (+ `binderInfo` scalar) |
-    /// | 8   | `letE`      | 4 (+ `nondep` scalar) |
+    /// | 6   | `lam`       | 3 (+ cached `Data`, then `binderInfo`) |
+    /// | 7   | `forallE`   | 3 (+ cached `Data`, then `binderInfo`) |
+    /// | 8   | `letE`      | 4 (+ cached `Data`, then `nondep`) |
     /// | 9   | `lit`       | 1 |
     /// | 10  | `mdata`     | 2 |
     /// | 11  | `proj`      | 0 enforced (`idx` is an unboxed scalar) |
@@ -508,18 +524,21 @@ impl<'a> CompactedRegion<'a> {
     /// A malformed or truncated `.olean` can present an `Expr` tag whose
     /// `other` is smaller than its arity. Without this check the iterative
     /// reader would (a) read bytes belonging to an adjacent object as a child
-    /// expression / name / level pointer, and (b) for the binder constructors
-    /// compute `scalar_base = field_base + other * 8` from the wrong `other`,
-    /// reading the binder-info / nondep scalar from the wrong location —
-    /// silently fabricating an expression rather than failing. Fail closed
-    /// with a typed [`OleanError::Region`] instead. This mirrors the `Level`
+    /// expression / name / level pointer, and (b) for scalar-bearing
+    /// constructors compute the start of cached `Expr.Data` from the wrong
+    /// `other`, then read binderInfo / nondep at the wrong offset. That would
+    /// silently fabricate an expression rather than failing. Fail closed with
+    /// a typed [`OleanError::Region`] instead. This mirrors the `Level`
     /// constructor field-count guard.
     ///
     /// # ENSURES
     /// - Returns `Ok(())` for non-`Expr` tags (rejected by the caller's match)
     ///   and for `Expr` tags whose `header.other >= arity`.
     /// - Returns `OleanError::Region` describing the mismatch otherwise.
-    fn require_expr_fields(header: &crate::region::ObjectHeader, offset: usize) -> OleanResult<()> {
+    pub(crate) fn require_expr_fields(
+        header: &crate::region::ObjectHeader,
+        offset: usize,
+    ) -> OleanResult<()> {
         let expected: u8 = match header.tag {
             // `bvar`'s de Bruijn index is stored as an unboxed `usize` scalar in
             // the object's scalar region, not as a boxed pointer field, so a real
@@ -709,19 +728,7 @@ mod tests {
     use super::*;
 
     fn get_lean_lib_path() -> Option<std::path::PathBuf> {
-        let home = std::env::var("HOME").ok()?;
-        let elan_path = std::path::PathBuf::from(home).join(".elan/toolchains");
-
-        if elan_path.exists() {
-            for entry in std::fs::read_dir(&elan_path).ok()? {
-                let entry = entry.ok()?;
-                let name = entry.file_name();
-                if name.to_string_lossy().contains("lean4") {
-                    return Some(entry.path().join("lib/lean"));
-                }
-            }
-        }
-        None
+        crate::pinned_lean_lib_path()
     }
 
     // ════════════════════════════════════════════════════════════════════════════
@@ -1371,13 +1378,13 @@ mod tests {
     // Fail-closed field-count validation for Expr constructor objects.
     //
     // `read_expr_iterative` reads child-expr / name / level field pointers at fixed
-    // `field_base + k*8` offsets, and (for the binder constructors) computes the
-    // binder-info / nondep scalar position as `field_base + other*8`. A malformed or
-    // truncated `.olean` that declares fewer pointer fields than a constructor's
-    // arity would, without a guard, read bytes belonging to an adjacent object as a
-    // child pointer (and place the scalar read at the wrong offset) — silently
-    // fabricating an expression. These tests pin that each such object fails closed
-    // with a typed `OleanError::Region`, mirroring the `Level` field-count guard.
+    // `field_base + k*8` offsets, and computes constructor scalars after both the
+    // pointer fields and Lean's cached `Expr.Data` word. A malformed or truncated
+    // `.olean` that declares fewer pointer fields than a constructor's arity would,
+    // without a guard, read bytes belonging to an adjacent object as a child pointer
+    // (and place the scalar read at the wrong offset) — silently fabricating an
+    // expression. These tests pin that each such object fails closed with a typed
+    // `OleanError::Region`, mirroring the `Level` field-count guard.
     // ════════════════════════════════════════════════════════════════════════════
 
     /// A two-field `App` declaring only one field must fail closed rather than
@@ -1609,12 +1616,11 @@ mod tests {
         );
     }
 
-    /// Documents the soundness motivation directly: with `Lam other=3` the
-    /// binder-info scalar is read from `field_base + 3*8`; an under-declared
-    /// `other=2` would read it from `field_base + 2*8` (overlapping the `body`
-    /// slot). The guard rejects the malformed object before that mis-read can
-    /// fabricate a binder kind, so a well-formed Lam still round-trips its
-    /// binder info correctly.
+    /// Documents the soundness motivation directly: with `Lam other=3`, the
+    /// cached `Expr.Data` word starts at `field_base + 3*8` and binderInfo
+    /// follows it. An under-declared `other=2` would overlap the body slot.
+    /// The cached word is deliberately given a low byte that is not the
+    /// expected binder kind, pinning that the parser skips it.
     #[test]
     fn test_read_expr_lam_correct_fields_preserves_binder_info() {
         let mut data = vec![0u8; 192];
@@ -1623,8 +1629,8 @@ mod tests {
         data[lam_off + 8..lam_off + 16].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // name (anon)
         data[lam_off + 16..lam_off + 24].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // type = BVar 0
         data[lam_off + 24..lam_off + 32].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // body = BVar 0
-                                                                                          // binderInfo scalar byte at field_base + 3*8 = lam_off + 8 + 24 = lam_off + 32.
-        data[lam_off + 32] = 3; // InstImplicit
+        data[lam_off + 32] = 0x03; // cached Expr.Data byte, not binderInfo
+        data[lam_off + 40] = 0xa5; // complete raw binderInfo byte
 
         let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
         let expr = region
@@ -1632,9 +1638,63 @@ mod tests {
             .expect("well-formed Lam should parse");
         match expr {
             ParsedExpr::Lam(_, _, _, info) => {
-                assert_eq!(info, ParsedBinderInfo::InstImplicit);
+                assert_eq!(info, ParsedBinderInfo::Unknown(0xa5));
             }
             other => panic!("expected Lam, got {other:?}"),
+        }
+    }
+
+    /// Preserve Lean's complete binder-info ABI byte. Lean's
+    /// `lean_expr_binder_info` accessor returns the raw byte after cached
+    /// `Expr.Data`; masking it to today's low three bits would silently turn a
+    /// future tag such as `0xa5` into a current tag instead of surfacing
+    /// `Unknown(0xa5)`.
+    #[test]
+    fn test_read_expr_forall_preserves_raw_unknown_binder_info() {
+        let mut data = vec![0u8; 192];
+        let forall_off = 64;
+        write_header(&mut data, forall_off, 3, expr_tags::FORALL_E);
+        data[forall_off + 8..forall_off + 16].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // name (anon)
+        data[forall_off + 16..forall_off + 24].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // type = BVar 0
+        data[forall_off + 24..forall_off + 32].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // body = BVar 0
+        data[forall_off + 32] = 0x03; // cached Expr.Data byte, not binderInfo
+        data[forall_off + 40] = 0xa5; // complete raw binderInfo byte
+
+        let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
+        let expr = region
+            .read_expr_at(forall_off)
+            .expect("well-formed ForallE should parse");
+        match expr {
+            ParsedExpr::ForallE(_, _, _, info) => {
+                assert_eq!(info, ParsedBinderInfo::Unknown(0xa5));
+            }
+            other => panic!("expected ForallE, got {other:?}"),
+        }
+    }
+
+    /// `letE` stores `nondep` after the cached `Expr.Data` word too. A nonzero
+    /// hash byte must not turn a dependent let into a nondependent one.
+    #[test]
+    fn test_read_expr_let_preserves_nondep_after_cached_data() {
+        let mut data = vec![0u8; 192];
+        let let_off = 64;
+        write_header(&mut data, let_off, 4, expr_tags::LET_E);
+        data[let_off + 8..let_off + 16].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // name
+        data[let_off + 16..let_off + 24].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // type
+        data[let_off + 24..let_off + 32].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // value
+        data[let_off + 32..let_off + 40].copy_from_slice(&boxed_scalar(0).to_le_bytes()); // body
+        data[let_off + 40] = 0xff; // cached Expr.Data hash byte
+        data[let_off + 48] = 0; // nondep = false
+
+        let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
+        let expr = region
+            .read_expr_at(let_off)
+            .expect("well-formed dependent LetE should parse");
+        match expr {
+            ParsedExpr::LetE(_, _, _, _, nondep) => {
+                assert!(!nondep, "cached Expr.Data must not be decoded as nondep");
+            }
+            other => panic!("expected LetE, got {other:?}"),
         }
     }
 

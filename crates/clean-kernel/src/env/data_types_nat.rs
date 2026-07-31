@@ -303,6 +303,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_bool` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_bool(&self) -> bool {
         self.bool_init
     }
@@ -1185,6 +1186,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_int` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_int(&self) -> bool {
         self.int_init
     }

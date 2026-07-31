@@ -24,13 +24,19 @@
 //! Reference: Limperg & From (2023), "Aesop: White-Box Best-First Proof Search";
 //!            Nilsson (1980), "Principles of Artificial Intelligence", ch. 3-4.
 
+#[cfg(test)]
 use super::verified_proof_search::VerifiedProofSearchConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 /// Register a helper axiom and theorem over (Goal, SearchBound) pairs.
+#[cfg(test)]
 fn register_goal_bound_theorem(
     env: &mut Environment,
     c: &VerifiedProofSearchConsts,
@@ -80,6 +86,7 @@ fn register_goal_bound_theorem(
     })
 }
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // T1: Soundness — search output type-checks
@@ -90,6 +97,7 @@ impl Environment {
     ///
     /// If `run_search g b` returns `Proved` with proof term `p`, then
     /// `type_checks g p` holds — the proof validates against the goal.
+    #[cfg(test)]
     pub(super) fn register_soundness_theorem(
         &mut self,
         c: &VerifiedProofSearchConsts,
@@ -112,6 +120,7 @@ impl Environment {
     /// If `proof_exists_within g b` holds (there exists a proof of `g`
     /// constructible within the bound `b`), then `run_search g b` returns
     /// `Proved`.
+    #[cfg(test)]
     pub(super) fn register_completeness_theorem(
         &mut self,
         c: &VerifiedProofSearchConsts,
@@ -133,6 +142,7 @@ impl Environment {
     ///
     /// For any finite bound `b`, `search_space_finite b` holds and
     /// `run_search` terminates for all goals.
+    #[cfg(test)]
     pub(super) fn register_termination_theorem(
         &mut self,
         c: &VerifiedProofSearchConsts,
@@ -177,6 +187,7 @@ impl Environment {
     ///
     /// If `bound_le b1 b2` and `run_search g b1` returns `Proved`,
     /// then `run_search g b2` also returns `Proved`.
+    #[cfg(test)]
     pub(super) fn register_budget_monotonicity_theorem(
         &mut self,
         c: &VerifiedProofSearchConsts,
@@ -239,6 +250,7 @@ impl Environment {
     ///
     /// If `tactic_preserves_validity t g` holds for every tactic `t` applied
     /// during search, then the composed proof term is sound.
+    #[cfg(test)]
     pub(super) fn register_composition_soundness_theorem(
         &mut self,
         c: &VerifiedProofSearchConsts,

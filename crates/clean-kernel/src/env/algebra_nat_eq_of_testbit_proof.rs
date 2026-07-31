@@ -87,6 +87,7 @@ struct C {
     zero: Expr,
     succ: Expr,
     one: Expr,
+    #[cfg(test)]
     two: Expr,
     add: Expr,
     sub: Expr,
@@ -107,10 +108,12 @@ struct C {
     nat_lt: Expr,
     acc1: Expr,
     accnatlt: Expr,
+    #[cfg(test)]
     false_const: Expr,
+    #[cfg(test)]
     false_elim0: Expr, // False.elim.{0}
-    noconf0: Expr,     // Bool.noConfusion.{0}
-    succ_add: Expr,    // Nat.succ_add
+    noconf0: Expr,  // Bool.noConfusion.{0}
+    succ_add: Expr, // Nat.succ_add
 }
 
 impl C {
@@ -120,12 +123,14 @@ impl C {
         let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
         let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
         let one = Expr::app(succ.clone(), zero.clone());
+        #[cfg(test)]
         let two = Expr::app(succ.clone(), one.clone());
         Self {
             nat,
             zero,
             succ,
             one,
+            #[cfg(test)]
             two,
             add: Expr::const_(Name::from_string("Nat.add"), vec![]),
             sub: Expr::const_(Name::from_string("Nat.sub"), vec![]),
@@ -149,7 +154,9 @@ impl C {
             nat_lt: Expr::const_(Name::from_string("Nat.lt"), vec![]),
             acc1: Expr::const_(Name::from_string("Acc"), vec![one_lvl.clone()]),
             accnatlt: Expr::const_(Name::from_string("Nat.accNatLt"), vec![]),
+            #[cfg(test)]
             false_const: Expr::const_(Name::from_string("False"), vec![]),
+            #[cfg(test)]
             false_elim0: Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]),
             noconf0: Expr::const_(Name::from_string("Bool.noConfusion"), vec![Level::zero()]),
             succ_add: Expr::const_(Name::from_string("Nat.succ_add"), vec![]),
@@ -972,7 +979,7 @@ fn build_eq_zero_of_testbit_all_false(c: &C) -> (Expr, Expr) {
                 // ih_nat : Mx k  (unused)
                 let mx_k = {
                     // recompute Mx k inline = ih_k → P k
-                    let mut mb = EnvDeclBuilder::child_of(&sb);
+                    let mb = EnvDeclBuilder::child_of(&sb);
                     let ih_k = {
                         let mut ib = EnvDeclBuilder::child_of(&mb);
                         let (y_id, y) = ib.fresh_local(c.nat.clone());
@@ -1292,7 +1299,7 @@ fn build_eq_of_testbit_eq(c: &C) -> (Expr, Expr) {
                 let (k_id, k) = sb.fresh_local(c.nat.clone());
                 let s = c.succ(k.clone());
                 let mx_k = {
-                    let mut mb = EnvDeclBuilder::child_of(&sb);
+                    let mb = EnvDeclBuilder::child_of(&sb);
                     let ih_k = ih_quant(&k, &mb);
                     let p_k = p_of(&k, &mb);
                     let mut bb = EnvDeclBuilder::child_of(&mb);

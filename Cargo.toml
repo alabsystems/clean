@@ -49,7 +49,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "1.2.0"
+version = "1.3.0"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -62,28 +62,26 @@ repository = "https://github.com/alabsystems/clean"
 
 readme = "README.md"
 [workspace.lints.rust]
-# Keep normal checks high-signal. The workspace contains a large amount of
-# experimental/prototype code where dead code and unused imports are expected
-# while subsystems are being connected; warning on every such site makes CLI
-# and factory verification output unusable. Keep correctness/security-oriented
-# lints active, and stage mechanical cleanup separately.
+# Keep hygiene diagnostics visible across every workspace crate. Feature- or
+# target-specific exceptions belong at the narrowest affected item with a
+# concrete justification; workspace-wide `allow` levels conceal real drift.
 # Cargo does not allow member manifests to inherit workspace lints and keep
 # package-local lint tables, so the custom cfg whitelist lives here.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(trust_verify)', 'cfg(feature, values("carcara-verify", "debug-infer", "debug-whnf", "geometry-tools", "math-overlays", "mimalloc", "round-trip-compile", "test-utils", "ay-smt"))'] }
-dead_code = "allow"
-unused_imports = "allow"
-unused_variables = "allow"
-unused_mut = "allow"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(trust_verify)', 'cfg(feature, values("carcara-verify", "debug-infer", "debug-whnf", "farkas-constructive", "geometry-tools", "math-overlays", "mimalloc", "round-trip-compile", "test-utils", "ay-smt"))'] }
+dead_code = "warn"
+unused_imports = "warn"
+unused_variables = "warn"
+unused_mut = "warn"
 unused_must_use = "warn"
-unreachable_code = "allow"
-unreachable_patterns = "allow"
+unreachable_code = "warn"
+unreachable_patterns = "warn"
 unsafe_op_in_unsafe_fn = "warn"
-unused_qualifications = "allow"
-unused_lifetimes = "allow"
-unused_import_braces = "allow"
-unused_macro_rules = "allow"
-private_interfaces = "allow"
-noop_method_call = "allow"
+unused_qualifications = "warn"
+unused_lifetimes = "warn"
+unused_import_braces = "warn"
+unused_macro_rules = "warn"
+private_interfaces = "warn"
+noop_method_call = "warn"
 non_ascii_idents = "forbid"
 keyword_idents_2024 = "forbid"
 
@@ -273,24 +271,32 @@ stacker = "0.1"
 # rapid internal development. This deliberately pins the already-published Ty
 # authority immediately before this Clean change. Clean(new) -> Ty(old), then
 # Ty(new) may advance to Clean(new), keeping the authority history acyclic.
-tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "8b854db78157d814d5bd7b718885225beb72f948" }
+tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "5b3b94d56abee54739395f3c47b330f1bf4527fe" }
 
-# Keep every AY crate on one immutable Git revision so Clean remains consumable
-# as a plain Cargo Git dependency: a `../ay` path escapes Cargo's Git checkout
-# and makes downstream resolution fail before features can be selected. Monorepo
+# The SMT solver sibling repo was renamed z4 -> ay (alabsystems/ay). Keep
+# every AY crate on one immutable Git revision so Clean remains consumable as a
+# plain Cargo Git dependency: a `../ay` path escapes Cargo's Git checkout and
+# makes downstream resolution fail before features can be selected. Monorepo
 # integrations may redirect this exact URL with a root-level `[patch]` table.
+#
+# Merge note (integrate/crash-2026-06-02): the proof-carrying-farkas branch
+# kept the legacy `z4` dependency KEYS aliased to the `ay` packages, but every
+# consuming crate on personal/main (clean-elab, clean-auto, ...) now
+# references `ay.workspace = true` / the `ay-smt` feature. No source in the
+# merged tree references the `z4*` keys, so personal/main's full `ay` rename is
+# the correct, semantically-complete side; the `z4` aliases are dropped.
 # Trust: default-features = false drops ay's GMP-backed LRA path (`rug` +
 # `gmp-mpfr-sys`). clean-auto links ay in-process via the `ay-smt` feature; the
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
-ay-core = { package = "ay-core", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
-ay-proof = { package = "ay-proof", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
-ay-frontend = { package = "ay-frontend", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
-ay-translate = { package = "ay-translate", version = "0.3.0", git = "https://github.com/alabsystems/ay.git", rev = "d766b0365d2cf614428bfea6debb8c02a815f384" }
+ay = { package = "ay", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1" }
+ay-core = { package = "ay-core", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1" }
+ay-proof = { package = "ay-proof", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1" }
+ay-frontend = { package = "ay-frontend", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1" }
+ay-translate = { package = "ay-translate", version = "0.5.0", git = "https://github.com/alabsystems/ay.git", rev = "accc0b797b761caf71a99b87073e8cc1c758bdb1" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).

@@ -65,6 +65,7 @@ impl Environment {
     }
 
     /// Check if ReLU definitions and T81 have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_relu(&self) -> bool {
         self.nn_verify_relu_init
     }

@@ -387,6 +387,7 @@ impl LemmaAConsts {
     }
 
     /// `a·p = a·q` from `h : p = q` (NNReal), via `Eq.subst` on the right factor.
+    #[cfg(test)]
     fn congr_mul_right(
         &self,
         parent: &EnvDeclBuilder,

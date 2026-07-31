@@ -29,13 +29,19 @@
 //!            Krajicek (1997), "Interpolation theorems, lower bounds for
 //!            proof systems, and independence results for bounded arithmetic".
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all feasible interpolation declarations.
+#[cfg(test)]
 pub(super) struct FeasibleInterpolationConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -46,7 +52,9 @@ pub(super) struct FeasibleInterpolationConsts {
     pub(super) res_proof: Expr,
 }
 
+#[cfg(test)]
 impl FeasibleInterpolationConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -58,10 +66,12 @@ impl FeasibleInterpolationConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize feasible interpolation declarations for Pudlak's theorem.
     ///
     /// Depends on: `init_bool()`, `init_nat()`, `init_craig_interpolation()`.
+    #[cfg(test)]
     pub(crate) fn init_feasible_interpolation(&mut self) -> Result<(), EnvError> {
         if self.feasible_interpolation_init {
             return Ok(());
@@ -101,6 +111,7 @@ impl Environment {
     ///
     /// Abstractly wraps a PropFormula together with a polynomial-time
     /// computability witness.
+    #[cfg(test)]
     fn register_feasible_interpolant(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -147,6 +158,7 @@ impl Environment {
     ///
     /// Reference: Krajicek (1998), "Interpolation and approximate semantic
     ///            derivations".
+    #[cfg(test)]
     fn register_communication_complexity(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -191,6 +203,7 @@ impl Environment {
     /// - `Input (v : Nat)` — input variable
     /// - `And (c1 c2 : monotone_circuit)` — conjunction gate
     /// - `Or (c1 c2 : monotone_circuit)` — disjunction gate
+    #[cfg(test)]
     fn register_monotone_circuit(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -252,6 +265,7 @@ impl Environment {
     ///
     /// The size of a monotone circuit: the number of gates (AND and OR nodes).
     /// Input nodes contribute 0 to the size.
+    #[cfg(test)]
     fn register_monotone_circuit_size(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -287,6 +301,7 @@ impl Environment {
     /// - `Axiom (cl : PropFormula)` — leaf: an axiom clause
     /// - `Resolve (p1 p2 : Nat) (v : Nat)` — resolve on variable v,
     ///   referencing previously derived clauses by index
+    #[cfg(test)]
     fn register_dag_like_proof(&mut self, c: &FeasibleInterpolationConsts) -> Result<(), EnvError> {
         let dag = Expr::const_(Name::from_string("ProofTheory.dag_like_proof"), vec![]);
         if self

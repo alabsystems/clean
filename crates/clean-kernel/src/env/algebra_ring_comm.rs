@@ -31,6 +31,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.comm_semiring_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_comm_semiring(&mut self) -> Result<(), EnvError> {
         if self.comm_semiring_init {
             return Ok(());
@@ -518,6 +519,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.comm_semiring_init == true`
+    #[cfg(test)]
     pub(crate) fn has_comm_semiring(&self) -> bool {
         self.comm_semiring_init
     }

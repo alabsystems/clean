@@ -138,10 +138,28 @@ impl<'a> ElabCtx<'a> {
         }
 
         // Cycle detection: same normalized goal already on the active path.
-        if goal_path.contains(&cache_key) {
+        //
+        // Keyed on a SEPARATE, more aggressively normalized key than `cache_key`.
+        // `cache_key` is computed from the goal above with the head deliberately
+        // left un-whnf'd (to preserve `def`-based class heads such as
+        // `DecidableEq`), so a self-wrapping instance produces a goal chain
+        // `OfNat Nat 0` -> `OfNat (Id Nat) 0` -> `OfNat (Id (Id Nat)) 0` -> …
+        // whose members are all definitionally equal but SYNTACTICALLY distinct.
+        // The cycle check therefore never fired: resolution ran to `MAX_DEPTH`,
+        // bottomed out on the genuine instance, and unwound into a 31-wrapper
+        // tower that was then accepted as the answer (the literal `0` in
+        // `n + 0` elaborated to 12,470 characters of `Id.instOfNat`).
+        //
+        // Normalizing the class ARGUMENTS collapses that chain to one key so the
+        // check fires on the second level. The head is untouched, so no
+        // `def`-based class head is lost, and `cache_key` keeps its existing
+        // meaning for the instance cache — a stricter cycle key can only reject
+        // paths that were already non-terminating.
+        let cycle_key = self.cycle_detection_key(&goal_ty, &cache_key);
+        if goal_path.contains(&cycle_key) {
             return None;
         }
-        goal_path.push(cache_key.clone());
+        goal_path.push(cycle_key);
         let result =
             self.resolve_instance_candidates(goal_ty, &cache_key, goal_is_ground, depth, goal_path);
         goal_path.pop();
@@ -881,6 +899,33 @@ impl<'a> ElabCtx<'a> {
     /// map to the same cache key.
     ///
     /// For example, `Add ?m1` and `Add ?m2` both normalize to `Add ?_0`.
+    /// Key used for instance-search cycle detection.
+    ///
+    /// Same as [`Self::normalize_for_cache`], except each class ARGUMENT is
+    /// weak-head normalized first, so goals that differ only by a reducible
+    /// wrapper (`OfNat Nat 0` vs `OfNat (Id Nat) 0`) share a key. The class head
+    /// is left exactly as-is, so `def`-based class heads are preserved.
+    ///
+    /// Falls back to `cache_key` when the goal is not a class application, which
+    /// keeps the previous behaviour for every non-class goal.
+    fn cycle_detection_key(&mut self, goal_ty: &Expr, cache_key: &str) -> String {
+        use crate::instances::extract_class_app;
+
+        let Some((class_name, args)) = extract_class_app(goal_ty) else {
+            return cache_key.to_string();
+        };
+        let mut key = String::from("cyc:");
+        key.push_str(&class_name.to_string());
+        for arg in &args {
+            let arg = self.metas.instantiate(arg);
+            let reduced = self.whnf(&arg);
+            let reduced = self.metas.instantiate(&reduced);
+            key.push('|');
+            key.push_str(&self.normalize_for_cache(&reduced));
+        }
+        key
+    }
+
     pub(super) fn normalize_for_cache(&self, e: &Expr) -> String {
         let mut meta_map: HashMap<u64, usize> = HashMap::new();
         let mut next_id = 0;

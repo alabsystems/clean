@@ -60,6 +60,7 @@ pub(crate) struct RatHalfPosConsts {
     or_c: Expr,
     or_rec: Expr,
     not_c: Expr,
+    #[cfg(test)]
     false_c: Expr,
     false_elim: Expr,
     iff_mp: Expr,
@@ -90,6 +91,7 @@ impl RatHalfPosConsts {
             or_c: k("Or"),
             or_rec: k("Or.rec"),
             not_c: k("Not"),
+            #[cfg(test)]
             false_c: k("False"),
             false_elim: Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]),
             iff_mp: k("Iff.mp"),

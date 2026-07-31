@@ -418,7 +418,7 @@ fn build_q14cc_eq(
     c: &TwoPointLegConsts,
     parent: &EnvDeclBuilder,
     bb: &Expr,
-    cc: &Expr,
+    _cc: &Expr,
     cc_sq: &Expr,
 ) -> Expr {
     let q29 = c.frac(2, 9);

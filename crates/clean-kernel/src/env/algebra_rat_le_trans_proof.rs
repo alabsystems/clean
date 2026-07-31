@@ -109,6 +109,7 @@ struct LeTransConsts {
     int_mul_comm: Expr,
     or_rec: Expr,
     eq_subst: Expr,
+    #[cfg(test)]
     eq_symm: Expr,
     eq_trans: Expr,
     congr_arg: Expr,
@@ -152,6 +153,7 @@ impl LeTransConsts {
             // (matching the established Nat-cancellation idiom).
             or_rec: Expr::const_(Name::from_string("Or.rec"), vec![]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![type1.clone()]),
+            #[cfg(test)]
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![type1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![type1.clone()]),
             congr_arg: Expr::const_(Name::from_string("congrArg"), vec![type1.clone(), type1]),
@@ -196,6 +198,7 @@ impl LeTransConsts {
     }
 
     /// `@Eq.symm.{1} Int x y h : Eq Int y x`.
+    #[cfg(test)]
     fn symm(&self, x: Expr, y: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.int.clone(), x, y, h])
     }

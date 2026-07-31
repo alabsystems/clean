@@ -95,6 +95,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.subgroup_init == true`
+    #[cfg(test)]
     pub(crate) fn has_subgroup(&self) -> bool {
         self.subgroup_init
     }
@@ -147,6 +148,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.subring_init == true`
+    #[cfg(test)]
     pub(crate) fn has_subring(&self) -> bool {
         self.subring_init
     }
@@ -200,6 +202,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.subfield_init == true`
+    #[cfg(test)]
     pub(crate) fn has_subfield(&self) -> bool {
         self.subfield_init
     }
@@ -243,6 +246,7 @@ impl Environment {
     }
 
     /// Check if Submonoid has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_submonoid(&self) -> bool {
         self.submonoid_init
     }
@@ -309,6 +313,7 @@ impl Environment {
     }
 
     /// Check if Fact has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_fact(&self) -> bool {
         self.fact_init
     }
@@ -354,6 +359,7 @@ impl Environment {
     }
 
     /// Check if Odd has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_odd(&self) -> bool {
         self.odd_init
     }
@@ -403,6 +409,7 @@ impl Environment {
     }
 
     /// Check if Nat.card has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nat_card(&self) -> bool {
         self.nat_card_init
     }
@@ -456,6 +463,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.ring_hom_init == true`
+    #[cfg(test)]
     pub(crate) fn has_ring_hom(&self) -> bool {
         self.ring_hom_init
     }
@@ -504,6 +512,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.is_empty_init == true`
+    #[cfg(test)]
     pub(crate) fn has_is_empty(&self) -> bool {
         self.is_empty_init
     }
@@ -568,6 +577,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.finite_init == true`
+    #[cfg(test)]
     pub(crate) fn has_finite(&self) -> bool {
         self.finite_init
     }

@@ -52,7 +52,9 @@ use crate::name::Name;
 /// Pre-resolved handles + smart-constructors for the two `powNat` primitives.
 struct PowMulConsts {
     nat: Expr,
+    #[cfg(test)]
     nat_succ: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     rat: Expr,
     rat_zero: Expr,
@@ -77,7 +79,9 @@ impl PowMulConsts {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
             nat: k("Nat"),
+            #[cfg(test)]
             nat_succ: k("Nat.succ"),
+            #[cfg(test)]
             nat_zero: k("Nat.zero"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
@@ -106,6 +110,7 @@ impl PowMulConsts {
     fn pow(&self, b: &Expr, k: &Expr) -> Expr {
         Expr::apps(self.pow_nat.clone(), [b.clone(), k.clone()])
     }
+    #[cfg(test)]
     fn succ(&self, k: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), k.clone())
     }

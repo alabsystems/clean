@@ -84,24 +84,3 @@ pub fn assert_both_contain(c_code: &str, rust_code: &str, pattern: &str) {
         rust_code
     );
 }
-
-/// Parity check: verify different patterns appear in C and Rust output.
-pub fn assert_c_and_rust_contain(
-    c_code: &str,
-    rust_code: &str,
-    c_pattern: &str,
-    rust_pattern: &str,
-) {
-    assert!(
-        c_code.contains(c_pattern),
-        "C emitter missing pattern: {}\n---C output---\n{}",
-        c_pattern,
-        c_code
-    );
-    assert!(
-        rust_code.contains(rust_pattern),
-        "Rust emitter missing pattern: {}\n---Rust output---\n{}",
-        rust_pattern,
-        rust_code
-    );
-}

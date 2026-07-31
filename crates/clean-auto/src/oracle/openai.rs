@@ -114,7 +114,7 @@ impl OpenAiOracle {
             .config
             .endpoint_url
             .as_deref()
-            .unwrap_or("https://api.example.com/v1")
+            .unwrap_or("https://api.AI Provider.com/v1")
             .trim_end_matches('/');
         format!("{base}/chat/completions")
     }

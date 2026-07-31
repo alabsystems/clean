@@ -15,11 +15,16 @@
 //! This module provides foundations for verifying SAT/SMT solvers and
 //! understanding the metatheory of the theorem prover itself.
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Formal Logic module
     ///
@@ -45,6 +50,7 @@ impl Environment {
     /// ENSURES: On success, `self.formal_logic_init == true`
     /// ENSURES: On success, required dependencies (`eq`, `nat`, `bool`, `list`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_formal_logic(&mut self) -> Result<(), EnvError> {
         if self.formal_logic_init {
             return Ok(());
@@ -419,6 +425,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_formal_logic` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_formal_logic(&self) -> bool {
         self.formal_logic_init
     }

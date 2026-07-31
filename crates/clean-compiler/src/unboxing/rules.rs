@@ -45,7 +45,7 @@ pub(crate) fn optimize_vdecl(
     _var: VarId,
     ty: &IRType,
     value: &IRExpr,
-    ctx: &mut UnboxingContext,
+    ctx: &mut UnboxingContext<'_>,
 ) -> (IRType, IRExpr) {
     if ctx.config.eliminate_box_unbox_pairs {
         if let Some(result) = try_eliminate_unbox_box(ty, value, ctx) {
@@ -83,7 +83,7 @@ pub(crate) fn optimize_vdecl(
 fn try_eliminate_unbox_box(
     _ty: &IRType,
     value: &IRExpr,
-    ctx: &mut UnboxingContext,
+    ctx: &mut UnboxingContext<'_>,
 ) -> Option<(IRType, IRExpr)> {
     if let IRExpr::Unbox {
         ty: unbox_ty,
@@ -119,7 +119,7 @@ fn try_eliminate_unbox_box(
 fn try_eliminate_box_unbox(
     _ty: &IRType,
     value: &IRExpr,
-    ctx: &mut UnboxingContext,
+    ctx: &mut UnboxingContext<'_>,
 ) -> Option<(IRType, IRExpr)> {
     if let IRExpr::Box {
         ty: box_ty,
@@ -178,7 +178,7 @@ pub(super) fn classify_comparison(name: &str) -> bool {
 fn try_unbox_arithmetic(
     _ty: &IRType,
     value: &IRExpr,
-    ctx: &mut UnboxingContext,
+    ctx: &mut UnboxingContext<'_>,
 ) -> Option<(IRType, IRExpr)> {
     if let IRExpr::Apply { fn_id, args } = value {
         let fn_name = format!("{}", fn_id.0);
@@ -203,7 +203,7 @@ fn try_unbox_arithmetic(
 fn try_unbox_comparison(
     _ty: &IRType,
     value: &IRExpr,
-    ctx: &mut UnboxingContext,
+    ctx: &mut UnboxingContext<'_>,
 ) -> Option<(IRType, IRExpr)> {
     if let IRExpr::Apply { fn_id, args } = value {
         let fn_name = format!("{}", fn_id.0);
@@ -227,7 +227,7 @@ fn try_unbox_comparison(
 /// Try to unwrap boxed arguments: for each `box(x)` argument, return `x`.
 ///
 /// Returns `None` if any non-erased argument is not a boxed scalar.
-fn try_unbox_args(args: &[IRArg], ctx: &UnboxingContext) -> Option<Vec<IRArg>> {
+fn try_unbox_args(args: &[IRArg], ctx: &UnboxingContext<'_>) -> Option<Vec<IRArg>> {
     let mut result = Vec::with_capacity(args.len());
     for arg in args {
         match arg {

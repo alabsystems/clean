@@ -10,6 +10,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::super::ProofCert;
+use super::limits::{
+    decode_bincode_limited, decode_certificate_bincode_limited, MAX_STREAM_CERTIFICATES,
+    MAX_STREAM_CERT_BYTES, MAX_STREAM_UNCOMPRESSED_BYTES,
+};
 use super::zstd_backend::ZstdCertArchive;
 
 /// Compression algorithm choice for certificate archiving.
@@ -117,7 +121,8 @@ pub struct StreamingArchiveHeader {
 impl StreamingArchiveHeader {
     /// Magic bytes for streaming certificate archives
     pub const MAGIC: [u8; 4] = *b"L5CS";
-    /// Current format version
+    /// Current format version. Streaming stores `ProofCert` directly, so the
+    /// compressed-expression v2 wire change does not affect this carrier.
     pub const VERSION: u8 = 1;
 
     /// Create a new header for LZ4 streaming
@@ -162,9 +167,9 @@ impl StreamingArchiveHeader {
                 self.magic
             )));
         }
-        if self.version > Self::VERSION {
+        if self.version != Self::VERSION {
             return Err(StreamingError::InvalidFormat(format!(
-                "Unsupported version: {} (max supported: {})",
+                "Unsupported version: {} (expected: {})",
                 self.version,
                 Self::VERSION
             )));
@@ -173,6 +178,18 @@ impl StreamingArchiveHeader {
             return Err(StreamingError::InvalidFormat(format!(
                 "Unknown algorithm: {}",
                 self.algorithm
+            )));
+        }
+        if self.cert_count > MAX_STREAM_CERTIFICATES {
+            return Err(StreamingError::InvalidFormat(format!(
+                "certificate count {} exceeds maximum {MAX_STREAM_CERTIFICATES}",
+                self.cert_count
+            )));
+        }
+        if self.uncompressed_size > MAX_STREAM_UNCOMPRESSED_BYTES {
+            return Err(StreamingError::InvalidFormat(format!(
+                "uncompressed size {} exceeds maximum {MAX_STREAM_UNCOMPRESSED_BYTES}",
+                self.uncompressed_size
             )));
         }
         Ok(())
@@ -227,16 +244,37 @@ impl<W: std::io::Write> StreamingCertWriter<W> {
     pub fn write_cert(&mut self, cert: &ProofCert) -> Result<(), StreamingError> {
         use std::io::Write;
 
+        if self.cert_count >= MAX_STREAM_CERTIFICATES {
+            return Err(StreamingError::SizeOverflow {
+                size: self.cert_count.saturating_add(1) as usize,
+                max: MAX_STREAM_CERTIFICATES as u32,
+            });
+        }
         let cert_bytes = bincode::serde::encode_to_vec(cert, bincode::config::standard())
             .map_err(|e| StreamingError::Serialize(e.to_string()))?;
+        if cert_bytes.len() > MAX_STREAM_CERT_BYTES {
+            return Err(StreamingError::SizeOverflow {
+                size: cert_bytes.len(),
+                max: MAX_STREAM_CERT_BYTES as u32,
+            });
+        }
 
         let cert_len = usize_to_u32_streaming(cert_bytes.len())?;
+        let next_total = self
+            .uncompressed_bytes
+            .checked_add(4 + u64::from(cert_len))
+            .ok_or_else(|| StreamingError::Decompress("stream byte count overflow".to_string()))?;
+        if next_total > MAX_STREAM_UNCOMPRESSED_BYTES {
+            return Err(StreamingError::Serialize(format!(
+                "stream size {next_total} exceeds maximum {MAX_STREAM_UNCOMPRESSED_BYTES}"
+            )));
+        }
         let len_bytes = cert_len.to_le_bytes();
         self.encoder.write_all(&len_bytes)?;
         self.encoder.write_all(&cert_bytes)?;
 
         self.cert_count += 1;
-        self.uncompressed_bytes += 4 + u64::from(cert_len);
+        self.uncompressed_bytes = next_total;
 
         if let Some(ref mut callback) = self.progress {
             callback(self.uncompressed_bytes, None);
@@ -287,6 +325,8 @@ pub struct StreamingCertReader<R: std::io::Read> {
     uncompressed_bytes: u64,
     /// Progress callback
     progress: Option<StreamingProgressCallback>,
+    /// Whether the zstd stream reached and validated its terminal boundary.
+    finished: bool,
 }
 
 impl<R: std::io::Read> StreamingCertReader<R> {
@@ -308,9 +348,7 @@ impl<R: std::io::Read> StreamingCertReader<R> {
         reader.read_exact(&mut header_bytes)?;
 
         let header: StreamingArchiveHeader =
-            bincode::serde::decode_from_slice(&header_bytes, bincode::config::standard())
-                .map(|(__v, _)| __v)
-                .map_err(|e| StreamingError::InvalidFormat(e.to_string()))?;
+            decode_bincode_limited(&header_bytes).map_err(StreamingError::InvalidFormat)?;
 
         header.validate()?;
 
@@ -320,7 +358,7 @@ impl<R: std::io::Read> StreamingCertReader<R> {
             ));
         }
 
-        let decoder = zstd::stream::Decoder::new(reader)?;
+        let decoder = zstd::stream::Decoder::new(reader)?.single_frame();
 
         Ok(StreamingCertReader {
             decoder,
@@ -328,6 +366,7 @@ impl<R: std::io::Read> StreamingCertReader<R> {
             certs_read: 0,
             uncompressed_bytes: 0,
             progress: None,
+            finished: false,
         })
     }
 
@@ -345,25 +384,51 @@ impl<R: std::io::Read> StreamingCertReader<R> {
 
     /// Read the next certificate from the stream.
     ///
-    /// Returns `None` when the stream is exhausted.
+    /// Returns `None` only after the terminal zstd boundary, declared counts,
+    /// and absence of trailing frames/bytes have all been validated.  A caller
+    /// that stops after `Some` must call [`Self::finish`] to validate the
+    /// remainder.
     pub fn read_cert(&mut self) -> Result<Option<ProofCert>, StreamingError> {
         use std::io::Read;
 
-        let mut len_bytes = [0u8; 4];
-        match self.decoder.read_exact(&mut len_bytes) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => return Err(StreamingError::Io(e)),
+        if self.finished {
+            return Ok(None);
         }
+
+        let mut len_bytes = [0u8; 4];
+        match self.decoder.read(&mut len_bytes[..1]) {
+            Ok(0) => return self.finish_reading(),
+            Ok(1) => self.decoder.read_exact(&mut len_bytes[1..])?,
+            Ok(_) => unreachable!("one-byte read returned more than one byte"),
+            Err(error) => return Err(StreamingError::Io(error)),
+        }
+        validate_next_certificate_count(
+            self.certs_read,
+            self.header.cert_count,
+            MAX_STREAM_CERTIFICATES,
+        )?;
 
         let cert_len = u32::from_le_bytes(len_bytes) as usize;
 
         // Guard against malicious/corrupt archives requesting extreme allocations.
-        // 256 MB is generous for any single serialized certificate.
-        const MAX_CERT_BYTES: usize = 256 * 1024 * 1024;
-        if cert_len > MAX_CERT_BYTES {
+        if cert_len > MAX_STREAM_CERT_BYTES {
             return Err(StreamingError::Decompress(format!(
-                "certificate size {cert_len} exceeds maximum {MAX_CERT_BYTES}"
+                "certificate size {cert_len} exceeds maximum {MAX_STREAM_CERT_BYTES}"
+            )));
+        }
+        let next_total = self
+            .uncompressed_bytes
+            .checked_add(4 + cert_len as u64)
+            .ok_or_else(|| StreamingError::Decompress("stream byte count overflow".to_string()))?;
+        if next_total > MAX_STREAM_UNCOMPRESSED_BYTES {
+            return Err(StreamingError::Decompress(format!(
+                "stream size {next_total} exceeds maximum {MAX_STREAM_UNCOMPRESSED_BYTES}"
+            )));
+        }
+        if self.header.uncompressed_size > 0 && next_total > self.header.uncompressed_size {
+            return Err(StreamingError::InvalidFormat(format!(
+                "stream exceeds declared uncompressed size {}",
+                self.header.uncompressed_size
             )));
         }
 
@@ -371,12 +436,10 @@ impl<R: std::io::Read> StreamingCertReader<R> {
         self.decoder.read_exact(&mut cert_bytes)?;
 
         let cert: ProofCert =
-            bincode::serde::decode_from_slice(&cert_bytes, bincode::config::standard())
-                .map(|(__v, _)| __v)
-                .map_err(|e| StreamingError::Decompress(e.to_string()))?;
+            decode_certificate_bincode_limited(&cert_bytes).map_err(StreamingError::Decompress)?;
 
         self.certs_read += 1;
-        self.uncompressed_bytes += 4 + cert_len as u64;
+        self.uncompressed_bytes = next_total;
 
         if let Some(ref mut callback) = self.progress {
             let total = if self.header.cert_count > 0 {
@@ -390,7 +453,46 @@ impl<R: std::io::Read> StreamingCertReader<R> {
         Ok(Some(cert))
     }
 
+    fn finish_reading(&mut self) -> Result<Option<ProofCert>, StreamingError> {
+        use std::io::Read;
+
+        if self.header.cert_count > 0 && self.certs_read != self.header.cert_count {
+            return Err(StreamingError::InvalidFormat(format!(
+                "stream ended after {} certificates; header declared {}",
+                self.certs_read, self.header.cert_count
+            )));
+        }
+        if self.header.uncompressed_size > 0
+            && self.uncompressed_bytes != self.header.uncompressed_size
+        {
+            return Err(StreamingError::InvalidFormat(format!(
+                "stream decoded {} bytes; header declared {}",
+                self.uncompressed_bytes, self.header.uncompressed_size
+            )));
+        }
+        let mut trailing = [0_u8; 1];
+        if self.decoder.get_mut().read(&mut trailing)? != 0 {
+            return Err(StreamingError::InvalidFormat(
+                "trailing bytes after the zstd stream".to_string(),
+            ));
+        }
+        self.finished = true;
+        Ok(None)
+    }
+
+    /// Drain any unread certificates and validate the terminal boundary.
+    ///
+    /// Remaining certificates are deliberately discarded one at a time, so a
+    /// selective/partial consumer can still prove the archive has no missing
+    /// rows, partial length prefix, trailing bytes, or concatenated frame.
+    pub fn finish(&mut self) -> Result<(), StreamingError> {
+        while self.read_cert()?.is_some() {}
+        Ok(())
+    }
+
     /// Read all remaining certificates from the stream.
+    ///
+    /// Successful return includes full terminal-boundary validation.
     pub fn read_all(&mut self) -> Result<Vec<ProofCert>, StreamingError> {
         let mut certs = Vec::new();
         while let Some(cert) = self.read_cert()? {
@@ -407,6 +509,37 @@ impl<R: std::io::Read> StreamingCertReader<R> {
     /// Get the total uncompressed bytes read so far.
     pub fn uncompressed_bytes(&self) -> u64 {
         self.uncompressed_bytes
+    }
+}
+
+fn validate_next_certificate_count(
+    certs_read: u64,
+    declared_count: u64,
+    maximum_count: u64,
+) -> Result<(), StreamingError> {
+    if certs_read >= maximum_count {
+        return Err(StreamingError::InvalidFormat(format!(
+            "stream contains more than the maximum {maximum_count} certificates"
+        )));
+    }
+    if declared_count > 0 && certs_read >= declared_count {
+        return Err(StreamingError::InvalidFormat(format!(
+            "stream contains more than declared {declared_count} certificates"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod resource_limit_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_declared_count_still_obeys_actual_count_limit() {
+        validate_next_certificate_count(2, 0, 3).expect("one remaining slot");
+        let error = validate_next_certificate_count(3, 0, 3)
+            .expect_err("unknown count must not disable the hard cap");
+        assert!(error.to_string().contains("maximum 3 certificates"));
     }
 }
 

@@ -65,6 +65,7 @@ impl IntAddZeroConsts {
         Expr::app(Expr::app(self.int_add.clone(), a), self.int_zero.clone())
     }
 
+    #[cfg(test)]
     fn of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_of_nat.clone(), n)
     }

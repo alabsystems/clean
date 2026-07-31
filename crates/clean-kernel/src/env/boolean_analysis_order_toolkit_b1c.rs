@@ -160,6 +160,7 @@ impl Environment {
     }
 
     /// Check if the B1c mixed-transitivity toolkit has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_order_toolkit_b1c(&self) -> bool {
         self.boolean_analysis_order_toolkit_b1c_init
     }

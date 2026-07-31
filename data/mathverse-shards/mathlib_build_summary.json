@@ -6,7 +6,7 @@
       "constants": 144868,
       "files_parsed": 2204,
       "label": "toolchain",
-      "root_dir": "$HOME/.elan/toolchains/leanprover--lean4---v4.29.1/lib/lean"
+      "root_dir": "$ELAN_HOME/toolchains/leanprover--lean4---v4.29.1/lib/lean"
     }
   ],
   "total_constants": 144868,

@@ -9,9 +9,14 @@
 //! - Int Semiring instance
 //! - Int Ring instance
 
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(test)]
+use crate::env::{Declaration, EnvError};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
@@ -28,6 +33,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_semiring_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_semiring_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_semiring_inst_init {
             return Ok(());
@@ -143,6 +149,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_semiring_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_semiring_inst(&self) -> bool {
         self.nat_semiring_inst_init
     }
@@ -160,6 +167,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_semiring_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_semiring_inst(&mut self) -> Result<(), EnvError> {
         if self.int_semiring_inst_init {
             return Ok(());
@@ -277,6 +285,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_semiring_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_semiring_inst(&self) -> bool {
         self.int_semiring_inst_init
     }
@@ -293,6 +302,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_ring_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_ring_inst(&mut self) -> Result<(), EnvError> {
         if self.int_ring_inst_init {
             return Ok(());
@@ -400,6 +410,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_ring_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_ring_inst(&self) -> bool {
         self.int_ring_inst_init
     }

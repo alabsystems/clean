@@ -342,7 +342,7 @@ fn translate_mk_comb(
 
 fn translate_abs(
     scope: &Scope,
-    binder: &crate::hol_light_import::HolVar,
+    binder: &HolVar,
     proof: &HolProof,
     symbols: &mut SymbolCollector,
 ) -> Result<CheckedTheorem, HolLightImportError> {
@@ -415,7 +415,7 @@ fn translate_abs(
 
 fn translate_beta(
     scope: &Scope,
-    binder: &crate::hol_light_import::HolVar,
+    binder: &HolVar,
     body: &HolTerm,
     argument: &HolTerm,
     symbols: &mut SymbolCollector,
@@ -430,7 +430,7 @@ fn translate_beta(
     }
     let rhs = substitute_term(
         body,
-        &[crate::hol_light_import::HolTermSubstitution {
+        &[HolTermSubstitution {
             variable: binder.clone(),
             replacement: argument.clone(),
         }],
@@ -564,7 +564,7 @@ fn translate_deduct_antisym(
 fn translate_inst(
     scope: &Scope,
     proof: &HolProof,
-    substitutions: &[crate::hol_light_import::HolTermSubstitution],
+    substitutions: &[HolTermSubstitution],
     symbols: &mut SymbolCollector,
 ) -> Result<CheckedTheorem, HolLightImportError> {
     let sub = translate_proof(scope, proof, symbols)?;
@@ -598,7 +598,7 @@ fn translate_inst(
 fn translate_inst_type(
     scope: &Scope,
     proof: &HolProof,
-    substitutions: &[crate::hol_light_import::HolTypeSubstitution],
+    substitutions: &[HolTypeSubstitution],
     symbols: &mut SymbolCollector,
 ) -> Result<CheckedTheorem, HolLightImportError> {
     let sub = translate_proof(scope, proof, symbols)?;

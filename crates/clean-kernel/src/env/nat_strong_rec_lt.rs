@@ -31,15 +31,22 @@
 //! Mentions only `Acc`/`Acc.rec` (kernel recursor), `Nat`/`Nat.lt`/
 //! `Nat.accNatLt` (axiom-free). Empty admitted-axiom closure.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Register `Nat.strongRecOnLt` (see module docs). Constructive Definition,
     /// empty axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_nat_strong_rec_on_lt(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.strongRecOnLt");
         if self.get_const(&name).is_some() {

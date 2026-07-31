@@ -57,13 +57,13 @@ fn multi_goal_state(env: Environment) -> ProofState {
 }
 
 /// A tactic that always succeeds (no-op).
-fn succeed_tactic(ctx: &mut TacticCtx) -> TacticResult {
+fn succeed_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let _ = ctx;
     Ok(())
 }
 
 /// A tactic that always fails.
-fn fail_tactic(ctx: &mut TacticCtx) -> TacticResult {
+fn fail_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let _ = ctx;
     Err(TacticError::NoProgress {
         tactic: "fail".into(),
@@ -71,7 +71,7 @@ fn fail_tactic(ctx: &mut TacticCtx) -> TacticResult {
 }
 
 /// A tactic that closes the current goal by assigning it a dummy proof.
-fn close_current_goal(ctx: &mut TacticCtx) -> TacticResult {
+fn close_current_goal(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let goal = ctx.state.current_goal().ok_or(TacticError::NoGoals)?;
     let meta_id = goal.meta_id;
     let target = goal.target.clone();
@@ -82,7 +82,7 @@ fn close_current_goal(ctx: &mut TacticCtx) -> TacticResult {
 
 /// A tactic that splits the current goal into two subgoals.
 /// Closes the current goal and pushes two new goals to the front.
-fn split_tactic(ctx: &mut TacticCtx) -> TacticResult {
+fn split_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let goal = ctx.state.current_goal().ok_or(TacticError::NoGoals)?;
     let meta_id = goal.meta_id;
     let target = goal.target.clone();

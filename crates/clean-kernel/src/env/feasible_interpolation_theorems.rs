@@ -22,12 +22,18 @@
 //!            Krajicek (1997), "Interpolation theorems, lower bounds for
 //!            proof systems, and independence results for bounded arithmetic".
 
+#[cfg(test)]
 use super::feasible_interpolation::FeasibleInterpolationConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Pudlak's feasible interpolation
@@ -46,6 +52,7 @@ impl Environment {
     /// computability bound: not just existence, but efficient extraction.
     ///
     /// Reference: Pudlak (1997), Theorem 3.1.
+    #[cfg(test)]
     pub(super) fn register_pudlak_feasible_interpolation(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -114,6 +121,7 @@ impl Environment {
     /// This is because the Krajicek-Pudlak extraction algorithm only
     /// introduces AND and OR connectives (no negation) when the pivot
     /// variable belongs to the shared variables.
+    #[cfg(test)]
     pub(super) fn register_interpolant_to_monotone_circuit(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -185,6 +193,7 @@ impl Environment {
     ///
     /// Reference: Razborov (1985), "Lower bounds on the monotone complexity
     ///            of some Boolean functions", Doklady Mathematics.
+    #[cfg(test)]
     pub(super) fn register_monotone_circuit_lower_bound(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -241,6 +250,7 @@ impl Environment {
     /// 4. Contradiction: |P| must be exponential.
     ///
     /// Reference: Pudlak (1997), Corollary 4.2.
+    #[cfg(test)]
     pub(super) fn register_feasible_interpolation_lower_bound(
         &mut self,
         c: &FeasibleInterpolationConsts,
@@ -300,6 +310,7 @@ impl Environment {
     ///
     /// Reference: Ben-Sasson, Wigderson, Impagliazzo (2004), "A scalable
     ///            algorithm for tree-like resolution".
+    #[cfg(test)]
     pub(super) fn register_dag_vs_tree_separation(
         &mut self,
         c: &FeasibleInterpolationConsts,

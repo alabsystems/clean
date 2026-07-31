@@ -84,6 +84,7 @@ struct NatDiv2Consts {
     nat_one: Expr,
     nat_add: Expr,
     nat_sub: Expr,
+    #[cfg(test)]
     nat_rec: Expr,
     prod_type: Expr,
     prod_mk: Expr,
@@ -120,6 +121,7 @@ impl NatDiv2Consts {
             // Nat.rec.{u}: u=1 when the motive is Type-valued (the pair fold),
             // u=0 when Prop-valued (the invariant / main theorem). We cache
             // BOTH explicitly at the use sites instead of here.
+            #[cfg(test)]
             nat_rec: Expr::const_(
                 Name::from_string("Nat.rec"),
                 vec![Level::succ(zero.clone())],

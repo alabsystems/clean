@@ -61,6 +61,7 @@ pub(crate) struct MulCancelConsts {
     rat: Expr,
     rat_zero: Expr,
     rat_two: Expr,
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_val: Expr,
     nnrat_val_mul: Expr,
@@ -112,6 +113,7 @@ pub(crate) struct MulCancelConsts {
     exists_c: Expr,
     exists_intro: Expr,
     exists_elim: Expr,
+    #[cfg(test)]
     eq_rat: Expr,
     eq_symm: Expr,
     eq_subst: Expr,
@@ -129,6 +131,7 @@ impl MulCancelConsts {
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
             rat_two: k("Rat.two"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_val: k("NNRat.val"),
             nnrat_val_mul: k("NNRat.val_mul"),
@@ -177,6 +180,7 @@ impl MulCancelConsts {
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![lvl1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1.clone()]),
@@ -921,7 +925,7 @@ fn build_nnreal_le_of_mul_cancel(c: &MulCancelConsts, nnreal: &Expr) -> Expr {
 /// The hypotheses-and-conclusion telescope `(hlow → hmul → concl)` for given
 /// multiplier `cc`, factors `aa,bb`, fixed `d,hd`. `nnle/nnmul/ofRat` closed.
 fn cancel_imp_chain(
-    c: &MulCancelConsts,
+    _c: &MulCancelConsts,
     cc: &Expr,
     aa: &Expr,
     bb: &Expr,

@@ -395,6 +395,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.division_ring_init == true`
+    #[cfg(test)]
     pub(crate) fn has_division_ring(&self) -> bool {
         self.division_ring_init
     }

@@ -16,7 +16,6 @@
 use crate::env::native_reducers_arith::get_bignat_val;
 use crate::env::Environment;
 use crate::expr::{BigNat, Expr, ExprKind, Literal};
-use crate::level::Level;
 use crate::name::Name;
 
 /// Matches the native reducer signature used by `env::native_reducers`.
@@ -33,11 +32,12 @@ pub(crate) mod names {
     }
 
     // Int constructors
+    #[cfg(test)]
+    name!(pub(crate) DECIDABLE_IS_TRUE = "Decidable.isTrue");
+    #[cfg(test)]
+    name!(pub(crate) DECIDABLE_IS_FALSE = "Decidable.isFalse");
     name!(pub(crate) INT_OF_NAT = "Int.ofNat");
     name!(pub(crate) INT_NEG_SUCC = "Int.negSucc");
-
-    // Int type name (for decidable equality)
-    name!(pub(crate) INT = "Int");
 
     // Int operations
     name!(pub(crate) INT_ADD = "Int.add");
@@ -52,14 +52,10 @@ pub(crate) mod names {
     name!(pub(crate) INT_BLT = "Int.blt");
     name!(pub(crate) INT_BLE = "Int.ble");
     name!(pub(crate) INT_DEC_EQ = "Int.decEq");
-
-    // Decidable constructors
-    name!(pub(crate) DECIDABLE_IS_TRUE = "Decidable.isTrue");
-    name!(pub(crate) DECIDABLE_IS_FALSE = "Decidable.isFalse");
-    name!(pub(crate) EQ_REFL = "Eq.refl");
 }
 
 /// Extract a Nat value from a literal expression.
+#[cfg(test)]
 pub(crate) fn get_nat_val(e: &Expr) -> Option<u64> {
     match e.kind() {
         ExprKind::Lit(Literal::Nat(n)) => n.to_u64(),

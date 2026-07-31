@@ -66,6 +66,7 @@ impl FinSumLeConsts {
     fn nat(&self) -> Expr {
         self.base.nat.clone()
     }
+    #[cfg(test)]
     fn nnreal(&self) -> Expr {
         self.base.nnreal.clone()
     }

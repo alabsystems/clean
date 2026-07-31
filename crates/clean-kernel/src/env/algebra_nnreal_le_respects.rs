@@ -289,7 +289,7 @@ fn build_impl(
     parent: &EnvDeclBuilder,
     hyp_lhs: &Expr,
     hyp_rhs: &Expr,
-    spec: &ImplSpec,
+    spec: &ImplSpec<'_>,
     // The equiv used for the bridge, plus which conjunct (true = left conjunct).
     hequiv: &Expr,
     bridge_x: &Expr,

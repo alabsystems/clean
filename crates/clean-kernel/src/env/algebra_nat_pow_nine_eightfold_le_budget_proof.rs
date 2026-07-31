@@ -42,11 +42,16 @@
 //! `env.axiom_deps("Nat.pow_nine_eightfold_le_budget")` is empty and the proof
 //! quality is `Constructive`.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Register `Nat.pow_nine_eightfold_le_budget` as a kernel-checked
     /// constructive theorem: `∀ e, 9^(2·2^(e+2)) ≤ 2^(48·2^e)`.
@@ -56,6 +61,7 @@ impl Environment {
     /// `Nat.eight_mul_pow_two_add_two_le` (`8·2^(e+2) ≤ 48·2^e`) via
     /// `Nat.pow_le_pow_right` and `Nat.le_trans`. Constructive, empty
     /// admitted-axiom closure. Idempotent. No axiom added or removed.
+    #[cfg(test)]
     pub(crate) fn register_nat_pow_nine_eightfold_le_budget_proof(
         &mut self,
     ) -> Result<(), EnvError> {

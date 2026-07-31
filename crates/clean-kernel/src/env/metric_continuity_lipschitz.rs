@@ -7,12 +7,18 @@
 //! Extracted from `metric_continuity.rs` for maintainability.
 //! Contains `init_metric_lipschitz` and `has_metric_lipschitz`.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Metric.Lipschitz for Lipschitz continuous functions
     ///
@@ -30,6 +36,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.metric_lipschitz_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_metric_lipschitz(&mut self) -> Result<(), EnvError> {
         if self.metric_lipschitz_init {
             return Ok(());
@@ -331,6 +338,7 @@ impl Environment {
     }
 
     /// Check if Metric.Lipschitz has been initialized
+    #[cfg(test)]
     pub(crate) fn has_metric_lipschitz(&self) -> bool {
         self.metric_lipschitz_init
     }

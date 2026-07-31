@@ -177,6 +177,7 @@ impl Environment {
     }
 
     /// Whether the peel parts have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_peel_parts(&self) -> bool {
         self.boolean_analysis_peel_parts_init
     }

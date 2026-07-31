@@ -156,7 +156,7 @@ fn const_app(e: &Expr) -> Option<(String, Vec<Expr>)> {
 /// Three-valued truth of a closed `Rat.le a b`: `Some(true)` iff it δ-reduces to
 /// a non-negative `Int.NonNeg (Int.ofNat _)`, `Some(false)` iff `Int.negSucc _`,
 /// `None` otherwise. (The same order bridge the C4 engine uses.)
-fn rat_le_truth(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> {
+fn rat_le_truth(tc: &TypeChecker<'_>, a: &Expr, b: &Expr) -> Option<bool> {
     let p = Expr::apps(
         Expr::const_(Name::from_string("Rat.le"), vec![]),
         [a.clone(), b.clone()],
@@ -188,7 +188,7 @@ fn rat_le_truth(tc: &TypeChecker, a: &Expr, b: &Expr) -> Option<bool> {
 /// equality at the single index via the order bridge (true iff both `≤`
 /// directions hold). Returns `Some(true/false)` for a decided point-containment,
 /// `None` if the shape is unexpected.
-fn point_contains_truth(tc: &TypeChecker, z: &Expr, x: &Expr) -> Option<bool> {
+fn point_contains_truth(tc: &TypeChecker<'_>, z: &Expr, x: &Expr) -> Option<bool> {
     let contains = Expr::const_(Name::from_string("NNVerify.Zonotope.contains"), vec![]);
     let prop = Expr::apps(contains, [nat(1), nat(0), z.clone(), x.clone()]);
     let w = tc.whnf(&prop);

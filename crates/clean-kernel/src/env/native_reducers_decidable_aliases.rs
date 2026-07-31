@@ -43,10 +43,11 @@ pub(crate) mod names {
         LazyLock::new(|| Name::from_string("instDecidableEqUInt32"));
     pub(crate) static INST_DECIDABLE_EQ_UINT64: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("instDecidableEqUInt64"));
-    pub(crate) static INST_DECIDABLE_EQ_USIZE: LazyLock<Name> =
-        LazyLock::new(|| Name::from_string("instDecidableEqUSize"));
     pub(crate) static INST_DECIDABLE_EQ_FLOAT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("instDecidableEqFloat"));
+    #[cfg(test)]
+    pub(crate) static INST_DECIDABLE_EQ_USIZE: LazyLock<Name> =
+        LazyLock::new(|| Name::from_string("instDecidableEqUSize"));
 }
 
 /// Also register `Nat.decEq` and `Bool.decEq` as aliases for the existing

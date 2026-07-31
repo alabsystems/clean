@@ -37,6 +37,20 @@ pub mod prec {
     pub const COMP: u8 = 12;
 }
 
+/// The surface family of a [`LeanTerm::Binder`] node — which quantifier /
+/// comprehension form to emit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinderKind {
+    /// Universal `∀ x, body` (and bounded `∀ x ∈ S, body`).
+    Forall,
+    /// Existential `∃ x, body` (and bounded `∃ x ∈ S, body`).
+    Exists,
+    /// Unique existential `∃! x, body` (`ExistsUnique`).
+    ExistsUnique,
+    /// Set comprehension `{x | body}` (`Set.setOf`).
+    SetOf,
+}
+
 /// A translated Lean statement fragment as an abstract term, rendered to surface
 /// text by [`super::render::render_top`]. Kept structural (not string-first) so
 /// parenthesization is decided by context, not guessed.
@@ -80,6 +94,27 @@ pub enum LeanTerm {
         head: String,
         /// The arguments.
         args: Vec<LeanTerm>,
+    },
+    /// An object-level binder: a quantifier (`∀ x, body`, `∃ x, body`,
+    /// `∃! x, body`, bounded `∀ x ∈ S, body` / `∃ x ∈ S, body`) or a set
+    /// comprehension (`{x | body}`). Opened from an Isabelle `Abs` predicate by a
+    /// capture-safe de Bruijn instantiation (see [`super::term::open_abs`]). Binds
+    /// looser than every infix — the render layer parenthesizes it whenever it is
+    /// an operand, argument, or receiver, so `(∀ x, P x) ∧ Q` stays faithful.
+    Binder {
+        /// Which surface form to emit.
+        kind: BinderKind,
+        /// The capture-safe bound-variable name.
+        var: String,
+        /// A concrete type annotation (`∀ x : ℕ, …`), emitted only when the
+        /// Isabelle domain renders to a variable-free concrete type; `None`
+        /// leaves the domain to Lean inference (`∀ x, …`).
+        ty: Option<String>,
+        /// The bounding set of a bounded quantifier (`∀ x ∈ dom, …`); `None` for
+        /// the unbounded and set-comprehension forms.
+        dom: Option<Box<LeanTerm>>,
+        /// The binder body (rendered maximally to the right).
+        body: Box<LeanTerm>,
     },
 }
 
@@ -125,9 +160,15 @@ pub enum Unsupported {
     /// order typeclass (`Preorder`/`PartialOrder`/`LinearOrder`) is not
     /// determined by the statement, so any choice would be a guess.
     PolymorphicOrder,
-    /// A lattice operator (`sup`/`inf`/`bot`) over a non-`Set` type: the generic
-    /// lattice rendering is not in scope.
+    /// A lattice operator (`sup`/`inf`/`bot`/`top`/`Sup`/`Inf`) over a non-`Set`
+    /// carrier: the generic lattice rendering is not statement-determined.
     PolymorphicLattice(String),
+    /// `gcd`/`lcm` over a carrier other than `ℕ`: on a bare type variable the
+    /// Lean `gcd`-class instance is not statement-determined, and on `ℤ` Lean's
+    /// `Int.gcd : ℤ → ℤ → ℕ` changes the result type (not a faithful drop-in for
+    /// Isabelle `gcd :: 'a ⇒ 'a ⇒ 'a`). Only the `ℕ` instance renders
+    /// (`Nat.gcd`/`Nat.lcm`); every other carrier is declined.
+    NonNatGcd(String),
     /// `size`/`length` applied to a non-list argument (the polymorphic `size`
     /// class does not map to a single Lean function off-lists).
     NonListSize,
@@ -152,6 +193,7 @@ impl std::fmt::Display for Unsupported {
             Unsupported::ClassPremise(n) => write!(f, "class-premise:{n}"),
             Unsupported::PolymorphicOrder => write!(f, "polymorphic-order"),
             Unsupported::PolymorphicLattice(n) => write!(f, "polymorphic-lattice:{n}"),
+            Unsupported::NonNatGcd(n) => write!(f, "non-nat-gcd:{n}"),
             Unsupported::NonListSize => write!(f, "non-list-size"),
             Unsupported::HigherOrder => write!(f, "higher-order"),
             Unsupported::PartialApplication(n) => write!(f, "partial-application:{n}"),

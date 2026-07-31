@@ -75,6 +75,7 @@ struct IntNegSuccMulSubNatNatConsts {
     int_neg_of_nat: Expr,
     int_sub_nat_nat: Expr,
     eq_const: Expr,
+    #[cfg(test)]
     eq_refl: Expr,
     eq_symm: Expr,
     eq_trans: Expr,
@@ -101,6 +102,7 @@ impl IntNegSuccMulSubNatNatConsts {
             int_neg_of_nat: Expr::const_(Name::from_string("Int.negOfNat"), vec![]),
             int_sub_nat_nat: Expr::const_(Name::from_string("Int.subNatNat"), vec![]),
             eq_const: Expr::const_(Name::from_string("Eq"), vec![type1.clone()]),
+            #[cfg(test)]
             eq_refl: Expr::const_(Name::from_string("Eq.refl"), vec![type1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![type1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![type1.clone()]),

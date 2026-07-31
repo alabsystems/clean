@@ -264,6 +264,7 @@ fn reduce_mm_memnat(args: &[&Expr]) -> Option<Expr> {
     }
 }
 /// `isVar K n` — the O(1) range-coded variable test (`Nat.blt n K`).
+#[cfg(test)]
 fn is_var_app(k: Expr, n: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::IS_VAR), [k, n])
 }
@@ -995,7 +996,7 @@ impl Environment {
     fn register_memnat_append(&mut self) -> Result<(), EnvError> {
         let ln = list_nat();
         let bt = bool_ty();
-        let nil = list_nil(nat_ty());
+        let _nil = list_nil(nat_ty());
         let ty = {
             let mut b = EnvDeclBuilder::new();
             let (x_id, x) = b.fresh_local(nat_ty());
@@ -1084,11 +1085,11 @@ impl Environment {
     fn register_bool_algebra(&mut self) -> Result<(), EnvError> {
         let bt = bool_ty();
         // A 3-ary Bool lemma proved by Bool.rec on `a`, both branches refl.
-        let mut reg3 = |this: &mut Self,
-                        name: &str,
-                        body: &dyn Fn(&Expr, &Expr, &Expr) -> Expr,
-                        false_val: &dyn Fn(&Expr, &Expr) -> Expr,
-                        true_val: &dyn Fn(&Expr, &Expr) -> Expr|
+        let reg3 = |this: &mut Self,
+                    name: &str,
+                    body: &dyn Fn(&Expr, &Expr, &Expr) -> Expr,
+                    false_val: &dyn Fn(&Expr, &Expr) -> Expr,
+                    true_val: &dyn Fn(&Expr, &Expr) -> Expr|
          -> Result<(), EnvError> {
             let ty = {
                 let mut b = EnvDeclBuilder::new();
@@ -1180,7 +1181,7 @@ impl Environment {
         let ln = list_nat();
         let st = subst_ty();
         let single = |h: &Expr| list_cons(nat_ty(), h.clone(), list_nil(nat_ty()));
-        let nil = list_nil(nat_ty());
+        let _nil = list_nil(nat_ty());
         let ty = {
             let mut b = EnvDeclBuilder::new();
             let (vars_id, vars) = b.fresh_local(ln.clone());
@@ -3142,6 +3143,7 @@ fn eq_mpr_mmthm(a1: Expr, a2: Expr, h: Expr, term: Expr) -> Expr {
 
 /// `Clean.MM.applySubst_compose s1 s2 e
 ///    : applySubst s1 (applySubst s2 e) = applySubst (comp s1 s2) e`.
+#[cfg(test)]
 fn applysubst_compose_app(s1: Expr, s2: Expr, e: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::APPLYSUBST_COMPOSE), [s1, s2, e])
 }
@@ -3152,6 +3154,7 @@ fn applysubstv_compose_app(vu: Expr, s1: Expr, s2: Expr, e: Expr) -> Expr {
 
 /// `comp s1 s2 = fun (s : Nat) => applySubst s1 (s2 s)` — the substitution whose
 /// `applySubst` equals `applySubst s1 ∘ applySubst s2` (per `applySubst_compose`).
+#[cfg(test)]
 fn comp_subst(s1: &Expr, s2: &Expr) -> Expr {
     Expr::lam(
         BinderInfo::Default,

@@ -40,6 +40,7 @@ impl ComposeConsts {
             subset_sum_swap: k("BoolAnalysis.subsetSum_swap"),
             subset_sum_smul: k("BoolAnalysis.subsetSum_smul"),
             fin: k("Fin"),
+            #[cfg(test)]
             fin_sum: k("Fin.sum"),
             fin_sum_congr: k("Fin.sum_congr"),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
@@ -79,6 +80,7 @@ impl ComposeConsts {
     pub(super) fn ssum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
+    #[cfg(test)]
     pub(super) fn fsum(&self, n: Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [n, g])
     }

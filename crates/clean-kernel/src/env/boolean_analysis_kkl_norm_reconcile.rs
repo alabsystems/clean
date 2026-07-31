@@ -220,6 +220,7 @@ impl ReconcileConsts {
         )
     }
     /// `pm∘f := fun (x : HCPoint n) => pm (f x)` — the deg-band carrier `b`.
+    #[cfg(test)]
     fn pm_f(&self, parent: &EnvDeclBuilder, n: &Expr, f: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);

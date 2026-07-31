@@ -7,18 +7,19 @@
 //! These tests produce command-output evidence for VISION Phase 1 AC1
 //! (.olean Init/Std path). They validate that clean-olean can load
 //! the complete Init and Std module trees from a Lean 4 elan toolchain.
+//! Run the opted-in suite with `--test-threads=1`: most cases independently
+//! materialize the full environment, so parallel harness execution can exhaust
+//! memory and kill the authority run before it produces a verdict.
 //!
 //! Part of #1679, Part of #1568, Part of #1611
 
 use clean_kernel::env::Environment;
 use clean_kernel::name::Name;
-use clean_olean::{default_search_paths, load_module_with_deps, LoadSummary};
+use clean_olean::{load_module_with_deps, pinned_lean_lib_path, LoadSummary};
 use std::path::PathBuf;
 
 fn get_lean_lib_path() -> Option<PathBuf> {
-    default_search_paths()
-        .into_iter()
-        .find(|p| p.join("Init/Prelude.olean").exists())
+    pinned_lean_lib_path()
 }
 
 /// Gate test_ac1_* integration tests behind `CLEAN_AC1_FULL_VALIDATION=1`.
@@ -33,7 +34,9 @@ fn get_lean_lib_path() -> Option<PathBuf> {
 fn require_ac1_lean() -> Option<PathBuf> {
     if std::env::var_os("CLEAN_AC1_FULL_VALIDATION").is_none() {
         eprintln!(
-            "TRACE: test_ac1_* skipped — set CLEAN_AC1_FULL_VALIDATION=1 to              run the full integration suite (requires matching Lean toolchain)"
+            "TRACE: test_ac1_* skipped — set CLEAN_AC1_FULL_VALIDATION=1 and use \
+             `--test-threads=1` to run the full integration suite \
+             (requires matching Lean toolchain)"
         );
         return None;
     }
@@ -3368,17 +3371,26 @@ fn test_ac1_zero_skipped_constants() {
     });
 }
 
-/// Validate recursor registration: check naming patterns and argument counts.
+/// Validate recursor registration: check naming and ownership metadata.
 ///
 /// Verifies that:
 /// 1. All recursors have consistent naming (Foo.rec, Foo.casesOn patterns)
-/// 2. All recursors have valid inductive_name (the inductive must exist)
-/// 3. All recursors have non-empty rules (except for empty types)
-/// 4. No recursor names are duplicated
+/// 2. Every recursor's major premise names a registered inductive
+/// 3. Every rule names a constructor of that exact major inductive
+/// 4. Nested-inductive `rec_N` companions have a registered family head
+/// 5. No recursor names are duplicated
 ///
 /// In Lean 4, .rec and .casesOn are stored as ConstantKind::Recursor in
 /// .olean. The .recOn variant is a ConstantKind::Definition (a wrapper),
-/// not a stored recursor. All stored recursors use MajorAfterMinors.
+/// not a stored recursor. All currently stored Init recursors use
+/// MajorAfterMinors.
+///
+/// `RecursorVal::inductive_name` is not an ownership oracle for nested
+/// inductives. Lean generates auxiliary recursors such as
+/// `Lean.Syntax.rec_1`, whose major premise eliminates a container (`Array`,
+/// `List`, ...), and Clean deliberately preserves the auxiliary family name in
+/// `inductive_name`. The kernel-authoritative owner is instead
+/// `RecursorVal::major_induct()`, recovered from the exact recursor type.
 ///
 /// Part of #3134
 #[test]
@@ -3397,14 +3409,29 @@ fn test_ac1_recursor_registration_integrity() {
         let mut rec_suffix = 0u32;
         let mut cases_on_suffix = 0u32;
         let mut other_suffix = 0u32;
-        let mut missing_inductive = 0u32;
+        let mut missing_major_inductive = 0u32;
+        let mut invalid_ordinary_owner = 0u32;
+        let mut invalid_auxiliary_owner = 0u32;
+        let mut invalid_rule_owner = 0u32;
+        let mut invalid_rule_count = 0u32;
+        let mut invalid_rule_order = 0u32;
+        let mut invalid_rule_fields = 0u32;
+        let mut duplicate_rule_names = 0u32;
+        let mut auxiliary_family_count = 0u32;
         let mut empty_rules = 0u32;
+        let mut seen_names = std::collections::BTreeSet::new();
+        let mut duplicate_names = 0u32;
+        let mut auxiliary_names = std::collections::BTreeSet::new();
+        let mut auxiliary_families = Vec::new();
         let mut suffix_counts: std::collections::BTreeMap<String, u32> =
             std::collections::BTreeMap::new();
 
         for rec in env.recursors() {
             total += 1;
             let name_str = rec.name.to_string();
+            if !seen_names.insert(name_str.clone()) {
+                duplicate_names += 1;
+            }
 
             // Classify by suffix pattern
             if name_str.ends_with(".rec") || name_str.contains(".rec_") {
@@ -3419,14 +3446,134 @@ fn test_ac1_recursor_registration_integrity() {
             let suffix = name_str.rsplit('.').next().unwrap_or("?");
             *suffix_counts.entry(suffix.to_string()).or_default() += 1;
 
-            // Check that inductive exists in environment
-            if env.get_inductive(&rec.inductive_name).is_none() {
-                missing_inductive += 1;
-                if missing_inductive <= 5 {
+            // The exact major-premise type, not the recursor-family label, is
+            // the authority for the inductive this recursor eliminates.
+            let Some(major_name) = rec.major_induct() else {
+                missing_major_inductive += 1;
+                if missing_major_inductive <= 5 {
+                    println!("  Missing major-premise owner for {name_str}");
+                }
+                continue;
+            };
+            let Some(major) = env.get_inductive(major_name) else {
+                missing_major_inductive += 1;
+                if missing_major_inductive <= 5 {
                     println!(
-                        "  Missing inductive for {}: {:?}",
-                        name_str, rec.inductive_name
+                        "  Missing major inductive for {}: {:?}",
+                        name_str, major_name
                     );
+                }
+                continue;
+            };
+
+            if env.get_inductive(&rec.inductive_name).is_some() {
+                // Ordinary recursors eliminate the inductive named by their
+                // family metadata.
+                if major_name != &rec.inductive_name {
+                    invalid_ordinary_owner += 1;
+                    if invalid_ordinary_owner <= 5 {
+                        println!(
+                            "  Ordinary recursor {name_str} has family {} but major {major_name}",
+                            rec.inductive_name
+                        );
+                    }
+                }
+            } else {
+                // A missing `inductive_name` is valid only for Lean's generated
+                // nested-inductive companions `Family.rec_N`. Bind that
+                // exception to an existing family head and to the exact
+                // recursor name; arbitrary missing owners still fail closed.
+                let valid_auxiliary =
+                    name_str
+                        .rsplit_once(".rec_")
+                        .is_some_and(|(family, index)| {
+                            !index.is_empty()
+                                && index.bytes().all(|byte| byte.is_ascii_digit())
+                                && rec.inductive_name == rec.name
+                                && env.get_inductive(&Name::from_string(family)).is_some()
+                        });
+                if valid_auxiliary {
+                    auxiliary_family_count += 1;
+                    auxiliary_names.insert(name_str.clone());
+                    auxiliary_families.push(format!(
+                        "{name_str}: family={}, major={major_name}",
+                        rec.inductive_name
+                    ));
+                } else {
+                    invalid_auxiliary_owner += 1;
+                    if invalid_auxiliary_owner <= 5 {
+                        println!(
+                            "  Invalid auxiliary owner for {name_str}: family={}, major={major_name}",
+                            rec.inductive_name
+                        );
+                    }
+                }
+            }
+
+            // Bind every reduction rule to the same major inductive by exact
+            // constructor metadata. This is stricter than suffix inference and
+            // also covers nested auxiliary recursors whose rules belong to a
+            // container rather than to their generated family label.
+            if rec.rules.len() != major.constructor_names.len() {
+                invalid_rule_count += 1;
+                if invalid_rule_count <= 5 {
+                    println!(
+                        "  Rule-count mismatch for {name_str}: rules={}, major {major_name} constructors={}",
+                        rec.rules.len(),
+                        major.constructor_names.len()
+                    );
+                }
+            }
+            let mut seen_rule_names = std::collections::BTreeSet::new();
+            for (rule_idx, rule) in rec.rules.iter().enumerate() {
+                if !seen_rule_names.insert(rule.constructor_name.clone()) {
+                    duplicate_rule_names += 1;
+                }
+                if major.constructor_names.get(rule_idx) != Some(&rule.constructor_name) {
+                    invalid_rule_order += 1;
+                    if invalid_rule_order <= 5 {
+                        println!(
+                            "  Rule-order mismatch for {name_str} at {rule_idx}: constructor={}, expected={:?}",
+                            rule.constructor_name,
+                            major.constructor_names.get(rule_idx)
+                        );
+                    }
+                }
+                match env.get_constructor(&rule.constructor_name) {
+                    Some(ctor) => {
+                        if &ctor.inductive_name != major_name {
+                            invalid_rule_owner += 1;
+                            if invalid_rule_owner <= 5 {
+                                println!(
+                                    "  Rule owner mismatch for {name_str}: constructor={}, parent={}, expected major={major_name}",
+                                    rule.constructor_name, ctor.inductive_name
+                                );
+                            }
+                        }
+                        if rule.num_fields != ctor.num_fields
+                            || rule.recursive_fields.len() != ctor.num_fields as usize
+                        {
+                            invalid_rule_fields += 1;
+                            if invalid_rule_fields <= 5 {
+                                println!(
+                                    "  Rule-field mismatch for {name_str}: constructor={}, rule fields={}, recursive flags={}, constructor fields={}",
+                                    rule.constructor_name,
+                                    rule.num_fields,
+                                    rule.recursive_fields.len(),
+                                    ctor.num_fields
+                                );
+                            }
+                        }
+                    }
+                    None => {
+                        invalid_rule_owner += 1;
+                        if invalid_rule_owner <= 5 {
+                            println!(
+                                "  Missing rule constructor for {name_str}: {}",
+                                rule.constructor_name
+                            );
+                        }
+                    }
                 }
             }
 
@@ -3441,27 +3588,89 @@ fn test_ac1_recursor_registration_integrity() {
         println!("  .rec/rec_N: {rec_suffix}");
         println!("  .casesOn/casesOn_N: {cases_on_suffix}");
         println!("  Other: {other_suffix}");
-        println!("  Missing inductive: {missing_inductive}");
+        println!("  Missing major inductive: {missing_major_inductive}");
+        println!("  Invalid ordinary owner: {invalid_ordinary_owner}");
+        println!("  Invalid auxiliary owner: {invalid_auxiliary_owner}");
+        println!("  Invalid rule owner: {invalid_rule_owner}");
+        println!("  Invalid rule count: {invalid_rule_count}");
+        println!("  Invalid rule order: {invalid_rule_order}");
+        println!("  Invalid rule fields: {invalid_rule_fields}");
+        println!("  Duplicate rule names: {duplicate_rule_names}");
+        println!("  Auxiliary families: {auxiliary_family_count}");
+        for auxiliary in &auxiliary_families {
+            println!("    {auxiliary}");
+        }
+        println!("  Duplicate names: {duplicate_names}");
         println!("  Empty rules: {empty_rules}");
         println!("  Suffix distribution:");
         for (suffix, count) in &suffix_counts {
             println!("    .{suffix}: {count}");
         }
 
-        // All recursors must reference a valid inductive
+        // All recursors must expose an exact, registered major inductive.
         assert_eq!(
-            missing_inductive, 0,
-            "Expected all recursors to reference a valid inductive, {missing_inductive} were missing"
+            missing_major_inductive, 0,
+            "Expected all recursors to expose a valid major inductive, \
+             {missing_major_inductive} were missing"
+        );
+        assert_eq!(
+            invalid_ordinary_owner, 0,
+            "Expected ordinary recursors' family and major inductives to agree, \
+             {invalid_ordinary_owner} disagreed"
+        );
+        assert_eq!(
+            invalid_auxiliary_owner, 0,
+            "Expected every non-inductive family label to be an exact nested rec_N companion, \
+             {invalid_auxiliary_owner} were invalid"
+        );
+        assert_eq!(
+            invalid_rule_owner, 0,
+            "Expected every recursor rule constructor to belong to its exact major inductive, \
+             {invalid_rule_owner} disagreed"
+        );
+        assert_eq!(
+            invalid_rule_count, 0,
+            "Expected one recursor rule per major-inductive constructor, \
+             {invalid_rule_count} recursors disagreed"
+        );
+        assert_eq!(
+            invalid_rule_order, 0,
+            "Expected recursor rules in exact major-inductive constructor order, \
+             {invalid_rule_order} rules disagreed"
+        );
+        assert_eq!(
+            invalid_rule_fields, 0,
+            "Expected recursor rule field metadata to match exact constructor metadata, \
+             {invalid_rule_fields} rules disagreed"
+        );
+        assert_eq!(
+            duplicate_rule_names, 0,
+            "Expected unique constructor rules within each recursor, found \
+             {duplicate_rule_names} duplicates"
+        );
+        assert_eq!(
+            duplicate_names, 0,
+            "Expected unique recursor names, found {duplicate_names} duplicates"
+        );
+        let expected_auxiliary_names = std::collections::BTreeSet::from([
+            "Lean.Syntax.rec_1".to_string(),
+            "Lean.Syntax.rec_2".to_string(),
+        ]);
+        assert_eq!(
+            auxiliary_names, expected_auxiliary_names,
+            "Pinned Lean auxiliary-recursors drifted; review every new non-inductive family label"
         );
 
-        // Should have both .rec and .casesOn variants
+        // Stored recursors use one of Lean's canonical suffix families. Init
+        // currently stores `.rec`/`.rec_N`; `.casesOn` entries are ordinarily
+        // definition wrappers, but remain a recognized future-compatible form.
         assert!(
             rec_suffix > 100,
             "Expected >100 .rec recursors, got {rec_suffix}"
         );
-        assert!(
-            cases_on_suffix > 100,
-            "Expected >100 .casesOn recursors, got {cases_on_suffix}"
+        assert_eq!(
+            other_suffix, 0,
+            "Expected only canonical rec/casesOn stored recursors, got {other_suffix} other names"
         );
     });
 }
@@ -3562,7 +3771,7 @@ fn test_ac1_reducibility_hints_loaded() {
 ///
 /// In Lean 4, reducibility hints are stored in the .olean binary as:
 ///   tag 0 = Opaque  (theorems, @[irreducible] defs)
-///   tag 1 = Abbrev  (@[reducible] / abbreviations)
+///   tag 1 = Abbrev  (kernel unfolding hint; independent of attributes)
 ///   tag 2 = Regular(height) (normal definitions)
 ///
 /// clean maps these as:
@@ -3570,7 +3779,10 @@ fn test_ac1_reducibility_hints_loaded() {
 ///   Abbrev -> Reducibility::Reducible
 ///   Regular(h) -> Reducibility::Regular(h)
 ///
-/// Additionally, projection functions (value shape: lam* . Proj(...)) get
+/// `ReducibilityHints` are kernel reduction metadata and are explicitly
+/// independent of source attributes such as `@[reducible]`
+/// (`Lean/Declaration.lean`). Additionally, projection functions (value shape:
+/// lam* . Proj(...)) get
 /// overridden to Reducible regardless of their stored hint, matching Lean 4's
 /// behavior where projFnExt marks them as abbreviations.
 ///
@@ -3623,21 +3835,38 @@ fn test_ac1_reducibility_specific_constants_audit() {
             // Some may be in inductives/constructors, skip if not found as const
         }
 
-        // --- 2. @[reducible] abbreviations must be Reducible ---
-        // In the olean these have Abbrev (tag 1) hints.
-        let abbrev_consts = ["id", "Function.comp"];
-        for name_str in &abbrev_consts {
+        // --- 2. Exact pinned Lean ConstantInfo.hints oracle ---
+        //
+        // Queried through the v4.30.0-rc2 environment itself, not inferred
+        // from source attributes:
+        //   id / Function.comp => regular(1)
+        //   HPow.hPow / Prod.fst => abbrev
+        //
+        // `id` and `Function.comp` are `@[inline]`, not `@[reducible]`. The
+        // previous audit incorrectly expected Abbrev and also masked the wire
+        // bug that scalar-unboxed raw UInt32 height 1 into zero.
+        for name_str in ["id", "Function.comp"] {
             let name = Name::from_string(name_str);
             if let Some(ci) = env.get_const(&name) {
                 assert_eq!(
                     ci.reducibility,
-                    Reducibility::Reducible,
-                    "{name_str} is @[reducible] and must be Reducible, got {:?}",
+                    Reducibility::Regular(1),
+                    "{name_str} must preserve Lean's exact regular(1) hint, got {:?}",
                     ci.reducibility
                 );
             } else {
                 panic!("{name_str}: expected to be a constant in Init");
             }
+        }
+        for name_str in ["HPow.hPow", "Prod.fst"] {
+            let ci = env
+                .get_const(&Name::from_string(name_str))
+                .unwrap_or_else(|| panic!("{name_str}: expected to be a constant in Init"));
+            assert_eq!(
+                ci.reducibility,
+                Reducibility::Reducible,
+                "{name_str} must preserve Lean's exact abbrev hint"
+            );
         }
 
         // --- 3. Theorems must be Opaque ---

@@ -223,7 +223,7 @@ fn pointwise_sq_eq_one(
     // Inner split on `x i` (only needed in the gate-true branch, but we build a
     // generic helper splitting on `x i` for a fixed gate Bool `sb`).
     let split_on_x = |c: &ChiDiagConsts, parent: &EnvDeclBuilder, sb: Expr| {
-        let mut d = EnvDeclBuilder::child_of(parent);
+        let d = EnvDeclBuilder::child_of(parent);
         // motive_x : fun (xb : Bool) => factor sb xb · factor sb xb = 1
         let motive_x = {
             let mut e = EnvDeclBuilder::child_of(&d);

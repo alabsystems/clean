@@ -22,12 +22,25 @@ fn replacement_status_accounts_launch_blockers_without_green_claims() {
         .collect();
 
     assert_eq!(accounting.required_row_count, required_rows.len());
+    // The accounting counts `effective_status` (readiness.rs:162-165), not the
+    // hand-declared literal. Those coincided until a row's zero-trust gate could
+    // outvote its declaration (B003), so asserting against `row.status` here was
+    // pinning a coincidence rather than the contract.
     assert_eq!(
         accounting.green_required_row_count,
         required_rows
             .iter()
-            .filter(|row| row.status == ReplacementStatus::Green)
+            .filter(|row| row.effective_status == ReplacementStatus::Green)
             .count()
+    );
+    // Declared may legitimately exceed effective; it may never be under it.
+    assert!(
+        accounting.green_required_row_count
+            <= required_rows
+                .iter()
+                .filter(|row| row.status == ReplacementStatus::Green)
+                .count(),
+        "a row became Green in the accounting without declaring Green"
     );
     assert_eq!(
         accounting.non_green_required_row_count,

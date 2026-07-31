@@ -65,7 +65,9 @@ struct RtConsts {
     eq_refl1: Expr,
     eq_symm1: Expr,
     eq_subst: Expr,
+    #[cfg(test)]
     false_c: Expr,
+    #[cfg(test)]
     false_elim0: Expr,
     or_c: Expr,
     or_rec: Expr,
@@ -96,7 +98,9 @@ impl RtConsts {
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![one.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![one.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![one]),
+            #[cfg(test)]
             false_c: Expr::const_(Name::from_string("False"), vec![]),
+            #[cfg(test)]
             false_elim0: Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]),
             or_c: Expr::const_(Name::from_string("Or"), vec![]),
             or_rec: Expr::const_(Name::from_string("Or.rec"), vec![]),
@@ -153,6 +157,7 @@ impl RtConsts {
         Expr::apps(self.or_c.clone(), [a, b])
     }
     /// `(h : a = b → False)`-shaped pi (a `Nat`-disequality).
+    #[cfg(test)]
     fn ne_nat_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.eq_nat(a, b), self.false_c.clone())
     }
@@ -967,7 +972,7 @@ fn build_xor_eq_cond(c: &RtConsts) -> (Expr, Expr) {
 
         // recurse on g; for each concrete gv, recurse on a; 4 ground rfl leaves.
         let inner_rec = |gv: Expr, parent: &EnvDeclBuilder| {
-            let mut d = EnvDeclBuilder::child_of(parent);
+            let d = EnvDeclBuilder::child_of(parent);
             // motive_a : fun (a' : Bool) => goal a' gv
             let motive_a = {
                 let mut e = EnvDeclBuilder::child_of(&d);

@@ -18,7 +18,7 @@
 //!
 //! [`TacticCtx`] wraps a `&mut ProofState` and [`CombinatorConfig`], giving
 //! combinators a uniform interface. [`TacticFn`] is a simple function pointer
-//! `fn(&mut TacticCtx) -> TacticResult`, enabling composition without
+//! `fn(&mut TacticCtx<'_>) -> TacticResult`, enabling composition without
 //! allocation (unlike the closure-based `combinator.rs` API).
 
 use super::core::{ProofState, TacticError, TacticResult};
@@ -28,7 +28,7 @@ use super::core::{ProofState, TacticError, TacticResult};
 /// Using a function pointer rather than a closure allows combinators to
 /// be composed without heap allocation. For closures that capture state,
 /// callers should use the closure-based API in `combinator.rs` instead.
-pub type TacticFn = fn(&mut TacticCtx) -> TacticResult;
+pub type TacticFn = fn(&mut TacticCtx<'_>) -> TacticResult;
 
 /// Configuration for tactic combinators.
 ///
@@ -90,7 +90,7 @@ impl<'a> TacticCtx<'a> {
 /// ```text
 /// eval_repeat(intro_tactic, None, &mut ctx)  // introduce all binders
 /// ```
-pub fn eval_repeat(tac: TacticFn, max: Option<usize>, ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_repeat(tac: TacticFn, max: Option<usize>, ctx: &mut TacticCtx<'_>) -> TacticResult {
     let limit = max.unwrap_or(ctx.config.max_repeat);
 
     for _ in 0..limit {
@@ -122,7 +122,7 @@ pub fn eval_repeat(tac: TacticFn, max: Option<usize>, ctx: &mut TacticCtx) -> Ta
 /// REQUIRES: `tacs` is non-empty
 /// ENSURES: on `Ok`, exactly one tactic succeeded and its state is committed
 /// ENSURES: on `Err(AllTacticsFailed)`, state is restored to pre-call
-pub fn eval_first(tacs: &[TacticFn], ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_first(tacs: &[TacticFn], ctx: &mut TacticCtx<'_>) -> TacticResult {
     if tacs.is_empty() {
         return Err(TacticError::AllTacticsFailed {
             combinator: "first".into(),
@@ -170,7 +170,7 @@ pub fn eval_first(tacs: &[TacticFn], ctx: &mut TacticCtx) -> TacticResult {
 ///
 /// REQUIRES: `ctx.state` has a valid meta scope stack
 /// ENSURES: always returns `Ok(())` — on failure, state is restored
-pub fn eval_try(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_try(tac: TacticFn, ctx: &mut TacticCtx<'_>) -> TacticResult {
     let saved_goals = ctx.state.goals.clone();
     ctx.state.metas_mut().push_scope();
 
@@ -195,7 +195,7 @@ pub fn eval_try(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
 /// REQUIRES: `ctx.state.goals` is non-empty (delegated to inner tactic)
 /// ENSURES: on `Ok`, tactic was applied to every original goal
 /// ENSURES: on `Err`, partial progress from earlier goals may remain
-pub fn eval_all_goals(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_all_goals(tac: TacticFn, ctx: &mut TacticCtx<'_>) -> TacticResult {
     let original_count = ctx.state.goals.len();
     let mut processed = 0;
 
@@ -217,7 +217,7 @@ pub fn eval_all_goals(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
 /// REQUIRES: `ctx.state.goals` is non-empty
 /// ENSURES: on `Ok`, at least one goal succeeded
 /// ENSURES: on `Err(AllTacticsFailed)`, all goals are restored
-pub fn eval_any_goals(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_any_goals(tac: TacticFn, ctx: &mut TacticCtx<'_>) -> TacticResult {
     let original_count = ctx.state.goals.len();
     let mut processed = 0;
     let mut any_succeeded = false;
@@ -262,7 +262,7 @@ pub fn eval_any_goals(tac: TacticFn, ctx: &mut TacticCtx) -> TacticResult {
 /// REQUIRES: `idx < ctx.state.goals.len()`
 /// ENSURES: on `Ok`, remaining goals are preserved after any new goals
 /// ENSURES: on `Err(InvalidTarget)`, `idx` is out of bounds; state unchanged
-pub fn eval_focus(tac: TacticFn, idx: usize, ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_focus(tac: TacticFn, idx: usize, ctx: &mut TacticCtx<'_>) -> TacticResult {
     let goal_count = ctx.state.goals.len();
     if idx >= goal_count {
         return Err(TacticError::InvalidTarget {
@@ -299,7 +299,7 @@ pub fn eval_focus(tac: TacticFn, idx: usize, ctx: &mut TacticCtx) -> TacticResul
 /// REQUIRES: `ctx.state.goals` is non-empty (for non-zero `n`)
 /// ENSURES: on `Ok`, `ctx.state.goals.len()` is unchanged
 /// ENSURES: goals are cyclically permuted by `n` positions
-pub fn eval_rotate(n: isize, ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_rotate(n: isize, ctx: &mut TacticCtx<'_>) -> TacticResult {
     if ctx.state.goals.is_empty() {
         return if n == 0 {
             Ok(())
@@ -333,7 +333,7 @@ pub fn eval_rotate(n: isize, ctx: &mut TacticCtx) -> TacticResult {
 /// REQUIRES: `ctx.state.goals.len() >= 2`
 /// ENSURES: on `Ok`, goals[0] and goals[1] are exchanged
 /// ENSURES: on `Err(InvalidTarget)`, fewer than 2 goals; state unchanged
-pub fn eval_swap(ctx: &mut TacticCtx) -> TacticResult {
+pub fn eval_swap(ctx: &mut TacticCtx<'_>) -> TacticResult {
     if ctx.state.goals.len() < 2 {
         return Err(TacticError::InvalidTarget {
             tactic: "swap".into(),

@@ -8,17 +8,24 @@
 //! - Metric.Compact type and axioms (bounded_of_compact, complete_of_compact,
 //!   compact_cauchy_converges)
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Metric.Compact and related axioms.
     ///
     /// Adds: Metric.Compact, bounded_of_compact, complete_of_compact,
     ///       compact_cauchy_converges
+    #[cfg(test)]
     pub(crate) fn init_metric_compact(&mut self) -> Result<(), EnvError> {
         if self.metric_compact_init {
             return Ok(());
@@ -36,10 +43,12 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_metric_compact(&self) -> bool {
         self.metric_compact_init
     }
 
+    #[cfg(test)]
     fn add_metric_compact_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -61,6 +70,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_bounded_of_compact(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -96,6 +106,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_complete_of_compact(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -131,6 +142,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_compact_cauchy_converges(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());

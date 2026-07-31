@@ -66,7 +66,7 @@ impl Environment {
         let fin_islt = Expr::const_(Name::from_string("Fin.isLt"), vec![]);
         let fin_last = Expr::const_(Name::from_string("Fin.last"), vec![]);
         let fin_cast = Expr::const_(Name::from_string("Fin.castSucc"), vec![]);
-        let fin_eq_of_val = Expr::const_(Name::from_string("Fin.eq_of_val_eq"), vec![]);
+        let _fin_eq_of_val = Expr::const_(Name::from_string("Fin.eq_of_val_eq"), vec![]);
 
         let false_c = Expr::const_(Name::from_string("False"), vec![]);
         let eq1 = Expr::const_(Name::from_string("Eq"), vec![l1.clone()]);

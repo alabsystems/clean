@@ -237,6 +237,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `init_tensor_ml` has completed successfully
+    #[cfg(test)]
     pub(crate) fn has_tensor_ml(&self) -> bool {
         self.tensor_ml_init
     }

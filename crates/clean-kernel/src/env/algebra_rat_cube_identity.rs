@@ -36,7 +36,7 @@
 //! `add_decl_structural`.
 
 use super::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::{EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
@@ -60,9 +60,11 @@ pub(crate) struct CubeConsts {
     rat_add_sq: Expr,
     // order bricks
     rat_mul_le_right: Expr,
+    #[cfg(test)]
     rat_mul_le_left: Expr,
     rat_mul_lt_pos_left: Expr,
     rat_mul_pos: Expr,
+    #[cfg(test)]
     rat_mul_nonneg: Expr,
     rat_sq_lt_sq: Expr,
     rat_lt_of_le_of_lt: Expr,
@@ -72,6 +74,7 @@ pub(crate) struct CubeConsts {
     // Eq toolkit (Rat is Sort 1)
     eq1: Expr,
     eq_symm1: Expr,
+    #[cfg(test)]
     eq_subst1: Expr,
     eq_trans1: Expr,
     congr_arg11: Expr,
@@ -110,9 +113,11 @@ impl CubeConsts {
             rat_one_mul: k("Rat.one_mul"),
             rat_add_sq: k("Rat.add_sq"),
             rat_mul_le_right: k("Rat.mul_le_mul_of_nonneg_right"),
+            #[cfg(test)]
             rat_mul_le_left: k("Rat.mul_le_mul_of_nonneg_left"),
             rat_mul_lt_pos_left: k("Rat.mul_lt_mul_of_pos_left"),
             rat_mul_pos: k("Rat.mul_pos"),
+            #[cfg(test)]
             rat_mul_nonneg: k("Rat.mul_nonneg"),
             rat_sq_lt_sq: k("Rat.sq_lt_sq_of_lt_of_nonneg"),
             rat_lt_of_le_of_lt: k("Rat.lt_of_le_of_lt"),
@@ -121,6 +126,7 @@ impl CubeConsts {
             rat_le_total: k("Rat.le_total"),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
             eq_trans1: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             congr_arg11: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1]),
@@ -177,6 +183,7 @@ impl CubeConsts {
             [self.rat.clone(), self.rat.clone(), a, b, f, h],
         )
     }
+    #[cfg(test)]
     fn subst(&self, motive: Expr, a: Expr, b: Expr, h_eq: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.eq_subst1.clone(),
@@ -214,6 +221,7 @@ impl CubeConsts {
         Expr::apps(self.rat_mul_le_right.clone(), [a, b, c, h, h0])
     }
     /// `Rat.mul_le_mul_of_nonneg_left a b c (b≤c)(0≤a) : a·b ≤ a·c`.
+    #[cfg(test)]
     fn mul_le_left(&self, a: Expr, b: Expr, c: Expr, h: Expr, h0: Expr) -> Expr {
         Expr::apps(self.rat_mul_le_left.clone(), [a, b, c, h, h0])
     }
@@ -226,6 +234,7 @@ impl CubeConsts {
         Expr::apps(self.rat_mul_pos.clone(), [a, b, ha, hb])
     }
     /// `Rat.mul_nonneg a b (0≤a)(0≤b) : 0 ≤ a·b`.
+    #[cfg(test)]
     fn mul_nonneg(&self, a: Expr, b: Expr, ha: Expr, hb: Expr) -> Expr {
         Expr::apps(self.rat_mul_nonneg.clone(), [a, b, ha, hb])
     }

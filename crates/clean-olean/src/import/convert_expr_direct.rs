@@ -14,7 +14,7 @@ use super::convert_expr::{convert_binder_info, convert_level, hash_str, intern_e
 use super::{ExprInternCache, ExprSharingStats, ImportError};
 use crate::error::OleanError;
 use crate::expr::expr_tags;
-use crate::expr::{ParsedBinderInfo, ParsedLiteral};
+use crate::expr::{ParsedBinderInfo, ParsedLiteral, EXPR_DATA_SCALAR_BYTES};
 use crate::region::{is_ptr, is_scalar, unbox_scalar, CompactedRegion};
 use clean_kernel::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, LevelVec, Literal, MDataMap};
 use clean_kernel::name::Name;
@@ -44,7 +44,7 @@ enum DirectConvertWork {
 /// The `intern` cache is shared across all constants in a module for
 /// cross-constant expression deduplication (#2383).
 pub(crate) fn read_and_convert_expr(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     initial_ptr: u64,
     name: &str,
     intern: &mut ExprInternCache,
@@ -154,7 +154,7 @@ pub(crate) fn read_and_convert_expr(
 
 /// Parse a single pointer from the binary region and push work items + results.
 fn parse_ptr(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     ptr: u64,
     name: &str,
     intern: &mut ExprInternCache,
@@ -193,6 +193,7 @@ fn parse_ptr(
 
     let offset = region.ptr_to_offset(ptr)?;
     let header = region.read_header_at(offset)?;
+    CompactedRegion::require_expr_fields(&header, offset)?;
     let field_base = offset + 8;
     let scalar_base = field_base + header.other as usize * 8;
 
@@ -259,7 +260,7 @@ fn parse_ptr(
             // (masked only for the ~handful of List ops clean hand-registers as
             // builtins, e.g. `List.map`). Read after the 8-byte Data scalar.
             let bi = convert_binder_info(ParsedBinderInfo::from_u8(
-                region.bytes_at(scalar_base + 8, 1)?[0],
+                region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0],
             ));
             work.push(DirectConvertWork::BuildLam(bi));
             work.push(DirectConvertWork::Parse(body_ptr));
@@ -271,7 +272,7 @@ fn parse_ptr(
             let body_ptr = region.read_u64_at(field_base + 16)?;
             // See LAM above: binderInfo follows the 8-byte cached `Expr.Data`.
             let bi = convert_binder_info(ParsedBinderInfo::from_u8(
-                region.bytes_at(scalar_base + 8, 1)?[0],
+                region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0],
             ));
             work.push(DirectConvertWork::BuildPi(bi));
             work.push(DirectConvertWork::Parse(body_ptr));
@@ -284,7 +285,9 @@ fn parse_ptr(
             let value_ptr = region.read_u64_at(field_base + 16)?;
             let body_ptr = region.read_u64_at(field_base + 24)?;
             let decl_name_str = region.resolve_name_ptr(name_ptr)?;
-            let nondep = region.bytes_at(scalar_base, 1)?[0] != 0;
+            // Like binderInfo above, `nondep` follows the cached Expr.Data
+            // word. Reading the hash byte made nearly every let look nondep.
+            let nondep = region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0] != 0;
             work.push(DirectConvertWork::BuildLet(
                 Name::from_string(&decl_name_str),
                 nondep,
@@ -309,7 +312,7 @@ fn parse_ptr(
 }
 
 fn parse_bvar(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     field_base: usize,
     name: &str,
     intern: &mut ExprInternCache,
@@ -341,7 +344,7 @@ fn parse_bvar(
 }
 
 fn parse_const(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     field_base: usize,
     name: &str,
     intern: &mut ExprInternCache,
@@ -370,7 +373,7 @@ fn parse_const(
 }
 
 fn parse_lit(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     field_base: usize,
     intern: &mut ExprInternCache,
     results: &mut SmallVec<[Arc<Expr>; 32]>,
@@ -401,7 +404,7 @@ fn parse_lit(
 }
 
 fn parse_proj(
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     field_base: usize,
     name: &str,
     work: &mut Vec<DirectConvertWork>,
@@ -429,4 +432,78 @@ fn parse_proj(
     ));
     work.push(DirectConvertWork::Parse(struct_ptr));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_BASE_ADDR: u64 = 0x0010_0000;
+
+    fn boxed_scalar(value: u64) -> u64 {
+        (value << 1) | 1
+    }
+
+    fn write_header(data: &mut [u8], offset: usize, other: u8, tag: u8) {
+        data[offset..offset + 4].copy_from_slice(&0i32.to_le_bytes());
+        data[offset + 4..offset + 6].copy_from_slice(&0u16.to_le_bytes());
+        data[offset + 6] = other;
+        data[offset + 7] = tag;
+    }
+
+    #[test]
+    fn underdeclared_app_fails_before_direct_conversion_reads_adjacent_data() {
+        let mut data = vec![0u8; 128];
+        let app_offset = 64;
+        write_header(&mut data, app_offset, 1, expr_tags::APP);
+        data[app_offset + 8..app_offset + 16].copy_from_slice(&boxed_scalar(0).to_le_bytes());
+        // This plausible adjacent word must never be accepted as the missing
+        // second App field.
+        data[app_offset + 16..app_offset + 24].copy_from_slice(&boxed_scalar(1).to_le_bytes());
+
+        let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
+        let mut intern = ExprInternCache::default();
+        let error = read_and_convert_expr(
+            &region,
+            region.offset_to_ptr(app_offset),
+            "malformed_app",
+            &mut intern,
+        )
+        .expect_err("the production direct path must share the field-count gate");
+        assert!(
+            matches!(
+                error,
+                ImportError::Parse(OleanError::Region(ref message))
+                    if message.contains("malformed Expr")
+            ),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[test]
+    fn direct_let_reads_nondep_after_cached_expr_data() {
+        let mut data = vec![0u8; 192];
+        let let_offset = 64;
+        write_header(&mut data, let_offset, 4, expr_tags::LET_E);
+        for field in 0..4 {
+            let start = let_offset + 8 + field * 8;
+            data[start..start + 8].copy_from_slice(&boxed_scalar(0).to_le_bytes());
+        }
+        data[let_offset + 40] = 0xff; // cached Expr.Data hash byte
+        data[let_offset + 48] = 0; // nondep = false
+
+        let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
+        let mut intern = ExprInternCache::default();
+        let (expr, _) = read_and_convert_expr(
+            &region,
+            region.offset_to_ptr(let_offset),
+            "dependent_let",
+            &mut intern,
+        )
+        .expect("well-formed dependent let must convert");
+        assert!(
+            matches!(expr.kind(), ExprKind::Let(_, _, _, _, false)),
+            "cached Expr.Data must not be decoded as nondep: {expr:?}"
+        );
+    }
 }

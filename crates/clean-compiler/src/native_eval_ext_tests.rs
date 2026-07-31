@@ -2,9 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-// 3.14 here is an arbitrary test value, not an approximation of PI.
-#![allow(clippy::approx_constant)]
-
 //! Tests for extended native evaluation: profiling, tracing, budget, analysis.
 //!
 //! Part of #3084 - Native type compilation for UInt and Float.
@@ -21,10 +18,6 @@ use crate::native_types::{NativeExpr, NativeOp, NativeType};
 
 fn uint32(val: u64) -> NativeExpr {
     NativeExpr::Lit(NativeType::UInt32, val)
-}
-
-fn uint64(val: u64) -> NativeExpr {
-    NativeExpr::Lit(NativeType::UInt64, val)
 }
 
 fn uint8(val: u64) -> NativeExpr {
@@ -84,9 +77,9 @@ fn test_inspect_value_usize() {
 
 #[test]
 fn test_inspect_value_float_normal() {
-    let s = inspect_value(&NativeValue::Float(3.14));
+    let s = inspect_value(&NativeValue::Float(1.25));
     assert!(s.starts_with("Float("), "got: {}", s);
-    assert!(s.contains("3.14"), "got: {}", s);
+    assert!(s.contains("1.25"), "got: {}", s);
 }
 
 #[test]

@@ -469,6 +469,7 @@ fn cake_graduate(project: &Path, json: bool) -> anyhow::Result<()> {
         seed: None,
         evidence_class: EvidenceClassArg::AgentAttested,
         residual_risk: "unreviewed".to_string(),
+        decided_at: None,
         // `lake_project` already defaults the source root inside the engine.
         olean_source_root: None,
         require_fresh: spec.require_fresh,

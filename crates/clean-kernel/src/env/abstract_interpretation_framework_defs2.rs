@@ -26,8 +26,11 @@
 //!
 //! Part of #3189.
 
+#[cfg(test)]
 use super::abstract_interpretation::AbstractInterpConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -39,6 +42,7 @@ use crate::expr::{BinderInfo, Expr};
 ///
 /// Zonotope-domain join operation. Computes the least upper bound of two
 /// zonotope abstract states.
+#[cfg(test)]
 pub(super) fn build_zonotope_join_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -58,6 +62,7 @@ pub(super) fn build_zonotope_join_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Zonotope-domain meet operation. Computes the greatest lower bound of two
 /// zonotope abstract states.
+#[cfg(test)]
 pub(super) fn build_zonotope_meet_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -75,6 +80,7 @@ pub(super) fn build_zonotope_meet_type(c: &AbstractInterpConsts) -> Expr {
 /// `AbstractInterp.Framework.zonotope_bot : AbstractState`
 ///
 /// Bottom element for the zonotope abstract domain.
+#[cfg(test)]
 pub(super) fn build_zonotope_bot_type(c: &AbstractInterpConsts) -> Expr {
     c.abstract_state.clone()
 }
@@ -82,6 +88,7 @@ pub(super) fn build_zonotope_bot_type(c: &AbstractInterpConsts) -> Expr {
 /// `AbstractInterp.Framework.zonotope_top : AbstractState`
 ///
 /// Top element for the zonotope abstract domain.
+#[cfg(test)]
 pub(super) fn build_zonotope_top_type(c: &AbstractInterpConsts) -> Expr {
     c.abstract_state.clone()
 }
@@ -91,6 +98,7 @@ pub(super) fn build_zonotope_top_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Zonotope-domain widening operator. Accelerates fixpoint computation by
 /// extrapolating ascending chains in the zonotope lattice.
+#[cfg(test)]
 pub(super) fn build_zonotope_widening_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -118,6 +126,7 @@ pub(super) fn build_zonotope_widening_type(c: &AbstractInterpConsts) -> Expr {
 /// Abstract transfer function for affine layers. Takes a weight transform, a
 /// bias abstract state, and an input abstract state, then returns the output
 /// abstract state after linear propagation.
+#[cfg(test)]
 pub(super) fn build_linear_transfer_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let weight_ty = Expr::pi(
@@ -144,6 +153,7 @@ pub(super) fn build_linear_transfer_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Abstract transfer function for ReLU activation. Maps input bounds to the
 /// abstract state describing the ReLU output bounds.
+#[cfg(test)]
 pub(super) fn build_relu_transfer_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (input_id, _) = b.fresh_local(c.abstract_state.clone());
@@ -165,6 +175,7 @@ pub(super) fn build_relu_transfer_type(c: &AbstractInterpConsts) -> Expr {
 /// Composition operator for abstract layer transformers. Given two unary
 /// transfer functions and an input abstract state, returns the abstract state
 /// obtained by applying the two transfers in sequence.
+#[cfg(test)]
 pub(super) fn build_layer_compose_transfer_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let transfer_ty = Expr::pi(
@@ -192,6 +203,7 @@ pub(super) fn build_layer_compose_transfer_type(c: &AbstractInterpConsts) -> Exp
 
 /// `AbstractInterp.Framework.interval_is_abstract_domain`:
 /// Simplified abstract-domain witness for intervals.
+#[cfg(test)]
 pub(super) fn build_interval_is_abstract_domain_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let binop_ty = Expr::pi(
@@ -241,6 +253,7 @@ pub(super) fn build_interval_is_abstract_domain_type(c: &AbstractInterpConsts) -
 
 /// `AbstractInterp.Framework.zonotope_is_abstract_domain`:
 /// Simplified abstract-domain witness for zonotopes.
+#[cfg(test)]
 pub(super) fn build_zonotope_is_abstract_domain_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let binop_ty = Expr::pi(
@@ -290,6 +303,7 @@ pub(super) fn build_zonotope_is_abstract_domain_type(c: &AbstractInterpConsts) -
 
 /// `AbstractInterp.Framework.zonotope_refines_interval_galois`:
 /// Full refinement interface for the interval/zonotope Galois connection.
+#[cfg(test)]
 pub(super) fn build_zonotope_refines_interval_galois_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(
@@ -316,6 +330,7 @@ pub(super) fn build_zonotope_refines_interval_galois_type(c: &AbstractInterpCons
 
 /// `AbstractInterp.Framework.linear_transfer_sound`:
 /// Soundness interface for affine transfer.
+#[cfg(test)]
 pub(super) fn build_linear_transfer_sound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(
@@ -357,6 +372,7 @@ pub(super) fn build_linear_transfer_sound_type(c: &AbstractInterpConsts) -> Expr
 
 /// `AbstractInterp.Framework.relu_transfer_sound`:
 /// Soundness interface for the ReLU transfer function.
+#[cfg(test)]
 pub(super) fn build_relu_transfer_sound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let relu_ty = Expr::pi(

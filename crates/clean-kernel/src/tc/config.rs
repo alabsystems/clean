@@ -563,6 +563,20 @@ impl<'env> TypeChecker<'env> {
         self.ctx_truncate_to(0);
     }
 
+    /// Number of entries currently in the local context. READ-ONLY observer.
+    ///
+    /// Exposed so callers and tests can assert STATE NEUTRALITY: a completed
+    /// `infer_type` / `check_type` must leave this exactly as it found it,
+    /// including on the error path. Every binder arm pushes an FVar and pops it,
+    /// so a nonzero value after a top-level call means a `?` escaped before its
+    /// `ctx_pop` — the defect `reset_local_context` above was introduced to work
+    /// around. Enforced by
+    /// `tests/infer_error_path_state_neutrality.rs`.
+    #[must_use]
+    pub fn local_context_len(&self) -> usize {
+        self.ctx.borrow().len()
+    }
+
     /// Set the maximum whnf/def-eq memoization-cache size (entries).
     ///
     /// A pure PERFORMANCE knob: it changes only how much reduction is memoized,

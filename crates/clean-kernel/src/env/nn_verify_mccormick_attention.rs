@@ -80,6 +80,7 @@ use super::nn_verify_mccormick_attention_types;
 /// Constants for the C005 theorem construction.
 pub(crate) struct C005Consts {
     pub(crate) rat: Expr,
+    #[cfg(test)]
     pub(crate) prop: Expr,
     pub(crate) rat_mul: Expr,
     pub(crate) rat_sub: Expr,
@@ -92,6 +93,7 @@ pub(crate) struct C005Consts {
     pub(crate) eq: Expr,
     pub(crate) and: Expr,
     pub(crate) gap: Expr,
+    #[cfg(test)]
     pub(crate) rat_div: Expr,
 }
 
@@ -99,6 +101,7 @@ impl C005Consts {
     pub(crate) fn new() -> Self {
         Self {
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             prop: Expr::prop(),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
             rat_sub: Expr::const_(Name::from_string("Rat.sub"), vec![]),
@@ -111,6 +114,7 @@ impl C005Consts {
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
             and: Expr::const_(Name::from_string("And"), vec![]),
             gap: Expr::const_(Name::from_string("NNVerify.McCormick.gap"), vec![]),
+            #[cfg(test)]
             rat_div: Expr::const_(Name::from_string("Rat.div"), vec![]),
         }
     }
@@ -161,6 +165,7 @@ impl C005Consts {
         Expr::app(self.rat_abs.clone(), a)
     }
 
+    #[cfg(test)]
     pub(crate) fn div(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_div.clone(), a), b)
     }

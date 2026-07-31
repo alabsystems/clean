@@ -130,6 +130,7 @@ const HAPPEND_FLAVOR: HeteroOpFlavor = HeteroOpFlavor {
 };
 
 #[derive(Clone, Copy)]
+#[cfg(test)]
 struct BinaryOpFlavor {
     class_name: &'static str,
     ctor_name: &'static str,
@@ -137,6 +138,7 @@ struct BinaryOpFlavor {
     projection_name: &'static str,
 }
 
+#[cfg(test)]
 const DIV_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
     class_name: "Div",
     ctor_name: "Div.mk",
@@ -144,6 +146,7 @@ const DIV_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
     projection_name: "Div.div",
 };
 
+#[cfg(test)]
 const MOD_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
     class_name: "Mod",
     ctor_name: "Mod.mk",
@@ -222,6 +225,7 @@ fn build_hetero_projection(
 
 /// Build the projection type and value for a 1-universe binary op class (Div, Mod).
 /// Returns `(projection_type, projection_value)`.
+#[cfg(test)]
 fn build_binary_projection(
     class_name: &Name,
     class_const: impl Fn(Level) -> Expr,
@@ -441,6 +445,7 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     fn init_binary_op_with_flavor(&mut self, flavor: BinaryOpFlavor) -> Result<(), EnvError> {
         let class_name = Name::from_string(flavor.class_name);
         let ctor_name = Name::from_string(flavor.ctor_name);
@@ -599,6 +604,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.hadd_init == true`
+    #[cfg(test)]
     pub(crate) fn has_hadd(&self) -> bool {
         self.hadd_init
     }
@@ -632,6 +638,7 @@ impl Environment {
     }
 
     /// Check if HAppend typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_happend(&self) -> bool {
         self.happend_init
     }
@@ -824,6 +831,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.hsub_init == true`
+    #[cfg(test)]
     pub(crate) fn has_hsub(&self) -> bool {
         self.hsub_init
     }
@@ -857,6 +865,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.hmul_init == true`
+    #[cfg(test)]
     pub(crate) fn has_hmul(&self) -> bool {
         self.hmul_init
     }
@@ -890,6 +899,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.hdiv_init == true`
+    #[cfg(test)]
     pub(crate) fn has_hdiv(&self) -> bool {
         self.hdiv_init
     }
@@ -907,6 +917,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.div_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_div(&mut self) -> Result<(), EnvError> {
         if self.div_init {
             return Ok(());
@@ -923,6 +934,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.div_init == true`
+    #[cfg(test)]
     pub(crate) fn has_div(&self) -> bool {
         self.div_init
     }
@@ -956,6 +968,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.hmod_init == true`
+    #[cfg(test)]
     pub(crate) fn has_hmod(&self) -> bool {
         self.hmod_init
     }
@@ -973,6 +986,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.mod_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_mod(&mut self) -> Result<(), EnvError> {
         if self.mod_init {
             return Ok(());
@@ -989,6 +1003,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.mod_init == true`
+    #[cfg(test)]
     pub(crate) fn has_mod(&self) -> bool {
         self.mod_init
     }
@@ -1022,6 +1037,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.hpow_init == true`
+    #[cfg(test)]
     pub(crate) fn has_hpow(&self) -> bool {
         self.hpow_init
     }
@@ -1055,6 +1071,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.pow_init == true`
+    #[cfg(test)]
     pub(crate) fn has_pow(&self) -> bool {
         self.pow_init
     }
@@ -1190,6 +1207,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_hadd_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_hadd_inst(&self) -> bool {
         self.nat_hadd_inst_init
     }
@@ -1250,6 +1268,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_hadd_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_hadd_inst(&self) -> bool {
         self.int_hadd_inst_init
     }
@@ -1294,6 +1313,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_hsub_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_hsub_inst(&self) -> bool {
         self.nat_hsub_inst_init
     }
@@ -1347,6 +1367,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_hsub_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_hsub_inst(&self) -> bool {
         self.int_hsub_inst_init
     }
@@ -1391,6 +1412,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_hmul_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_hmul_inst(&self) -> bool {
         self.nat_hmul_inst_init
     }
@@ -1532,6 +1554,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_hmul_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_hmul_inst(&self) -> bool {
         self.int_hmul_inst_init
     }
@@ -2130,6 +2153,7 @@ impl Environment {
     }
 
     /// Check if HAnd typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_hand(&self) -> bool {
         self.hand_init
     }
@@ -2156,6 +2180,7 @@ impl Environment {
     }
 
     /// Check if HOr typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_hor(&self) -> bool {
         self.hor_init
     }
@@ -2182,6 +2207,7 @@ impl Environment {
     }
 
     /// Check if HXor typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_hxor(&self) -> bool {
         self.hxor_init
     }
@@ -2208,6 +2234,7 @@ impl Environment {
     }
 
     /// Check if HShiftLeft typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_hshiftleft(&self) -> bool {
         self.hshiftleft_init
     }
@@ -2234,6 +2261,7 @@ impl Environment {
     }
 
     /// Check if HShiftRight typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_hshiftright(&self) -> bool {
         self.hshiftright_init
     }
@@ -2264,6 +2292,7 @@ impl Environment {
     }
 
     /// Check if Nat HAnd instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_hand_inst(&self) -> bool {
         self.nat_hand_inst_init
     }
@@ -2294,6 +2323,7 @@ impl Environment {
     }
 
     /// Check if Nat HOr instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_hor_inst(&self) -> bool {
         self.nat_hor_inst_init
     }
@@ -2324,6 +2354,7 @@ impl Environment {
     }
 
     /// Check if Nat HXor instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_hxor_inst(&self) -> bool {
         self.nat_hxor_inst_init
     }
@@ -2370,6 +2401,7 @@ impl Environment {
     }
 
     /// Check if Nat HShiftLeft instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_hshiftleft_inst(&self) -> bool {
         self.nat_hshiftleft_inst_init
     }
@@ -2407,6 +2439,7 @@ impl Environment {
     }
 
     /// Check if Nat HShiftRight instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_hshiftright_inst(&self) -> bool {
         self.nat_hshiftright_inst_init
     }

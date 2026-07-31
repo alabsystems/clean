@@ -22,13 +22,19 @@
 //!   Razborov (2003), "Resolution Lower Bounds for the Weak Pigeonhole
 //!     Principle".
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all PB pigeonhole declarations.
+#[cfg(test)]
 pub(super) struct PBPigeonholeConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -45,7 +51,9 @@ pub(super) struct PBPigeonholeConsts {
     pub(super) cp_proof: Expr,
 }
 
+#[cfg(test)]
 impl PBPigeonholeConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -60,10 +68,12 @@ impl PBPigeonholeConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize PB pigeonhole declarations for exponential separation.
     ///
     /// Depends on: `init_nat()`, `init_cutting_planes()`.
+    #[cfg(test)]
     pub(crate) fn init_pb_pigeonhole(&mut self) -> Result<(), EnvError> {
         if self.pb_pigeonhole_init {
             return Ok(());
@@ -102,6 +112,7 @@ impl Environment {
     ///
     /// Abstractly represents a constraint where a_i are integer coefficients,
     /// x_i are 0/1 variables, and b is an integer threshold.
+    #[cfg(test)]
     fn register_pb_constraint(&mut self, c: &PBPigeonholeConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.PBConstraint"))
@@ -132,6 +143,7 @@ impl Environment {
     /// The saturation rule is what distinguishes PB from cutting planes:
     /// in sum(a_i * x_i) >= b, any coefficient a_i > b can be replaced
     /// by b since x_i in {0,1} and a_i * 1 >= b already suffices.
+    #[cfg(test)]
     fn register_pb_proof(&mut self, c: &PBPigeonholeConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.PBProof"))
@@ -216,6 +228,7 @@ impl Environment {
     // ====================================================================
 
     /// `pb_proof_size (p : PBProof) : Nat` -- number of proof steps.
+    #[cfg(test)]
     fn register_pb_proof_size(&mut self, c: &PBPigeonholeConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.pb_proof_size"))
@@ -242,6 +255,7 @@ impl Environment {
     /// i in {0,...,n} and j in {0,...,n-1}.
     /// Clauses: (1) at-least-one hole per pigeon,
     ///          (2) at-most-one pigeon per hole.
+    #[cfg(test)]
     fn register_pigeonhole_formula(&mut self, c: &PBPigeonholeConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.pigeonhole_formula"))
@@ -265,6 +279,7 @@ impl Environment {
     ///
     /// The degree of a PB proof is the maximum over all constraints derived
     /// in the proof of the largest absolute value of any coefficient.
+    #[cfg(test)]
     fn register_pb_degree(&mut self, c: &PBPigeonholeConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.pb_degree"))

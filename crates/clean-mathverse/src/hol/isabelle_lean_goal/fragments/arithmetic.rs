@@ -15,11 +15,17 @@
 //! * `Groups.uminus_class.uminus a` ≡ `-a` (`Neg.neg`).
 //! * `Int.nat i` ≡ `i.toNat` (`Int.toNat`, `= 0` on negatives — matching
 //!   Isabelle's `nat` of a negative).
+//! * `GCD.gcd_class.gcd a b` ≡ `Nat.gcd a b` **on `ℕ`** (`Nat.gcd`, greatest
+//!   common divisor); `GCD.gcd_class.lcm a b` ≡ `Nat.lcm a b`. Off `ℕ` the shape
+//!   is declined ([`Unsupported::NonNatGcd`]) — Lean's `Int.gcd : ℤ → ℤ → ℕ`
+//!   changes the result type, so it is *not* a faithful drop-in for Isabelle
+//!   `gcd :: 'a ⇒ 'a ⇒ 'a`, and a bare-`'a` carrier is class-undetermined.
 
 use super::super::super::isabelle_pure::IsaTerm;
+use super::super::lean_type::is_nat_typed;
 use super::super::term::translate_term;
 use super::super::types::{prec, LeanTerm, Unsupported};
-use super::{binary_infix, method_object_last};
+use super::{binary_infix, method_object_last, prefix_app};
 
 /// Try to render `n` as an arithmetic constant.
 pub(super) fn try_translate(n: &str, args: &[&IsaTerm]) -> Option<Result<LeanTerm, Unsupported>> {
@@ -35,9 +41,25 @@ pub(super) fn try_translate(n: &str, args: &[&IsaTerm]) -> Option<Result<LeanTer
         "Nat.Suc" => suc(args),
         // `nat i` (int → nat cast) → `i.toNat`.
         "Int.nat" => method_object_last("Int.nat", "toNat", 1, args),
+        // `gcd`/`lcm` — faithful only on the `ℕ` instance (see module docs).
+        "GCD.gcd_class.gcd" => nat_gcd_lcm(n, "Nat.gcd", args),
+        "GCD.gcd_class.lcm" => nat_gcd_lcm(n, "Nat.lcm", args),
         _ => return None,
     };
     Some(out)
+}
+
+/// `gcd`/`lcm a b` → `Nat.gcd`/`Nat.lcm a b`, guarded to a `ℕ` operand. On any
+/// other carrier the shape is declined: `Int.gcd` returns `ℕ` (result-type
+/// mismatch) and a bare type variable leaves the Lean `gcd` class undetermined.
+fn nat_gcd_lcm(n: &str, head: &'static str, args: &[&IsaTerm]) -> Result<LeanTerm, Unsupported> {
+    let [a, _] = args else {
+        return Err(Unsupported::PartialApplication(n.to_string()));
+    };
+    if !is_nat_typed(a) {
+        return Err(Unsupported::NonNatGcd(n.to_string()));
+    }
+    prefix_app(head, 2, args)
 }
 
 /// `Groups.uminus_class.uminus a` → `-a`.
@@ -154,5 +176,46 @@ mod tests {
         };
         let out = try_translate("Int.nat", &[&iv]).unwrap().unwrap();
         assert_eq!(render_top(&out), "i.toNat");
+    }
+
+    #[test]
+    fn nat_gcd_lcm_render_on_nat() {
+        let out = try_translate("GCD.gcd_class.gcd", &[&v("a"), &v("b")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(render_top(&out), "Nat.gcd a b");
+        let out = try_translate("GCD.gcd_class.lcm", &[&v("a"), &v("b")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(render_top(&out), "Nat.lcm a b");
+    }
+
+    #[test]
+    fn gcd_off_nat_declined() {
+        // `gcd` on a bare type var / ℤ is not a faithful drop-in (result type).
+        let av = IsaTerm::Var {
+            n: "a".into(),
+            i: 0,
+            t: IsaType::TVar {
+                n: "'a".into(),
+                i: 0,
+            },
+        };
+        assert!(matches!(
+            try_translate("GCD.gcd_class.gcd", &[&av, &av]),
+            Some(Err(Unsupported::NonNatGcd(_)))
+        ));
+        let iv = IsaTerm::Var {
+            n: "a".into(),
+            i: 0,
+            t: IsaType::Type {
+                n: "Int.int".into(),
+                a: vec![],
+            },
+        };
+        assert!(matches!(
+            try_translate("GCD.gcd_class.lcm", &[&iv, &iv]),
+            Some(Err(Unsupported::NonNatGcd(_)))
+        ));
     }
 }

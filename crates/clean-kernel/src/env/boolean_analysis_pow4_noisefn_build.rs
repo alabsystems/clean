@@ -7,6 +7,7 @@
 // operator-side 4th moment).
 
 /// Atoms specific to the `noiseFn`-side 4-fold expansion.
+#[cfg(test)]
 struct Pow4NoiseConsts {
     base: Pow4Consts,
     nat: Expr,
@@ -21,7 +22,9 @@ struct Pow4NoiseConsts {
     fin_sum_pow4: Expr,
 }
 
+#[cfg(test)]
 impl Pow4NoiseConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
         let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
@@ -41,26 +44,32 @@ impl Pow4NoiseConsts {
         }
     }
 
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
     /// `HCPoint n → Rat`.
+    #[cfg(test)]
     fn f_type(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }
     /// `Nat.pow 2 n`.
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two.clone(), n.clone()])
     }
     /// `Fin (Nat.pow 2 n)`.
+    #[cfg(test)]
     fn fin_pow(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), self.pow2(n))
     }
     /// `BoolAnalysis.hcDecode n k`.
+    #[cfg(test)]
     fn decode(&self, n: &Expr, k: &Expr) -> Expr {
         Expr::apps(self.hc_decode.clone(), [n.clone(), k.clone()])
     }
     /// `noiseDensityW ρ n x y`.
+    #[cfg(test)]
     fn density(&self, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         Expr::apps(
             self.noise_density.clone(),
@@ -68,6 +77,7 @@ impl Pow4NoiseConsts {
         )
     }
     /// `noiseFn ρ n F jx`.
+    #[cfg(test)]
     fn noise_fn(&self, rho: &Expr, n: &Expr, f: &Expr, jx: &Expr) -> Expr {
         Expr::apps(
             self.noise_fn.clone(),
@@ -75,6 +85,7 @@ impl Pow4NoiseConsts {
         )
     }
     /// `Fin.sum (2^n) g`.
+    #[cfg(test)]
     fn sum_pow(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.base.fin_sum.clone(), [self.pow2(n), g])
     }
@@ -82,6 +93,7 @@ impl Pow4NoiseConsts {
     /// `gx jx := fun (jy : Fin (2^n)) => F(decode jy)·noiseDensityW ρ n (decode jx)(decode jy)`
     /// — the `noiseFn` integrand at fixed `jx`, byte-for-byte the `noiseFn` body
     /// so `Fin.sum (2^n) (gx jx) ≡ noiseFn ρ n F jx`.
+    #[cfg(test)]
     fn gx(&self, parent: &EnvDeclBuilder, rho: &Expr, n: &Expr, f: &Expr, jx: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_p = self.fin_pow(n);
@@ -101,6 +113,7 @@ impl Pow4NoiseConsts {
 ///      = Fin.sum (2^n) (fun jx => Σ_{j1}Σ_{j3}Σ_{j2}Σ_{j4}
 ///           (gx jx j1·gx jx j2)·(gx jx j3·gx jx j4))`
 /// where `gx jx jy := F(decode jy)·noiseDensityW ρ n (decode jx)(decode jy)`.
+#[cfg(test)]
 fn build_fourfold_type(c: &Pow4NoiseConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat.clone());
@@ -118,6 +131,7 @@ fn build_fourfold_type(c: &Pow4NoiseConsts) -> Expr {
 }
 
 /// `fun (jx : Fin (2^n)) => pow4 (noiseFn ρ n F jx)`.
+#[cfg(test)]
 fn build_lhs_jx_fn(
     c: &Pow4NoiseConsts,
     parent: &EnvDeclBuilder,
@@ -137,6 +151,7 @@ fn build_lhs_jx_fn(
 /// where `g := gx jx`. This is `build_quad_rhs` of the base brick at `f := gx jx`,
 /// over the `Fin (2^n)` index, so it is byte-for-byte the `Fin.sum_pow4 (2^n)
 /// (gx jx)` RHS.
+#[cfg(test)]
 fn build_rhs_jx_fn(
     c: &Pow4NoiseConsts,
     parent: &EnvDeclBuilder,
@@ -154,6 +169,7 @@ fn build_rhs_jx_fn(
 }
 
 /// `pow4 x := (x·x)·(x·x)` over the base atoms.
+#[cfg(test)]
 fn pow4_of(c: &Pow4Consts, x: &Expr) -> Expr {
     let sq = c.mul(x.clone(), x.clone());
     c.mul(sq.clone(), sq)
@@ -162,6 +178,7 @@ fn pow4_of(c: &Pow4Consts, x: &Expr) -> Expr {
 /// Proof of `pow4_noisefn_fourfold` : `Fin.sum_congr` over `jx` of the pointwise
 /// `Fin.sum_pow4 (2^n) (gx jx)` (whose LHS `pow4(Fin.sum (2^n) (gx jx))` is
 /// def-eq to `pow4(noiseFn ρ n F jx)`).
+#[cfg(test)]
 fn build_fourfold_value(c: &Pow4NoiseConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rho_id, rho) = b.fresh_local(c.rat.clone());

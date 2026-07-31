@@ -12,11 +12,16 @@
 //! - Algebraic curves and surfaces
 //! - Intersection theory and Chern classes
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize AlgebraicGeometry module
     ///
@@ -38,6 +43,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.algebraic_geometry_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_algebraic_geometry(&mut self) -> Result<(), EnvError> {
         if self.algebraic_geometry_init {
             return Ok(());
@@ -407,6 +413,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.algebraic_geometry_init == true`
+    #[cfg(test)]
     pub(crate) fn has_algebraic_geometry(&self) -> bool {
         self.algebraic_geometry_init
     }

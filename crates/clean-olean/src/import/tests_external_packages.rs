@@ -417,7 +417,7 @@ fn test_malformed_module_name_is_unsupported_not_missing() {
 #[test]
 fn test_load_olean_file_missing_names_path() {
     let mut env = clean_kernel::Environment::new();
-    let missing = std::path::Path::new("/nonexistent/dir/Foo.olean");
+    let missing = Path::new("/nonexistent/dir/Foo.olean");
     let msg = super::load_olean_file(&mut env, missing)
         .expect_err("missing .olean must fail")
         .to_string();

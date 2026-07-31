@@ -29,13 +29,19 @@
 //! {`chi_mul_chi_symmDiff`, `subsetSum_congr`} ∪ Eq/congrArg built-ins, all
 //! admitted-axiom-free).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for the 4-fold character orthogonality lemmas.
+#[cfg(test)]
 struct QuadConsts {
     nat: Expr,
     rat: Expr,
@@ -52,7 +58,9 @@ struct QuadConsts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl QuadConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         Self {
@@ -78,28 +86,36 @@ impl QuadConsts {
         }
     }
 
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn ssum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
+    #[cfg(test)]
     fn chi_(&self, n: &Expr, s: &Expr, x: &Expr) -> Expr {
         Expr::apps(self.chi.clone(), [n.clone(), s.clone(), x.clone()])
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
     /// `congrArg (g : Rat -> Rat) (h : a = b) : g a = g b`.
+    #[cfg(test)]
     fn congr(&self, a: Expr, b: Expr, g: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -109,6 +125,7 @@ impl QuadConsts {
 
     /// `fun (i : Fin n) => Bool.xor (S i) (T i)` — the symmetric difference
     /// `S Δ T` as an `HCPoint n` (matches `chi_mul_chi_symmDiff`'s RHS subset).
+    #[cfg(test)]
     fn symm_diff_fn(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr, t: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -121,6 +138,7 @@ impl QuadConsts {
     }
 
     /// `chi_mul_chi_symmDiff n S T x : χ_S(x)·χ_T(x) = χ_{S Δ T}(x)`.
+    #[cfg(test)]
     fn fold(&self, n: &Expr, s: &Expr, t: &Expr, x: &Expr) -> Expr {
         Expr::apps(
             self.chi_mul_chi_symm_diff.clone(),
@@ -130,6 +148,7 @@ impl QuadConsts {
 
     /// `congrArg (fun z => z·right) h : a·right = b·right` — rewrite the LEFT
     /// factor of a `Rat.mul` under the proof `h : a = b`.
+    #[cfg(test)]
     fn mul_right_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -149,6 +168,7 @@ impl QuadConsts {
 
     /// `congrArg (fun z => left·z) h : left·a = left·b` — rewrite the RIGHT
     /// factor of a `Rat.mul` under the proof `h : a = b`.
+    #[cfg(test)]
     fn mul_left_congr(
         &self,
         parent: &EnvDeclBuilder,
@@ -174,6 +194,7 @@ impl QuadConsts {
 /// `∀ (n : Nat) (S1 S2 S3 S4 x : HCPoint n),
 ///   (χ_{S1}(x)·χ_{S2}(x))·(χ_{S3}(x)·χ_{S4}(x))
 ///     = χ_{(S1 Δ S2) Δ (S3 Δ S4)}(x)`.
+#[cfg(test)]
 fn fold_type(c: &QuadConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -203,6 +224,7 @@ fn fold_type(c: &QuadConsts) -> Expr {
     b.finish(r)
 }
 
+#[cfg(test)]
 fn fold_value(c: &QuadConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -280,6 +302,7 @@ fn fold_value(c: &QuadConsts) -> Expr {
 // ===========================================================================
 
 /// `fun (x : HCPoint n) => (χ_{S1}(x)·χ_{S2}(x))·(χ_{S3}(x)·χ_{S4}(x))`.
+#[cfg(test)]
 fn quad_product_fn(
     c: &QuadConsts,
     parent: &EnvDeclBuilder,
@@ -300,6 +323,7 @@ fn quad_product_fn(
 }
 
 /// `fun (x : HCPoint n) => χ_{U}(x)` — the single-character integrand at `U`.
+#[cfg(test)]
 fn chi_single_fn(c: &QuadConsts, parent: &EnvDeclBuilder, n: &Expr, u: &Expr) -> Expr {
     let mut b = EnvDeclBuilder::child_of(parent);
     let hcp = c.hcpoint_of(n);
@@ -311,6 +335,7 @@ fn chi_single_fn(c: &QuadConsts, parent: &EnvDeclBuilder, n: &Expr, u: &Expr) ->
 /// `∀ (n : Nat) (S1 S2 S3 S4 : HCPoint n),
 ///   subsetSum n (fun x => (χ_{S1}(x)·χ_{S2}(x))·(χ_{S3}(x)·χ_{S4}(x)))
 ///     = subsetSum n (fun x => χ_{(S1 Δ S2) Δ (S3 Δ S4)}(x))`.
+#[cfg(test)]
 fn ortho_type(c: &QuadConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -335,6 +360,7 @@ fn ortho_type(c: &QuadConsts) -> Expr {
     b.finish(r)
 }
 
+#[cfg(test)]
 fn ortho_value(c: &QuadConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -377,6 +403,7 @@ fn ortho_value(c: &QuadConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.chi_quad_fold`: the pointwise 4-fold character
     /// merge `(χ_{S1}·χ_{S2})·(χ_{S3}·χ_{S4}) = χ_{(S1 Δ S2) Δ (S3 Δ S4)}`.
@@ -385,6 +412,7 @@ impl Environment {
     /// pair, fold the right pair (each lifted through `Rat.mul` by `congrArg`),
     /// then fold the two symmetric differences together. Constructive, empty
     /// admitted-axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_chi_quad_fold(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_quad_fold");
         if self.get_const(&name).is_some() {
@@ -422,6 +450,7 @@ impl Environment {
     /// (rung 1 of the sharp-KKL roadmap), consumed under `subsetSum_congr` by the
     /// `pow4_noisefn_spectral_diag` rung. Constructive, empty admitted-axiom
     /// closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_subset_sum_chi_quad_orthogonality(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.subsetSum_chi_quad_orthogonality");
         if self.get_const(&name).is_some() {

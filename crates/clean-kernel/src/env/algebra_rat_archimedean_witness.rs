@@ -84,6 +84,7 @@ struct WitnessConsts {
     raw: Expr,
     ratq: Expr,
     // Carrier.
+    #[cfg(test)]
     raw_mk: Expr,
     raw_num: Expr,
     raw_eff_denom: Expr,
@@ -137,6 +138,7 @@ impl WitnessConsts {
             int: k("Int"),
             raw: k("Rat.Raw"),
             ratq: k("Rat"),
+            #[cfg(test)]
             raw_mk: k("Rat.Raw.mk"),
             raw_num: k("Rat.Raw.num"),
             raw_eff_denom: k("Rat.Raw.effDenom"),
@@ -206,12 +208,14 @@ impl WitnessConsts {
         Expr::app(self.raw_num.clone(), p)
     }
     /// `Int.ofNat (Rat.Raw.effDenom p)`.
+    #[cfg(test)]
     fn eff(&self, p: Expr) -> Expr {
         self.of_nat(Expr::app(self.raw_eff_denom.clone(), p))
     }
     fn eff_nat(&self, p: Expr) -> Expr {
         Expr::app(self.raw_eff_denom.clone(), p)
     }
+    #[cfg(test)]
     fn raw_mk(&self, n: Expr, d: Expr) -> Expr {
         Expr::apps(self.raw_mk.clone(), [n, d])
     }

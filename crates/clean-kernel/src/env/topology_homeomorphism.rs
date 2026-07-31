@@ -603,6 +603,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_homeomorphism_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_homeomorphism(&self) -> bool {
         self.topology_homeomorphism_init
     }

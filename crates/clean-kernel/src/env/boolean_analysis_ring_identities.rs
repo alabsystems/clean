@@ -102,6 +102,7 @@ impl Environment {
     }
 
     /// Check if the ring-identity layer has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_ring_identities(&self) -> bool {
         self.boolean_analysis_ring_identities_init
     }

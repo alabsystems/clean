@@ -241,7 +241,7 @@ fn build_per_coord_uncond(c: &PerCoordConsts, for_value: bool) -> Expr {
     let (f_id, f) = b.fresh_local(c.bool_fn_of(&n));
     let (i_id, i) = b.fresh_local(c.fin_of(&n));
 
-    let half = c.half();
+    let _half = c.half();
     let big_d = c.pow_of(8, &n); // 8^n
     let d_inv = c.inv(big_d.clone());
 

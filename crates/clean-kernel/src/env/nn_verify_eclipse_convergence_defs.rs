@@ -26,6 +26,7 @@ pub(super) struct ConvergenceConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
     pub(super) type0: Expr,
+    #[cfg(test)]
     pub(super) prop: Expr,
     pub(super) nn_vec: Expr,
     pub(super) rat_mul: Expr,
@@ -40,6 +41,7 @@ pub(super) struct ConvergenceConsts {
     pub(super) rat_pow: Expr,
     pub(super) width: Expr,
     pub(super) refine_op: Expr,
+    #[cfg(test)]
     pub(super) log_rat: Expr,
 }
 
@@ -49,6 +51,7 @@ impl ConvergenceConsts {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
             type0: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+            #[cfg(test)]
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
@@ -66,6 +69,7 @@ impl ConvergenceConsts {
             rat_pow: Expr::const_(Name::from_string("NNVerify.ECLipsE.rat_pow"), vec![]),
             width: Expr::const_(Name::from_string("NNVerify.ECLipsE.width"), vec![]),
             refine_op: Expr::const_(Name::from_string("NNVerify.ECLipsE.refine_op"), vec![]),
+            #[cfg(test)]
             log_rat: Expr::const_(Name::from_string("NNVerify.ECLipsE.log_rat"), vec![]),
         }
     }

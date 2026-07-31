@@ -122,7 +122,7 @@ installs).
 
 ### B1.1 persistent-stateful (default when available)
 
-The persistent backend lives in the internal `mathbot` crate (not part of this snapshot).
+The persistent backend lives in `crates/mathbot/src/lean_repl_server.rs`.
 It drives `leanprover-community/repl` (the `lake exe repl` binary) via
 its JSON-line protocol — one Lean kernel process per session, with an
 `env` cursor (post-command environment) and a `proofState` cursor
@@ -142,8 +142,8 @@ dispatch layer picks the persistent backend.
 
 When `MATHBOT_LEAN_REPL_BIN` is unset and `lake exe repl` is not
 available in the project, the dispatch layer in
-The REPL client falls back honestly to the stateless
-backend. This backend
+`crates/mathbot/src/lean_repl.rs` falls back honestly to the stateless
+backend in `crates/mathbot/src/lean_repl_stateless.rs`. This backend
 re-elaborates the accumulated file on every tactic call — proof-state
 continuity is simulated, not real. Sub-second response times do NOT
 scale beyond bare-prelude fixtures, and the kernel cannot carry

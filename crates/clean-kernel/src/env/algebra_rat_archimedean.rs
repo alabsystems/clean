@@ -83,8 +83,10 @@ struct ArchimedeanConsts {
     int_mul_one: Expr,
     one_le_two_pow: Expr,
     le_two_pow_self: Expr,
+    #[cfg(test)]
     rat_le_trans: Expr,
     // Eq.{1} / subst machinery.
+    #[cfg(test)]
     eq1: Expr,
     eq_symm: Expr,
     eq_subst: Expr,
@@ -114,7 +116,9 @@ impl ArchimedeanConsts {
             int_mul_one: k("Int.mul_one"),
             one_le_two_pow: k("Nat.one_le_two_pow"),
             le_two_pow_self: k("Nat.le_two_pow_self"),
+            #[cfg(test)]
             rat_le_trans: k("Rat.le_trans"),
+            #[cfg(test)]
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![l1]),
@@ -174,6 +178,7 @@ impl ArchimedeanConsts {
     }
     /// `Rat.le_trans a b c h_ab h_bc : a ≤ c` (the toolkit `Rat.le_trans`,
     /// stated over the bare `Rat.le`; defeq to the `LE.le` surface).
+    #[cfg(test)]
     fn le_trans_of(&self, a: Expr, b: Expr, c: Expr, h_ab: Expr, h_bc: Expr) -> Expr {
         Expr::apps(self.rat_le_trans.clone(), [a, b, c, h_ab, h_bc])
     }

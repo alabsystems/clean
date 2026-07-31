@@ -31,10 +31,15 @@
 //!            SAT Modulo Theories"; Fleury (2019), "A verified SAT solver
 //!            framework with learn, forget, restart, and incrementality".
 
+#[cfg(test)]
 use super::cdcl_soundness::CDCLSoundnessConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 // ============================================================================
@@ -46,6 +51,7 @@ use crate::name::Name;
 /// Each axiom captures one case of the induction: if trail_consistent holds
 /// for state s, then after applying the specific transition, trail_consistent
 /// still holds. These are the genuine proof obligations from IsaSAT Lemma 3.1.
+#[cfg(test)]
 pub(super) fn register_s01_step_axioms(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -133,6 +139,7 @@ pub(super) fn register_s01_step_axioms(
 ///
 /// Each axiom captures that the 2WL invariant is maintained when BCP
 /// updates watched literals during propagation.
+#[cfg(test)]
 pub(super) fn register_s02_step_axioms(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -225,6 +232,7 @@ pub(super) fn register_s02_step_axioms(
 /// - Decide: decision doesn't learn new clauses
 /// - Restart: restart doesn't change learned clauses
 /// - Backtrack: backtracking doesn't change learned clauses
+#[cfg(test)]
 pub(super) fn register_s03_step_axioms(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -365,6 +373,7 @@ pub(super) fn register_s03_step_axioms(
 ///
 /// The key axiom: after backtracking to level k, the trail prefix up to k
 /// is unchanged and all entries above k are removed.
+#[cfg(test)]
 pub(super) fn register_s04_step_axioms(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -405,6 +414,7 @@ pub(super) fn register_s04_step_axioms(
 ///
 /// The key axiom: when BCP reaches a fixpoint (no more unit propagations),
 /// every clause is either satisfied or has >= 2 unassigned literals.
+#[cfg(test)]
 pub(super) fn register_s05_step_axioms(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,
@@ -450,6 +460,7 @@ pub(super) fn register_s05_step_axioms(
 ///
 /// We use an abstract measure-decrease predicate rather than `Nat.lt`
 /// directly to avoid pulling in the `init_lt()` dependency chain.
+#[cfg(test)]
 pub(super) fn register_s06_step_axioms(
     env: &mut Environment,
     c: &CDCLSoundnessConsts,

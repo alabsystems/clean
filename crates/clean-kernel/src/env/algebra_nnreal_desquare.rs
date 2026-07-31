@@ -73,6 +73,7 @@ use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the de-square assembly.
 pub(crate) struct DesqConsts {
+    #[cfg(test)]
     nat: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
@@ -118,6 +119,7 @@ impl DesqConsts {
         let l1 = Level::succ(Level::zero());
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
+            #[cfg(test)]
             nat: k("Nat"),
             nat_zero: k("Nat.zero"),
             nat_succ: k("Nat.succ"),

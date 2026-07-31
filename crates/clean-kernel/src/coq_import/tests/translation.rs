@@ -431,3 +431,59 @@ fn coq_imported_stdlib_propositions_translate_to_lean_names() {
         assert!(levels.is_empty(), "unexpected universes for {lean_name}");
     }
 }
+
+#[test]
+fn coq_translate_coinductive_block_fails_closed() {
+    use crate::coq_import::{
+        translate_inductive_decl, CoqImportError, InductiveBody, InductiveKind, MutualInductiveDecl,
+    };
+
+    // A CoInductive block must be rejected, never silently admitted as a
+    // least-fixpoint inductive (which would be a different type and would
+    // receive an induction principle the greatest fixpoint must not have).
+    let decl = MutualInductiveDecl {
+        kind: InductiveKind::CoInductive,
+        universe_params: vec![],
+        num_params: 0,
+        params: vec![],
+        bodies: vec![InductiveBody {
+            name: CoqName::from_dotted("Coq.Lists.Streams.Stream"),
+            type_: Constr::prop(),
+            constructors: vec![],
+        }],
+    };
+
+    let context = TranslationContext::default();
+    match translate_inductive_decl(&decl, &context) {
+        Err(CoqImportError::CoinductiveUnsupported { name }) => {
+            assert_eq!(name, "Coq.Lists.Streams.Stream");
+        }
+        other => panic!("CoInductive block must fail closed, got {other:?}"),
+    }
+}
+
+#[test]
+fn coq_translate_plain_inductive_block_still_translates() {
+    use crate::coq_import::{
+        translate_inductive_decl, InductiveBody, InductiveKind, MutualInductiveDecl,
+    };
+
+    // Companion pin for the fail-closed CoInductive check: an ordinary
+    // Inductive block with the same shape must keep translating.
+    let decl = MutualInductiveDecl {
+        kind: InductiveKind::Inductive,
+        universe_params: vec![],
+        num_params: 0,
+        params: vec![],
+        bodies: vec![InductiveBody {
+            name: CoqName::from_dotted("Test.Empty"),
+            type_: Constr::prop(),
+            constructors: vec![],
+        }],
+    };
+
+    let context = TranslationContext::default();
+    let translated =
+        translate_inductive_decl(&decl, &context).expect("plain inductive must translate");
+    assert_eq!(translated.types.len(), 1);
+}

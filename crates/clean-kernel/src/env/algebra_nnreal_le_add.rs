@@ -49,6 +49,7 @@ use crate::name::Name;
 /// Pre-resolved handles + smart-constructors for `NNReal.add_le_add`.
 pub(crate) struct LeAddConsts {
     nat: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     rat: Expr,
     rat_zero: Expr,
@@ -96,6 +97,7 @@ impl LeAddConsts {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
             nat: k("Nat"),
+            #[cfg(test)]
             nat_zero: k("Nat.zero"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
@@ -210,6 +212,7 @@ impl LeAddConsts {
 
     /// The `CauSeq.le` body for a fixed `(f,g)`:
     ///   `∀ ε, 0<ε → ∃ N, ∀ n, N≤n → vseq f n < vseq g n + ε`.
+    #[cfg(test)]
     fn le_body(&self, parent: &EnvDeclBuilder, f: &Expr, g: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let (eps_id, eps) = b.fresh_local(self.rat.clone());

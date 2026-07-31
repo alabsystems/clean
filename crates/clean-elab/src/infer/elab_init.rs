@@ -555,6 +555,21 @@ impl<'a> ElabCtx<'a> {
         std::mem::take(&mut self.tactic_registry)
     }
 
+    /// Replace the user term elaborators for file-scoped `elab ... : term` state.
+    pub(crate) fn set_user_term_elabs(
+        &mut self,
+        elabs: std::collections::HashMap<String, super::user_term::UserTermElab>,
+    ) {
+        self.user_term_elabs = elabs;
+    }
+
+    /// Move out the user term elaborators after declaration elaboration.
+    pub(crate) fn take_user_term_elabs(
+        &mut self,
+    ) -> std::collections::HashMap<String, super::user_term::UserTermElab> {
+        std::mem::take(&mut self.user_term_elabs)
+    }
+
     /// Set universe parameters for the current declaration
     #[must_use]
     pub fn with_universe_params(mut self, params: Vec<String>) -> Self {

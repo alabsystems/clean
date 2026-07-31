@@ -9,11 +9,12 @@
 //!
 //! # Gating (offline-skip pattern)
 //!
-//! Mirrors the graceful-skip style of `mathverse_real_corpus_e2e.rs` and
-//! `no_stub_shards.rs`: the test is opt-in via the `CLEAN_ARTIFACTS_NET_E2E`
-//! env var, and additionally skips with an eprintln note when `gh` is absent
-//! or unauthenticated. Normal CI never touches the network: it does not set
-//! the env var, so the test returns early after one env lookup.
+//! This legacy network test is opt-in via the `CLEAN_ARTIFACTS_NET_E2E` env
+//! var, and additionally skips with an eprintln note when `gh` is absent or
+//! unauthenticated. Normal CI never touches the network: it does not set the
+//! env var, so the test returns early after one env lookup. Unlike explicit
+//! qualification examples, an invocation that does not opt in is not evidence
+//! that the network path passed.
 //!
 //! ```bash
 //! CLEAN_ARTIFACTS_NET_E2E=1 cargo test --locked -p clean-mathverse \

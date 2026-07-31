@@ -76,6 +76,47 @@ pub fn render(t: &LeanTerm, ctx: Ctx) -> String {
             }
             wrap(s, wrap_application(!args.is_empty(), ctx))
         }
+        LeanTerm::Binder {
+            kind: super::types::BinderKind::SetOf,
+            var,
+            ty,
+            body,
+            ..
+        } => {
+            // `{x | body}` / `{x : T | body}` — the braces are self-delimiting, so
+            // the node never needs outer parentheses in any context.
+            let head = match ty {
+                Some(t) => format!("{{{var} : {t} | "),
+                None => format!("{{{var} | "),
+            };
+            format!("{head}{}}}", render(body, Ctx::Top))
+        }
+        LeanTerm::Binder {
+            kind,
+            var,
+            ty,
+            dom,
+            body,
+        } => {
+            let q = match kind {
+                super::types::BinderKind::Forall => "∀",
+                super::types::BinderKind::Exists => "∃",
+                super::types::BinderKind::ExistsUnique => "∃!",
+                // Handled by the dedicated `SetOf` arm above.
+                super::types::BinderKind::SetOf => "∀",
+            };
+            // `∀ x ∈ S, body` (bounded) · `∀ x : T, body` (concrete-typed) ·
+            // `∀ x, body` (inferred domain). The body extends maximally right, so
+            // it renders at `Top` (no inner wrap); the whole binder wraps whenever
+            // it is nested (any non-`Top` context).
+            let opener = match (dom, ty) {
+                (Some(s), _) => format!("{q} {var} ∈ {}", render(s, Ctx::Arg)),
+                (None, Some(t)) => format!("{q} {var} : {t}"),
+                (None, None) => format!("{q} {var}"),
+            };
+            let inner = format!("{opener}, {}", render(body, Ctx::Top));
+            wrap(inner, !matches!(ctx, Ctx::Top))
+        }
     }
 }
 

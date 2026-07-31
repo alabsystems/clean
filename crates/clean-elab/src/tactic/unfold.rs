@@ -49,6 +49,7 @@ pub fn unfold(state: &mut ProofState, name: &str) -> TacticResult {
             reason: "is not a constant".into(),
         })?;
 
+    let def_level_params = const_info.level_params.clone();
     let def_val = const_info
         .value
         .as_ref()
@@ -58,8 +59,9 @@ pub fn unfold(state: &mut ProofState, name: &str) -> TacticResult {
         })?
         .clone();
 
-    // Substitute the definition for the constant in the target
-    let unfolded = substitute_const(&target, &def_name, &def_val);
+    // Substitute the definition for the constant in the target, instantiating
+    // the definition's universe params from each occurrence's level args.
+    let unfolded = substitute_const_levels(&target, &def_name, &def_level_params, &def_val);
 
     if unfolded == target {
         return Err(TacticError::UnfoldFailed {
@@ -73,27 +75,64 @@ pub fn unfold(state: &mut ProofState, name: &str) -> TacticResult {
     state.replace_target_def_eq(unfolded)
 }
 
-/// Helper: substitute a constant with its definition in an expression.
+/// Test-only helper: substitute a constant with its definition in an
+/// expression, ignoring the universe levels each occurrence carries.
+///
+/// Correct ONLY for a MONOMORPHIC definition (empty `level_params`). Every
+/// production caller goes through [`substitute_const_levels`] instead, which
+/// instantiates the definition's universe parameters (RC-E.2); this wrapper
+/// survives purely so the structural-traversal tests (Proj / MData / Squash
+/// recursion) can keep their terse three-argument form.
+#[cfg(test)]
+pub(crate) fn substitute_const(expr: &Expr, name: &Name, value: &Expr) -> Expr {
+    substitute_const_levels(expr, name, &[], value)
+}
+
+/// Helper: substitute a constant with its definition in an expression,
+/// instantiating the definition's universe parameters at each occurrence.
 ///
 /// Uses `ExprFolder` for structural recursion over all ExprKind variants
 /// (including Cubical and ZFC extensions). Part of #2092.
 ///
-/// REQUIRES: `expr` is a well-formed expression tree; `value` is a valid
-///   replacement for occurrences of `name`.
-/// ENSURES: Returns an expression where every `Const` named `name` is replaced
-///   with `value`.
+/// RC-E.2: `fold_const` used to DROP the `levels` of the node it replaced. A
+/// universe-polymorphic definition's stored value is written over the
+/// declaration's own level params, so substituting it verbatim for
+/// `@MyId.{0} …` left a dangling `Sort (Param u)` behind — hence `unfold id at
+/// hid` failing with `TypeMismatch { expected: Sort(Param(u)) }` under real
+/// `Init`, while the monomorphic local-def spelling passed. Each occurrence
+/// supplies its own level arguments, so the substitution has to instantiate the
+/// body per occurrence, not once.
+///
+/// REQUIRES: `expr` is a well-formed expression tree; `value` is the stored
+///   value of the declaration named `name`, whose universe parameters are
+///   `def_level_params`.
+/// ENSURES: Returns an expression where every `Const(name, levels)` node is
+///   replaced with `value` under the substitution
+///   `def_level_params[i] := levels[i]`.
+/// ENSURES: A monomorphic definition (`def_level_params` empty) substitutes the
+///   body unchanged, exactly as before.
 /// ENSURES: Non-matching nodes preserve their constructor/metadata while
 ///   recursively rewriting children; recursion is stack-safe.
-pub(crate) fn substitute_const(expr: &Expr, name: &Name, value: &Expr) -> Expr {
+pub(crate) fn substitute_const_levels(
+    expr: &Expr,
+    name: &Name,
+    def_level_params: &[Name],
+    value: &Expr,
+) -> Expr {
     struct SubstConstFolder<'a> {
         target_name: &'a Name,
+        def_level_params: &'a [Name],
         replacement: &'a Expr,
     }
 
     impl ExprFolder for SubstConstFolder<'_> {
         fn fold_const(&mut self, name: &Name, levels: &LevelVec) -> Expr {
             if name == self.target_name {
-                self.replacement.clone()
+                // `instantiate_level_params_direct` returns the body unchanged
+                // when either slice is empty, and `zip`-truncates a length
+                // mismatch rather than indexing out of bounds.
+                self.replacement
+                    .instantiate_level_params_direct(self.def_level_params, levels)
             } else {
                 Expr::const_(name.clone(), levels.clone())
             }
@@ -102,6 +141,7 @@ pub(crate) fn substitute_const(expr: &Expr, name: &Name, value: &Expr) -> Expr {
 
     let mut folder = SubstConstFolder {
         target_name: name,
+        def_level_params,
         replacement: value,
     };
     folder.fold_expr(expr)
@@ -129,6 +169,7 @@ pub fn unfold_at(state: &mut ProofState, def_name: &str, hyp_name: &str) -> Tact
                 reason: "is not a constant".into(),
             })?;
 
+    let def_level_params = const_info.level_params.clone();
     let def_val = const_info
         .value
         .as_ref()
@@ -149,7 +190,7 @@ pub fn unfold_at(state: &mut ProofState, def_name: &str, hyp_name: &str) -> Tact
         .cloned()
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
-    let new_ty = substitute_const(&hyp_decl.ty, &def_name_obj, &def_val);
+    let new_ty = substitute_const_levels(&hyp_decl.ty, &def_name_obj, &def_level_params, &def_val);
 
     if new_ty == hyp_decl.ty {
         return Err(TacticError::UnfoldFailed {
@@ -189,7 +230,12 @@ pub fn delta(state: &mut ProofState) -> TacticResult {
         for const_name in consts {
             if let Some(const_info) = state.env.get_const(&const_name) {
                 if let Some(def_val) = &const_info.value {
-                    let new_target = substitute_const(&target, &const_name, def_val);
+                    let new_target = substitute_const_levels(
+                        &target,
+                        &const_name,
+                        &const_info.level_params,
+                        def_val,
+                    );
                     if new_target != target {
                         target = new_target;
                         changed = true;

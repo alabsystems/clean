@@ -167,7 +167,7 @@ fn diag_value(c: &Rung2Consts) -> Expr {
         let fk = Expr::app(f.clone(), k.clone());
         let cond = c.eq_fin(&n, &k, &j);
         let inst_kj = c.inst(&n, &k, &j);
-        let ite_term = c.ite(
+        let _ite_term = c.ite(
             cond.clone(),
             inst_kj.clone(),
             fj.clone(),

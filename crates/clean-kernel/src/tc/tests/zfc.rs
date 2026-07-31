@@ -216,7 +216,7 @@ fn test_zfc_separation_certificate_structure() {
     let (_, cert) = tc.infer_type_with_cert(&separation).unwrap();
 
     // Certificate should have ZFCSet kind with Separation variant
-    match cert {
+    match &cert {
         ProofCert::ZFCSet { kind, .. } => match kind {
             ZFCSetCertKind::Separation {
                 set_cert,
@@ -224,12 +224,12 @@ fn test_zfc_separation_certificate_structure() {
             } => {
                 // set_cert should be for Empty set
                 assert!(
-                    matches!(*set_cert, ProofCert::ZFCSet { .. }),
+                    matches!(set_cert.as_ref(), ProofCert::ZFCSet { .. }),
                     "set_cert should be ZFCSet"
                 );
                 // pred_cert should be for lambda
                 assert!(
-                    matches!(*pred_cert, ProofCert::Lam { .. }),
+                    matches!(pred_cert.as_ref(), ProofCert::Lam { .. }),
                     "pred_cert should be Lam"
                 );
             }
@@ -260,7 +260,7 @@ fn test_zfc_replacement_certificate_structure() {
     let (_, cert) = tc.infer_type_with_cert(&replacement).unwrap();
 
     // Certificate should have ZFCSet kind with Replacement variant
-    match cert {
+    match &cert {
         ProofCert::ZFCSet { kind, .. } => match kind {
             ZFCSetCertKind::Replacement {
                 set_cert,
@@ -268,12 +268,12 @@ fn test_zfc_replacement_certificate_structure() {
             } => {
                 // set_cert should be for Empty set
                 assert!(
-                    matches!(*set_cert, ProofCert::ZFCSet { .. }),
+                    matches!(set_cert.as_ref(), ProofCert::ZFCSet { .. }),
                     "set_cert should be ZFCSet"
                 );
                 // func_cert should be for lambda
                 assert!(
-                    matches!(*func_cert, ProofCert::Lam { .. }),
+                    matches!(func_cert.as_ref(), ProofCert::Lam { .. }),
                     "func_cert should be Lam"
                 );
             }

@@ -57,7 +57,7 @@ impl<'env> CertVerifier<'env> {
 
         // Verify element and set have type ZFC.Set
         let expected_set_ty = Expr::const_(NAME_ZFC_SET.clone(), vec![]);
-        let elem_ty = self.verify_impl(elem_cert, element)?;
+        let elem_ty = self.verify_recurse(elem_cert, element)?;
         if !self.def_eq_impl(&elem_ty, &expected_set_ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_set_ty.clone()),
@@ -65,7 +65,7 @@ impl<'env> CertVerifier<'env> {
                 location: "ZFCMem element type".to_string(),
             });
         }
-        let set_ty = self.verify_impl(set_cert, set)?;
+        let set_ty = self.verify_recurse(set_cert, set)?;
         if !self.def_eq_impl(&set_ty, &expected_set_ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_set_ty),
@@ -96,7 +96,7 @@ impl<'env> CertVerifier<'env> {
 
         // Verify domain has type ZFC.Set
         let expected_set_ty = Expr::const_(NAME_ZFC_SET.clone(), vec![]);
-        let domain_ty = self.verify_impl(var_ty_cert, domain)?;
+        let domain_ty = self.verify_recurse(var_ty_cert, domain)?;
         if !self.def_eq_impl(&domain_ty, &expected_set_ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_set_ty),
@@ -106,7 +106,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify pred : Set -> Prop
-        let pred_ty = self.verify_impl(pred_cert, pred)?;
+        let pred_ty = self.verify_recurse(pred_cert, pred)?;
         let expected_pred_ty =
             Expr::arrow(Expr::const_(NAME_ZFC_SET.clone(), vec![]), Expr::prop());
         if !self.def_eq_impl(&pred_ty, &expected_pred_ty) {
@@ -153,7 +153,7 @@ impl<'env> CertVerifier<'env> {
             });
         }
         // Verify inner expression is a type (Sort u)
-        let inner_ty = self.verify_impl(inner_cert, inner)?;
+        let inner_ty = self.verify_recurse(inner_cert, inner)?;
         let inner_ty_whnf = self.whnf_impl(&inner_ty);
         if !matches!(inner_ty_whnf.kind, ExprKind::Sort(_)) {
             return Err(CertError::TypeMismatch {
@@ -174,7 +174,7 @@ impl<'env> CertVerifier<'env> {
         location: &str,
     ) -> Result<(), CertError> {
         let expected = Expr::const_(NAME_ZFC_SET.clone(), vec![]);
-        let actual = self.verify_impl(cert, expr)?;
+        let actual = self.verify_recurse(cert, expr)?;
         if !self.def_eq_impl(&actual, &expected) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected),
@@ -216,7 +216,7 @@ impl<'env> CertVerifier<'env> {
             ) => {
                 self.verify_zfc_set_operand(set_cert, set, "ZFC Separation set")?;
                 // Verify pred : Set -> Prop
-                let pred_ty = self.verify_impl(pred_cert, pred)?;
+                let pred_ty = self.verify_recurse(pred_cert, pred)?;
                 let expected_pred_ty =
                     Expr::arrow(Expr::const_(NAME_ZFC_SET.clone(), vec![]), Expr::prop());
                 if !self.def_eq_impl(&pred_ty, &expected_pred_ty) {
@@ -237,7 +237,7 @@ impl<'env> CertVerifier<'env> {
             ) => {
                 self.verify_zfc_set_operand(set_cert, set, "ZFC Replacement set")?;
                 // Verify func : Set -> Set
-                let func_ty = self.verify_impl(func_cert, func)?;
+                let func_ty = self.verify_recurse(func_cert, func)?;
                 let expected_func_ty = Expr::arrow(
                     Expr::const_(NAME_ZFC_SET.clone(), vec![]),
                     Expr::const_(NAME_ZFC_SET.clone(), vec![]),

@@ -18,16 +18,11 @@ use std::time::Instant;
 
 use clean_kernel::{Expr, ExprKind, Name, RecursorArgOrder, TypeChecker};
 use clean_verify::red_env_reflect::{
-    fidelity_check, reflect_expr, reflect_foundation_core, REFLECT_DEFS, REFLECT_INDUCTIVES,
+    fidelity_check, parse_interning_tsv, reflect_expr, reflect_foundation_core,
+    COMMITTED_DEF_SCRIPT, COMMITTED_INTERNING_TSV, COMMITTED_SKIP_LEDGER, REFLECT_DEFS,
+    REFLECT_INDUCTIVES,
 };
 use clean_verify::test_utils::run_with_stack;
-
-const COMMITTED_SCRIPT: &str =
-    include_str!("../src/spec/core_spec/generated/kernel_core_red_env.defs.txt");
-const COMMITTED_INTERNING: &str =
-    include_str!("../src/spec/core_spec/generated/kernel_core_red_env.interning.tsv");
-const COMMITTED_SKIPS: &str =
-    include_str!("../src/spec/core_spec/generated/kernel_core_red_env.skips.md");
 
 /// THE FIDELITY GATE: regenerating the reflection from the live kernel env
 /// must reproduce the committed def script, interning table, and skip
@@ -36,17 +31,64 @@ const COMMITTED_SKIPS: &str =
 #[test]
 fn test_fidelity_gate_regenerated_reflection_matches_committed_artifacts() {
     run_with_stack(|| {
-        let spec = clean_verify::Specification::new().expect("spec should build");
+        // Exercise the generator's artifact-independent full-build path with a
+        // harmless extra marker. Seeing the marker live proves this build
+        // consumed the supplied in-memory script rather than the committed
+        // `include_str!` payload; the reflection itself must remain identical.
+        let injected_script =
+            format!("def kcre_full_validation_probe : Nat := Nat.zero\n{COMMITTED_DEF_SCRIPT}");
+        let spec =
+            clean_verify::Specification::new_with_red_env_reflection_script(&injected_script)
+                .expect("full spec should build from the fresh in-memory script");
+        let injected = spec
+            .env()
+            .get_const(&Name::from_string("kcre_full_validation_probe"))
+            .expect("full spec must consume the injected script");
+        assert!(
+            injected.value.is_some(),
+            "injected validation marker must be a value-bearing definition"
+        );
         let reflection = fidelity_check(
             spec.env(),
-            COMMITTED_SCRIPT,
-            COMMITTED_INTERNING,
-            COMMITTED_SKIPS,
+            COMMITTED_DEF_SCRIPT,
+            COMMITTED_INTERNING_TSV,
+            COMMITTED_SKIP_LEDGER,
         )
         .expect("regenerated reflection must match the committed generated artifacts (no drift)");
         assert!(
             !reflection.recs.is_empty() && !reflection.defs.is_empty(),
             "reflection must be non-empty (foundation core present)"
+        );
+
+        // Regeneration must not depend on loading the artifact it replaces.
+        // The dedicated seed contains exactly the allowlisted source
+        // declarations and must render byte-identically to the final full
+        // environment.
+        let seed = clean_verify::Specification::new_red_env_reflection_seed()
+            .expect("artifact-independent reflection seed should build");
+        let seeded = reflect_foundation_core(seed.env());
+        assert_eq!(
+            seeded
+                .def_script()
+                .expect("seed reflection should render safely"),
+            reflection
+                .def_script()
+                .expect("full reflection should render safely"),
+            "artifact-independent seed and full live environment must generate the same script"
+        );
+        assert_eq!(
+            seeded.interning_tsv(),
+            reflection.interning_tsv(),
+            "seed and full environment must generate the same interning table"
+        );
+        assert_eq!(
+            seeded
+                .skip_ledger_md()
+                .expect("seed ledger should render safely"),
+            reflection
+                .skip_ledger_md()
+                .expect("full ledger should render safely"),
+            "seed and full environment must generate the same coverage ledger"
         );
     });
 }
@@ -154,25 +196,11 @@ fn test_interning_table_injective() {
             reflection.interning_injective(),
             "interning table must be injective"
         );
-        // The committed table must be exactly the regenerated one, and parse
-        // as (tag, name) rows with unique tags 0..n and unique names.
-        let mut tags = std::collections::BTreeSet::new();
-        let mut names = std::collections::BTreeSet::new();
-        let mut rows = 0usize;
-        for line in COMMITTED_INTERNING.lines() {
-            let (tag, name) = line
-                .split_once('\t')
-                .expect("interning row should be tag<TAB>name");
-            let tag: u64 = tag.parse().expect("interning tag should be a number");
-            assert!(tags.insert(tag), "duplicate tag {tag} in committed table");
-            assert!(
-                names.insert(name.to_string()),
-                "duplicate name {name} in committed table"
-            );
-            rows += 1;
-        }
+        // Reuse the same whole-table parser as semantic source consumers.
+        let committed = parse_interning_tsv(COMMITTED_INTERNING_TSV)
+            .expect("committed interning table must satisfy the full format");
         assert_eq!(
-            rows,
+            committed.len(),
             reflection.interning.len(),
             "committed table row count matches regenerated interning"
         );
@@ -297,10 +325,13 @@ fn test_one_rfl_probe_checker_folds_evaluate_over_reflected_env() {
         );
         let mut total = std::time::Duration::ZERO;
         for (label, term) in &elements {
+            let reflected_term = reflection
+                .kexpr_term(term)
+                .unwrap_or_else(|error| panic!("{label}: reflected term must render: {error}"));
             let e = Expr::apps(
                 Expr::const_str("nat_eqb"),
                 [
-                    Expr::app(Expr::const_str("bvar_ceiling"), reflection.kexpr_term(term)),
+                    Expr::app(Expr::const_str("bvar_ceiling"), reflected_term),
                     Expr::const_str("kcre_nat_0"),
                 ],
             );

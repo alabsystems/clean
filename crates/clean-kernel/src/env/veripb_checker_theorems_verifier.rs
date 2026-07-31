@@ -12,12 +12,18 @@
 //! Each theorem follows the helper-axiom pattern from
 //! `cutting_planes_theorems.rs`.
 
+#[cfg(test)]
 use super::veripb_checker::VeriPbCheckerConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 6: RUP soundness
@@ -27,6 +33,7 @@ impl Environment {
     /// `(db : ConstraintDb) -> (cst : PbConstraint) -> Prop`
     ///
     /// Encodes: if `rup_check db cst = true`, then `cst` is implied by `db`.
+    #[cfg(test)]
     pub(super) fn register_veripb_rup_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -60,6 +67,7 @@ impl Environment {
     ///
     /// Soundness of reverse unit propagation: every accepted RUP step is
     /// semantically implied by the current constraint database.
+    #[cfg(test)]
     pub(super) fn register_veripb_rup_sound(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -93,6 +101,7 @@ impl Environment {
     /// `(db : ConstraintDb) -> (s : VeriPbStep) -> Prop`
     ///
     /// Encodes: executing `s` preserves satisfiability of `db`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -126,6 +135,7 @@ impl Environment {
     ///
     /// Soundness of the small-step checker: each accepted VeriPB instruction
     /// preserves semantic correctness of the database state.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_sound(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -158,6 +168,7 @@ impl Environment {
     /// Helper for verify_sound: `(db : ConstraintDb) -> Prop`
     ///
     /// Encodes: if `verify_certificate db steps = true`, then `db` is UNSAT.
+    #[cfg(test)]
     pub(super) fn register_veripb_verify_sound_helper(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -178,6 +189,7 @@ impl Environment {
     ///
     /// Overall checker soundness: if a VeriPB certificate is accepted for
     /// `db`, then the initial constraint database is unsatisfiable.
+    #[cfg(test)]
     pub(super) fn register_veripb_verify_sound(
         &mut self,
         c: &VeriPbCheckerConsts,

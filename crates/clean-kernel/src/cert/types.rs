@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 ///
 /// Certificates are serializable for proof archives and can be verified
 /// independently by a certificate verifier.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[must_use = "proof certificates should be verified or stored"]
 pub enum ProofCert {
     /// Certificate for Sort(l) : Sort(succ(l))
@@ -296,6 +295,1651 @@ pub enum ProofCert {
     },
 }
 
+/// Bounded diagnostic representation.
+///
+/// Certificate rejection is an attacker-reachable path. Printing a complete
+/// recursive certificate there would consume O(depth) native stack and
+/// unbounded output, so Debug reports scalar metadata and one child-rule level.
+impl std::fmt::Debug for ProofCert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Sort { level } => f.debug_struct("Sort").field("level", level).finish(),
+            Self::BVar { idx, expected_type } => f
+                .debug_struct("BVar")
+                .field("idx", idx)
+                .field("expected_type", &ExprRule(expected_type))
+                .finish(),
+            Self::FVar { id, type_ } => f
+                .debug_struct("FVar")
+                .field("id", id)
+                .field("type_", &ExprRule(type_))
+                .finish(),
+            Self::Const {
+                name,
+                levels,
+                type_,
+            } => f
+                .debug_struct("Const")
+                .field("name", name)
+                .field("levels", &LevelListSummary(levels))
+                .field("type_", &ExprRule(type_))
+                .finish(),
+            Self::App {
+                fn_cert,
+                fn_type,
+                arg_cert,
+                result_type,
+            } => f
+                .debug_struct("App")
+                .field("fn_cert", &CertRule(fn_cert))
+                .field("fn_type", &ExprRule(fn_type))
+                .field("arg_cert", &CertRule(arg_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::Lam {
+                binder_info,
+                arg_type_cert,
+                body_cert,
+                result_type,
+            } => f
+                .debug_struct("Lam")
+                .field("binder_info", binder_info)
+                .field("arg_type_cert", &CertRule(arg_type_cert))
+                .field("body_cert", &CertRule(body_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::Pi {
+                binder_info,
+                arg_type_cert,
+                arg_level,
+                body_type_cert,
+                body_level,
+            } => f
+                .debug_struct("Pi")
+                .field("binder_info", binder_info)
+                .field("arg_type_cert", &CertRule(arg_type_cert))
+                .field("arg_level", arg_level)
+                .field("body_type_cert", &CertRule(body_type_cert))
+                .field("body_level", body_level)
+                .finish(),
+            Self::Let {
+                type_cert,
+                value_cert,
+                body_cert,
+                result_type,
+            } => f
+                .debug_struct("Let")
+                .field("type_cert", &CertRule(type_cert))
+                .field("value_cert", &CertRule(value_cert))
+                .field("body_cert", &CertRule(body_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::Lit { lit, type_ } => f
+                .debug_struct("Lit")
+                .field("lit", &LiteralSummary(lit))
+                .field("type_", &ExprRule(type_))
+                .finish(),
+            Self::DefEq {
+                inner,
+                expected_type,
+                actual_type,
+                eq_steps,
+            } => f
+                .debug_struct("DefEq")
+                .field("inner", &CertRule(inner))
+                .field("expected_type", &ExprRule(expected_type))
+                .field("actual_type", &ExprRule(actual_type))
+                .field("eq_steps", &DefEqListSummary(eq_steps))
+                .finish(),
+            Self::MData {
+                metadata,
+                inner_cert,
+                result_type,
+            } => f
+                .debug_struct("MData")
+                .field("metadata", &MetadataSummary(metadata))
+                .field("inner_cert", &CertRule(inner_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::Proj {
+                struct_name,
+                idx,
+                expr_cert,
+                expr_type,
+                field_type,
+            } => f
+                .debug_struct("Proj")
+                .field("struct_name", struct_name)
+                .field("idx", idx)
+                .field("expr_cert", &CertRule(expr_cert))
+                .field("expr_type", &ExprRule(expr_type))
+                .field("field_type", &ExprRule(field_type))
+                .finish(),
+            Self::CubicalInterval => f.write_str("CubicalInterval"),
+            Self::CubicalEndpoint { is_one } => f
+                .debug_struct("CubicalEndpoint")
+                .field("is_one", is_one)
+                .finish(),
+            Self::CubicalPath {
+                ty_cert,
+                ty_level,
+                left_cert,
+                right_cert,
+            } => f
+                .debug_struct("CubicalPath")
+                .field("ty_cert", &CertRule(ty_cert))
+                .field("ty_level", ty_level)
+                .field("left_cert", &CertRule(left_cert))
+                .field("right_cert", &CertRule(right_cert))
+                .finish(),
+            Self::CubicalPathLam {
+                body_cert,
+                body_type,
+                result_type,
+            } => f
+                .debug_struct("CubicalPathLam")
+                .field("body_cert", &CertRule(body_cert))
+                .field("body_type", &ExprRule(body_type))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::CubicalPathApp {
+                path_cert,
+                arg_cert,
+                path_type,
+                result_type,
+            } => f
+                .debug_struct("CubicalPathApp")
+                .field("path_cert", &CertRule(path_cert))
+                .field("arg_cert", &CertRule(arg_cert))
+                .field("path_type", &ExprRule(path_type))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::CubicalHComp {
+                ty_cert,
+                phi_cert,
+                u_cert,
+                base_cert,
+                result_type,
+            } => f
+                .debug_struct("CubicalHComp")
+                .field("ty_cert", &CertRule(ty_cert))
+                .field("phi_cert", &CertRule(phi_cert))
+                .field("u_cert", &CertRule(u_cert))
+                .field("base_cert", &CertRule(base_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::CubicalTransp {
+                ty_cert,
+                phi_cert,
+                base_cert,
+                result_type,
+            } => f
+                .debug_struct("CubicalTransp")
+                .field("ty_cert", &CertRule(ty_cert))
+                .field("phi_cert", &CertRule(phi_cert))
+                .field("base_cert", &CertRule(base_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::CubicalCoe {
+                ty_cert,
+                r_cert,
+                s_cert,
+                base_cert,
+                result_type,
+            } => f
+                .debug_struct("CubicalCoe")
+                .field("ty_cert", &CertRule(ty_cert))
+                .field("r_cert", &CertRule(r_cert))
+                .field("s_cert", &CertRule(s_cert))
+                .field("base_cert", &CertRule(base_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::ZFCSet { kind, result_type } => f
+                .debug_struct("ZFCSet")
+                .field("kind", &ZfcRule(kind))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::ZFCMem {
+                elem_cert,
+                set_cert,
+            } => f
+                .debug_struct("ZFCMem")
+                .field("elem_cert", &CertRule(elem_cert))
+                .field("set_cert", &CertRule(set_cert))
+                .finish(),
+            Self::ZFCComprehension {
+                var_ty_cert,
+                pred_cert,
+                result_type,
+            } => f
+                .debug_struct("ZFCComprehension")
+                .field("var_ty_cert", &CertRule(var_ty_cert))
+                .field("pred_cert", &CertRule(pred_cert))
+                .field("result_type", &ExprRule(result_type))
+                .finish(),
+            Self::SProp => f.write_str("SProp"),
+            Self::Squash { inner_cert } => f
+                .debug_struct("Squash")
+                .field("inner_cert", &CertRule(inner_cert))
+                .finish(),
+        }
+    }
+}
+
+struct CertRule<'a>(&'a ProofCert);
+
+impl std::fmt::Debug for CertRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(cert_rule(self.0))
+    }
+}
+
+fn cert_rule(cert: &ProofCert) -> &'static str {
+    match cert {
+        ProofCert::Sort { .. } => "Sort",
+        ProofCert::BVar { .. } => "BVar",
+        ProofCert::FVar { .. } => "FVar",
+        ProofCert::Const { .. } => "Const",
+        ProofCert::App { .. } => "App",
+        ProofCert::Lam { .. } => "Lam",
+        ProofCert::Pi { .. } => "Pi",
+        ProofCert::Let { .. } => "Let",
+        ProofCert::Lit { .. } => "Lit",
+        ProofCert::DefEq { .. } => "DefEq",
+        ProofCert::MData { .. } => "MData",
+        ProofCert::Proj { .. } => "Proj",
+        ProofCert::CubicalInterval => "CubicalInterval",
+        ProofCert::CubicalEndpoint { .. } => "CubicalEndpoint",
+        ProofCert::CubicalPath { .. } => "CubicalPath",
+        ProofCert::CubicalPathLam { .. } => "CubicalPathLam",
+        ProofCert::CubicalPathApp { .. } => "CubicalPathApp",
+        ProofCert::CubicalHComp { .. } => "CubicalHComp",
+        ProofCert::CubicalTransp { .. } => "CubicalTransp",
+        ProofCert::CubicalCoe { .. } => "CubicalCoe",
+        ProofCert::ZFCSet { .. } => "ZFCSet",
+        ProofCert::ZFCMem { .. } => "ZFCMem",
+        ProofCert::ZFCComprehension { .. } => "ZFCComprehension",
+        ProofCert::SProp => "SProp",
+        ProofCert::Squash { .. } => "Squash",
+    }
+}
+
+struct ExprRule<'a>(&'a Expr);
+
+impl std::fmt::Debug for ExprRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match &self.0.kind {
+            ExprKind::BVar(_) => "BVar",
+            ExprKind::FVar(_) => "FVar",
+            ExprKind::Sort(_) => "Sort",
+            ExprKind::Const(_, _) => "Const",
+            ExprKind::App(_, _) => "App",
+            ExprKind::Lam(_, _, _) => "Lam",
+            ExprKind::Pi(_, _, _) => "Pi",
+            ExprKind::Let(_, _, _, _, _) => "Let",
+            ExprKind::Lit(_) => "Lit",
+            ExprKind::Proj(_, _, _) => "Proj",
+            ExprKind::MData(_, _) => "MData",
+            ExprKind::CubicalInterval => "CubicalInterval",
+            ExprKind::CubicalI0 => "CubicalI0",
+            ExprKind::CubicalI1 => "CubicalI1",
+            ExprKind::CubicalPath { .. } => "CubicalPath",
+            ExprKind::CubicalPathLam { .. } => "CubicalPathLam",
+            ExprKind::CubicalPathApp { .. } => "CubicalPathApp",
+            ExprKind::CubicalHComp { .. } => "CubicalHComp",
+            ExprKind::CubicalTransp { .. } => "CubicalTransp",
+            ExprKind::CubicalCoe { .. } => "CubicalCoe",
+            ExprKind::ZFCSet(_) => "ZFCSet",
+            ExprKind::ZFCMem { .. } => "ZFCMem",
+            ExprKind::ZFCComprehension { .. } => "ZFCComprehension",
+            ExprKind::SProp => "SProp",
+            ExprKind::Squash(_) => "Squash",
+        })
+    }
+}
+
+struct LevelListSummary<'a>(&'a [Level]);
+
+impl std::fmt::Debug for LevelListSummary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut summary = f.debug_struct("LevelList");
+        summary.field("len", &self.0.len());
+        if let Some(first) = self.0.first() {
+            summary.field("first", first);
+        }
+        summary.finish()
+    }
+}
+
+struct LiteralSummary<'a>(&'a Literal);
+
+impl std::fmt::Debug for LiteralSummary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Literal::Nat(value) => match value.to_u64() {
+                Some(value) => f.debug_tuple("Nat").field(&value).finish(),
+                None => f.write_str("Nat(<big>)"),
+            },
+            Literal::String(value) => f
+                .debug_struct("String")
+                .field("len", &value.len())
+                .field("prefix", &BoundedStr(value))
+                .finish(),
+        }
+    }
+}
+
+struct BoundedStr<'a>(&'a str);
+
+impl std::fmt::Debug for BoundedStr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const MAX_CHARS: usize = 32;
+        let end = self
+            .0
+            .char_indices()
+            .nth(MAX_CHARS)
+            .map_or(self.0.len(), |(index, _)| index);
+        std::fmt::Debug::fmt(&&self.0[..end], f)?;
+        if end != self.0.len() {
+            f.write_str("…")?;
+        }
+        Ok(())
+    }
+}
+
+struct DefEqListSummary<'a>(&'a [DefEqStep]);
+
+impl std::fmt::Debug for DefEqListSummary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut summary = f.debug_struct("DefEqSteps");
+        summary.field("len", &self.0.len());
+        if let Some(first) = self.0.first() {
+            summary.field("first", &DefEqRule(first));
+        }
+        summary.finish()
+    }
+}
+
+struct DefEqRule<'a>(&'a DefEqStep);
+
+impl std::fmt::Debug for DefEqRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(def_eq_rule(self.0))
+    }
+}
+
+fn def_eq_rule(step: &DefEqStep) -> &'static str {
+    match step {
+        DefEqStep::Refl => "Refl",
+        DefEqStep::Symm(_) => "Symm",
+        DefEqStep::Trans(_, _) => "Trans",
+        DefEqStep::Beta => "Beta",
+        DefEqStep::Delta(_) => "Delta",
+        DefEqStep::Zeta => "Zeta",
+        DefEqStep::Iota => "Iota",
+        DefEqStep::Struct(_, _) => "Struct",
+    }
+}
+
+struct MetadataSummary<'a>(&'a MDataMap);
+
+impl std::fmt::Debug for MetadataSummary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut summary = f.debug_struct("Metadata");
+        summary.field("len", &self.0.len());
+        if let Some((name, value)) = self.0.first() {
+            summary.field("first_name", name);
+            summary.field("first_value_kind", &metadata_value_rule(value));
+            summary.field("first_value", &MetadataValueSummary(value));
+        }
+        summary.finish()
+    }
+}
+
+struct MetadataValueSummary<'a>(&'a crate::expr::MDataValue);
+
+impl std::fmt::Debug for MetadataValueSummary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            crate::expr::MDataValue::Bool(value) => std::fmt::Debug::fmt(value, f),
+            crate::expr::MDataValue::Nat(value) => std::fmt::Debug::fmt(value, f),
+            crate::expr::MDataValue::String(value) => f
+                .debug_struct("String")
+                .field("len", &value.len())
+                .field("prefix", &BoundedStr(value))
+                .finish(),
+            crate::expr::MDataValue::Name(value) => std::fmt::Debug::fmt(value, f),
+        }
+    }
+}
+
+fn metadata_value_rule(value: &crate::expr::MDataValue) -> &'static str {
+    match value {
+        crate::expr::MDataValue::Bool(_) => "Bool",
+        crate::expr::MDataValue::Nat(_) => "Nat",
+        crate::expr::MDataValue::String(_) => "String",
+        crate::expr::MDataValue::Name(_) => "Name",
+    }
+}
+
+struct ZfcRule<'a>(&'a ZFCSetCertKind);
+
+impl std::fmt::Debug for ZfcRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self.0 {
+            ZFCSetCertKind::Empty => "Empty",
+            ZFCSetCertKind::Singleton(_) => "Singleton",
+            ZFCSetCertKind::Pair(_, _) => "Pair",
+            ZFCSetCertKind::Union(_) => "Union",
+            ZFCSetCertKind::PowerSet(_) => "PowerSet",
+            ZFCSetCertKind::Separation { .. } => "Separation",
+            ZFCSetCertKind::Replacement { .. } => "Replacement",
+            ZFCSetCertKind::Infinity => "Infinity",
+            ZFCSetCertKind::Choice(_) => "Choice",
+        })
+    }
+}
+
+// Generic wire mirrors preserve the exact derived serde representation while
+// allowing recursive certificate edges to call the manual, stack-guarded
+// implementations below. Box and references are both serde-transparent.
+#[derive(Serialize, Deserialize)]
+#[serde(rename = "ProofCert")]
+enum ProofCertWire<C, E, L, LS, N, Li, M, D, Z> {
+    Sort {
+        level: L,
+    },
+    BVar {
+        idx: u32,
+        expected_type: E,
+    },
+    FVar {
+        id: FVarId,
+        type_: E,
+    },
+    Const {
+        name: N,
+        levels: LS,
+        type_: E,
+    },
+    App {
+        fn_cert: C,
+        fn_type: E,
+        arg_cert: C,
+        result_type: E,
+    },
+    Lam {
+        binder_info: BinderInfo,
+        arg_type_cert: C,
+        body_cert: C,
+        result_type: E,
+    },
+    Pi {
+        binder_info: BinderInfo,
+        arg_type_cert: C,
+        arg_level: L,
+        body_type_cert: C,
+        body_level: L,
+    },
+    Let {
+        type_cert: C,
+        value_cert: C,
+        body_cert: C,
+        result_type: E,
+    },
+    Lit {
+        lit: Li,
+        type_: E,
+    },
+    DefEq {
+        inner: C,
+        expected_type: E,
+        actual_type: E,
+        eq_steps: D,
+    },
+    MData {
+        metadata: M,
+        inner_cert: C,
+        result_type: E,
+    },
+    Proj {
+        struct_name: N,
+        idx: u32,
+        expr_cert: C,
+        expr_type: E,
+        field_type: E,
+    },
+    CubicalInterval,
+    CubicalEndpoint {
+        is_one: bool,
+    },
+    CubicalPath {
+        ty_cert: C,
+        ty_level: L,
+        left_cert: C,
+        right_cert: C,
+    },
+    CubicalPathLam {
+        body_cert: C,
+        body_type: E,
+        result_type: E,
+    },
+    CubicalPathApp {
+        path_cert: C,
+        arg_cert: C,
+        path_type: E,
+        result_type: E,
+    },
+    CubicalHComp {
+        ty_cert: C,
+        phi_cert: C,
+        u_cert: C,
+        base_cert: C,
+        result_type: E,
+    },
+    CubicalTransp {
+        ty_cert: C,
+        phi_cert: C,
+        base_cert: C,
+        result_type: E,
+    },
+    CubicalCoe {
+        ty_cert: C,
+        r_cert: C,
+        s_cert: C,
+        base_cert: C,
+        result_type: E,
+    },
+    ZFCSet {
+        kind: Z,
+        result_type: E,
+    },
+    ZFCMem {
+        elem_cert: C,
+        set_cert: C,
+    },
+    ZFCComprehension {
+        var_ty_cert: C,
+        pred_cert: C,
+        result_type: E,
+    },
+    SProp,
+    Squash {
+        inner_cert: C,
+    },
+}
+
+type BorrowedProofCertWire<'a> = ProofCertWire<
+    &'a ProofCert,
+    &'a Expr,
+    &'a Level,
+    &'a Vec<Level>,
+    &'a Name,
+    &'a Literal,
+    &'a MDataMap,
+    &'a Vec<DefEqStep>,
+    &'a ZFCSetCertKind,
+>;
+
+type OwnedProofCertWire = ProofCertWire<
+    Box<ProofCert>,
+    Box<Expr>,
+    Level,
+    Vec<Level>,
+    Name,
+    Literal,
+    MDataMap,
+    Vec<DefEqStep>,
+    ZFCSetCertKind,
+>;
+
+fn proof_cert_wire(cert: &ProofCert) -> BorrowedProofCertWire<'_> {
+    match cert {
+        ProofCert::Sort { level } => ProofCertWire::Sort { level },
+        ProofCert::BVar { idx, expected_type } => ProofCertWire::BVar {
+            idx: *idx,
+            expected_type,
+        },
+        ProofCert::FVar { id, type_ } => ProofCertWire::FVar { id: *id, type_ },
+        ProofCert::Const {
+            name,
+            levels,
+            type_,
+        } => ProofCertWire::Const {
+            name,
+            levels,
+            type_,
+        },
+        ProofCert::App {
+            fn_cert,
+            fn_type,
+            arg_cert,
+            result_type,
+        } => ProofCertWire::App {
+            fn_cert,
+            fn_type,
+            arg_cert,
+            result_type,
+        },
+        ProofCert::Lam {
+            binder_info,
+            arg_type_cert,
+            body_cert,
+            result_type,
+        } => ProofCertWire::Lam {
+            binder_info: *binder_info,
+            arg_type_cert,
+            body_cert,
+            result_type,
+        },
+        ProofCert::Pi {
+            binder_info,
+            arg_type_cert,
+            arg_level,
+            body_type_cert,
+            body_level,
+        } => ProofCertWire::Pi {
+            binder_info: *binder_info,
+            arg_type_cert,
+            arg_level,
+            body_type_cert,
+            body_level,
+        },
+        ProofCert::Let {
+            type_cert,
+            value_cert,
+            body_cert,
+            result_type,
+        } => ProofCertWire::Let {
+            type_cert,
+            value_cert,
+            body_cert,
+            result_type,
+        },
+        ProofCert::Lit { lit, type_ } => ProofCertWire::Lit { lit, type_ },
+        ProofCert::DefEq {
+            inner,
+            expected_type,
+            actual_type,
+            eq_steps,
+        } => ProofCertWire::DefEq {
+            inner,
+            expected_type,
+            actual_type,
+            eq_steps,
+        },
+        ProofCert::MData {
+            metadata,
+            inner_cert,
+            result_type,
+        } => ProofCertWire::MData {
+            metadata,
+            inner_cert,
+            result_type,
+        },
+        ProofCert::Proj {
+            struct_name,
+            idx,
+            expr_cert,
+            expr_type,
+            field_type,
+        } => ProofCertWire::Proj {
+            struct_name,
+            idx: *idx,
+            expr_cert,
+            expr_type,
+            field_type,
+        },
+        ProofCert::CubicalInterval => ProofCertWire::CubicalInterval,
+        ProofCert::CubicalEndpoint { is_one } => ProofCertWire::CubicalEndpoint { is_one: *is_one },
+        ProofCert::CubicalPath {
+            ty_cert,
+            ty_level,
+            left_cert,
+            right_cert,
+        } => ProofCertWire::CubicalPath {
+            ty_cert,
+            ty_level,
+            left_cert,
+            right_cert,
+        },
+        ProofCert::CubicalPathLam {
+            body_cert,
+            body_type,
+            result_type,
+        } => ProofCertWire::CubicalPathLam {
+            body_cert,
+            body_type,
+            result_type,
+        },
+        ProofCert::CubicalPathApp {
+            path_cert,
+            arg_cert,
+            path_type,
+            result_type,
+        } => ProofCertWire::CubicalPathApp {
+            path_cert,
+            arg_cert,
+            path_type,
+            result_type,
+        },
+        ProofCert::CubicalHComp {
+            ty_cert,
+            phi_cert,
+            u_cert,
+            base_cert,
+            result_type,
+        } => ProofCertWire::CubicalHComp {
+            ty_cert,
+            phi_cert,
+            u_cert,
+            base_cert,
+            result_type,
+        },
+        ProofCert::CubicalTransp {
+            ty_cert,
+            phi_cert,
+            base_cert,
+            result_type,
+        } => ProofCertWire::CubicalTransp {
+            ty_cert,
+            phi_cert,
+            base_cert,
+            result_type,
+        },
+        ProofCert::CubicalCoe {
+            ty_cert,
+            r_cert,
+            s_cert,
+            base_cert,
+            result_type,
+        } => ProofCertWire::CubicalCoe {
+            ty_cert,
+            r_cert,
+            s_cert,
+            base_cert,
+            result_type,
+        },
+        ProofCert::ZFCSet { kind, result_type } => ProofCertWire::ZFCSet { kind, result_type },
+        ProofCert::ZFCMem {
+            elem_cert,
+            set_cert,
+        } => ProofCertWire::ZFCMem {
+            elem_cert,
+            set_cert,
+        },
+        ProofCert::ZFCComprehension {
+            var_ty_cert,
+            pred_cert,
+            result_type,
+        } => ProofCertWire::ZFCComprehension {
+            var_ty_cert,
+            pred_cert,
+            result_type,
+        },
+        ProofCert::SProp => ProofCertWire::SProp,
+        ProofCert::Squash { inner_cert } => ProofCertWire::Squash { inner_cert },
+    }
+}
+
+fn proof_cert_from_wire(wire: OwnedProofCertWire) -> ProofCert {
+    match wire {
+        ProofCertWire::Sort { level } => ProofCert::Sort { level },
+        ProofCertWire::BVar { idx, expected_type } => ProofCert::BVar { idx, expected_type },
+        ProofCertWire::FVar { id, type_ } => ProofCert::FVar { id, type_ },
+        ProofCertWire::Const {
+            name,
+            levels,
+            type_,
+        } => ProofCert::Const {
+            name,
+            levels,
+            type_,
+        },
+        ProofCertWire::App {
+            fn_cert,
+            fn_type,
+            arg_cert,
+            result_type,
+        } => ProofCert::App {
+            fn_cert,
+            fn_type,
+            arg_cert,
+            result_type,
+        },
+        ProofCertWire::Lam {
+            binder_info,
+            arg_type_cert,
+            body_cert,
+            result_type,
+        } => ProofCert::Lam {
+            binder_info,
+            arg_type_cert,
+            body_cert,
+            result_type,
+        },
+        ProofCertWire::Pi {
+            binder_info,
+            arg_type_cert,
+            arg_level,
+            body_type_cert,
+            body_level,
+        } => ProofCert::Pi {
+            binder_info,
+            arg_type_cert,
+            arg_level,
+            body_type_cert,
+            body_level,
+        },
+        ProofCertWire::Let {
+            type_cert,
+            value_cert,
+            body_cert,
+            result_type,
+        } => ProofCert::Let {
+            type_cert,
+            value_cert,
+            body_cert,
+            result_type,
+        },
+        ProofCertWire::Lit { lit, type_ } => ProofCert::Lit { lit, type_ },
+        ProofCertWire::DefEq {
+            inner,
+            expected_type,
+            actual_type,
+            eq_steps,
+        } => ProofCert::DefEq {
+            inner,
+            expected_type,
+            actual_type,
+            eq_steps,
+        },
+        ProofCertWire::MData {
+            metadata,
+            inner_cert,
+            result_type,
+        } => ProofCert::MData {
+            metadata,
+            inner_cert,
+            result_type,
+        },
+        ProofCertWire::Proj {
+            struct_name,
+            idx,
+            expr_cert,
+            expr_type,
+            field_type,
+        } => ProofCert::Proj {
+            struct_name,
+            idx,
+            expr_cert,
+            expr_type,
+            field_type,
+        },
+        ProofCertWire::CubicalInterval => ProofCert::CubicalInterval,
+        ProofCertWire::CubicalEndpoint { is_one } => ProofCert::CubicalEndpoint { is_one },
+        ProofCertWire::CubicalPath {
+            ty_cert,
+            ty_level,
+            left_cert,
+            right_cert,
+        } => ProofCert::CubicalPath {
+            ty_cert,
+            ty_level,
+            left_cert,
+            right_cert,
+        },
+        ProofCertWire::CubicalPathLam {
+            body_cert,
+            body_type,
+            result_type,
+        } => ProofCert::CubicalPathLam {
+            body_cert,
+            body_type,
+            result_type,
+        },
+        ProofCertWire::CubicalPathApp {
+            path_cert,
+            arg_cert,
+            path_type,
+            result_type,
+        } => ProofCert::CubicalPathApp {
+            path_cert,
+            arg_cert,
+            path_type,
+            result_type,
+        },
+        ProofCertWire::CubicalHComp {
+            ty_cert,
+            phi_cert,
+            u_cert,
+            base_cert,
+            result_type,
+        } => ProofCert::CubicalHComp {
+            ty_cert,
+            phi_cert,
+            u_cert,
+            base_cert,
+            result_type,
+        },
+        ProofCertWire::CubicalTransp {
+            ty_cert,
+            phi_cert,
+            base_cert,
+            result_type,
+        } => ProofCert::CubicalTransp {
+            ty_cert,
+            phi_cert,
+            base_cert,
+            result_type,
+        },
+        ProofCertWire::CubicalCoe {
+            ty_cert,
+            r_cert,
+            s_cert,
+            base_cert,
+            result_type,
+        } => ProofCert::CubicalCoe {
+            ty_cert,
+            r_cert,
+            s_cert,
+            base_cert,
+            result_type,
+        },
+        ProofCertWire::ZFCSet { kind, result_type } => ProofCert::ZFCSet { kind, result_type },
+        ProofCertWire::ZFCMem {
+            elem_cert,
+            set_cert,
+        } => ProofCert::ZFCMem {
+            elem_cert,
+            set_cert,
+        },
+        ProofCertWire::ZFCComprehension {
+            var_ty_cert,
+            pred_cert,
+            result_type,
+        } => ProofCert::ZFCComprehension {
+            var_ty_cert,
+            pred_cert,
+            result_type,
+        },
+        ProofCertWire::SProp => ProofCert::SProp,
+        ProofCertWire::Squash { inner_cert } => ProofCert::Squash { inner_cert },
+    }
+}
+
+impl Serialize for ProofCert {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        crate::expr::stack_safe(|| proof_cert_wire(self).serialize(serializer))
+    }
+}
+
+impl<'de> Deserialize<'de> for ProofCert {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let _decode_node = crate::serde_budget::enter_decode_node::<D::Error>("proof certificate")?;
+        crate::expr::stack_safe(|| {
+            OwnedProofCertWire::deserialize(deserializer).map(proof_cert_from_wire)
+        })
+    }
+}
+
+// Do not derive `Clone` for this recursive certificate tree. A certificate can
+// be cloned while type inference is already deep in a protected stack segment
+// (notably by the Arc-identity memo), and the derived implementation performs
+// its whole recursive descent without another `stack_safe` boundary. On the
+// default Rust test-thread stack that can cross the guard page and abort the
+// entire process. Every recursive child clone re-enters this implementation, so
+// guarding here keeps both direct clones and all existing call sites stack-safe.
+impl Clone for ProofCert {
+    fn clone(&self) -> Self {
+        crate::expr::stack_safe(|| match self {
+            Self::Sort { level } => Self::Sort {
+                level: level.clone(),
+            },
+            Self::BVar { idx, expected_type } => Self::BVar {
+                idx: *idx,
+                expected_type: expected_type.clone(),
+            },
+            Self::FVar { id, type_ } => Self::FVar {
+                id: *id,
+                type_: type_.clone(),
+            },
+            Self::Const {
+                name,
+                levels,
+                type_,
+            } => Self::Const {
+                name: name.clone(),
+                levels: levels.clone(),
+                type_: type_.clone(),
+            },
+            Self::App {
+                fn_cert,
+                fn_type,
+                arg_cert,
+                result_type,
+            } => Self::App {
+                fn_cert: fn_cert.clone(),
+                fn_type: fn_type.clone(),
+                arg_cert: arg_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::Lam {
+                binder_info,
+                arg_type_cert,
+                body_cert,
+                result_type,
+            } => Self::Lam {
+                binder_info: *binder_info,
+                arg_type_cert: arg_type_cert.clone(),
+                body_cert: body_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::Pi {
+                binder_info,
+                arg_type_cert,
+                arg_level,
+                body_type_cert,
+                body_level,
+            } => Self::Pi {
+                binder_info: *binder_info,
+                arg_type_cert: arg_type_cert.clone(),
+                arg_level: arg_level.clone(),
+                body_type_cert: body_type_cert.clone(),
+                body_level: body_level.clone(),
+            },
+            Self::Let {
+                type_cert,
+                value_cert,
+                body_cert,
+                result_type,
+            } => Self::Let {
+                type_cert: type_cert.clone(),
+                value_cert: value_cert.clone(),
+                body_cert: body_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::Lit { lit, type_ } => Self::Lit {
+                lit: lit.clone(),
+                type_: type_.clone(),
+            },
+            Self::DefEq {
+                inner,
+                expected_type,
+                actual_type,
+                eq_steps,
+            } => Self::DefEq {
+                inner: inner.clone(),
+                expected_type: expected_type.clone(),
+                actual_type: actual_type.clone(),
+                eq_steps: eq_steps.clone(),
+            },
+            Self::MData {
+                metadata,
+                inner_cert,
+                result_type,
+            } => Self::MData {
+                metadata: metadata.clone(),
+                inner_cert: inner_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::Proj {
+                struct_name,
+                idx,
+                expr_cert,
+                expr_type,
+                field_type,
+            } => Self::Proj {
+                struct_name: struct_name.clone(),
+                idx: *idx,
+                expr_cert: expr_cert.clone(),
+                expr_type: expr_type.clone(),
+                field_type: field_type.clone(),
+            },
+            Self::CubicalInterval => Self::CubicalInterval,
+            Self::CubicalEndpoint { is_one } => Self::CubicalEndpoint { is_one: *is_one },
+            Self::CubicalPath {
+                ty_cert,
+                ty_level,
+                left_cert,
+                right_cert,
+            } => Self::CubicalPath {
+                ty_cert: ty_cert.clone(),
+                ty_level: ty_level.clone(),
+                left_cert: left_cert.clone(),
+                right_cert: right_cert.clone(),
+            },
+            Self::CubicalPathLam {
+                body_cert,
+                body_type,
+                result_type,
+            } => Self::CubicalPathLam {
+                body_cert: body_cert.clone(),
+                body_type: body_type.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::CubicalPathApp {
+                path_cert,
+                arg_cert,
+                path_type,
+                result_type,
+            } => Self::CubicalPathApp {
+                path_cert: path_cert.clone(),
+                arg_cert: arg_cert.clone(),
+                path_type: path_type.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::CubicalHComp {
+                ty_cert,
+                phi_cert,
+                u_cert,
+                base_cert,
+                result_type,
+            } => Self::CubicalHComp {
+                ty_cert: ty_cert.clone(),
+                phi_cert: phi_cert.clone(),
+                u_cert: u_cert.clone(),
+                base_cert: base_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::CubicalTransp {
+                ty_cert,
+                phi_cert,
+                base_cert,
+                result_type,
+            } => Self::CubicalTransp {
+                ty_cert: ty_cert.clone(),
+                phi_cert: phi_cert.clone(),
+                base_cert: base_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::CubicalCoe {
+                ty_cert,
+                r_cert,
+                s_cert,
+                base_cert,
+                result_type,
+            } => Self::CubicalCoe {
+                ty_cert: ty_cert.clone(),
+                r_cert: r_cert.clone(),
+                s_cert: s_cert.clone(),
+                base_cert: base_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::ZFCSet { kind, result_type } => Self::ZFCSet {
+                kind: kind.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::ZFCMem {
+                elem_cert,
+                set_cert,
+            } => Self::ZFCMem {
+                elem_cert: elem_cert.clone(),
+                set_cert: set_cert.clone(),
+            },
+            Self::ZFCComprehension {
+                var_ty_cert,
+                pred_cert,
+                result_type,
+            } => Self::ZFCComprehension {
+                var_ty_cert: var_ty_cert.clone(),
+                pred_cert: pred_cert.clone(),
+                result_type: result_type.clone(),
+            },
+            Self::SProp => Self::SProp,
+            Self::Squash { inner_cert } => Self::Squash {
+                inner_cert: inner_cert.clone(),
+            },
+        })
+    }
+}
+
+impl PartialEq for ProofCert {
+    fn eq(&self, other: &Self) -> bool {
+        crate::expr::stack_safe(|| match (self, other) {
+            (Self::Sort { level: left }, Self::Sort { level: right }) => left == right,
+            (
+                Self::BVar {
+                    idx: li,
+                    expected_type: lt,
+                },
+                Self::BVar {
+                    idx: ri,
+                    expected_type: rt,
+                },
+            ) => li == ri && lt == rt,
+            (Self::FVar { id: li, type_: lt }, Self::FVar { id: ri, type_: rt }) => {
+                li == ri && lt == rt
+            }
+            (
+                Self::Const {
+                    name: ln,
+                    levels: ll,
+                    type_: lt,
+                },
+                Self::Const {
+                    name: rn,
+                    levels: rl,
+                    type_: rt,
+                },
+            ) => ln == rn && ll == rl && lt == rt,
+            (
+                Self::App {
+                    fn_cert: lf,
+                    fn_type: lft,
+                    arg_cert: la,
+                    result_type: lr,
+                },
+                Self::App {
+                    fn_cert: rf,
+                    fn_type: rft,
+                    arg_cert: ra,
+                    result_type: rr,
+                },
+            ) => lf == rf && lft == rft && la == ra && lr == rr,
+            (
+                Self::Lam {
+                    binder_info: lbi,
+                    arg_type_cert: la,
+                    body_cert: lb,
+                    result_type: lr,
+                },
+                Self::Lam {
+                    binder_info: rbi,
+                    arg_type_cert: ra,
+                    body_cert: rb,
+                    result_type: rr,
+                },
+            ) => lbi == rbi && la == ra && lb == rb && lr == rr,
+            (
+                Self::Pi {
+                    binder_info: lbi,
+                    arg_type_cert: la,
+                    arg_level: lal,
+                    body_type_cert: lb,
+                    body_level: lbl,
+                },
+                Self::Pi {
+                    binder_info: rbi,
+                    arg_type_cert: ra,
+                    arg_level: ral,
+                    body_type_cert: rb,
+                    body_level: rbl,
+                },
+            ) => lbi == rbi && la == ra && lal == ral && lb == rb && lbl == rbl,
+            (
+                Self::Let {
+                    type_cert: lt,
+                    value_cert: lv,
+                    body_cert: lb,
+                    result_type: lr,
+                },
+                Self::Let {
+                    type_cert: rt,
+                    value_cert: rv,
+                    body_cert: rb,
+                    result_type: rr,
+                },
+            ) => lt == rt && lv == rv && lb == rb && lr == rr,
+            (Self::Lit { lit: ll, type_: lt }, Self::Lit { lit: rl, type_: rt }) => {
+                ll == rl && lt == rt
+            }
+            (
+                Self::DefEq {
+                    inner: li,
+                    expected_type: le,
+                    actual_type: la,
+                    eq_steps: ls,
+                },
+                Self::DefEq {
+                    inner: ri,
+                    expected_type: re,
+                    actual_type: ra,
+                    eq_steps: rs,
+                },
+            ) => li == ri && le == re && la == ra && ls == rs,
+            (
+                Self::MData {
+                    metadata: lm,
+                    inner_cert: li,
+                    result_type: lr,
+                },
+                Self::MData {
+                    metadata: rm,
+                    inner_cert: ri,
+                    result_type: rr,
+                },
+            ) => lm == rm && li == ri && lr == rr,
+            (
+                Self::Proj {
+                    struct_name: ln,
+                    idx: li,
+                    expr_cert: lc,
+                    expr_type: let_,
+                    field_type: lft,
+                },
+                Self::Proj {
+                    struct_name: rn,
+                    idx: ri,
+                    expr_cert: rc,
+                    expr_type: ret,
+                    field_type: rft,
+                },
+            ) => ln == rn && li == ri && lc == rc && let_ == ret && lft == rft,
+            (Self::CubicalInterval, Self::CubicalInterval) => true,
+            (Self::CubicalEndpoint { is_one: left }, Self::CubicalEndpoint { is_one: right }) => {
+                left == right
+            }
+            (
+                Self::CubicalPath {
+                    ty_cert: lt,
+                    ty_level: ll,
+                    left_cert: lle,
+                    right_cert: lr,
+                },
+                Self::CubicalPath {
+                    ty_cert: rt,
+                    ty_level: rl,
+                    left_cert: rle,
+                    right_cert: rr,
+                },
+            ) => lt == rt && ll == rl && lle == rle && lr == rr,
+            (
+                Self::CubicalPathLam {
+                    body_cert: lb,
+                    body_type: lbt,
+                    result_type: lr,
+                },
+                Self::CubicalPathLam {
+                    body_cert: rb,
+                    body_type: rbt,
+                    result_type: rr,
+                },
+            ) => lb == rb && lbt == rbt && lr == rr,
+            (
+                Self::CubicalPathApp {
+                    path_cert: lp,
+                    arg_cert: la,
+                    path_type: lpt,
+                    result_type: lr,
+                },
+                Self::CubicalPathApp {
+                    path_cert: rp,
+                    arg_cert: ra,
+                    path_type: rpt,
+                    result_type: rr,
+                },
+            ) => lp == rp && la == ra && lpt == rpt && lr == rr,
+            (
+                Self::CubicalHComp {
+                    ty_cert: lt,
+                    phi_cert: lp,
+                    u_cert: lu,
+                    base_cert: lb,
+                    result_type: lr,
+                },
+                Self::CubicalHComp {
+                    ty_cert: rt,
+                    phi_cert: rp,
+                    u_cert: ru,
+                    base_cert: rb,
+                    result_type: rr,
+                },
+            ) => lt == rt && lp == rp && lu == ru && lb == rb && lr == rr,
+            (
+                Self::CubicalTransp {
+                    ty_cert: lt,
+                    phi_cert: lp,
+                    base_cert: lb,
+                    result_type: lr,
+                },
+                Self::CubicalTransp {
+                    ty_cert: rt,
+                    phi_cert: rp,
+                    base_cert: rb,
+                    result_type: rr,
+                },
+            ) => lt == rt && lp == rp && lb == rb && lr == rr,
+            (
+                Self::CubicalCoe {
+                    ty_cert: lt,
+                    r_cert: lrc,
+                    s_cert: ls,
+                    base_cert: lb,
+                    result_type: lr,
+                },
+                Self::CubicalCoe {
+                    ty_cert: rt,
+                    r_cert: rrc,
+                    s_cert: rs,
+                    base_cert: rb,
+                    result_type: rr,
+                },
+            ) => lt == rt && lrc == rrc && ls == rs && lb == rb && lr == rr,
+            (
+                Self::ZFCSet {
+                    kind: lk,
+                    result_type: lr,
+                },
+                Self::ZFCSet {
+                    kind: rk,
+                    result_type: rr,
+                },
+            ) => lk == rk && lr == rr,
+            (
+                Self::ZFCMem {
+                    elem_cert: le,
+                    set_cert: ls,
+                },
+                Self::ZFCMem {
+                    elem_cert: re,
+                    set_cert: rs,
+                },
+            ) => le == re && ls == rs,
+            (
+                Self::ZFCComprehension {
+                    var_ty_cert: lv,
+                    pred_cert: lp,
+                    result_type: lr,
+                },
+                Self::ZFCComprehension {
+                    var_ty_cert: rv,
+                    pred_cert: rp,
+                    result_type: rr,
+                },
+            ) => lv == rv && lp == rp && lr == rr,
+            (Self::SProp, Self::SProp) => true,
+            (Self::Squash { inner_cert: left }, Self::Squash { inner_cert: right }) => {
+                left == right
+            }
+            _ => false,
+        })
+    }
+}
+
+impl Drop for ProofCert {
+    fn drop(&mut self) {
+        if !proof_cert_has_recursive_children(self) || !recursive_drop_needs_segment() {
+            return;
+        }
+
+        // Ordinary nodes use compiler-generated field teardown. At the stack
+        // red zone, detach only the next recursive children and destroy them
+        // on a grown stack segment. Replacement allocations therefore occur
+        // at segment transitions rather than at every node in a deep tree.
+        let leaf = || Box::new(ProofCert::SProp);
+        let mut cert_children = Vec::with_capacity(4);
+        let mut def_eq_steps = None;
+        let mut zfc_kind = None;
+
+        match self {
+            Self::App {
+                fn_cert, arg_cert, ..
+            } => {
+                cert_children.push(std::mem::replace(fn_cert, leaf()));
+                cert_children.push(std::mem::replace(arg_cert, leaf()));
+            }
+            Self::Lam {
+                arg_type_cert,
+                body_cert,
+                ..
+            }
+            | Self::Pi {
+                arg_type_cert,
+                body_type_cert: body_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(arg_type_cert, leaf()));
+                cert_children.push(std::mem::replace(body_cert, leaf()));
+            }
+            Self::Let {
+                type_cert,
+                value_cert,
+                body_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(type_cert, leaf()));
+                cert_children.push(std::mem::replace(value_cert, leaf()));
+                cert_children.push(std::mem::replace(body_cert, leaf()));
+            }
+            Self::DefEq {
+                inner, eq_steps, ..
+            } => {
+                cert_children.push(std::mem::replace(inner, leaf()));
+                def_eq_steps = Some(std::mem::take(eq_steps));
+            }
+            Self::MData { inner_cert, .. }
+            | Self::Proj {
+                expr_cert: inner_cert,
+                ..
+            }
+            | Self::CubicalPathLam {
+                body_cert: inner_cert,
+                ..
+            }
+            | Self::Squash { inner_cert } => {
+                cert_children.push(std::mem::replace(inner_cert, leaf()));
+            }
+            Self::CubicalPath {
+                ty_cert,
+                left_cert,
+                right_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(ty_cert, leaf()));
+                cert_children.push(std::mem::replace(left_cert, leaf()));
+                cert_children.push(std::mem::replace(right_cert, leaf()));
+            }
+            Self::CubicalPathApp {
+                path_cert,
+                arg_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(path_cert, leaf()));
+                cert_children.push(std::mem::replace(arg_cert, leaf()));
+            }
+            Self::CubicalHComp {
+                ty_cert,
+                phi_cert,
+                u_cert,
+                base_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(ty_cert, leaf()));
+                cert_children.push(std::mem::replace(phi_cert, leaf()));
+                cert_children.push(std::mem::replace(u_cert, leaf()));
+                cert_children.push(std::mem::replace(base_cert, leaf()));
+            }
+            Self::CubicalTransp {
+                ty_cert,
+                phi_cert,
+                base_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(ty_cert, leaf()));
+                cert_children.push(std::mem::replace(phi_cert, leaf()));
+                cert_children.push(std::mem::replace(base_cert, leaf()));
+            }
+            Self::CubicalCoe {
+                ty_cert,
+                r_cert,
+                s_cert,
+                base_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(ty_cert, leaf()));
+                cert_children.push(std::mem::replace(r_cert, leaf()));
+                cert_children.push(std::mem::replace(s_cert, leaf()));
+                cert_children.push(std::mem::replace(base_cert, leaf()));
+            }
+            Self::ZFCSet { kind, .. } => {
+                zfc_kind = Some(std::mem::replace(kind, ZFCSetCertKind::Empty));
+            }
+            Self::ZFCMem {
+                elem_cert,
+                set_cert,
+            } => {
+                cert_children.push(std::mem::replace(elem_cert, leaf()));
+                cert_children.push(std::mem::replace(set_cert, leaf()));
+            }
+            Self::ZFCComprehension {
+                var_ty_cert,
+                pred_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(var_ty_cert, leaf()));
+                cert_children.push(std::mem::replace(pred_cert, leaf()));
+            }
+            Self::Sort { .. }
+            | Self::BVar { .. }
+            | Self::FVar { .. }
+            | Self::Const { .. }
+            | Self::Lit { .. }
+            | Self::CubicalInterval
+            | Self::CubicalEndpoint { .. }
+            | Self::SProp => {}
+        }
+
+        crate::expr::stack_safe(move || {
+            drop(cert_children);
+            drop(def_eq_steps);
+            drop(zfc_kind);
+        });
+    }
+}
+
+fn proof_cert_has_recursive_children(cert: &ProofCert) -> bool {
+    !matches!(
+        cert,
+        ProofCert::Sort { .. }
+            | ProofCert::BVar { .. }
+            | ProofCert::FVar { .. }
+            | ProofCert::Const { .. }
+            | ProofCert::Lit { .. }
+            | ProofCert::CubicalInterval
+            | ProofCert::CubicalEndpoint { .. }
+            | ProofCert::SProp
+    )
+}
+
+fn recursive_drop_needs_segment() -> bool {
+    #[cfg(kani)]
+    {
+        false
+    }
+    #[cfg(not(kani))]
+    {
+        const DROP_RED_ZONE: usize = 256 * 1024;
+        stacker::remaining_stack().is_none_or(|remaining| remaining < DROP_RED_ZONE)
+    }
+}
+
 /// Certificate variants for ZFC set expressions
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ZFCSetCertKind {
@@ -333,7 +1977,6 @@ pub enum ZFCSetCertKind {
 ///
 /// These steps record how the verifier establishes definitional equality
 /// between types, useful for debugging and proof reconstruction.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DefEqStep {
     /// Reflexivity: e ≡ e
     Refl,
@@ -351,6 +1994,159 @@ pub enum DefEqStep {
     Iota,
     /// Structural: congruence through constructors
     Struct(String, Vec<DefEqStep>),
+}
+
+impl std::fmt::Debug for DefEqStep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refl => f.write_str("Refl"),
+            Self::Symm(inner) => f.debug_tuple("Symm").field(&DefEqRule(inner)).finish(),
+            Self::Trans(left, right) => f
+                .debug_tuple("Trans")
+                .field(&DefEqRule(left))
+                .field(&DefEqRule(right))
+                .finish(),
+            Self::Beta => f.write_str("Beta"),
+            Self::Delta(name) => f.debug_tuple("Delta").field(name).finish(),
+            Self::Zeta => f.write_str("Zeta"),
+            Self::Iota => f.write_str("Iota"),
+            Self::Struct(name, children) => {
+                let mut value = f.debug_struct("Struct");
+                value.field("name", &BoundedStr(name));
+                value.field("children", &DefEqListSummary(children));
+                value.finish()
+            }
+        }
+    }
+}
+
+impl PartialEq for DefEqStep {
+    fn eq(&self, other: &Self) -> bool {
+        crate::expr::stack_safe(|| match (self, other) {
+            (Self::Refl, Self::Refl)
+            | (Self::Beta, Self::Beta)
+            | (Self::Zeta, Self::Zeta)
+            | (Self::Iota, Self::Iota) => true,
+            (Self::Symm(left), Self::Symm(right)) => left == right,
+            (Self::Trans(ll, lr), Self::Trans(rl, rr)) => ll == rl && lr == rr,
+            (Self::Delta(left), Self::Delta(right)) => left == right,
+            (Self::Struct(ln, ls), Self::Struct(rn, rs)) => ln == rn && ls == rs,
+            _ => false,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename = "DefEqStep")]
+enum DefEqStepWire<D, N, S, V> {
+    Refl,
+    Symm(D),
+    Trans(D, D),
+    Beta,
+    Delta(N),
+    Zeta,
+    Iota,
+    Struct(S, V),
+}
+
+fn def_eq_step_wire(
+    step: &DefEqStep,
+) -> DefEqStepWire<&DefEqStep, &Name, &String, &Vec<DefEqStep>> {
+    match step {
+        DefEqStep::Refl => DefEqStepWire::Refl,
+        DefEqStep::Symm(inner) => DefEqStepWire::Symm(inner),
+        DefEqStep::Trans(left, right) => DefEqStepWire::Trans(left, right),
+        DefEqStep::Beta => DefEqStepWire::Beta,
+        DefEqStep::Delta(name) => DefEqStepWire::Delta(name),
+        DefEqStep::Zeta => DefEqStepWire::Zeta,
+        DefEqStep::Iota => DefEqStepWire::Iota,
+        DefEqStep::Struct(name, children) => DefEqStepWire::Struct(name, children),
+    }
+}
+
+fn def_eq_step_from_wire(
+    wire: DefEqStepWire<Box<DefEqStep>, Name, String, Vec<DefEqStep>>,
+) -> DefEqStep {
+    match wire {
+        DefEqStepWire::Refl => DefEqStep::Refl,
+        DefEqStepWire::Symm(inner) => DefEqStep::Symm(inner),
+        DefEqStepWire::Trans(left, right) => DefEqStep::Trans(left, right),
+        DefEqStepWire::Beta => DefEqStep::Beta,
+        DefEqStepWire::Delta(name) => DefEqStep::Delta(name),
+        DefEqStepWire::Zeta => DefEqStep::Zeta,
+        DefEqStepWire::Iota => DefEqStep::Iota,
+        DefEqStepWire::Struct(name, children) => DefEqStep::Struct(name, children),
+    }
+}
+
+impl Serialize for DefEqStep {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        crate::expr::stack_safe(|| def_eq_step_wire(self).serialize(serializer))
+    }
+}
+
+impl<'de> Deserialize<'de> for DefEqStep {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let _decode_node =
+            crate::serde_budget::enter_decode_node::<D::Error>("definitional-equality step")?;
+        crate::expr::stack_safe(|| {
+            DefEqStepWire::<Box<DefEqStep>, Name, String, Vec<DefEqStep>>::deserialize(deserializer)
+                .map(def_eq_step_from_wire)
+        })
+    }
+}
+
+// Definitional-equality traces are recursive independently of `ProofCert`.
+// Give each child clone its own growth boundary for the same reason as the
+// certificate tree above.
+impl Clone for DefEqStep {
+    fn clone(&self) -> Self {
+        crate::expr::stack_safe(|| match self {
+            Self::Refl => Self::Refl,
+            Self::Symm(step) => Self::Symm(step.clone()),
+            Self::Trans(left, right) => Self::Trans(left.clone(), right.clone()),
+            Self::Beta => Self::Beta,
+            Self::Delta(name) => Self::Delta(name.clone()),
+            Self::Zeta => Self::Zeta,
+            Self::Iota => Self::Iota,
+            Self::Struct(name, steps) => Self::Struct(name.clone(), steps.clone()),
+        })
+    }
+}
+
+impl Drop for DefEqStep {
+    fn drop(&mut self) {
+        if matches!(
+            self,
+            Self::Refl | Self::Beta | Self::Delta(_) | Self::Zeta | Self::Iota
+        ) || !recursive_drop_needs_segment()
+        {
+            return;
+        }
+
+        let leaf = || Box::new(DefEqStep::Refl);
+        let mut boxed_children = Vec::with_capacity(2);
+        let mut vector_children = None;
+        match self {
+            Self::Symm(step) => boxed_children.push(std::mem::replace(step, leaf())),
+            Self::Trans(left, right) => {
+                boxed_children.push(std::mem::replace(left, leaf()));
+                boxed_children.push(std::mem::replace(right, leaf()));
+            }
+            Self::Struct(_, steps) => vector_children = Some(std::mem::take(steps)),
+            Self::Refl | Self::Beta | Self::Delta(_) | Self::Zeta | Self::Iota => {}
+        }
+        crate::expr::stack_safe(move || {
+            drop(boxed_children);
+            drop(vector_children);
+        });
+    }
 }
 
 /// Error during certificate verification

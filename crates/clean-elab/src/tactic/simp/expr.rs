@@ -883,23 +883,50 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
                 // requires outermost-binder-first order, so we iterate in reverse:
                 // BVar(max-1) first (outermost), down to BVar(0) (innermost).
                 //
-                // Universe-polymorphic builtins (e.g. `eq_self`/`ite_*` over
-                // `Eq.{u}`/`ite.{u}`) need the const's level args supplied:
-                // `@eq_self.{1} Nat n`, not the bare `eq_self`. The builtin
-                // pattern carries a `Level::Param("u_simp")` head that the
-                // unifier solved as a level constraint; resolve it and assign it
-                // to EACH of the decl's level params (these lemmas are single-
-                // universe; a monomorphic builtin has no level param, so the loop
-                // is empty and the bare const is unchanged).
+                // Universe-polymorphic lemmas need the const's level args
+                // supplied: `@eq_self.{1} Nat n`, not the bare `eq_self`.
+                //
+                // TWO level-param conventions coexist in the simp set, and the
+                // proof reconstruction has to serve both:
+                //
+                //  * A lemma taken from the ENVIRONMENT (`simp [X]`,
+                //    `simp only [X]`, the `@[simp]` registry) has its pattern
+                //    lifted verbatim out of `decl.type_`, so the `Const` nodes
+                //    of `lemma.lhs` carry the DECLARATION's real level-param
+                //    names (`u`, `u_1`, …). Those are the params the unifier
+                //    just solved against the goal's levels, so each decl level
+                //    param must be resolved under its OWN name. Substituting a
+                //    fixed `u_simp` here left every such lemma's level
+                //    unconstrained, so the assembled proof carried an
+                //    unassigned `Param("u_simp")`, `proof_matches_rewrite`
+                //    rejected it, and the rewrite was silently dropped as
+                //    `NoProgress` — 37% of Lean core's `@[simp]` set is
+                //    universe-polymorphic, so this was most of the imported
+                //    simp set (RC-E.1).
+                //
+                //  * Clean's HAND-WRITTEN builtin patterns
+                //    (`simp/lemmas_builtin.rs`) deliberately spell a single
+                //    `Level::Param("u_simp")` in their `Const` heads
+                //    (`Eq.{u_simp}`, `ite.{u_simp}`, `List.append_nil.{u_simp}`)
+                //    — a name that has no counterpart in the proof
+                //    declaration's level params (`List.append_nil.{u}`). For
+                //    those the decl's own name is never constrained and
+                //    `u_simp` is, so the `u_simp` convention is the fallback.
+                //
+                // Resolving the decl's own name FIRST and only falling back to
+                // `u_simp` when that name is still unsolved keeps both paths
+                // working without renaming anything: a registry pattern never
+                // mentions `u_simp`, so its fallback lookup is itself unsolved
+                // and the own-name resolution is kept (which is also the right
+                // answer when a level legitimately resolves to a *rigid* param
+                // of the surrounding polymorphic declaration).
                 let lemma_levels: Vec<Level> = state
                     .env
                     .get_const(&lemma.name)
                     .map(|info| {
                         info.level_params
                             .iter()
-                            .map(|_| {
-                                metas.instantiate_level(&Level::param(Name::from_string("u_simp")))
-                            })
+                            .map(|param| resolve_lemma_level(&metas, param))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -941,6 +968,37 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
         }
         UnifyResult::Failure(_) | UnifyResult::Stuck => None,
     }
+}
+
+/// The level-param name Clean's hand-written builtin simp patterns
+/// (`simp/lemmas_builtin.rs`) use for their universe-polymorphic `Const` heads.
+/// It is a pattern-local convention, NOT any declaration's level param.
+const BUILTIN_PATTERN_LEVEL_PARAM: &str = "u_simp";
+
+/// Resolve one level param of a simp lemma's declaration to the level the
+/// unifier solved for it while matching the lemma's pattern.
+///
+/// `param` is the name as it appears in the DECLARATION (`u`, `u_1`, …), which
+/// is also how an environment-sourced pattern spells it — so that is the primary
+/// lookup. A hand-written builtin pattern instead spells
+/// [`BUILTIN_PATTERN_LEVEL_PARAM`], leaving the declaration's own name
+/// unconstrained; that is the only case the fallback fires in, because a
+/// registry pattern never mentions `u_simp` and so leaves it unsolved too.
+///
+/// ENSURES: returns the concrete level whenever the unifier solved one for
+///   either name; otherwise returns the declaration's own (unsolved) param, so
+///   the caller's `proof_matches_rewrite` guard still fails closed.
+fn resolve_lemma_level(metas: &MetaState, param: &Name) -> Level {
+    let own = metas.instantiate_level(&Level::param(param.clone()));
+    if own.has_params() {
+        let builtin = metas.instantiate_level(&Level::param(Name::from_string(
+            BUILTIN_PATTERN_LEVEL_PARAM,
+        )));
+        if !builtin.has_params() {
+            return builtin;
+        }
+    }
+    own
 }
 
 /// Whether `expr` contains a leaked *unassigned* metavariable, represented as an

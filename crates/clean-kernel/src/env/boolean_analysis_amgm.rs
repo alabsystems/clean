@@ -114,6 +114,7 @@ impl AmGmConsts {
     fn rat(&self) -> Expr {
         self.r.rat()
     }
+    #[cfg(test)]
     fn one(&self) -> Expr {
         self.r.one()
     }

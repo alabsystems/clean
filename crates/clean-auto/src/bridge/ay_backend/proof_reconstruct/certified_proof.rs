@@ -324,7 +324,7 @@ fn rescan_residual_trust(term: &Expr) -> usize {
 /// Returns `Ok(CertifiedPayload)` iff all six fail-closed gates hold;
 /// otherwise `Err(NotCertified)` identifying the first gate that failed. Never
 /// returns a payload for a partial or trust-bearing proof.
-pub fn certify_reconstruction(
+pub(crate) fn certify_reconstruction(
     result: &ReconstructionResult,
     env: &Environment,
     ctx: &LocalContext,
@@ -444,7 +444,7 @@ pub fn reconstruct_and_certify_ay_proof(
             bind_id,
             Name::from_string("h_neg_goal"),
             negated_goal.clone(),
-            clean_kernel::BinderInfo::Default,
+            BinderInfo::Default,
         );
     }
 

@@ -16,15 +16,10 @@
 //!
 //! ## Scope: KExpr as Intentional Subset
 //!
-//! The `KExpr` inductive type models core lambda calculus (5 constructors:
-//! sort, bvar, app, lam, pi), not the full kernel expression type (12+ constructors).
-//! This is intentional:
-//!
-//! - Core typing theory (beta reduction, type preservation) is fully captured
-//! - Missing constructs (Let, Const, Lit, Proj) are derived forms or environment lookups
-//! - Matches standard mathematical practice for type theory proofs
-//! - Not a TODO: additional kernel constructors are modeled in later phases
-//! - Full kernel Expr coverage is tracked in Phase 4 roadmapping (see SCOPE.md)
+//! The `KExpr` inductive models nine expression forms: sort, bvar, app, lam,
+//! pi, const, let, projection, and natural literal. It is still a subset of
+//! the production kernel expression surface: unsupported production forms and
+//! metadata must not be inferred from the reflected theorems.
 //!
 //! See `SCOPE.md` for full documentation of what is and isn't modeled.
 //!
@@ -54,6 +49,9 @@ mod types;
 mod verification;
 
 pub use definition::SpecDefinition;
+pub(crate) use definition::{
+    certification_axiom_deps, certification_integrity_errors, dependencies_from_value,
+};
 pub use error::SpecError;
 pub use type_checker_spec::{
     check_defeq_spec, check_type_spec, CompletenessWitness, DefeqAlgorithm, TypeCheckStep,
@@ -71,6 +69,13 @@ pub struct Specification {
     env: Environment,
     /// Named definitions
     definitions: HashMap<String, SpecDefinition>,
+    /// Fresh generated red-environment script to consume at the corresponding
+    /// core-bundle stage. `None` uses the committed `include_str!` artifact.
+    ///
+    /// This is transient: `add_kernel_core_red_env` takes and clears it. It
+    /// exists so the generator can build the complete live specification
+    /// against the freshly rendered script before publishing any file.
+    red_env_script_override: Option<String>,
 }
 
 impl Specification {
@@ -79,13 +84,40 @@ impl Specification {
     /// # Errors
     /// Returns `SpecError` if specification construction fails.
     pub fn new() -> Result<Self, SpecError> {
+        Self::new_with_optional_red_env_script(None)
+    }
+
+    /// Build the complete specification while injecting a freshly rendered
+    /// red-environment script at the normal core-bundle stage.
+    ///
+    /// The reflection generator uses this artifact-independent path to prove
+    /// that the exact in-memory script can support every downstream full-spec
+    /// registration before it replaces the committed artifact.
+    ///
+    /// # Errors
+    /// Returns `SpecError` if the script or any downstream full-spec stage
+    /// fails parsing, elaboration, or kernel checking.
+    #[doc(hidden)]
+    pub fn new_with_red_env_reflection_script(script: &str) -> Result<Self, SpecError> {
+        Self::new_with_optional_red_env_script(Some(script.to_string()))
+    }
+
+    fn new_with_optional_red_env_script(
+        red_env_script_override: Option<String>,
+    ) -> Result<Self, SpecError> {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override,
         };
 
         // Add core type theory specification.
         spec.add_core_spec()?;
+        if spec.red_env_script_override.is_some() {
+            return Err(SpecError::TypeError(
+                "fresh red-environment script was not consumed by the full core bundle".to_string(),
+            ));
+        }
         spec.add_type_checker_spec()?;
         // tc_spec registers algorithmic-correctness definitions
         // (tc_infer_type_correct, tc_def_eq_transitivity, …). Without this

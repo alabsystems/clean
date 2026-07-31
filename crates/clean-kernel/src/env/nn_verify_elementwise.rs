@@ -19,13 +19,19 @@
 //!
 //! Part of #3181.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for element-wise inequality definitions and axioms.
+#[cfg(test)]
 pub(super) struct ElemConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -46,7 +52,9 @@ pub(super) struct ElemConsts {
     pub(super) nn_mat_mulvec: Expr,
 }
 
+#[cfg(test)]
 impl ElemConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -73,6 +81,7 @@ impl ElemConsts {
     }
 
     /// `LE.le @Rat instLERat lhs rhs`
+    #[cfg(test)]
     pub(super) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -86,32 +95,39 @@ impl ElemConsts {
         )
     }
 
+    #[cfg(test)]
     pub(super) fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
 
+    #[cfg(test)]
     pub(super) fn mat_of(&self, m: &Expr, n: &Expr) -> Expr {
         Expr::app(Expr::app(self.nn_mat.clone(), m.clone()), n.clone())
     }
 
+    #[cfg(test)]
     pub(super) fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
 
+    #[cfg(test)]
     pub(super) fn vec_le_ref(&self) -> Expr {
         Expr::const_(Name::from_string("NNVerify.vec_le"), vec![])
     }
 
+    #[cfg(test)]
     pub(super) fn mat_nonneg_ref(&self) -> Expr {
         Expr::const_(Name::from_string("NNVerify.mat_nonneg"), vec![])
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize element-wise inequality operations and axioms.
     ///
     /// Depends on: `init_nn_verify_types_ops()`, `init_rat_abs()`,
     ///             `init_rat_ord()`, `init_and()`.
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_elementwise(&mut self) -> Result<(), EnvError> {
         if self.nn_verify_elementwise_init {
             return Ok(());
@@ -138,6 +154,7 @@ impl Environment {
 
     /// `NNVerify.vec_le (n : Nat) (a b : NNVec n) : Prop :=`
     /// `  forall i : Fin n, LE.le @Rat instLERat (a i) (b i)`
+    #[cfg(test)]
     fn register_vec_le(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -180,6 +197,7 @@ impl Environment {
 
     /// `NNVerify.mat_le (m n : Nat) (A B : NNMat m n) : Prop :=`
     /// `  forall (i : Fin m) (j : Fin n), LE.le (A i j) (B i j)`
+    #[cfg(test)]
     fn register_mat_le(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -235,6 +253,7 @@ impl Environment {
 
     /// `NNVerify.vec_nonneg (n : Nat) (a : NNVec n) : Prop :=`
     /// `  forall i : Fin n, LE.le Rat.zero (a i)`
+    #[cfg(test)]
     fn register_vec_nonneg(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -273,6 +292,7 @@ impl Environment {
 
     /// `NNVerify.mat_nonneg (m n : Nat) (A : NNMat m n) : Prop :=`
     /// `  forall (i : Fin m) (j : Fin n), LE.le Rat.zero (A i j)`
+    #[cfg(test)]
     fn register_mat_nonneg(&mut self, c: &ElemConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();

@@ -65,6 +65,7 @@ struct ReassocConsts {
     causeq_mul: Expr,
     and_c: Expr,
     and_intro: Expr,
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     nat_le: Expr,
@@ -100,6 +101,7 @@ impl ReassocConsts {
             causeq_mul: k("NNReal.CauSeq.mul"),
             and_c: k("And"),
             and_intro: k("And.intro"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             nat_le: k("Nat.le"),

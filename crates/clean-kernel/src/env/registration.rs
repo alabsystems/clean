@@ -1513,7 +1513,7 @@ impl Environment {
         &mut self,
         struct_name: Name,
         field: Name,
-        default: crate::expr::Expr,
+        default: Expr,
     ) {
         self.structure_field_defaults
             .entry(struct_name)
@@ -1522,11 +1522,7 @@ impl Environment {
     }
 
     /// Look up the default value for a structure field, if any.
-    pub fn get_structure_field_default(
-        &self,
-        struct_name: &Name,
-        field: &Name,
-    ) -> Option<&crate::expr::Expr> {
+    pub fn get_structure_field_default(&self, struct_name: &Name, field: &Name) -> Option<&Expr> {
         self.structure_field_defaults
             .get(struct_name)
             .and_then(|fields| fields.get(field))

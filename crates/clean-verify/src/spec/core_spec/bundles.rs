@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Centralized bundle planner for core-spec registration order.
@@ -232,8 +232,10 @@ const STAGES: &[CoreSpecStage] = &[
     // inductive is elaborated. (Previously DefEq's type + non-δ/ι constructors
     // were hand-axioms registered first, and DefEq.delta/.iota/.rec were split
     // into a LATER `add_typing_def_eq_delta_iota_rec` stage precisely to bridge
-    // this ordering gap; folding all nine constructors into one real inductive
-    // removes that split.) reduction_families only needs delta_step / iota_step /
+    // this ordering gap; folding all of DefEq's constructors into one real
+    // inductive removes that split — there were nine at the fold, twelve today
+    // after zeta / let_cong / proj_cong joined.)
+    // reduction_families only needs delta_step / iota_step /
     // the_red_env (all registered far earlier) — never Typing/DefEq — so the swap
     // is dependency-safe. Part of the DefEq inductive-encoding drain.
     CoreSpecStage {
@@ -448,7 +450,7 @@ const STAGES: &[CoreSpecStage] = &[
     // δ-extended computational parallel reduction par_reduces_cd (#2859 track,
     // Increment H): RedEnv = RecEnv × DefEnv product + red_rec/red_def projections,
     // the RecEnvDefEnvDisjoint name-disjointness faithful interface (mirror of
-    // RecEnvCtorRecDisjoint), the 9-ctor par_reduces_cd relation (the 8
+    // RecEnvCtorRecDisjoint), the 11-ctor par_reduces_cd relation (the 10
     // par_reduces_c ctors over red_rec env + a delta ctor carrying delta_step
     // (red_def env)) + par_strips_witness_cd + the (δ,δ) determinism cross-join.
     // After add_par_reduces_c (par_strips pattern) and add_delta_subst (DefEnv /
@@ -832,6 +834,29 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: false,
     },
+    // W-type (Acc / higher-order fields) OBJECT prefix: names/consts/types/
+    // rule-rhs/wREnv/wRecApp/wContractum/WRecContract/WFresh/WRecEnvOK + the rfl
+    // validations, moved AHEAD of add_dependent_sn_richmodel so a CandModel
+    // redRecW field can reference them — the stage-ordering prerequisite for
+    // W-type recursor adequacy (acc_wtype.rs previously deferred it). Same idiom
+    // as add_natrec_objects / add_snschema_objects; consumes only expr_model,
+    // rec_env, iota_step and delta_step. Census-NEUTRAL pure reorder.
+    CoreSpecStage {
+        apply: Specification::add_acc_wtype_objects,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Mutual-block OBJECT layer, split out of add_mutual_schema (which stays
+    // late at its old slot) and moved AHEAD of add_dependent_sn_richmodel so a
+    // CandModel redRecMut field can reference mutRecApp / MutFresh /
+    // MutRecEnvOK / MutRecContract. Same idiom as the three *_objects stages
+    // above. Mechanical dependency check: max external stage consumed is 76
+    // (add_snschema_objects), nothing at >= 78. Census-NEUTRAL pure reorder.
+    CoreSpecStage {
+        apply: Specification::add_mutual_schema_objects,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
     CoreSpecStage {
         apply: Specification::add_dependent_sn_richmodel,
         in_substitution: true,
@@ -1126,7 +1151,8 @@ const STAGES: &[CoreSpecStage] = &[
     },
     // De Bruijn closedness bundle (census-11 drain, Stage 2A): the PROVED
     // lift/instantiate/beta_reduces closedness lemmas ported from
-    // scratch/aristotle-debruijn-lt/DeBruijnLt.lean. Needs the is_closed_at
+    // scratch/aristotle-harvest/aristotle-debruijn-lt/aristotle-debruijn-lt_aristotle/DeBruijnLt.lean.
+    // Needs the is_closed_at
     // body/type inversions (add_implementation_soundness_admissibility, above)
     // plus the Lt/Le arithmetic (add_dependent_sn_richmodel, earlier).
     // NOT in the ImplementationSoundness subset bundle: it depends on the
@@ -1376,6 +1402,116 @@ const STAGES: &[CoreSpecStage] = &[
     // Ported from the Aristotle-proven nested-rose guide. Terminal layer.
     CoreSpecStage {
         apply: Specification::add_rose_schema,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // kexpr_beq CORE + its soundness, wired LIVE (step 2a of
+    // docs/plans/DEFEQ_COMPLETENESS_PROGRAM_2026-07-25.md). Both modules were
+    // proven but reachable only from #[cfg(test)] builders, so the LIVE spec had
+    // no Bool-valued comparison on KExpr at all, and `kexpr_beq_eq` — the leaf
+    // lemma a conversion-algorithm soundness proof needs — was absent too.
+    //
+    // NOT in the ImplementationSoundness bundle — this FIXES a pre-existing
+    // break. `add_defeq_fuel` registers `opt_rec_bool_true_inv`, whose proof term
+    // applies `bool_false_ne_true_t`, and the ONLY registrar of that lemma is
+    // `add_env_closed_checkers_depth` (this file, ~:897), which is
+    // `in_impl_soundness: false` because IT depends in turn on
+    // `add_dependent_sn_richmodel`'s `lt_to_le_succ` — also excluded. So the
+    // subset spec failed to elaborate with `Unknown identifier:
+    // bool_false_ne_true_t`, breaking all 6 tests in
+    // implementation_soundness_{admissibility,check_decomposition}_tests.rs.
+    //
+    // Fixed from the CONSUMER side rather than by dragging the Girard SN lane into
+    // the subset: no implementation-soundness test references `kexpr_beq`,
+    // `defeq_fuel`, `def_eq_fuel_sound`, `opt_rec_bool_true_inv` or
+    // `level_is_zero` (grep over the two files that call
+    // build_implementation_soundness_spec_with_stack), so these three terminal
+    // defeq-completeness stages were never needed there. Flipping them keeps the
+    // subset MINIMAL, which is its whole purpose, and avoids widening it by the
+    // whole SN dependency closure. The Full bundle is unaffected —
+    // `run_bundle`'s `Full => true` arm ignores these flags.
+    //
+    // THESE MUST RUN LAST, structurally rather than incidentally. Five of their
+    // names are also registered by modules already live here; all five were
+    // compared pairwise and are genuine duplicates, so they are skipped via the
+    // *_if_absent guards. That guard keeps the FIRST registration, so the guarded
+    // module must run SECOND — and the other registrants are spread across the
+    // list (add_env_extensions for level_eqb / level_is_zero,
+    // add_iota_closedness_bundle for kexpr_bvar_inj, add_snschema for
+    // nat_eqb_refl / name_eqb_refl). Any position earlier than the LAST of them
+    // loses the race and the kernel rejects the other module's add_decl.
+    CoreSpecStage {
+        apply: Specification::add_kexpr_beq_core,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_kexpr_beq_sound,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Step 2b/3: the conversion ALGORITHM and its soundness. Must follow
+    // add_kexpr_beq_sound directly — it consumes kexpr_beq and kexpr_beq_eq,
+    // which only became live in the stage above.
+    CoreSpecStage {
+        apply: Specification::add_defeq_fuel,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ── C1 / the crystal: the layer-1 ImplInfer lane ────────────────────
+    // designs/2026-07-29-unified-implinfer-relation.md, migration steps M2/M3/M5.
+    // A NEW LATE STAGE, deliberately terminal: the lane is PURELY ADDITIVE
+    // (it introduces `ImplExpr` and never touches `KExpr`), so nothing earlier
+    // can depend on it, and running it last keeps every existing stage's
+    // registration order — and every existing `KExpr.rec` proof term —
+    // byte-identical. It consumes `nat_eqb` / `name_eqb` / `nat_is_zero`
+    // (add_rec_env), `Bool` + `Empty` (foundation), and
+    // `le_trans` (add_iota_core) and `Le` (foundation) — all live well before here.
+    //
+    // NOT in the Substitution or ImplementationSoundness bundles. Those are
+    // MINIMAL subset builders for focused tests, and no spec declaration outside
+    // this lane references any of its names — the only consumers are this stage
+    // table and the lane's own test module. (The `run_impl_infer` hits in
+    // `validate/mod.rs` are an unrelated pre-existing Rust method, not these
+    // declarations.) Including the lane would add ~154 kernel declarations of
+    // build cost to tests that cannot observe any of them — counted, not
+    // estimated: 14 inductive types + their 14 recursors + 71 constructors + 40
+    // `add_recursive_def` + 15 `add_definition`-family.
+    //
+    // Measured aside, recorded because it is easy to misattribute to this lane:
+    // the ImplementationSoundness bundle is ALREADY BROKEN at HEAD, independently
+    // of this stage group. `add_defeq_fuel` (in_impl_soundness: true) registers
+    // `opt_rec_bool_true_inv`, whose proof term needs `bool_false_ne_true_t`,
+    // which only `add_env_closed_checkers_depth` registers — and that stage is
+    // `in_impl_soundness: false`. So the subset spec fails to elaborate with
+    // `Unknown identifier: bool_false_ne_true_t`. Verified by running
+    // `cargo test --release -p clean-verify --lib implementation_soundness_admissibility`
+    // at this lane's parent commit (3 failed, 98.41s, same error) and again with
+    // the lane present (3 failed, 100.43s, same error) — identical either way.
+    // Fixing it means giving that bundle `add_env_closed_checkers_depth`, which is
+    // a separate change with its own dependency closure to check; it is NOT done
+    // here so this commit stays scoped to C1.
+    CoreSpecStage {
+        apply: Specification::add_impl_infer_syntax,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // M3: the relation + the bvar refutation. Needs the M2 syntax above.
+    CoreSpecStage {
+        apply: Specification::add_impl_infer,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // C1's acceptance gate: a non-vacuity witness per rule, including the
+    // identity lambda `KernelInferAccepts` provably cannot represent.
+    CoreSpecStage {
+        apply: Specification::add_impl_infer_witnesses,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // M5: the mode-gate side lemma + the 24-arm coverage ledger.
+    CoreSpecStage {
+        apply: Specification::add_impl_infer_mode_gate,
         in_substitution: false,
         in_impl_soundness: false,
     },

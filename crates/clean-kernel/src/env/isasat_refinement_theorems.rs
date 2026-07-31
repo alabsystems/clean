@@ -13,12 +13,18 @@
 //! theorem modules: a `_helper` axiom captures the proposition body, and the
 //! theorem quantifies over its parameters with the helper applied.
 
+#[cfg(test)]
 use super::isasat_refinement::IsaSATConsts;
+#[cfg(test)]
 use crate::env::{decl_builder::EnvDeclBuilder, Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
+    #[cfg(test)]
     fn register_isasat_helper_theorem_pair(
         &mut self,
         helper_name: &str,
@@ -86,6 +92,7 @@ impl Environment {
     ///    cdcl_invariant (cdcl_step s Propagate) f`.
     ///
     /// Propagation preserves the abstract CDCL state invariant.
+    #[cfg(test)]
     pub(super) fn register_invariant_preserved_by_propagate(
         &mut self,
         c: &IsaSATConsts,
@@ -108,6 +115,7 @@ impl Environment {
     ///    cdcl_invariant (cdcl_step s Decide) f`.
     ///
     /// Decision preserves the abstract CDCL state invariant.
+    #[cfg(test)]
     pub(super) fn register_invariant_preserved_by_decide(
         &mut self,
         c: &IsaSATConsts,
@@ -128,6 +136,7 @@ impl Environment {
     /// `forall (s : CDCLState) (f : ClauseDB),
     ///    cdcl_invariant s f ->
     ///    cdcl_invariant (cdcl_step s Backtrack) f`.
+    #[cfg(test)]
     pub(super) fn register_invariant_preserved_by_backtrack(
         &mut self,
         c: &IsaSATConsts,
@@ -150,6 +159,7 @@ impl Environment {
     ///    refinement_relation (cdcl_step s Propagate) (concrete_propagate cs)`.
     ///
     /// This is the key propagation/refinement commutation theorem.
+    #[cfg(test)]
     pub(super) fn register_refinement_simulation_propagate(
         &mut self,
         c: &IsaSATConsts,
@@ -172,6 +182,7 @@ impl Environment {
     ///    cdcl_invariant (abstract_of cs) f`.
     ///
     /// The abstract invariant transfers through the refinement relation.
+    #[cfg(test)]
     pub(super) fn register_refinement_preserves_invariant(
         &mut self,
         c: &IsaSATConsts,
@@ -196,6 +207,7 @@ impl Environment {
     /// `forall (s : CDCLState) (t : CDCLTransition),
     ///    trail_consistent (trail_of s) ->
     ///    trail_consistent (trail_of (cdcl_step s t))`.
+    #[cfg(test)]
     pub(super) fn register_trail_consistency_preserved(
         &mut self,
         c: &IsaSATConsts,

@@ -262,6 +262,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn has_nat_minmax_lemmas(&self) -> bool {
         self.nat_minmax_lemmas_init
     }

@@ -26,12 +26,18 @@
 //! - Bonet & Galesi (2001), "Optimality of size-width tradeoffs for
 //!   Resolution"
 
+#[cfg(test)]
 use super::proof_hierarchy::ProofHierarchyConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // Theorem 1: Resolution is p-simulated by Cutting Planes
@@ -44,6 +50,7 @@ impl Environment {
     /// refutation can be translated into a Cutting Planes proof of at most
     /// polynomial blowup, since clausal reasoning is a special case of
     /// linear integer arithmetic reasoning over {0,1} variables.
+    #[cfg(test)]
     pub(super) fn register_resolution_below_cp(
         &mut self,
         c: &ProofHierarchyConsts,
@@ -105,6 +112,7 @@ impl Environment {
     /// integer arithmetic reasoning over {0,1} can be encoded in
     /// propositional logic with polynomial overhead using binary
     /// representations and carry-chain arguments.
+    #[cfg(test)]
     pub(super) fn register_cp_below_frege(
         &mut self,
         c: &ProofHierarchyConsts,
@@ -164,6 +172,7 @@ impl Environment {
     /// every Frege proof is trivially an Extended Frege proof (the extension
     /// rule is optional). The converse is a major open problem: whether
     /// Frege and Extended Frege are polynomially equivalent.
+    #[cfg(test)]
     pub(super) fn register_frege_below_extended_frege(
         &mut self,
         c: &ProofHierarchyConsts,
@@ -226,6 +235,7 @@ impl Environment {
     /// The exponential lower bound for Resolution is Haken (1985).
     /// The polynomial upper bound in Frege follows from the fact that
     /// PHP can be proved in constant-depth Frege (Ajtai, 1988).
+    #[cfg(test)]
     pub(super) fn register_resolution_exponential_gap(
         &mut self,
         c: &ProofHierarchyConsts,
@@ -268,6 +278,7 @@ impl Environment {
     /// its tautological encoding, which holds iff NP = coNP.
     ///
     /// Reference: Cook & Reckhow (1979), Theorem 1.5.
+    #[cfg(test)]
     pub(super) fn register_cook_reckhow_completeness(
         &mut self,
         c: &ProofHierarchyConsts,

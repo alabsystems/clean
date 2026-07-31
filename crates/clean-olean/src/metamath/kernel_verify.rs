@@ -37,10 +37,10 @@
 //! critical input — see `collect_var_universe`. See
 //! `docs/METAMATH_KERNEL_VERIFICATION.md`.
 
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 use clean_kernel::metamath_reflect::{
-    register_metamath_assertions, verify_metamath_theorem, verify_metamath_theorem_guarded,
+    register_metamath_assertions, verify_metamath_theorem_guarded,
     verify_metamath_theorem_schematic, verify_metamath_theorem_schematic_dv, MMAssertion,
     MMProofTree,
 };
@@ -411,17 +411,6 @@ fn axiom_assertions(
     out
 }
 
-/// Maximum node count of an (inlined) proof tree before we skip it — guards
-/// against the exponential blow-up of fully expanding deeply-reused proofs.
-const MAX_TREE_SIZE: usize = 2_000_000;
-
-/// A previously-verified `$p` theorem's axiom-expanded proof tree. Its `Hyp(j)`
-/// nodes reference its own frame (mandatory floats then essentials, by index).
-#[derive(Clone)]
-struct CachedTheorem {
-    tree: MMProofTree,
-}
-
 /// Report from kernel-verifying a whole database.
 #[derive(Debug, Default, Clone)]
 pub struct KernelVerifyReport {
@@ -429,8 +418,8 @@ pub struct KernelVerifyReport {
     pub verified: Vec<String>,
     /// `(label, error)` for theorems the kernel rejected.
     pub failed: Vec<(String, String)>,
-    /// `(label, reason)` for theorems skipped (compressed proof, oversized
-    /// inlined tree, or a dependency that itself did not verify).
+    /// `(label, reason)` for theorems skipped (malformed proof, unsupported
+    /// guarded reuse, or a dependency that itself did not verify).
     pub skipped: Vec<(String, String)>,
     /// `(kernel_name, type_expr, value_expr)` for each verified theorem — the
     /// material a Mathverse exporter needs to write a `KernelVerified` shard.
@@ -438,7 +427,7 @@ pub struct KernelVerifyReport {
 }
 
 /// Kernel-verify every `$p` theorem in `db`, in source order, reusing earlier
-/// theorems by inlining their (already-verified) axiom-expanded proof trees.
+/// verified theorems through their registered schematic kernel constants.
 ///
 /// # Errors
 /// Returns an error only if the database fails to resolve or the axiom
@@ -523,7 +512,7 @@ pub fn kernel_verify_two_pass_range(
 pub fn kernel_verify_pass1_types(
     db: &Database,
     max_provables: usize,
-    wanted: &hashbrown::HashSet<String>,
+    wanted: &HashSet<String>,
     sink: &mut dyn FnMut(&str, &str, &clean_kernel::Expr),
 ) -> MetamathResult<KernelVerifyReport> {
     kernel_verify_database_prefix_impl(
@@ -536,8 +525,7 @@ pub fn kernel_verify_pass1_types(
 
 /// Like [`kernel_verify_database`] but stops after attempting `max_provables`
 /// theorems (in source order). Useful for bounded coverage experiments on large
-/// databases, where the proof-inlining strategy's worst-case blow-up makes a
-/// full pass impractical.
+/// databases where a full pass is impractical.
 ///
 /// # Errors
 /// See [`kernel_verify_database`].
@@ -604,7 +592,7 @@ enum TwoPass {
     /// ∪ their transitive `$p`-dependency closure so a chunked caller bounds memory.
     /// Drives [`kernel_verify_pass1_types`]; the wanted set is also the export
     /// filter (see [`CollectMode::Pass1Types`]).
-    Pass1Types(hashbrown::HashSet<String>),
+    Pass1Types(HashSet<String>),
 }
 
 /// Disposition of each verified theorem's `(type, value)` — see the match in
@@ -623,7 +611,7 @@ enum CollectMode<'a> {
     /// dependency that was merely registered to build a wanted type. Drives
     /// [`kernel_verify_pass1_types`].
     Pass1Types {
-        wanted: &'a hashbrown::HashSet<String>,
+        wanted: &'a HashSet<String>,
         sink: &'a mut dyn FnMut(&str, &str, &clean_kernel::Expr),
     },
 }
@@ -659,7 +647,7 @@ fn kernel_verify_database_prefix_impl(
     // `Π σ` form would let σ corrupt the dummy). Registered separately from the
     // schematic `$a` axioms because their body must NOT be `applySubst σ`.
     let float_assertions = float_axiom_assertions(db, &mut interner);
-    let mut float_axiom_names: hashbrown::HashSet<String> =
+    let mut float_axiom_names: HashSet<String> =
         float_assertions.iter().map(|a| a.name.clone()).collect();
 
     // M12/M13: number of `$d` guard arrows each guarded assertion carries — used to
@@ -675,7 +663,7 @@ fn kernel_verify_database_prefix_impl(
     // M13: `$d` pair frame of each guarded assertion, in the order its guard arrows
     // were registered — axioms one order; verified `$d`-theorems BOTH orders. Drives
     // the schematic discharge. Grows as `$d`-bearing theorems verify schematically.
-    let mut guards: hashbrown::HashMap<String, Vec<(u64, u64)>> = assertions
+    let mut guards: HashMap<String, Vec<(u64, u64)>> = assertions
         .iter()
         .filter(|a| !a.disjoints.is_empty())
         .map(|a| (a.name.clone(), a.disjoints.clone()))
@@ -696,8 +684,8 @@ fn kernel_verify_database_prefix_impl(
         .collect();
 
     let mut env = Environment::new();
-    // Disable the kernel heartbeat (fuel) limit: a deeply-inlined Metamath
-    // derivation reduces `applySubst` over large forms many times, which exceeds
+    // Disable the kernel heartbeat (fuel) limit: a deep Metamath derivation
+    // reduces `applySubst` over large forms many times, which exceeds
     // the default 2M-tick budget and shows up as a spurious type mismatch. Sound
     // — `maxHeartbeats=0` only removes a resource cap, not a correctness check.
     //
@@ -755,31 +743,9 @@ fn kernel_verify_database_prefix_impl(
     // M13-dummy: per verified theorem, its TRANSITIVE dummy frame (own work
     // variables ∪ those of every theorem it reuses). Drives the σ-fixes-d guards a
     // reusing theorem must carry + discharge. Grows as dummy theorems verify.
-    let mut dummy_frames: hashbrown::HashMap<String, Vec<u64>> = hashbrown::HashMap::new();
+    let mut dummy_frames: HashMap<String, Vec<u64>> = HashMap::new();
 
-    // SOUNDNESS GUARD ($d). A theorem is registered as `Π σ, …` — it claims to
-    // hold for ALL substitutions. That is correct ONLY when the theorem and its
-    // whole proof are `$d`-FREE. A `$d`-constrained theorem (predicate logic) does
-    // NOT hold for every σ, and the predicate-logic axioms (ax-5, …) are sound
-    // only under their `$d` side-conditions — which this encoding does not carry.
-    // So: collect the `$a` axioms/definitions that bear `$d`; skip any theorem
-    // that references one (via `build_tree`) or carries its own `$d`. This keeps
-    // every verified theorem's closure `$d`-free, so the all-σ claim is sound.
-    let mut tainted: hashbrown::HashSet<String> = hashbrown::HashSet::new();
-    for stmt in &resolved.statements {
-        if let ResolvedStatement::Assertion(a) = stmt {
-            if a.kind == "axiom" && !a.disjoints.is_empty() {
-                tainted.insert(kernel_name(&a.label));
-            }
-        }
-    }
-    // A proof needs the GROUND guarded path if it applies a `$d`-bearing axiom OR
-    // references a non-mandatory (dummy) float-axiom — the schematic `Π σ` form
-    // handles neither (σ would corrupt a dummy; the all-σ claim drops `$d`).
-    let needs_ground: hashbrown::HashSet<String> =
-        tainted.union(&float_axiom_names).cloned().collect();
-
-    let mut cache: HashMap<String, CachedTheorem> = HashMap::new();
+    let mut cache: HashSet<String> = HashSet::new();
     let mut report = KernelVerifyReport::default();
     // M13-dummy: globally-fresh codes for per-proof dummy α-renaming. Base far above
     // any interned symbol code (set.mm has < 2^21 symbols) so a fresh dummy is `∉ vu`
@@ -862,11 +828,11 @@ fn kernel_verify_database_prefix_impl(
         TwoPass::Pass1Types(_) => Some(&two_pass),
         _ => None,
     };
-    let reuse_set: Option<hashbrown::HashSet<String>> = if let Some(req) = scope_request {
+    let reuse_set: Option<HashSet<String>> = if let Some(req) = scope_request {
         // Per-provable `$p`-theorem dependency edges (cited labels that are
         // themselves provables) and the in-source-order provable labels (for the
         // ordinal → label seed). Built once from the resolved database.
-        let mut provable: hashbrown::HashSet<&str> = hashbrown::HashSet::new();
+        let mut provable: HashSet<&str> = HashSet::new();
         for stmt in &resolved.statements {
             if let ResolvedStatement::Assertion(a) = stmt {
                 if a.kind == "provable" {
@@ -874,7 +840,7 @@ fn kernel_verify_database_prefix_impl(
                 }
             }
         }
-        let mut deps: hashbrown::HashMap<&str, Vec<&str>> = hashbrown::HashMap::new();
+        let mut deps: HashMap<&str, Vec<&str>> = HashMap::new();
         let mut provable_order: Vec<&str> = Vec::new();
         for stmt in &resolved.statements {
             if let ResolvedStatement::Assertion(a) = stmt {
@@ -899,7 +865,7 @@ fn kernel_verify_database_prefix_impl(
         // close over `$p`-dependency edges. The `end` bound matches `max_provables`
         // (the prefix the pass traverses), so an ordinal beyond `provable_order`
         // simply contributes nothing.
-        let mut keep: hashbrown::HashSet<String> = hashbrown::HashSet::new();
+        let mut keep: HashSet<String> = HashSet::new();
         let mut work: Vec<&str> = Vec::new();
         match req {
             TwoPass::Pass2(range) => {
@@ -1219,8 +1185,7 @@ fn kernel_verify_database_prefix_impl(
             // skips; never a false accept). Merged with the theorem's own `$d` frame.
             let full_disjoints: Vec<(u64, u64)> = {
                 let mandatory: Vec<u64> = float_hyps.iter().map(|&(_, v)| v).collect();
-                let mut seen: hashbrown::HashSet<(u64, u64)> =
-                    thm_disjoints.iter().copied().collect();
+                let mut seen: HashSet<(u64, u64)> = thm_disjoints.iter().copied().collect();
                 let mut out = thm_disjoints.clone();
                 for &d in &dummies {
                     for &v in mandatory.iter().chain(dummies.iter()) {
@@ -1233,10 +1198,10 @@ fn kernel_verify_database_prefix_impl(
             };
             let needs_schematic_dv = uses_guarded || !dummies.is_empty();
             let run = |env: &mut Environment,
-                       sigs: &hashbrown::HashMap<String, (Vec<Vec<u64>>, Vec<u64>)>,
-                       guards: &hashbrown::HashMap<String, Vec<(u64, u64)>>,
+                       sigs: &HashMap<String, (Vec<Vec<u64>>, Vec<u64>)>,
+                       guards: &HashMap<String, Vec<(u64, u64)>>,
                        guard_counts: &std::collections::HashMap<String, usize>,
-                       dummy_frames: &hashbrown::HashMap<String, Vec<u64>>|
+                       dummy_frames: &HashMap<String, Vec<u64>>|
              -> (Result<(), clean_kernel::KernelEnvError>, bool) {
                 // TWO-PASS LIGHT PASS-1 (axiom-only mode ON: pass-1, or an out-of-range
                 // pass-2 theorem). Register ONLY the schematic-`$d` TYPE, SKIPPING the
@@ -1440,7 +1405,7 @@ fn kernel_verify_database_prefix_impl(
                             float_hyps.iter().map(|&(tc, v)| vec![tc, v]).collect();
                         hf.extend(essential_hyps.iter().cloned());
                         sigs.insert(kn.clone(), (hf, conclusion.clone()));
-                        cache.insert(a.label.clone(), CachedTheorem { tree });
+                        cache.insert(a.label.clone());
                     }
                     // Disposition of the just-verified `(type, value)` (both the
                     // schematic and guarded ground path register `mm.<label>` with its
@@ -1522,7 +1487,7 @@ fn kernel_verify_database_prefix_impl(
                     // Faithful Rust re-check of the tree (forms + arity + hyps): if
                     // this ACCEPTS but the kernel rejects, the tree is a valid
                     // Metamath proof and the issue is a kernel-interaction one on
-                    // large inlined terms — not a translation bug.
+                    // large derivation terms — not a translation bug.
                     let mut hyp_forms: Vec<Vec<u64>> =
                         float_hyps.iter().map(|&(tc, v)| vec![tc, v]).collect();
                     hyp_forms.extend(essential_hyps.iter().cloned());
@@ -1823,15 +1788,15 @@ fn decode_compressed(
 
 /// Replay a proof's RPN stack machine, emitting an [`MMProofTree`] (tracking
 /// each stack entry's [`Formula`] so substitutions can be read off the
-/// floating-hypothesis arguments). Steps that apply an earlier `$p` theorem are
-/// resolved by INLINING that theorem's cached axiom-expanded tree under the
-/// call-site substitution. Handles compressed proofs' `Z`-save / back-reference.
+/// floating-hypothesis arguments). Steps that apply an earlier verified `$p`
+/// theorem emit an application of its registered schematic kernel constant.
+/// Handles compressed proofs' `Z`-save / back-reference.
 fn build_tree(
     theorem: &ResolvedAssertion,
     resolved: &ResolvedDatabase,
     interner: &mut Interner,
     hyp_index: &HashMap<String, usize>,
-    cache: &HashMap<String, CachedTheorem>,
+    cache: &HashSet<String>,
 ) -> MetamathResult<(Formula, MMProofTree)> {
     let proof = theorem.proof.as_ref().ok_or_else(|| {
         MetamathError::InvalidStatement(format!("missing proof for {}", theorem.label))
@@ -1881,8 +1846,8 @@ fn build_tree(
 }
 
 /// Apply one labelled proof step: push the corresponding stack entry and return
-/// it (a floating/essential hypothesis, or an assertion application — with `$p`
-/// reuse inlined). The pushed entry is also returned for `Z`-save tracking.
+/// it (a floating/essential hypothesis, or an assertion application). The pushed
+/// entry is also returned for `Z`-save tracking.
 #[allow(clippy::too_many_arguments)]
 fn apply_label(
     label: &str,
@@ -1890,7 +1855,7 @@ fn apply_label(
     resolved: &ResolvedDatabase,
     interner: &mut Interner,
     hyp_index: &HashMap<String, usize>,
-    cache: &HashMap<String, CachedTheorem>,
+    cache: &HashSet<String>,
     stack: &mut Vec<(Formula, MMProofTree)>,
 ) -> MetamathResult<(Formula, MMProofTree)> {
     let stmt = resolved
@@ -1942,16 +1907,14 @@ fn apply_label(
 
             // Substitution from the floating-hypothesis arguments (the first
             // `mandatory_floats.len()` popped entries): string form (to track
-            // the resulting stack formula) and interned form (to build the
-            // kernel `subst` / inline `$p` reuse).
+            // the resulting stack formula) and interned pairs (for the kernel
+            // substitution).
             let mut subst_str: HashMap<String, Vec<String>> = HashMap::new();
             let mut subst_pairs: Vec<(u64, Vec<u64>)> = Vec::new();
-            let mut subst_codes: HashMap<u64, Vec<u64>> = HashMap::new();
             for (arg, hyp) in args.iter().zip(a.mandatory_floats.iter()) {
                 subst_str.insert(hyp.variable.clone(), arg.0.tokens.clone());
                 let var = interner.intern(&hyp.variable);
                 let repl = interner.tokens(&arg.0.tokens);
-                subst_codes.insert(var, repl.clone());
                 subst_pairs.push((var, repl));
             }
 
@@ -1962,7 +1925,6 @@ fn apply_label(
             // constants (`mm.<label>`), applied here at the call-site
             // substitution — SCHEMATIC reuse, no inlining, so the term stays
             // small. A `$p` is reusable only once it has verified (is in `cache`).
-            let _ = &subst_codes;
             // `$d`-constrained axioms (e.g. ax-5) ARE applied here: the registrar
             // gave them `disjPair … = true` GUARD arrows, and the GROUND guarded
             // verification path discharges those so the kernel enforces the
@@ -1970,7 +1932,7 @@ fn apply_label(
             // applies one to that path.) A reused `$p` theorem must still have
             // verified ($d-free schematic theorems are in `cache`; $d-bearing ones
             // are ground-only, so reusing them stays skipped).
-            if a.kind != "axiom" && !cache.contains_key(&a.label) {
+            if a.kind != "axiom" && !cache.contains(&a.label) {
                 return Err(MetamathError::InvalidStatement(format!(
                     "unsupported: proof of {} reuses $p theorem {label} that did not verify",
                     theorem.label
@@ -1986,49 +1948,6 @@ fn apply_label(
     };
     stack.push(entry.clone());
     Ok(entry)
-}
-
-/// Inline a cached `$p` theorem's tree at a call site: apply the call-site
-/// substitution `sigma` (the theorem's variable codes → replacement forms) to
-/// every form inside, and replace each `Hyp(j)` with the call-site argument
-/// `use_args[j]`. The result references only `$a` axioms and the OUTER theorem's
-/// hypotheses.
-fn inline_tree(
-    node: &MMProofTree,
-    sigma: &HashMap<u64, Vec<u64>>,
-    use_args: &[MMProofTree],
-) -> MMProofTree {
-    match node {
-        MMProofTree::Hyp(j) => use_args[*j].clone(),
-        MMProofTree::Apply {
-            assertion,
-            subst,
-            args,
-        } => MMProofTree::Apply {
-            assertion: assertion.clone(),
-            subst: subst
-                .iter()
-                .map(|(v, form)| (*v, apply_codes(sigma, form)))
-                .collect(),
-            args: args
-                .iter()
-                .map(|a| inline_tree(a, sigma, use_args))
-                .collect(),
-        },
-    }
-}
-
-/// Apply an interned substitution to an interned form (symbol-list splice).
-fn apply_codes(sigma: &HashMap<u64, Vec<u64>>, form: &[u64]) -> Vec<u64> {
-    let mut out = Vec::with_capacity(form.len());
-    for &s in form {
-        if let Some(r) = sigma.get(&s) {
-            out.extend_from_slice(r);
-        } else {
-            out.push(s);
-        }
-    }
-    out
 }
 
 /// Apply a substitution to a form using FIRST-match semantics over the binding
@@ -2052,25 +1971,10 @@ fn tree_size(node: &MMProofTree) -> usize {
     }
 }
 
-/// Whether the proof tree applies any `$d`-constrained (tainted) axiom — such a
-/// proof must be verified on the GROUND guarded path, where the kernel can enforce
-/// the disjoint-variable side-condition (M12).
-fn tree_uses(node: &MMProofTree, tainted: &hashbrown::HashSet<String>) -> bool {
-    match node {
-        MMProofTree::Hyp(_) => false,
-        MMProofTree::Apply {
-            assertion, args, ..
-        } => tainted.contains(assertion) || args.iter().any(|a| tree_uses(a, tainted)),
-    }
-}
-
 /// Whether the proof tree applies any GUARDED assertion — a `$d`-bearing axiom OR a
 /// verified `$d`-bearing schematic theorem (anything in `guards`). Such a proof must
 /// take the schematic-`$d` path so the kernel discharges those guards (M13).
-fn tree_uses_guarded(
-    node: &MMProofTree,
-    guards: &hashbrown::HashMap<String, Vec<(u64, u64)>>,
-) -> bool {
+fn tree_uses_guarded(node: &MMProofTree, guards: &HashMap<String, Vec<(u64, u64)>>) -> bool {
     match node {
         MMProofTree::Hyp(_) => false,
         MMProofTree::Apply {
@@ -2084,9 +1988,9 @@ fn tree_uses_guarded(
 /// `axiom_map`) PLUS every dummy of a verified theorem it reuses (`dummy_frames`).
 fn collect_dummy_frame(
     node: &MMProofTree,
-    float_names: &hashbrown::HashSet<String>,
+    float_names: &HashSet<String>,
     axiom_map: &HashMap<String, (Vec<Vec<u64>>, Vec<u64>)>,
-    dummy_frames: &hashbrown::HashMap<String, Vec<u64>>,
+    dummy_frames: &HashMap<String, Vec<u64>>,
     out: &mut std::collections::BTreeSet<u64>,
 ) {
     if let MMProofTree::Apply {
@@ -2114,7 +2018,7 @@ fn collect_dummy_frame(
 /// MANDATORY floats are `Hyp` nodes) → `dummy_code -> (typecode, float_name)`.
 fn collect_direct_dummies(
     node: &MMProofTree,
-    float_names: &hashbrown::HashSet<String>,
+    float_names: &HashSet<String>,
     axiom_map: &HashMap<String, (Vec<Vec<u64>>, Vec<u64>)>,
     out: &mut std::collections::BTreeMap<u64, (u64, String)>,
 ) {
@@ -2187,7 +2091,7 @@ fn rename_tree_dummies(
 /// can discharge whichever order a step needs (`disjPair` is not symmetric).
 fn both_orders(pairs: &[(u64, u64)]) -> Vec<(u64, u64)> {
     let mut out = Vec::new();
-    let mut seen: hashbrown::HashSet<(u64, u64)> = hashbrown::HashSet::new();
+    let mut seen: HashSet<(u64, u64)> = HashSet::new();
     for &(x, y) in pairs {
         for p in [(x, y), (y, x)] {
             if seen.insert(p) {

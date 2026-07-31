@@ -141,6 +141,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.zero_init == true`
+    #[cfg(test)]
     pub(crate) fn has_zero(&self) -> bool {
         self.zero_init
     }
@@ -262,6 +263,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_one` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_one(&self) -> bool {
         self.one_init
     }
@@ -525,6 +527,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_mul` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_mul(&self) -> bool {
         self.mul_init
     }
@@ -665,6 +668,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_neg` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_neg(&self) -> bool {
         self.neg_init
     }
@@ -795,6 +799,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_sub` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_sub(&self) -> bool {
         self.sub_init
     }

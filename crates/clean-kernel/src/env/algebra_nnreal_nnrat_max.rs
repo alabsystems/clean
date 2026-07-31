@@ -29,12 +29,15 @@
 
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::expr::ExprKind;
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the `NNRat` order/max layer.
 pub(crate) struct NNRatMaxConsts {
+    #[cfg(test)]
     prop: Expr,
     rat: Expr,
     rat_zero: Expr,
@@ -59,6 +62,7 @@ impl NNRatMaxConsts {
         let lvl1 = Level::succ(Level::zero());
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
+            #[cfg(test)]
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),

@@ -41,12 +41,12 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
         python_tool_row_with_status_and_criticality(
             "docs-metrics-sync",
             "python3 scripts/sync_readme_metrics.py --check",
-            "README.md; docs/DESIGN.md; docs/VERIFICATION_METRICS.md",
+            "docs/SOURCE_INVENTORY.md",
             "non-launch diagnostic only; no replacement launch surface required",
             ToolMigrationStatus::Demoted,
             false,
-            "Demoted out of replacement launch evidence because README/design/verification metric freshness is not Lean4 replacement-critical.",
-            "scripts/sync_readme_metrics.py remains a non-launch diagnostic for public metric freshness and cannot satisfy or block Lean4 replacement readiness.",
+            "Demoted out of replacement launch evidence because static source-inventory freshness is not Lean4 replacement-critical.",
+            "scripts/sync_readme_metrics.py remains a non-launch diagnostic for SOURCE_INVENTORY.md static source-layout freshness and cannot satisfy or block Lean4 replacement readiness.",
         ),
         python_tool_row_with_status(
             "system-health-release-json",
@@ -54,7 +54,7 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "docs/RELEASE_READINESS.md",
             "clean factory status --json",
             ToolMigrationStatus::RustOwned,
-            "The Rust factory status command owns release health JSON, tracked Cargo.lock presence, stale git gc-log detection, local Rust toolchain availability, sibling ay path reachability, and fail-closed ay update freshness.",
+            "The Rust factory status command owns release health JSON, tracked Cargo.lock presence, stale git gc-log detection, local Rust toolchain availability, committed AY Git-graph validation, and fail-closed remote-main freshness.",
             "Primary release health JSON uses clean factory status --json; scripts/system_health_check.py is no longer launch evidence for system health and remains only as a legacy diagnostic.",
         ),
         python_tool_row_with_status(
@@ -98,13 +98,13 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
         ),
         python_tool_row_with_status_and_criticality(
             "mathverse-download-pytest",
-            "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_download_mathverse_library.py",
+            "retired: tests/test_download_mathverse_library.py (never tracked)",
             "docs/RELEASE_READINESS.md",
             "clean mathverse download --version <version> --output-dir <dir> --json verified launch gate with exact mathverse-library-v<version>.tar.zst asset selection, temp extraction failure reporting, manifest checksum verification, zero-shard/manifest drift rejection, and stale-shard cleanup",
             ToolMigrationStatus::RustOwned,
             true,
             "Rust-owned Mathverse download verification gate covers the scripts/download_mathverse_library.sh launch contract: rejects missing or wrong-version mathverse-library-v*.tar.zst assets, invalid or zero-shard archives, manifest checksum/aggregate/path mismatches, temp-extract failures, and stale output shards before publishing.",
-            "Primary launch evidence is clean mathverse download --version <version> --output-dir <dir> --json plus cmd_mathverse Rust unit coverage; tests/test_download_mathverse_library.py remains a legacy shell-script regression lane, not the replacement launch blocker.",
+            "Primary launch evidence is clean mathverse download --version <version> --output-dir <dir> --json plus cmd_mathverse Rust unit coverage. The referenced Python test was never tracked and is retired; no Python wrapper remains in this lane.",
         ),
     ]
 }

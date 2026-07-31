@@ -1029,7 +1029,7 @@ impl ShardWriter {
         // `write` is `&self`, so build an effective string table that appends the
         // module name only when it is not already interned. `module_name_idx == 0`
         // (the empty-string sentinel slot) means "no bound module".
-        let (effective_strings, module_name_idx): (std::borrow::Cow<[String]>, u32) =
+        let (effective_strings, module_name_idx): (std::borrow::Cow<'_, [String]>, u32) =
             match &self.module_name {
                 Some(name) => match self.strings.iter().position(|s| s == name) {
                     Some(idx) => (std::borrow::Cow::Borrowed(&self.strings), idx as u32),

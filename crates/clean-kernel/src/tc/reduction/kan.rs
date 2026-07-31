@@ -1699,7 +1699,7 @@ impl<'env> TypeChecker<'env> {
         a_base: &Expr,
         a1: &Expr,
         level: &Level,
-        mode: WhnfMode,
+        _mode: WhnfMode,
     ) -> Option<Expr> {
         // Single-cell residual scope: the `glue` intro encodes exactly one cell whose
         // face is the Glue extent, so a multi-cell residual Glue is left stuck (sound).
@@ -4598,7 +4598,7 @@ pub(crate) fn is_prop_to_is_set(level: Level, a: &Expr, hprop: &Expr) -> Expr {
 /// universe. SOUNDNESS: a genuine type-preserving Kan composite — endpoints
 /// `b0`/`b1` compute, the cap is coherent, no `sorry`.
 #[allow(dead_code, non_snake_case)]
-pub(crate) fn to_path_p(level: Level, b_line: &Expr, b0: &Expr, b1: &Expr, q: &Expr) -> Expr {
+pub(crate) fn to_path_p(level: Level, b_line: &Expr, b0: &Expr, _b1: &Expr, q: &Expr) -> Expr {
     let i0 = || Expr::from_kind(ExprKind::CubicalI0);
     let i1 = || Expr::from_kind(ExprKind::CubicalI1);
     let interval = || Expr::from_kind(ExprKind::CubicalInterval);

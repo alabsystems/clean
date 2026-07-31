@@ -947,3 +947,38 @@ fn test_verify_nested_lam_const_combinator() {
         result.err()
     );
 }
+
+#[test]
+fn rejected_scoped_certificate_does_not_leak_binder_authority() {
+    let env = empty_env();
+    let mut verifier = CertVerifier::new(&env);
+    let prop = Expr::prop();
+    let lam = Expr::lam(BinderInfo::Default, prop.clone(), bv(0));
+    let malformed = ProofCert::Lam {
+        binder_info: BinderInfo::Default,
+        arg_type_cert: Box::new(ProofCert::Sort {
+            level: Level::zero(),
+        }),
+        // The expression body is BVar(0), so this certificate fails only
+        // after the Lam verifier has extended its local context.
+        body_cert: Box::new(ProofCert::BVar {
+            idx: 1,
+            expected_type: Box::new(prop.clone()),
+        }),
+        result_type: Box::new(Expr::pi(BinderInfo::Default, prop.clone(), prop.clone())),
+    };
+    assert!(verifier.verify(&malformed, &lam).is_err());
+
+    let free_bvar = bv(0);
+    let forged = ProofCert::BVar {
+        idx: 0,
+        expected_type: Box::new(prop),
+    };
+    assert!(
+        matches!(
+            verifier.verify(&forged, &free_bvar),
+            Err(CertError::InvalidBVar(0))
+        ),
+        "a rejected scoped proof must not leave a reusable verifier context"
+    );
+}

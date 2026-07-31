@@ -1057,7 +1057,7 @@ impl Environment {
         let cons_of = |a: &Expr, x: Expr, l: Expr| Expr::apps(list_cons.clone(), [a.clone(), x, l]);
         let mem = |a: &Expr, x: Expr, l: Expr| Expr::apps(mem_const.clone(), [a.clone(), x, l]);
         let nodup = |a: &Expr, l: Expr| Expr::apps(nodup_const.clone(), [a.clone(), l]);
-        let perm_rel = |a: &Expr| Expr::app(perm_const.clone(), a.clone());
+        let _perm_rel = |a: &Expr| Expr::app(perm_const.clone(), a.clone());
         let perm =
             |a: &Expr, l1: Expr, l2: Expr| Expr::apps(perm_const.clone(), [a.clone(), l1, l2]);
         let eq_ = |a: &Expr, x: Expr, y: Expr| Expr::apps(eq_const.clone(), [a.clone(), x, y]);
@@ -2020,7 +2020,7 @@ impl Environment {
         let nil_of = |a: &Expr| Expr::app(list_nil.clone(), a.clone());
         let mem = |a: &Expr, x: Expr, l: Expr| Expr::apps(mem_const.clone(), [a.clone(), x, l]);
         let not = |p: Expr| Expr::app(not_const.clone(), p);
-        let fin_of = |a: &Expr| Expr::app(finset_const.clone(), a.clone());
+        let _fin_of = |a: &Expr| Expr::app(finset_const.clone(), a.clone());
         let fempty_of = |a: &Expr| Expr::app(finset_empty.clone(), a.clone());
         let fmem = |a: &Expr, x: Expr, f: Expr| Expr::apps(finset_mem.clone(), [a.clone(), x, f]);
 

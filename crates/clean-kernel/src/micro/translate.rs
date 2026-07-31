@@ -10,7 +10,7 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 
 use crate::cert::ProofCert;
-use crate::expr::{BigNat, Expr, ExprKind, Literal};
+use crate::expr::{stack_safe, BigNat, Expr, ExprKind, Literal};
 use crate::level::Level;
 
 use super::checker::MicroChecker;
@@ -75,6 +75,10 @@ impl MicroLevel {
     /// ENSURES: `Err(UnsupportedLevel)` if level contains Param (universe polymorphism)
     /// ENSURES: Zero, Succ, Max, IMax are preserved structurally
     pub fn from_kernel(level: &Level) -> Result<MicroLevel, TranslateError> {
+        stack_safe(|| Self::from_kernel_impl(level))
+    }
+
+    fn from_kernel_impl(level: &Level) -> Result<MicroLevel, TranslateError> {
         match level {
             Level::Zero => Ok(MicroLevel::Zero),
             Level::Succ(l) => Ok(MicroLevel::Succ(Arc::new(MicroLevel::from_kernel(l)?))),
@@ -101,6 +105,10 @@ impl MicroLevel {
     /// they are PRESENT in the read-only env (presence is the fail-closed
     /// coverage gate). The load-bearing reduction re-check is level-free.
     pub fn from_kernel_erased(level: &Level) -> MicroLevel {
+        stack_safe(|| Self::from_kernel_erased_impl(level))
+    }
+
+    fn from_kernel_erased_impl(level: &Level) -> MicroLevel {
         match level {
             Level::Zero | Level::Param(_) => MicroLevel::Zero,
             Level::Succ(l) => MicroLevel::Succ(Arc::new(MicroLevel::from_kernel_erased(l))),
@@ -133,6 +141,10 @@ impl MicroExpr {
     /// ENSURES: `Err(UnsupportedExpr)` for cubical/classical/ZFC/impredicative extensions
     /// ENSURES: `Err(UnsupportedLevel)` if any universe level contains Param
     pub fn from_kernel(expr: &Expr) -> Result<MicroExpr, TranslateError> {
+        stack_safe(|| Self::from_kernel_impl(expr))
+    }
+
+    fn from_kernel_impl(expr: &Expr) -> Result<MicroExpr, TranslateError> {
         match &expr.kind {
             ExprKind::BVar(idx) => Ok(MicroExpr::BVar(*idx)),
             ExprKind::Sort(level) => Ok(MicroExpr::Sort(MicroLevel::from_kernel(level)?)),
@@ -212,6 +224,10 @@ impl MicroExpr {
     /// `Eq.{1}` / `Eq.refl.{1}` heads of the corpus, which we keep but whose
     /// single level is not load-bearing for the structural type comparison.
     pub fn from_kernel_env(expr: &Expr) -> Result<MicroExpr, TranslateError> {
+        stack_safe(|| Self::from_kernel_env_impl(expr))
+    }
+
+    fn from_kernel_env_impl(expr: &Expr) -> Result<MicroExpr, TranslateError> {
         match &expr.kind {
             ExprKind::BVar(idx) => Ok(MicroExpr::BVar(*idx)),
             ExprKind::Sort(level) => Ok(MicroExpr::Sort(MicroLevel::from_kernel_erased(level))),
@@ -277,6 +293,13 @@ impl MicroExpr {
     /// This is useful when you have a closed expression with constants that
     /// you want to treat as opaque with known types.
     pub fn from_kernel_with_opaques(
+        expr: &Expr,
+        opaque_types: &std::collections::HashMap<String, MicroExpr>,
+    ) -> Result<MicroExpr, TranslateError> {
+        stack_safe(|| Self::from_kernel_with_opaques_impl(expr, opaque_types))
+    }
+
+    fn from_kernel_with_opaques_impl(
         expr: &Expr,
         opaque_types: &std::collections::HashMap<String, MicroExpr>,
     ) -> Result<MicroExpr, TranslateError> {
@@ -365,6 +388,10 @@ impl MicroCert {
     /// This is expected - the micro-checker only handles a subset of the
     /// full kernel's capabilities.
     pub fn from_proof_cert(cert: &ProofCert) -> Option<MicroCert> {
+        stack_safe(|| Self::from_proof_cert_impl(cert))
+    }
+
+    fn from_proof_cert_impl(cert: &ProofCert) -> Option<MicroCert> {
         match cert {
             ProofCert::Sort { level } => {
                 let micro_level = MicroLevel::from_kernel(level).ok()?;
@@ -514,6 +541,10 @@ impl MicroCert {
     /// certificates (FVars, mode-specific forms) — the caller treats `None`
     /// as `Unsupported` (fail-closed).
     pub fn from_proof_cert_env(cert: &ProofCert) -> Option<MicroCert> {
+        stack_safe(|| Self::from_proof_cert_env_impl(cert))
+    }
+
+    fn from_proof_cert_env_impl(cert: &ProofCert) -> Option<MicroCert> {
         match cert {
             ProofCert::Sort { level } => Some(MicroCert::Sort {
                 level: MicroLevel::from_kernel(level).ok()?,
@@ -661,7 +692,7 @@ pub fn diversity_check_rfl(
     let micro_expr = micro_expr_of_cert(&micro_cert);
 
     // --- Stage B: env-aware typing re-check ---
-    let mut checker = super::MicroChecker::with_env(env);
+    let mut checker = MicroChecker::with_env(env);
     match checker.verify_result(&micro_cert, &micro_expr) {
         MicroResult::Unsupported(m) => {
             return DiversityOutcome::Unsupported(format!("typing: {m}"));
@@ -671,7 +702,7 @@ pub fn diversity_check_rfl(
         }
         MicroResult::Verified(ty) => {
             // Confirm the micro type matches the kernel's inferred type.
-            let eq = super::MicroChecker::with_env(env);
+            let eq = MicroChecker::with_env(env);
             match eq.check_def_eq_result(&ty, &micro_inferred) {
                 MicroResult::Unsupported(m) => {
                     return DiversityOutcome::Unsupported(format!("type compare: {m}"));
@@ -694,7 +725,7 @@ pub fn diversity_check_rfl(
         let Ok(mrhs) = MicroExpr::from_kernel_env(rhs) else {
             return DiversityOutcome::Unsupported("Eq rhs not translatable".to_string());
         };
-        let eq = super::MicroChecker::with_env(env);
+        let eq = MicroChecker::with_env(env);
         // Value-eq: both sides MUST reduce to closed Nat values. An unmodelable
         // recursor leaves a stuck head -> Unsupported (fail-closed), not a
         // misleading Disagreement.
@@ -718,6 +749,10 @@ pub fn diversity_check_rfl(
 /// Mirrors the structural shape the checker's `verify_impl` expects to pair
 /// with each cert node.
 fn micro_expr_of_cert(cert: &MicroCert) -> MicroExpr {
+    stack_safe(|| micro_expr_of_cert_impl(cert))
+}
+
+fn micro_expr_of_cert_impl(cert: &MicroCert) -> MicroExpr {
     match cert {
         MicroCert::Sort { level } => MicroExpr::Sort(level.clone()),
         MicroCert::Const { name, .. } => MicroExpr::Const(name.clone()),

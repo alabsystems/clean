@@ -51,6 +51,7 @@ use crate::name::Name;
 struct NsConsts {
     nat: Expr,
     nat_succ: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
     nat_add: Expr,
     nat_pow: Expr,
@@ -88,6 +89,7 @@ impl NsConsts {
         Self {
             nat: k("Nat"),
             nat_succ,
+            #[cfg(test)]
             nat_zero,
             nat_add: k("Nat.add"),
             nat_pow: k("Nat.pow"),

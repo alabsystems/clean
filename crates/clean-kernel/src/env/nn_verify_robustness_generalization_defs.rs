@@ -19,8 +19,11 @@
 //!
 //! Part of #3262.
 
+#[cfg(test)]
 use super::nn_verify_robustness_generalization::RobustnessGenConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -28,6 +31,7 @@ use crate::expr::{BinderInfo, Expr};
 // =============================================================================
 
 /// `NNVerify.RobustnessGen.certified_robust : Nat -> (NNVec n -> NNVec n) -> Rat -> Prop`
+#[cfg(test)]
 pub(super) fn build_certified_robust_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -41,6 +45,7 @@ pub(super) fn build_certified_robust_type(c: &RobustnessGenConsts) -> Expr {
 }
 
 /// `NNVerify.RobustnessGen.lipschitz_local : Nat -> (NNVec n -> NNVec n) -> Rat -> Rat -> Prop`
+#[cfg(test)]
 pub(super) fn build_lipschitz_local_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -56,21 +61,25 @@ pub(super) fn build_lipschitz_local_type(c: &RobustnessGenConsts) -> Expr {
 }
 
 /// `NNVerify.RobustnessGen.nat_to_rat : Nat -> Rat`
+#[cfg(test)]
 pub(super) fn build_nat_to_rat_type(c: &RobustnessGenConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.nat.clone(), c.rat.clone())
 }
 
 /// `NNVerify.RobustnessGen.sqrt : Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_sqrt_type(c: &RobustnessGenConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.rat.clone(), c.rat.clone())
 }
 
 /// `NNVerify.RobustnessGen.ln : Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_ln_type(c: &RobustnessGenConsts) -> Expr {
     Expr::pi(BinderInfo::Default, c.rat.clone(), c.rat.clone())
 }
 
 /// `NNVerify.RobustnessGen.rademacher_complexity : Nat -> Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_rademacher_complexity_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, _) = b.fresh_local(c.nat.clone());
@@ -81,6 +90,7 @@ pub(super) fn build_rademacher_complexity_type(c: &RobustnessGenConsts) -> Expr 
 }
 
 /// `NNVerify.RobustnessGen.generalization_gap : Rat -> Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_generalization_gap_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (tr_id, _) = b.fresh_local(c.rat.clone());
@@ -91,6 +101,7 @@ pub(super) fn build_generalization_gap_type(c: &RobustnessGenConsts) -> Expr {
 }
 
 /// `NNVerify.RobustnessGen.gen_bound : Nat -> Rat -> Rat -> Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_gen_bound_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, _) = b.fresh_local(c.nat.clone());
@@ -116,6 +127,7 @@ pub(super) fn build_gen_bound_type(c: &RobustnessGenConsts) -> Expr {
 /// ```
 ///
 /// Certified robustness radius eps implies local Lipschitz constant 1/eps.
+#[cfg(test)]
 pub(super) fn build_certified_implies_lipschitz_local_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -169,6 +181,7 @@ pub(super) fn build_certified_implies_lipschitz_local_type(c: &RobustnessGenCons
 ///
 /// Classical result: Rademacher complexity of L-Lipschitz class on R^d
 /// is bounded by L * sqrt(d) / sqrt(m).
+#[cfg(test)]
 pub(super) fn build_lipschitz_rademacher_bound_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -206,6 +219,7 @@ pub(super) fn build_lipschitz_rademacher_bound_type(c: &RobustnessGenConsts) -> 
 /// ```
 ///
 /// Standard PAC-learning generalization bound via Rademacher complexity.
+#[cfg(test)]
 pub(super) fn build_rademacher_gen_bound_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (rn_id, r_n) = b.fresh_local(c.rat.clone());
@@ -264,6 +278,7 @@ pub(super) fn build_rademacher_gen_bound_type(c: &RobustnessGenConsts) -> Expr {
 /// certificate => better generalization). The bound has two terms:
 /// - Rademacher term: 2*sqrt(d)/(eps*sqrt(m)) from certificate => Lipschitz
 /// - Confidence term: sqrt(ln(2/delta)/(2*m)) from PAC tail bound
+#[cfg(test)]
 pub(super) fn build_certificate_gen_bound_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());
@@ -328,6 +343,7 @@ pub(super) fn build_certificate_gen_bound_type(c: &RobustnessGenConsts) -> Expr 
 /// Monotonicity: a larger robustness radius (tighter certificate) implies
 /// a smaller generalization bound. This follows from the 1/eps factor in
 /// the Rademacher term.
+#[cfg(test)]
 pub(super) fn build_tighter_cert_better_gen_type(c: &RobustnessGenConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (d_id, d) = b.fresh_local(c.nat.clone());

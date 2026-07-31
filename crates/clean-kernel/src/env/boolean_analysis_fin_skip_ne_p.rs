@@ -42,7 +42,9 @@ struct SkipNePConsts {
     skip_nth_lt: Expr,
     skip_nth_ge: Expr,
     nat_lt_irrefl: Expr,
+    #[cfg(test)]
     nat_lt_of_lt_of_le: Expr,
+    #[cfg(test)]
     nat_le_of_succ_le_succ: Expr,
     nat_not_lt: Expr, // Nat.not_lt : Iff (¬ a<b) (b≤a)
     iff_mp: Expr,     // Iff.mp
@@ -76,7 +78,9 @@ impl SkipNePConsts {
             skip_nth_lt: k("Fin.skipNth_lt"),
             skip_nth_ge: k("Fin.skipNth_ge"),
             nat_lt_irrefl: k("Nat.lt_irrefl"),
+            #[cfg(test)]
             nat_lt_of_lt_of_le: k("Nat.lt_of_lt_of_le"),
+            #[cfg(test)]
             nat_le_of_succ_le_succ: k("Nat.le_of_succ_le_succ"),
             nat_not_lt: k("Nat.not_lt"),
             iff_mp: Expr::const_(Name::from_string("Iff.mp"), vec![]),

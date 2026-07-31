@@ -543,8 +543,8 @@ fn test_translate_level_max() {
 
     // Test that we can construct a Max if needed (raw construction)
     let raw_max = Level::Max(
-        Arc::new(Level::succ(Level::zero())),
-        Arc::new(Level::succ(Level::succ(Level::zero()))),
+        Level::succ(Level::zero()).into(),
+        Level::succ(Level::succ(Level::zero())).into(),
     );
     let micro_max = MicroLevel::from_kernel(&raw_max).unwrap();
     // This should be Max(1, 2)
@@ -997,6 +997,41 @@ fn test_verify_opaque_mismatching_type() {
 
     let result = checker.verify(&cert, &expr);
     assert!(matches!(result, Err(MicroError::TypeMismatch { .. })));
+}
+
+/// Every recursive certificate edge must re-enter the segmented-stack guard.
+/// A guard only at `verify`'s root still leaves one finite grown segment, which
+/// adversarially deep (but structurally valid) projection certificates can
+/// exhaust.
+#[test]
+fn test_verify_deep_projection_certificate_is_stack_safe() {
+    const DEPTH: usize = 10_000;
+
+    let ty = sort(l0());
+    let mut expr = MicroExpr::Opaque(Arc::new(ty.clone()));
+    let mut cert = MicroCert::Opaque {
+        ty: Box::new(ty.clone()),
+    };
+    for _ in 0..DEPTH {
+        expr = MicroExpr::Proj(0, Arc::new(expr));
+        cert = MicroCert::Proj {
+            idx: 0,
+            expr_cert: Box::new(cert),
+            field_ty: Box::new(ty.clone()),
+        };
+    }
+
+    let mut checker = MicroChecker::new();
+    assert_eq!(
+        checker.verify(&cert, &expr),
+        Ok(ty),
+        "deep projection certificate should verify on the default test stack"
+    );
+
+    // Recursive Drop is a separate concern from verification and can obscure
+    // this regression on platforms with especially small test-thread stacks.
+    std::mem::forget(cert);
+    std::mem::forget(expr);
 }
 
 // --- MicroChecker::structural_eq tests ---
@@ -1608,7 +1643,7 @@ fn test_micro_subst_let_body_depth() {
         Arc::new(MicroExpr::BVar(1)),                // body: BVar(1)
     );
     let result = let_expr.subst(0, &val);
-    match result {
+    match &result {
         MicroExpr::Let(_, _, body) => {
             // BVar(1) at depth 1: 1 == 1, so substitute with val (no lifting needed)
             assert!(
@@ -1627,7 +1662,7 @@ fn test_micro_subst_let_body_depth() {
         Arc::new(MicroExpr::BVar(0)),
     );
     let result = let_expr.subst(0, &val);
-    match result {
+    match &result {
         MicroExpr::Let(_, _, body) => {
             assert!(
                 matches!(body.as_ref(), MicroExpr::BVar(0)),
@@ -2602,4 +2637,83 @@ fn test_verify_bvar_cross_check_depth_3() {
         matches!(forged_result, Err(MicroError::TypeMismatch { .. })),
         "Forged BVar type at depth 3 should be rejected, got: {forged_result:?}"
     );
+}
+
+#[test]
+fn deep_micro_values_clone_compare_debug_and_drop_on_tiny_stack() {
+    crate::test_utils::run_with_stack(256 * 1024, || {
+        let mut level = MicroLevel::Zero;
+        let mut expr = MicroExpr::BVar(0);
+        let mut cert = MicroCert::Sort {
+            level: MicroLevel::Zero,
+        };
+        for idx in 0..20_000 {
+            level = MicroLevel::Succ(Arc::new(level));
+            expr = MicroExpr::Proj(idx, Arc::new(expr));
+            cert = MicroCert::Proj {
+                idx,
+                expr_cert: Box::new(cert),
+                field_ty: Box::new(MicroExpr::BVar(idx)),
+            };
+        }
+
+        let level_clone = level.clone();
+        let expr_clone = expr.clone();
+        let cert_clone = cert.clone();
+        assert_eq!(level, level_clone);
+        assert_eq!(expr, expr_clone);
+        assert_eq!(cert, cert_clone);
+        assert!(format!("{level:?}").len() < 256);
+        assert!(format!("{expr:?}").len() < 256);
+        assert!(format!("{cert:?}").len() < 512);
+
+        // All six recursive roots are intentionally dropped normally on this
+        // 256 KiB thread.
+    });
+}
+
+#[test]
+fn shallow_micro_debug_is_exact() {
+    assert_eq!(
+        format!("{:?}", MicroLevel::Succ(Arc::new(MicroLevel::Zero))),
+        "Succ(Zero)"
+    );
+    assert_eq!(
+        format!("{:?}", MicroExpr::Proj(3, Arc::new(MicroExpr::BVar(7)))),
+        "Proj(3, BVar)"
+    );
+    assert_eq!(
+        format!(
+            "{:?}",
+            MicroCert::Proj {
+                idx: 3,
+                expr_cert: Box::new(MicroCert::Sort {
+                    level: MicroLevel::Zero,
+                }),
+                field_ty: Box::new(MicroExpr::BVar(7)),
+            }
+        ),
+        "Proj { idx: 3, expr_cert: Sort, field_ty: BVar }"
+    );
+}
+
+#[test]
+fn huge_nat_debug_is_bounded_and_does_not_materialize_all_digits() {
+    crate::test_utils::run_with_stack(256 * 1024, || {
+        let huge = (num_bigint::BigUint::from(1_u8) << 1_000_000_usize)
+            + num_bigint::BigUint::from(0xfeed_beef_u64);
+        let expr = MicroExpr::Lit(MicroLiteral::Nat(huge.clone()));
+        let cert = MicroCert::Lit {
+            lit: MicroLiteral::Nat(huge),
+            ty: Box::new(MicroExpr::BVar(0)),
+        };
+
+        let expr_output = format!("{expr:?}");
+        let cert_output = format!("{cert:?}");
+        assert!(expr_output.contains("bits: 1000001"));
+        assert!(expr_output.contains("4276993775"));
+        assert!(cert_output.contains("bits: 1000001"));
+        assert!(expr_output.len() < 256);
+        assert!(cert_output.len() < 512);
+    });
 }

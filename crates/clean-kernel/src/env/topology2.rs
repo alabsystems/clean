@@ -9,8 +9,10 @@
 //! - Vector bundles
 //! - Coproducts
 
+#[cfg(test)]
 use crate::env::{EnvError, Environment};
 
+#[cfg(test)]
 impl Environment {
     // ================================================================
     // TOPOLOGY.SUSPENSION PRIMITIVES
@@ -56,6 +58,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_suspension_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_suspension(&mut self) -> Result<(), EnvError> {
         if self.topology_suspension_init {
             return Ok(());
@@ -86,6 +89,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_suspension_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_suspension(&self) -> bool {
         self.topology_suspension_init
     }
@@ -123,6 +127,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_vector_bundle_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_vector_bundle(&mut self) -> Result<(), EnvError> {
         if self.topology_vector_bundle_init {
             return Ok(());
@@ -154,6 +159,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_vector_bundle_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_vector_bundle(&self) -> bool {
         self.topology_vector_bundle_init
     }
@@ -181,6 +187,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_coproduct_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_coproduct(&mut self) -> Result<(), EnvError> {
         if self.topology_coproduct_init {
             return Ok(());
@@ -215,6 +222,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_coproduct_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_coproduct(&self) -> bool {
         self.topology_coproduct_init
     }

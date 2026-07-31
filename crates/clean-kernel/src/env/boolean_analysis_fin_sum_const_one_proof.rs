@@ -61,6 +61,7 @@ struct FinSumConstOneConsts {
     eq1: Expr,
     eq_refl: Expr,
     eq_trans: Expr,
+    #[cfg(test)]
     eq_symm: Expr,
     congr_arg: Expr,
     // Quot machinery over the Rat.Raw / Rat.Raw.Equiv carrier.
@@ -100,6 +101,7 @@ impl FinSumConstOneConsts {
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_refl: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             congr_arg: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
             raw: Expr::const_(Name::from_string("Rat.Raw"), vec![]),
@@ -134,6 +136,7 @@ impl FinSumConstOneConsts {
         Expr::app(self.nat_succ.clone(), self.nat_zero.clone())
     }
     /// `@Eq Int x y`.
+    #[cfg(test)]
     fn eq_int(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.int.clone(), x, y])
     }
@@ -197,6 +200,7 @@ impl FinSumConstOneConsts {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), x, y, z, h1, h2])
     }
     /// `@Eq.symm Rat x y h : Eq Rat y x`.
+    #[cfg(test)]
     fn symm_rat(&self, x: Expr, y: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), x, y, h])
     }
@@ -204,6 +208,7 @@ impl FinSumConstOneConsts {
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn fin_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.fin_of(n), self.rat.clone())
     }
@@ -466,7 +471,7 @@ fn sum_const_one_step(c: &FinSumConstOneConsts) -> Expr {
 
     // ih : Fin.sum k (const 1) = Rat.mk (ofNat k) 1
     let ih_ty = {
-        let mut d = EnvDeclBuilder::child_of(&b);
+        let d = EnvDeclBuilder::child_of(&b);
         let lhs = c.sum(k.clone(), c.const_one_fn(&d, &k));
         d.finish_child(c.eq_rat(lhs, c.rat_natcast(k.clone())))
     };

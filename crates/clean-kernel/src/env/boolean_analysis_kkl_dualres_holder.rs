@@ -140,6 +140,7 @@ impl HolderResConsts {
     pub(super) fn rat(&self) -> Expr {
         self.o.rat.clone()
     }
+    #[cfg(test)]
     pub(super) fn zero(&self) -> Expr {
         self.o.rat_zero.clone()
     }

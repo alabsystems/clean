@@ -76,7 +76,6 @@ pub(crate) mod names {
     name!(pub(crate) FLOAT = "Float");
     name!(pub(crate) FLOAT_MK = "Float.mk");
     name!(pub(crate) DECIDABLE_IS_TRUE = "Decidable.isTrue");
-    name!(pub(crate) DECIDABLE_IS_FALSE = "Decidable.isFalse");
     name!(pub(crate) EQ_REFL = "Eq.refl");
 }
 

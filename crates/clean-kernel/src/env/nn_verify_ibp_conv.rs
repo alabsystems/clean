@@ -28,12 +28,17 @@
 //!
 //! Part of #3212.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 /// Constants for T84 conv proof construction.
+#[cfg(test)]
 struct T84Consts {
     nat: Expr,
     nn_vec: Expr,
@@ -43,7 +48,9 @@ struct T84Consts {
     prop: Expr,
 }
 
+#[cfg(test)]
 impl T84Consts {
+    #[cfg(test)]
     fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -58,18 +65,22 @@ impl T84Consts {
         }
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn mat_of(&self, m: &Expr, n: &Expr) -> Expr {
         Expr::app(Expr::app(self.nn_mat.clone(), m.clone()), n.clone())
     }
 
+    #[cfg(test)]
     fn ib_of(&self, n: &Expr) -> Expr {
         Expr::app(self.ib.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn contains(&self, n: &Expr, b: &Expr, x: &Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.ib_contains.clone(), n.clone()), b.clone()),
@@ -89,6 +100,7 @@ impl T84Consts {
 ///   contains (ibp_linear_bounds m n (toeplitz m n k W) b B)
 ///            (linear_output m n (toeplitz m n k W) b x)
 /// ```
+#[cfg(test)]
 fn build_t84_type(c: &T84Consts) -> Expr {
     let conv_kernel = Expr::const_(Name::from_string("NNVerify.ConvKernel"), vec![]);
     let toeplitz = Expr::const_(Name::from_string("NNVerify.toeplitz"), vec![]);
@@ -155,6 +167,7 @@ fn build_t84_type(c: &T84Consts) -> Expr {
     db.finish(e)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize T84 (IBP convolutional layer soundness).
     ///
@@ -166,7 +179,7 @@ impl Environment {
     /// - `NNVerify.ibp_conv_sound` — theorem with proof via axiom
     ///
     /// Depends on `init_nn_verify_ibp_linear()` for T80 types and lemmas.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_ibp_conv(&mut self) -> Result<(), EnvError> {
         let check_name = Name::from_string("NNVerify.ibp_conv_sound");
         if self.get_const(&check_name).is_some() {
@@ -185,7 +198,7 @@ impl Environment {
     /// `NNVerify.ConvKernel : Nat -> Type`
     ///
     /// Convolution kernel parameterized by kernel size.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_conv_kernel_axiom(&mut self, c: &T84Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.ConvKernel");
         if self.get_const(&name).is_some() {
@@ -208,7 +221,7 @@ impl Environment {
     /// `NNVerify.toeplitz : (m n k : Nat) -> ConvKernel k -> NNMat m n`
     ///
     /// Maps a convolution kernel to its equivalent Toeplitz weight matrix.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_toeplitz_axiom(&mut self, c: &T84Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.toeplitz");
         if self.get_const(&name).is_some() {
@@ -240,7 +253,7 @@ impl Environment {
     ///
     /// Predicate asserting that the Toeplitz construction is valid
     /// (dimensions are compatible: m = n - k + 1).
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_toeplitz_valid_axiom(&mut self, c: &T84Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.toeplitz_valid");
         if self.get_const(&name).is_some() {
@@ -270,7 +283,7 @@ impl Environment {
     /// T84: `NNVerify.ibp_conv_sound` — convolution soundness via Toeplitz reduction.
     ///
     /// Registered as axiom + theorem pair for kernel type-checking.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t84_ibp_conv_sound(&mut self, c: &T84Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.ibp_conv_sound");
         if self.get_const(&name).is_some() {

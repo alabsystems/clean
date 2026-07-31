@@ -12,9 +12,14 @@
 //!
 //! The Rat Field instance (init_rat_field_inst) is in `algebra_field_inst.rs`.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::env::{Constructor, InductiveDecl, InductiveType};
+use crate::env::{Declaration, EnvError, Environment};
+use crate::expr::Expr;
+#[cfg(test)]
+use crate::expr::{BinderInfo, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 
@@ -59,8 +64,8 @@ impl Environment {
         self.register_rat_order_proofs()?;
 
         let rat_const = Expr::const_(Name::from_string("Rat"), vec![]);
-        let le_const = Expr::const_(Name::from_string("Rat.le"), vec![]);
-        let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
+        let _le_const = Expr::const_(Name::from_string("Rat.le"), vec![]);
+        let _eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
         // Note: Rat.le_refl / Rat.le_total / Rat.lt_iff_le_not_le are now
         // kernel-checked Theorems (see `register_rat_order_proofs`), so the
         // `Rat.lt` / `Not` / `Or` / `Iff` / `And` constants they referenced are
@@ -229,6 +234,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_linear_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_linear_order(&self) -> bool {
         self.rat_linear_order_init
     }
@@ -257,6 +263,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.linear_ordered_field_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_linear_ordered_field(&mut self) -> Result<(), EnvError> {
         if self.linear_ordered_field_init {
             return Ok(());
@@ -577,6 +584,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.linear_ordered_field_init == true`
+    #[cfg(test)]
     pub(crate) fn has_linear_ordered_field(&self) -> bool {
         self.linear_ordered_field_init
     }
@@ -660,6 +668,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_ordered_field_axioms_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_ordered_field_axioms(&self) -> bool {
         self.rat_ordered_field_axioms_init
     }
@@ -674,6 +683,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_linear_ordered_field_inst_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_rat_linear_ordered_field_inst(&mut self) -> Result<(), EnvError> {
         if self.rat_linear_ordered_field_inst_init {
             return Ok(());
@@ -740,6 +750,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_linear_ordered_field_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_linear_ordered_field_inst(&self) -> bool {
         self.rat_linear_ordered_field_inst_init
     }

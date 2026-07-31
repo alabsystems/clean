@@ -23,7 +23,7 @@
 #   scripts/kernel_lint_ratchet.sh --update   # rewrite baseline (ratchet-down)
 #
 # Wired into scripts/local_gate.sh (full mode). clean-kernel does not depend on
-# ../ay, so this check is self-contained and does not compile the SMT sibling.
+# the AY solver graph, so this check is self-contained and does not compile it.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

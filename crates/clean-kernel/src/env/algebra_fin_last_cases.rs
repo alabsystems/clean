@@ -122,7 +122,7 @@ impl Environment {
         // lands in `Sort u`.
         let eq_ndrec = Expr::const_(Name::from_string("Eq.ndrec"), vec![lu.clone(), l1.clone()]);
         let eq_symm = Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]);
-        let eq1 = Expr::const_(Name::from_string("Eq"), vec![l1.clone()]);
+        let _eq1 = Expr::const_(Name::from_string("Eq"), vec![l1.clone()]);
 
         let dec = Expr::const_(Name::from_string("Decidable"), vec![]);
         // Decidable.rec eliminating into Sort u (the dispatch's motive returns

@@ -511,6 +511,8 @@ impl Parser {
                 TokenKind::LParen => binders.extend(self.explicit_binders()?),
                 TokenKind::LBrace => binders.extend(self.implicit_binders()?),
                 TokenKind::LBracket => binders.extend(self.instance_binders()?),
+                // `⦃x : T⦄` — strict-implicit, same gap as `optional_binders`.
+                TokenKind::StrictLBrace => binders.extend(self.strict_implicit_binders()?),
                 _ => break,
             }
         }
@@ -546,133 +548,5 @@ impl Parser {
         let result = self.expr();
         self.in_instance_field = saved;
         result
-    }
-
-    /// Arrow types for instance field values, stopping at field assignment boundaries
-    pub(in crate::grammar) fn instance_field_arrow_expr(
-        &mut self,
-    ) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.instance_field_app_expr()?;
-
-        while self.eat(&TokenKind::Arrow) {
-            let right = self.instance_field_arrow_expr()?;
-            let span = left.span().merge(right.span());
-            left = SurfaceExpr::Arrow(span, Box::new(left), Box::new(right));
-        }
-
-        Ok(left)
-    }
-
-    /// Application expressions for instance fields, stopping at field assignment boundaries
-    pub(in crate::grammar) fn instance_field_app_expr(
-        &mut self,
-    ) -> Result<SurfaceExpr, ParseError> {
-        let mut expr = self.atom_expr()?;
-        let mut pending_args: Vec<SurfaceArg> = Vec::new();
-
-        loop {
-            // Stop if the next token looks like a field assignment (ident followed by :=)
-            if self.is_field_assign_start() {
-                break;
-            }
-
-            // Check for Dot FIRST - if followed by ident/number, it's a projection
-            // If followed by {, it's universe instantiation (Foo.{u v})
-            if self.check(&TokenKind::Dot) {
-                let is_projection = match self.peek_kind(1) {
-                    Some(TokenKind::Ident(_) | TokenKind::NatLit(_)) => true,
-                    Some(other) => other.as_keyword_str().is_some(),
-                    None => false,
-                };
-                let is_universe_inst = matches!(self.peek_kind(1), Some(TokenKind::LBrace));
-
-                if is_universe_inst {
-                    self.advance(); // consume the dot
-                    self.advance(); // consume the {
-
-                    // Comma-separated `Foo.{u, v}` (Lean canonical); the
-                    // space-separated form is also accepted.
-                    let mut levels = Vec::new();
-                    while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
-                        levels.push(self.level_expr()?);
-                        if self.check(&TokenKind::Comma) {
-                            self.advance();
-                        }
-                    }
-                    self.expect(&TokenKind::RBrace)?;
-
-                    let end_span = self.current_span();
-                    let span = expr.span().merge(end_span);
-                    expr = SurfaceExpr::UniverseInst(span, Box::new(expr), levels);
-                    continue;
-                }
-
-                if is_projection {
-                    self.advance(); // consume the dot
-
-                    // Projection attaches to the last argument, not the whole application.
-                    let proj_base = if let Some(last_arg) = pending_args.pop() {
-                        last_arg.expr
-                    } else {
-                        let span = expr.span();
-                        std::mem::replace(&mut expr, SurfaceExpr::Hole(span))
-                    };
-
-                    let (projection, end_span) = match self.current_kind().clone() {
-                        TokenKind::Ident(field) => {
-                            let end_span = self.current_span();
-                            self.advance();
-                            (Projection::Named(field), end_span)
-                        }
-                        TokenKind::NatLit(n) => {
-                            let end_span = self.current_span();
-                            self.advance();
-                            let idx = n.to_u64().and_then(|v| u32::try_from(v).ok()).ok_or_else(
-                                || ParseError::UnexpectedToken {
-                                    line: self.current_line(),
-                                    col: self.current_span().start,
-                                    message: format!("projection index too large: {n}"),
-                                },
-                            )?;
-                            (Projection::Index(idx), end_span)
-                        }
-                        other => {
-                            if let Some(kw_str) = other.as_keyword_str() {
-                                let end_span = self.current_span();
-                                self.advance();
-                                (Projection::Named(kw_str.to_string()), end_span)
-                            } else {
-                                unreachable!("peek_kind already checked");
-                            }
-                        }
-                    };
-
-                    let proj_span = proj_base.span().merge(end_span);
-                    let projected = SurfaceExpr::Proj(proj_span, Box::new(proj_base), projection);
-
-                    if matches!(&expr, SurfaceExpr::Hole(_)) {
-                        expr = projected;
-                    } else {
-                        pending_args.push(SurfaceArg::positional(projected));
-                    }
-                    continue;
-                }
-            }
-
-            if self.is_atom_start() {
-                let arg = self.atom_expr()?;
-                pending_args.push(SurfaceArg::positional(arg));
-                continue;
-            }
-
-            break;
-        }
-
-        if pending_args.is_empty() {
-            Ok(expr)
-        } else {
-            let span = expr.span();
-            Ok(SurfaceExpr::App(span, Box::new(expr), pending_args))
-        }
     }
 }

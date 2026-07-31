@@ -78,7 +78,7 @@ fn build_step_body(
     let two = c.two();
     let pow8n = c.pow8(n);
     let add_c = c.add_c();
-    let mul_c = c.mul_c();
+    let _mul_c = c.mul_c();
 
     // ── The leaf functions / sums.
     let pow4_full = {

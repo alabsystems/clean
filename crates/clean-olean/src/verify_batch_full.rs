@@ -17,7 +17,9 @@
 use clean_kernel::env::{Environment, ProofElisionStats, ProofValueElision};
 use clean_kernel::expr::Expr;
 use clean_kernel::name::Name;
-use clean_kernel::tc::{TypeChecker, DEFAULT_HEARTBEAT_LIMIT};
+use clean_kernel::tc::TypeChecker;
+#[cfg(test)]
+use clean_kernel::tc::DEFAULT_HEARTBEAT_LIMIT;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -138,7 +140,7 @@ pub fn typecheck_constants_full(
     tc.set_heartbeat_limit(max_heartbeats);
 
     // Phase 1: infer_sort on all types (constants, inductives, constructors, recursors)
-    let check_type_sort = |tc: &TypeChecker,
+    let check_type_sort = |tc: &TypeChecker<'_>,
                            name: &str,
                            type_: &Expr,
                            pass: &mut usize,
@@ -304,7 +306,7 @@ pub fn typecheck_constants_full_streaming(
         let mut tc = TypeChecker::new(&*env);
         tc.enable_type_cache_pub();
         tc.set_heartbeat_limit(max_heartbeats);
-        let mut check_type_sort = |tc: &mut TypeChecker, name: &str, type_: &Expr| {
+        let mut check_type_sort = |tc: &mut TypeChecker<'_>, name: &str, type_: &Expr| {
             if !target_names.contains(name) {
                 return;
             }

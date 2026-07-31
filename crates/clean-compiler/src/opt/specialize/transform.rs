@@ -193,7 +193,7 @@ pub(crate) fn specialize_code_with_index(
     state: &mut SpecState,
     code: &Code,
     config: &SpecConfig,
-    decl_index: &DeclIndex,
+    decl_index: &DeclIndex<'_>,
 ) -> Code {
     match code {
         Code::Let(decl, body) => {

@@ -11,11 +11,16 @@
 //! - Spectral sequences: computational tools for homology
 //! - Ext/Tor: fundamental derived functors
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize HomologicalAlgebra module
     ///
@@ -39,6 +44,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.homological_algebra_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_homological_algebra(&mut self) -> Result<(), EnvError> {
         if self.homological_algebra_init {
             return Ok(());
@@ -315,6 +321,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.homological_algebra_init == true`
+    #[cfg(test)]
     pub(crate) fn has_homological_algebra(&self) -> bool {
         self.homological_algebra_init
     }

@@ -7,7 +7,7 @@
 #
 # The historical stamp_mathlib_*.sh scripts each open-coded corpus discovery and
 # LEAN_PATH construction, and several hardcoded one contributor's machine paths
-# (`$HOME/trust-ir/...`, `/tmp/mathlib_lean_path.txt`) so they only ran
+# (absolute contributor checkout paths, `/tmp/mathlib_lean_path.txt`) so they only ran
 # on that box. This library centralizes that logic so every rebuild entry point
 # resolves the corpus the SAME portable way:
 #

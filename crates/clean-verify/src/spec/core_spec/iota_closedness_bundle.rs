@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Iota / whnf / infer closedness bundle (census-11 drain, Stage 2B).

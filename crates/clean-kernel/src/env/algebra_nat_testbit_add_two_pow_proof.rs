@@ -62,9 +62,11 @@ struct C {
     add: Expr,
     sub: Expr,
     rec0: Expr, // Nat.rec.{0} — Prop motive
+    #[cfg(test)]
     rec1: Expr, // Nat.rec.{1} — type-valued motive (for div2 helper recursion)
     bool_ty: Expr,
     btrue: Expr,
+    #[cfg(test)]
     bfalse: Expr,
     div2: Expr,
     div2par: Expr,
@@ -99,9 +101,11 @@ impl C {
             add: Expr::const_(Name::from_string("Nat.add"), vec![]),
             sub: Expr::const_(Name::from_string("Nat.sub"), vec![]),
             rec0: Expr::const_(Name::from_string("Nat.rec"), vec![Level::zero()]),
+            #[cfg(test)]
             rec1: Expr::const_(Name::from_string("Nat.rec"), vec![one_lvl.clone()]),
             bool_ty: Expr::const_(Name::from_string("Bool"), vec![]),
             btrue: Expr::const_(Name::from_string("Bool.true"), vec![]),
+            #[cfg(test)]
             bfalse: Expr::const_(Name::from_string("Bool.false"), vec![]),
             div2: Expr::const_(Name::from_string("Nat.div2"), vec![]),
             div2par: Expr::const_(Name::from_string("Nat.div2Par"), vec![]),
@@ -155,6 +159,7 @@ impl C {
     fn eq_bool(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.bool_ty.clone(), a, b])
     }
+    #[cfg(test)]
     fn refl_nat(&self, a: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.nat.clone(), a])
     }
@@ -218,6 +223,7 @@ impl C {
         )
     }
     /// `Nat.testBit_lt_pow n k h : testBit k n = false` (rung 4a).
+    #[cfg(test)]
     fn testbit_lt_pow(&self, n: Expr, k: Expr, h: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Nat.testBit_lt_pow"), vec![]),
@@ -247,7 +253,7 @@ fn build_div2par_add_two_mul(c: &C) -> (Expr, Expr) {
     let value = {
         let mut vb = EnvDeclBuilder::new();
         let (e_id, e) = vb.fresh_local(c.nat.clone());
-        let ee = c.add(e.clone(), e.clone());
+        let _ee = c.add(e.clone(), e.clone());
 
         // motive : fun (k : Nat) => div2Par ((e+e)+k) = div2Par k
         let motive = {

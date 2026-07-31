@@ -568,7 +568,7 @@ fn test_certified_proj_rejects_forged_field_type() {
     let (_ty0, cert0) = tc.infer_type_with_cert(&proj0).unwrap();
 
     // Tamper: replace field_type with Nat (wrong type)
-    let forged_cert = match cert0 {
+    let forged_cert = match &cert0 {
         ProofCert::Proj {
             struct_name,
             idx,
@@ -576,10 +576,10 @@ fn test_certified_proj_rejects_forged_field_type() {
             expr_type,
             field_type: _,
         } => ProofCert::Proj {
-            struct_name,
-            idx,
-            expr_cert,
-            expr_type,
+            struct_name: struct_name.clone(),
+            idx: *idx,
+            expr_cert: expr_cert.clone(),
+            expr_type: expr_type.clone(),
             field_type: Box::new(Expr::const_(Name::from_string("Nat"), vec![])),
         },
         _ => panic!("Expected Proj cert"),
@@ -622,7 +622,7 @@ fn test_certified_proj_rejects_oob_index() {
     let (_ty0, cert0) = tc.infer_type_with_cert(&proj0).unwrap();
 
     // Forge: change idx to 5 (Pair only has 2 fields)
-    let forged_cert = match cert0 {
+    let forged_cert = match &cert0 {
         ProofCert::Proj {
             struct_name,
             idx: _,
@@ -630,11 +630,11 @@ fn test_certified_proj_rejects_oob_index() {
             expr_type,
             field_type,
         } => ProofCert::Proj {
-            struct_name,
+            struct_name: struct_name.clone(),
             idx: 5,
-            expr_cert,
-            expr_type,
-            field_type,
+            expr_cert: expr_cert.clone(),
+            expr_type: expr_type.clone(),
+            field_type: field_type.clone(),
         },
         _ => panic!("Expected Proj cert"),
     };
@@ -750,7 +750,7 @@ fn test_certified_proj_rejects_struct_name_mismatch() {
     let (_ty0, cert0) = tc.infer_type_with_cert(&proj0).unwrap();
 
     // Forge: change struct_name to "Fake"
-    let forged_cert = match cert0 {
+    let forged_cert = match &cert0 {
         ProofCert::Proj {
             struct_name: _,
             idx,
@@ -759,10 +759,10 @@ fn test_certified_proj_rejects_struct_name_mismatch() {
             field_type,
         } => ProofCert::Proj {
             struct_name: Name::from_string("Fake"),
-            idx,
-            expr_cert,
-            expr_type,
-            field_type,
+            idx: *idx,
+            expr_cert: expr_cert.clone(),
+            expr_type: expr_type.clone(),
+            field_type: field_type.clone(),
         },
         _ => panic!("Expected Proj cert"),
     };

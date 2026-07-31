@@ -127,6 +127,7 @@ impl Environment {
         self.init_le()?; // LE / LE.le / LE.mk / Nat.le
         self.init_lt()?; // LT / LT.lt / LT.mk / Nat.lt
         self.init_decidable()?;
+        #[cfg(test)]
         if matches!(carrier, super::WrapperCarrier::Fin(_)) {
             self.init_fin()?; // Fin.val projection
         }
@@ -135,7 +136,7 @@ impl Environment {
 
         // ----- shared constants -----
         let zero_lvl = Level::zero();
-        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let _nat = Expr::const_(Name::from_string("Nat"), vec![]);
         let ty_c = Expr::const_(Name::from_string(name), vec![]);
         let val_c = Expr::const_(Name::from_string(&format!("{name}.val")), vec![]);
         let nat_le = Expr::const_(Name::from_string("Nat.le"), vec![]);
@@ -150,6 +151,7 @@ impl Environment {
         let lt_mk = Expr::const_(Name::from_string("LT.mk"), vec![zero_lvl.clone()]);
         let le_le = Expr::const_(Name::from_string("LE.le"), vec![zero_lvl.clone()]);
         let lt_lt = Expr::const_(Name::from_string("LT.lt"), vec![zero_lvl.clone()]);
+        #[cfg(test)]
         let fin_val = Expr::const_(Name::from_string("Fin.val"), vec![]);
 
         // Underlying `Nat` of `x : <T>`:
@@ -159,6 +161,7 @@ impl Environment {
             let v = Expr::app(val_c.clone(), x);
             match &carrier {
                 super::WrapperCarrier::Nat => v,
+                #[cfg(test)]
                 super::WrapperCarrier::Fin(size_lit) => {
                     Expr::apps(fin_val.clone(), [size_lit.clone(), v])
                 }
@@ -425,7 +428,7 @@ impl Environment {
 
         let zero = Level::zero();
         let one = Level::succ(Level::zero());
-        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let _nat = Expr::const_(Name::from_string("Nat"), vec![]);
         let ty_c = Expr::const_(Name::from_string(name), vec![]);
         let bool_c = Expr::const_(Name::from_string("Bool"), vec![]);
         let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);

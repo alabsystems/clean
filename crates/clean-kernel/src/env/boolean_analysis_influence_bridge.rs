@@ -270,7 +270,7 @@ impl InflConsts {
             [two_two.clone(), is_.clone(), kk.clone()],
         );
         let is_kk = self.mul(is_.clone(), kk.clone());
-        let s3 = self.mul(two_two.clone(), is_kk.clone());
+        let _s3 = self.mul(two_two.clone(), is_kk.clone());
         // target : 4·(is·(k·k))  — def-eq to (2·2)·(is·(k·k)).
         let target = self.mul(self.rat_four(), is_kk.clone());
 

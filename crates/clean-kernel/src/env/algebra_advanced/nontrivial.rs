@@ -187,6 +187,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nontrivial_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nontrivial(&self) -> bool {
         self.nontrivial_init
     }
@@ -339,6 +340,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_nontrivial_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_nontrivial_inst(&self) -> bool {
         self.int_nontrivial_inst_init
     }

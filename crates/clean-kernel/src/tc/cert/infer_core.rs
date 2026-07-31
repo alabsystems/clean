@@ -209,8 +209,9 @@ impl<'env> TypeChecker<'env> {
                 self.expr_loc_push(ExprPathStep::LamBody);
                 let body_result = self.infer_type_with_cert_impl(&body_with_fvar);
                 self.expr_loc_pop();
-                let (body_type, body_cert_raw) = body_result?;
+                // Pop BEFORE `?` so an Err leaves self.ctx unchanged.
                 self.ctx_pop();
+                let (body_type, body_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
                 let body_cert = convert_fvar_cert_to_bvar(body_cert_raw, fvar_id, 0);
@@ -258,8 +259,9 @@ impl<'env> TypeChecker<'env> {
                 self.expr_loc_push(ExprPathStep::PiBody);
                 let body_result = self.infer_type_with_cert_impl(&body_with_fvar);
                 self.expr_loc_pop();
-                let (body_sort, body_type_cert_raw) = body_result?;
+                // Pop BEFORE `?` so an Err leaves self.ctx unchanged.
                 self.ctx_pop();
+                let (body_sort, body_type_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
                 let body_type_cert = convert_fvar_cert_to_bvar(body_type_cert_raw, fvar_id, 0);
@@ -348,8 +350,9 @@ impl<'env> TypeChecker<'env> {
                 self.expr_loc_push(ExprPathStep::LetBody);
                 let body_result = self.infer_type_with_cert_impl(&body_with_fvar);
                 self.expr_loc_pop();
-                let (body_type, body_cert_raw) = body_result?;
+                // Pop BEFORE `?` so an Err leaves self.ctx unchanged.
                 self.ctx_pop();
+                let (body_type, body_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
                 let body_cert = convert_fvar_cert_to_bvar(body_cert_raw, fvar_id, 0);

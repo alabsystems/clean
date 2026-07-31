@@ -56,6 +56,7 @@ use crate::name::Name;
 struct PairDiagConsts {
     nat: Expr,
     rat: Expr,
+    #[cfg(test)]
     bool_: Expr,
     bool_xor: Expr,
     nat_zero: Expr,
@@ -84,6 +85,7 @@ impl PairDiagConsts {
         Self {
             nat: k("Nat"),
             rat: k("Rat"),
+            #[cfg(test)]
             bool_: k("Bool"),
             bool_xor: k("Bool.xor"),
             nat_zero: k("Nat.zero"),

@@ -315,7 +315,6 @@ pub(crate) trait IRBodyFolder {
 /// Walk `IRExpr` nodes to collect information.
 pub(crate) trait IRExprVisitor {
     type Result: Default;
-    fn combine(&self, a: Self::Result, b: Self::Result) -> Self::Result;
 
     fn visit_ctor(&mut self, _args: &[IRArg]) -> Self::Result {
         Self::Result::default()

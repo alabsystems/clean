@@ -1157,3 +1157,129 @@ fn f1_equalelim_leak_closed_on_both_hubs() {
         );
     }
 }
+
+// ── v3.2 census target #2 — the `*_dict` class-method registration gap ───────
+//
+// The 1,328 `unmapped-axiom` rejects are dominated by overloaded class-method
+// dictionary registrations that do not resolve (`numeral_dict` 356, `power_dict`
+// 136, `of_nat_dict` 105, `dvd_dict` 103, `of_int`/`sum`/`prod`/`of_bool`/`min`/
+// `max`/… tails). Root cause (`docs/analysis/zproof-v32-reject-census.md` §4): the
+// method-registration pre-pass recovered the dictionary equation
+// `c_class.method ≡ c.method op₁ … opₙ` ONLY from a legacy `Pure.symmetric % LHS %
+// RHS %% …_dict` term-application spine ([`scan_method_dicts`]). In the v3.2 zproof
+// encoding the `Pure.symmetric` axiom carries its schematic operands in `tminst`
+// (as the derivation box's internal `Free` placeholders, not the equation sides),
+// so that recovery finds nothing and every `…_dict` leaf declines as
+// `unmapped-axiom`. The dictionary rewrite's two goals are instead carried by the
+// enclosing `Pure.equal_elim` axiom's `A`/`B` schematic term arguments — `A` the
+// dictionary-form goal, `B` the overloaded-method-form goal — which
+// [`scan_method_dicts_zproof`] recovers by structurally diffing the two sides.
+//
+// Each fixture is the VERBATIM corpus seed line (extracted by serial via the
+// `main_v32` `.idx` seek-read). The fixtures below are the four largest families.
+
+const S1432612_NUMERAL_DICT: &str =
+    include_str!("../../../tests/fixtures/isabelle/reject_decode/s1432612_numeral_dict.jsonl");
+const S1572512_POWER_DICT: &str =
+    include_str!("../../../tests/fixtures/isabelle/reject_decode/s1572512_power_dict.jsonl");
+const S721842_OF_NAT_DICT: &str =
+    include_str!("../../../tests/fixtures/isabelle/reject_decode/s721842_of_nat_dict.jsonl");
+const S366392_DVD_DICT: &str =
+    include_str!("../../../tests/fixtures/isabelle/reject_decode/s366392_dvd_dict.jsonl");
+
+/// **The `*_dict` registration flip — fail-before → registered-after, kernel-
+/// checked.** For each of the four largest dictionary families (numeral / power /
+/// of_nat / dvd) the seed is a real corpus `…_dict` consumer whose method never
+/// registered under the legacy spine recovery. This pins both halves of the flip:
+///
+///   - **fail-before**: the legacy [`scan_method_dicts`] (`Pure.symmetric`-spine)
+///     recovers NOTHING for the method — the zproof encoding hides the equation
+///     from it (so the `…_dict` leaf declined as `unmapped-axiom`, exactly the
+///     census §4 state);
+///   - **pass-after**: the new [`scan_method_dicts_zproof`] `A`/`B` `equal_elim`
+///     diff recovers the dictionary equation with the correct dictionary-form impl
+///     const (`c_class.method` → `c.method`, [`dict_impl_name`]) and bare-`Const`
+///     class operations, and [`register_method_defs`] builds a method `Definition`
+///     the KERNEL ACCEPTS — a real, faithful registration (`add_decl` re-checks
+///     `value : type`), not a mere name entry. Once registered, the `…_dict` leaf
+///     discharges reflexively (`apply_expecting`'s `dict_sides_registered` gate).
+#[test]
+fn dict_methods_register_from_zproof_equal_elim_rewrite() {
+    // (serial, seed line, overloaded method const, dictionary-form impl const).
+    let cases: [(i64, &str, &str, &str); 4] = [
+        (
+            1432612,
+            S1432612_NUMERAL_DICT,
+            "Num.numeral_class.numeral",
+            "Num.numeral.numeral",
+        ),
+        (
+            1572512,
+            S1572512_POWER_DICT,
+            "Power.power_class.power",
+            "Power.power.power",
+        ),
+        (
+            721842,
+            S721842_OF_NAT_DICT,
+            "Nat.semiring_1_class.of_nat",
+            "Nat.semiring_1.of_nat",
+        ),
+        (
+            366392,
+            S366392_DVD_DICT,
+            "Rings.dvd_class.dvd",
+            "Rings.dvd.dvd",
+        ),
+    ];
+    for (serial, line, method, impl_const) in cases {
+        let thm = parse_proven_theorem(line).expect("dict seed parses");
+        assert_eq!(thm.serial, serial, "fixture serial");
+
+        // FAIL-BEFORE — the legacy spine recovery is blind to the zproof encoding.
+        let mut legacy = Vec::new();
+        scan_method_dicts(&thm.proof, &mut legacy);
+        assert!(
+            !legacy.iter().any(|e| e.method_name == method),
+            "s{serial}: legacy `Pure.symmetric`-spine recovery must NOT see {method} \
+             (the equation is not on the proof spine in the zproof encoding)"
+        );
+
+        // PASS-AFTER (recovery) — the `equal_elim` A/B diff recovers the equation.
+        let mut zeqs = Vec::new();
+        scan_method_dicts_zproof(&thm.proof, &mut zeqs);
+        let eq = zeqs
+            .iter()
+            .find(|e| e.method_name == method)
+            .unwrap_or_else(|| {
+                panic!(
+                    "s{serial}: zproof recovery must recover {method}; recovered: {:?}",
+                    zeqs.iter().map(|e| &e.method_name).collect::<Vec<_>>()
+                )
+            });
+        assert_eq!(
+            eq.impl_const.0, impl_const,
+            "s{serial}: dictionary-form impl const (`_class.` collapsed to `.`)"
+        );
+        assert!(
+            !eq.ops.is_empty(),
+            "s{serial}: at least one class operation recovered for {method}"
+        );
+
+        // PASS-AFTER (registration) — the built Definition is KERNEL-ACCEPTED
+        // against the driver's base environment (HOL base datatypes `Nat`/`Num`
+        // registered, exactly as the streaming driver does before the method
+        // pre-pass; the numeral/power/of_nat methods carry those ground types).
+        let recovered = register_method_defs(&thm, &BTreeMap::new());
+        let (_, decl, _) = recovered
+            .iter()
+            .find(|(n, _, _)| n == method)
+            .unwrap_or_else(|| panic!("s{serial}: register_method_defs must yield {method}"));
+        let mut env = Environment::with_prelude();
+        super::register_datatype_inductives(&mut env);
+        assert!(
+            env.add_decl(decl.clone()).is_ok(),
+            "s{serial}: the kernel must accept the {method} method Definition (faithful registration)"
+        );
+    }
+}

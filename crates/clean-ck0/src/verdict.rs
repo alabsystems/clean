@@ -26,6 +26,10 @@ impl ConstId {
     /// Mint a `ConstId`. `pub(crate)` so only the kernel can produce one — a
     /// `ConstId` therefore witnesses that the kernel vouched for the name.
     #[must_use]
+    #[allow(
+        dead_code,
+        reason = "reserved kernel-only constructor for the fail-closed certificate API"
+    )]
     pub(crate) fn new(name: Name) -> Self {
         ConstId(name)
     }
@@ -90,8 +94,8 @@ mod tests {
         // `ConstId::new` is pub(crate): only the kernel mints these, so a
         // ConstId witnesses a kernel decision. A consumer outside the crate can
         // read the name but cannot fabricate one (compile-time guarantee).
-        let id = ConstId::new(crate::name::Name::from_dotted("And.intro"));
-        assert_eq!(id.name(), &crate::name::Name::from_dotted("And.intro"));
+        let id = ConstId::new(Name::from_dotted("And.intro"));
+        assert_eq!(id.name(), &Name::from_dotted("And.intro"));
     }
 
     #[test]
@@ -108,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_cert_verdict_success_names_a_theorem() {
-        let id = ConstId::new(crate::name::Name::from_dotted("T"));
+        let id = ConstId::new(Name::from_dotted("T"));
         let v = CertVerdict::Refuted {
             theorem: id.clone(),
         };

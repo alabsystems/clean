@@ -22,7 +22,7 @@ use crate::term::{ConstRef, Term, TermKind};
 ///   minor_k field_0 .. field_{nf-1} IH_0 .. IH_p`
 /// where IH_j = `T_field_target.rec @levels params motives minors field_idxs (field_j ..)`.
 pub(crate) fn build_mutual_rule_rhs(
-    cx: &BlockCx,
+    cx: &BlockCx<'_>,
     rec_num_levels: u32,
     ci: &BlockCtorInfo,
 ) -> Result<Term, String> {

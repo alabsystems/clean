@@ -1806,12 +1806,12 @@ mod tests {
         .expect("definition");
         env.mark_unsafe(unsafe_name);
         env.add_decl_structural(Declaration::Theorem {
-            name: Name::from_string("Project.ay_theorem"),
+            name: Name::from_string("Project.z4_theorem"),
             level_params: vec![],
             type_: prop.clone(),
             value: Expr::const_str("trustedAy"),
         })
-        .expect("ay theorem");
+        .expect("z4 theorem");
 
         let report = audit_lake_project(&workspace, &env);
 

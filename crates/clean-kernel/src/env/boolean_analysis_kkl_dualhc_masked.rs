@@ -133,6 +133,7 @@ impl PerCoordConsts {
         )
     }
     /// `Eq.symm.{1} Rat a b h`.
+    #[cfg(test)]
     fn rat_symm(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm1.clone(), [self.rat.clone(), a, b, h])
     }

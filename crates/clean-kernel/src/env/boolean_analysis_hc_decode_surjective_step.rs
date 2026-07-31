@@ -9,6 +9,7 @@ impl SurjConsts {
     /// `@Eq.ndrec Nat (2^n+2^n) (fun m => Fin m) mapped (2^(n+1))
     ///   (Eq.symm (Nat.pow_two_succ n))`, byte-identical to the
     /// `hcDecode_castP_*` / bridge spelling so the bridge lemmas apply.
+    #[cfg(test)]
     fn cast_p(&self, parent: &EnvDeclBuilder, n: &Expr, mapped: &Expr) -> Expr {
         let p2n = self.pow2(n);
         let sum_pow = Expr::apps(
@@ -42,6 +43,7 @@ impl SurjConsts {
 
 /// step : ∀ (k : Nat), (∀ S', ∃ j', hcDecode k j' = S')
 ///          → ∀ (S : HCPoint (k+1)), ∃ jS, hcDecode (k+1) jS = S.
+#[cfg(test)]
 fn build_step(c: &SurjConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (k_id, k) = b.fresh_local(c.nat.clone());
@@ -115,42 +117,50 @@ fn build_step(c: &SurjConsts) -> Expr {
 }
 
 #[derive(Clone, Copy)]
+#[cfg(test)]
 enum Half {
     Low,  // top bit false, idx = castP (castAdd j'), bridge → extendF
     High, // top bit true,  idx = castP (addNat  j'), bridge → extendT
 }
 
+#[cfg(test)]
 impl Half {
+    #[cfg(test)]
     fn idx_map<'a>(&self, c: &'a SurjConsts) -> &'a Expr {
         match self {
             Half::Low => &c.cast_add,
             Half::High => &c.add_nat,
         }
     }
+    #[cfg(test)]
     fn bridge(&self) -> &'static str {
         match self {
             Half::Low => "BoolAnalysis.hcDecode_castP_castAdd_extendF",
             Half::High => "BoolAnalysis.hcDecode_castP_addNat_extendT",
         }
     }
+    #[cfg(test)]
     fn extend<'a>(&self, c: &'a SurjConsts) -> &'a Expr {
         match self {
             Half::Low => &c.extend_f,
             Half::High => &c.extend_t,
         }
     }
+    #[cfg(test)]
     fn ext_castsucc(&self) -> &'static str {
         match self {
             Half::Low => "BoolAnalysis.extendF_castSucc",
             Half::High => "BoolAnalysis.extendT_castSucc",
         }
     }
+    #[cfg(test)]
     fn ext_last(&self) -> &'static str {
         match self {
             Half::Low => "BoolAnalysis.extendF_last",
             Half::High => "BoolAnalysis.extendT_last",
         }
     }
+    #[cfg(test)]
     fn top_bit<'a>(&self, c: &'a SurjConsts) -> &'a Expr {
         match self {
             Half::Low => &c.bool_false,
@@ -162,6 +172,7 @@ impl Half {
 /// One `Bool.casesOn` branch: `fun (hb : S (last k) = <bit>) => Exists.intro ...`.
 /// Builds the witness `jS := castP (idx_map j')` and the proof
 /// `hcDecode (k+1) jS = S` via the bridge + `extend* k S' = S` reconstruction.
+#[cfg(test)]
 fn build_branch(
     c: &SurjConsts,
     parent: &EnvDeclBuilder,
@@ -263,6 +274,7 @@ fn build_branch(
 /// recon : extend* k S' = S, by `funext` over `Fin (k+1)` + `Fin.lastCases`:
 ///   - castSucc i : extend* k S' (castSucc i) = S' i ≡ S (castSucc i)  (extend*_castSucc);
 ///   - last       : extend* k S' (last k)     = <bit> = S (last k)     (extend*_last, hb.symm).
+#[cfg(test)]
 fn build_recon(
     c: &SurjConsts,
     parent: &EnvDeclBuilder,

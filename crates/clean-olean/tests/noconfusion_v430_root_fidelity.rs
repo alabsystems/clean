@@ -18,14 +18,13 @@
 //! (same convention as `import_mathlib_tests.rs`).
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 use clean_kernel::env::Environment;
 use clean_kernel::expr::{BinderInfo, Expr, ExprKind};
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
 use clean_kernel::tc::TypeChecker;
-use clean_olean::{convert_parsed_constant_to_const_info, parse_module_file};
+use clean_olean::{convert_parsed_constant_to_const_info, parse_module_file, pinned_lean_lib_path};
 
 /// The 31 Init.Prelude dedup-conflict roots (design §2.5).
 const ROOTS_PRELUDE: &[&str] = &[
@@ -65,16 +64,8 @@ const ROOTS_PRELUDE: &[&str] = &[
 /// design §1.6/§2.5).
 const ROOTS_CORE: &[&str] = &["Sigma", "Sum"];
 
-fn toolchain_lib() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("CLEAN_V430_LEAN_LIB") {
-        let p = PathBuf::from(p);
-        if p.exists() {
-            return Some(p);
-        }
-    }
-    let home = std::env::var("HOME").ok()?;
-    let p = PathBuf::from(home).join(".elan/toolchains/leanprover--lean4---v4.30.0-rc2/lib/lean");
-    p.exists().then_some(p)
+fn toolchain_lib() -> Option<std::path::PathBuf> {
+    pinned_lean_lib_path()
 }
 
 /// Register the `outParam` / `semiOutParam` identity gadgets so `is_def_eq`
@@ -103,10 +94,7 @@ fn register_out_param_gadgets(env: &mut Environment) {
 #[test]
 fn test_v430_33_root_twin_types_match_genuine_olean() {
     let Some(lib) = toolchain_lib() else {
-        eprintln!(
-            "SKIP: leanprover--lean4---v4.30.0-rc2 toolchain not found \
-             (set CLEAN_V430_LEAN_LIB to override)"
-        );
+        eprintln!("SKIP: repository-pinned leanprover/lean4:v4.30.0-rc2 toolchain not found");
         return;
     };
 

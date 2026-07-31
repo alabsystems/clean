@@ -43,7 +43,7 @@ pub(crate) const DEFAULT_TIMEOUT_BUDGET_MS: u64 = 5000;
 
 /// Errors reading or parsing the telemetry stream.
 #[derive(Debug, Error)]
-pub(crate) enum AnalysisError {
+pub enum AnalysisError {
     /// An I/O error reading an `attempts.jsonl` file.
     #[error("read telemetry {path}: {source}")]
     Io {

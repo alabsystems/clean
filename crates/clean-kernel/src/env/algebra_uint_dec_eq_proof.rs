@@ -75,6 +75,7 @@ use crate::name::Name;
 #[derive(Clone)]
 pub(crate) enum WrapperCarrier {
     Nat,
+    #[cfg(test)]
     Fin(Expr),
     /// v4.30 UInt/USize carrier: `<T>.ofBitVec : BitVec <width> → <T>`,
     /// projection `<T>.toBitVec : <T> → BitVec <width>`. Equality is decided by
@@ -124,6 +125,7 @@ impl Environment {
         // The `Nat`-equality discriminant — axiom-free, recursive decision proc.
         self.register_nat_dec_eq_proof()?;
         // The `Fin`-equality discriminant (axiom-free) for a Fin carrier.
+        #[cfg(test)]
         if matches!(carrier, WrapperCarrier::Fin(_)) {
             self.register_fin_dec_eq_proof()?;
         }
@@ -175,6 +177,7 @@ impl Environment {
                     Box::new(move |l: Expr, r: Expr| Expr::apps(nat_dec_eq.clone(), [l, r])),
                 )
             }
+            #[cfg(test)]
             WrapperCarrier::Fin(size_lit) => {
                 let fin_c = Expr::const_(Name::from_string("Fin"), vec![]);
                 let fin_size = Expr::app(fin_c, size_lit.clone());

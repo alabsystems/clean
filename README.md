@@ -90,9 +90,8 @@ There are two checkout shapes:
   to attested Git revisions. It is designed to build as an ordinary clone, but
   the current policy record does not yet claim a successful anonymous-clone
   compile; that remains a promotion gate.
-- The **development workspace** (the private tree this snapshot is projected
-  from) keeps those cross-repository integrations. It requires sibling
-  checkouts at `../trust`, `../trust-ir`, and `../trust-cg` (not yet published);
+- This **development workspace** keeps those cross-repository integrations. It
+  requires sibling checkouts at `../trust`, `../trust-ir`, and `../trust-cg`;
   Cargo validates workspace path dependencies even when a particular backend
   is optional or test-only. `ay` is pinned as a Git dependency and does not
   require a sibling checkout.

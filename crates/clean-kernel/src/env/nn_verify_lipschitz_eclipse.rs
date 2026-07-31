@@ -19,14 +19,21 @@
 //!
 //! Part of #3152.
 
+#[cfg(test)]
 use super::nn_verify_ibp_linear::sorry_inhabit_pi;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Constants for ECLipsE-specific formalization.
+#[cfg(test)]
 struct EclipseConsts {
     nat: Expr,
     rat: Expr,
@@ -47,7 +54,9 @@ struct EclipseConsts {
     block_lipschitz: Expr,
 }
 
+#[cfg(test)]
 impl EclipseConsts {
+    #[cfg(test)]
     fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -85,14 +94,17 @@ impl EclipseConsts {
         }
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn endo_ty(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.vec_of(n), self.vec_of(n))
     }
 
+    #[cfg(test)]
     fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -106,22 +118,26 @@ impl EclipseConsts {
         )
     }
 
+    #[cfg(test)]
     fn add(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_add.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize ECLipsE Lipschitz composition declarations (T30-T33).
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_lipschitz_eclipse(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.Lipschitz.NetworkBlock"))
@@ -142,7 +158,7 @@ impl Environment {
 
     /// `NNVerify.Lipschitz.NetworkBlock : Nat -> Type`
     /// Opaque: placeholder `fun (n : Nat) => NNVec n` (blocks are vector-typed)
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_network_block(&mut self, c: &EclipseConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.Lipschitz.NetworkBlock");
         if self.get_const(&name).is_some() {
@@ -171,7 +187,7 @@ impl Environment {
 
     /// `NNVerify.Lipschitz.block_lipschitz : (n : Nat) -> NetworkBlock n -> Rat`
     /// Opaque: placeholder `fun (n : Nat) (_ : NetworkBlock n) => Rat.zero`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_block_lipschitz(&mut self, c: &EclipseConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.Lipschitz.block_lipschitz");
         if self.get_const(&name).is_some() {
@@ -206,7 +222,7 @@ impl Environment {
     /// T30: Lip(f . g) <= Lip(f) * Lip(g)
     ///
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t30_lipschitz_compose(&mut self, c: &EclipseConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.Lipschitz.lipschitz_compose");
         if self.get_const(&name).is_some() {
@@ -236,7 +252,7 @@ impl Environment {
     /// T31: Per-block Lipschitz bound monotonicity (promotion to block bound).
     ///
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t31_eclipse_block_lipschitz(&mut self, c: &EclipseConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.Lipschitz.eclipse_block_lipschitz");
         if self.get_const(&name).is_some() {
@@ -266,7 +282,7 @@ impl Environment {
     /// T32: L_total = prod L_i for N blocks via compose_chain and lip_product.
     ///
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t32_eclipse_network_lipschitz(
         &mut self,
         c: &EclipseConsts,
@@ -299,7 +315,7 @@ impl Environment {
     /// T33: L_block = 1 + L_attn + L_ffn for transformer residual blocks.
     ///
     /// Upgraded from Axiom to Opaque with sorry-based proof inhabitation. Part of #3381.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t33_residual_lipschitz_sum(&mut self, c: &EclipseConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.Lipschitz.residual_lipschitz_sum");
         if self.get_const(&name).is_some() {
@@ -332,6 +348,7 @@ impl Environment {
 // =============================================================================
 
 /// Build T30 type: `Lip(f . g) <= Lip(f) * Lip(g)`.
+#[cfg(test)]
 fn build_t30_type(c: &EclipseConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -383,6 +400,7 @@ fn build_t30_type(c: &EclipseConsts) -> Expr {
 }
 
 /// Build T31 type: per-block Lipschitz bound monotonicity.
+#[cfg(test)]
 fn build_t31_type(c: &EclipseConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -410,6 +428,7 @@ fn build_t31_type(c: &EclipseConsts) -> Expr {
 }
 
 /// Build T32 type: L_total = prod L_i for N blocks.
+#[cfg(test)]
 fn build_t32_type(c: &EclipseConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (big_n_id, big_n) = b.fresh_local(c.nat.clone());
@@ -456,6 +475,7 @@ fn build_t32_type(c: &EclipseConsts) -> Expr {
 }
 
 /// Build T33 type: L_block = 1 + L_attn + L_ffn for transformer residual blocks.
+#[cfg(test)]
 fn build_t33_type(c: &EclipseConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());

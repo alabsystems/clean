@@ -25,13 +25,19 @@
 //!
 //! Part of #3167.
 
+#[cfg(test)]
 use super::entropy_clause_quality::{ns, EntropyClauseQualityConsts};
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 /// Register a helper axiom with idempotency check.
+#[cfg(test)]
 fn add_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvError> {
     if env.get_const(&Name::from_string(name)).is_some() {
         return Ok(());
@@ -43,6 +49,7 @@ fn add_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvEr
     })
 }
 
+#[cfg(test)]
 impl Environment {
     // ====================================================================
     // T7: Entropy Monotonicity
@@ -58,7 +65,7 @@ impl Environment {
     ///
     /// The helper encodes: formula_entails_clause f c ->
     ///   solution_entropy(formula_add_clause f c) <= solution_entropy f.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_ecq_entropy_monotonicity(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -112,7 +119,7 @@ impl Environment {
     /// forall (f g : CNFFormula) (cl : CNFClause),
     ///   submodularity_helper f g cl
     /// ```
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_ecq_submodularity(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -167,7 +174,7 @@ impl Environment {
     /// ```text
     /// forall (f : CNFFormula), entropy_nonneg_helper f
     /// ```
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_ecq_entropy_nonneg(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -204,7 +211,7 @@ impl Environment {
     /// ```text
     /// forall (f : CNFFormula), entropy_upper_bound_helper f
     /// ```
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_ecq_entropy_upper_bound(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -240,7 +247,7 @@ impl Environment {
     /// ```text
     /// forall (f : CNFFormula), entropy_zero_iff_unique_helper f
     /// ```
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_ecq_entropy_zero_iff_unique(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -280,7 +287,7 @@ impl Environment {
     /// forall (f : CNFFormula) (cl : CNFClause),
     ///   solution_count_monotone_helper f cl
     /// ```
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(super) fn register_ecq_solution_count_monotone(
         &mut self,
         c: &EntropyClauseQualityConsts,

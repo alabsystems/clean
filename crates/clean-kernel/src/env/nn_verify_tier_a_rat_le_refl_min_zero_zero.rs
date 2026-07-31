@@ -85,6 +85,7 @@ impl Environment {
     }
 
     /// Check if Tier A `le_refl_min_zero_zero` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_rat_le_refl_min_zero_zero(&self) -> bool {
         self.nn_verify_tier_a_rat_le_refl_min_zero_zero_init
     }

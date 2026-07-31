@@ -10,9 +10,7 @@ use crate::emit_rust_ext::{
     default_ownership, rust_type_borrowed, rust_type_boxed, rust_type_owned, Ownership,
     RustExtConfig, RustExtEmitter, RustExtStats, RustFfiFunc,
 };
-use crate::ir::{
-    CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
-};
+use crate::ir::{CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, VarId};
 use clean_kernel::Name;
 
 // ── Helpers ──

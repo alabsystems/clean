@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.name@gmail.com>
 // Licensed under the Apache License, Version 2.0
 
 //! Warning detection: sorry/admit usage, deprecated names, unused variables.

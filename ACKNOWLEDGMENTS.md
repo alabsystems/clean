@@ -63,7 +63,7 @@ trusted base collapsed toward three foundational axioms.
 
 ## TLA+ and TLAPS
 
-`Clean-tla` depends on the public `tla-core` crate from the public <https://github.com/alabsystems/ty> repository. The names differ because `ty` is the repository name, while `tla-core` is the reusable library crate inside it that Clean imports. Clean reuses that shared public TLA+ AST and TLAPS obligation model instead of maintaining a divergent second TLA+ front end.
+`Clean-tla` depends on the public `tla-core` crate from the public <https://github.com/alabsystems/ty> repository. The names differ because `tla2` is the repository/workspace name, while `tla-core` is the reusable library crate inside it that Clean imports. Clean reuses that shared public TLA+ AST and TLAPS obligation model instead of maintaining a divergent second TLA+ front end.
 
 Additional references:
 

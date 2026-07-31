@@ -15,13 +15,19 @@
 //!
 //! Part of #3186.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for certified eval definitions.
+#[cfg(test)]
 pub(crate) struct CertEvalConsts {
     pub(crate) nat: Expr,
     pub(crate) rat: Expr,
@@ -39,7 +45,9 @@ pub(crate) struct CertEvalConsts {
     pub(crate) eq: Expr,
 }
 
+#[cfg(test)]
 impl CertEvalConsts {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -63,16 +71,19 @@ impl CertEvalConsts {
     }
 
     /// Build `NNVec n`.
+    #[cfg(test)]
     pub(crate) fn vec_of(&self, n: Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n)
     }
 
     /// Build `IntervalBounds d`.
+    #[cfg(test)]
     pub(crate) fn ib_of(&self, d: Expr) -> Expr {
         Expr::app(self.ib.clone(), d)
     }
 
     /// Build `IntervalBounds.contains d bounds vec`.
+    #[cfg(test)]
     pub(crate) fn contains(&self, d: Expr, bounds: Expr, vec: Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.ib_contains.clone(), d), bounds),
@@ -81,20 +92,24 @@ impl CertEvalConsts {
     }
 
     /// Build `Eq @T a b`.
+    #[cfg(test)]
     pub(crate) fn mk_eq(&self, ty: Expr, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(Expr::app(self.eq.clone(), ty), a), b)
     }
 
     /// Build `List @T`.
+    #[cfg(test)]
     pub(crate) fn list_of(&self, ty: Expr) -> Expr {
         Expr::app(self.list.clone(), ty)
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `NNVerify.concrete_input (n : Nat) : Type := NNVec n`.
     ///
     /// A concrete input is just a vector of rational values indexed by Fin n.
+    #[cfg(test)]
     pub(crate) fn register_concrete_input(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = Expr::pi(BinderInfo::Default, c.nat.clone(), c.type0.clone());
         let value = {
@@ -116,6 +131,7 @@ impl Environment {
     /// Register `NNVerify.concrete_output (m : Nat) : Type := NNVec m`.
     ///
     /// A concrete output is a vector of rational values indexed by Fin m.
+    #[cfg(test)]
     pub(crate) fn register_concrete_output(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = Expr::pi(BinderInfo::Default, c.nat.clone(), c.type0.clone());
         let value = {
@@ -139,6 +155,7 @@ impl Environment {
     /// An eval trace records the intermediate values at each layer boundary
     /// during a forward pass. `layers` is the number of layer boundaries
     /// and `n` is the common dimension (simplified: uniform width).
+    #[cfg(test)]
     pub(crate) fn register_eval_trace(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -173,6 +190,7 @@ impl Environment {
     /// is correct — each step follows from applying the layer function to
     /// the previous step's output. The certificate type is Prop because
     /// it will be inhabited by a proof term.
+    #[cfg(test)]
     pub(crate) fn register_eval_certificate(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -204,6 +222,7 @@ impl Environment {
     ///
     /// Predicate that the evaluation output matches a given specification.
     /// The spec is a predicate on output vectors (e.g., "classified as class k").
+    #[cfg(test)]
     pub(crate) fn register_eval_matches_spec(
         &mut self,
         c: &CertEvalConsts,

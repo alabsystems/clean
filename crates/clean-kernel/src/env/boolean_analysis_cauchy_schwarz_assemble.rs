@@ -187,6 +187,7 @@ impl AssembleConsts {
         self.mul(self.two.clone(), self.neg(t))
     }
     /// `aₖ·aₗ` (the `prod_fn a a` value at indices `k,l`).
+    #[cfg(test)]
     fn aa(&self, a: &Expr, k: &Expr) -> Expr {
         self.mul(
             Expr::app(a.clone(), k.clone()),
@@ -194,6 +195,7 @@ impl AssembleConsts {
         )
     }
     /// `aₖ·bₖ` (the `prod_fn a b` value).
+    #[cfg(test)]
     fn ab_at(&self, a: &Expr, b: &Expr, k: &Expr) -> Expr {
         self.mul(
             Expr::app(a.clone(), k.clone()),

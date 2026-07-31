@@ -32,6 +32,7 @@ struct CommGroupFlavor {
     inverse_projection_name: &'static str,
 }
 
+#[cfg(test)]
 const MUL_COMM_GROUP_FLAVOR: CommGroupFlavor = CommGroupFlavor {
     class_name: "CommGroup",
     ctor_name: "CommGroup.mk",
@@ -370,6 +371,7 @@ impl Environment {
     }
 
     /// Initialize the CommGroup typeclass
+    #[cfg(test)]
     pub(crate) fn init_comm_group(&mut self) -> Result<(), EnvError> {
         if self.comm_group_init {
             return Ok(());
@@ -382,6 +384,7 @@ impl Environment {
     }
 
     /// Check if CommGroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_comm_group(&self) -> bool {
         self.comm_group_init
     }
@@ -399,6 +402,7 @@ impl Environment {
     }
 
     /// Check if AddCommGroup typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_add_comm_group(&self) -> bool {
         self.add_comm_group_init
     }

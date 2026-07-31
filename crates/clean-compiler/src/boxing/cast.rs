@@ -36,7 +36,7 @@ pub(crate) fn mk_cast_optimized(
     var: VarId,
     var_type: &IRType,
     expected: &IRType,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRExpr {
     if expected.is_scalar() {
         IRExpr::Unbox {
@@ -57,7 +57,12 @@ pub(crate) fn mk_cast_optimized(
     }
 }
 
-pub fn cast_var_if_needed<F>(var: VarId, expected: &IRType, ctx: &mut BoxingContext, k: F) -> IRBody
+pub fn cast_var_if_needed<F>(
+    var: VarId,
+    expected: &IRType,
+    ctx: &mut BoxingContext<'_>,
+    k: F,
+) -> IRBody
 where
     F: FnOnce(VarId) -> IRBody,
 {
@@ -83,7 +88,7 @@ where
 pub fn cast_arg_if_needed<F>(
     arg: &IRArg,
     expected: &IRType,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
     k: F,
 ) -> IRBody
 where
@@ -98,7 +103,7 @@ where
 pub fn cast_args(
     args: &[IRArg],
     param_types: &[IRType],
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> (Vec<IRArg>, Vec<(VarId, IRType, IRExpr)>) {
     let mut cast_args = Vec::with_capacity(args.len());
     let mut prefix = Vec::new();
@@ -142,7 +147,7 @@ pub fn wrap_with_prefix(prefix: Vec<(VarId, IRType, IRExpr)>, body: IRBody) -> I
 
 pub fn box_args(
     args: &[IRArg],
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> (Vec<IRArg>, Vec<(VarId, IRType, IRExpr)>) {
     let obj_types: Vec<_> = args.iter().map(|_| IRType::Object).collect();
     cast_args(args, &obj_types, ctx)

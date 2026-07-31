@@ -36,14 +36,21 @@
 //!
 //! Part of #3259.
 
+#[cfg(test)]
 use super::nn_verify_proof_guided_nas_defs as defs;
+#[cfg(test)]
 use super::nn_verify_proof_guided_nas_defs2 as defs2;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants for proof-guided NAS formalization.
+#[cfg(test)]
 pub(super) struct ProofGuidedNasConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -84,7 +91,9 @@ pub(super) struct ProofGuidedNasConsts {
     pub(super) residual_sub_cert: Expr,
 }
 
+#[cfg(test)]
 impl ProofGuidedNasConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -148,6 +157,7 @@ impl ProofGuidedNasConsts {
     }
 
     /// Build `LE.le @Nat instLENat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn nat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -162,6 +172,7 @@ impl ProofGuidedNasConsts {
     }
 
     /// Build `LT.lt @Nat instLTNat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn nat_lt(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -176,6 +187,7 @@ impl ProofGuidedNasConsts {
     }
 
     /// Build `Eq @Nat a b`.
+    #[cfg(test)]
     pub(super) fn nat_eq(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.eq.clone(), self.nat.clone()), a),
@@ -184,6 +196,7 @@ impl ProofGuidedNasConsts {
     }
 
     /// Build `LE.le @Rat instLERat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -198,6 +211,7 @@ impl ProofGuidedNasConsts {
     }
 
     /// Build `LT.lt @Rat instLTRat lhs rhs`.
+    #[cfg(test)]
     pub(super) fn rat_lt(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -216,10 +230,11 @@ impl ProofGuidedNasConsts {
 // Environment impl
 // =============================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Register an axiom+theorem pair: axiom `{name}_axiom` with the given type,
     /// then a theorem `{name}` whose proof references the axiom.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_axiom_theorem_pair(&mut self, name: &str, thm_type: Expr) -> Result<(), EnvError> {
         let axiom_name = format!("{}_axiom", name);
         self.add_decl(Declaration::Axiom {
@@ -240,7 +255,7 @@ impl Environment {
     ///
     /// Depends on: `init_nat`, `init_rat`, `init_rat_arith`, `init_rat_ord`,
     /// `init_eq`, `init_true_false`, `init_and`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_proof_guided_nas(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.architecture_space"))
@@ -367,7 +382,7 @@ impl Environment {
     // -- Definition helpers ---------------------------------------------------
 
     /// Register a single axiom definition.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_nas_def(&mut self, name: &str, ty: Expr) -> Result<(), EnvError> {
         self.add_decl(Declaration::Axiom {
             name: Name::from_string(name),
@@ -377,7 +392,7 @@ impl Environment {
     }
 
     /// `without_skip : architecture_space -> architecture_space`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_nas_without_skip(&mut self) -> Result<(), EnvError> {
         let arch = Expr::const_(Name::from_string("NNVerify.architecture_space"), vec![]);
         self.add_decl(Declaration::Axiom {

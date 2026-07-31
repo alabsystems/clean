@@ -62,6 +62,11 @@ pub(crate) const DENY_SORRY_LAUNCH_EVIDENCE_SCHEMA_VERSION: &str =
 pub(crate) const DENY_SORRY_LAUNCH_EVIDENCE_PATH: &str = "reports/deny-sorry-launch-evidence.json";
 pub(crate) const DENY_SORRY_EXPECTED_STEPS: u32 = 6;
 pub(crate) const TRUST_CORE_RUST_SOURCE_PATH: &str = "crates/clean-cli/src/cmd_replacement.rs";
+/// Directory holding the gate logic behind [`TRUST_CORE_RUST_SOURCE_PATH`].
+pub(crate) const TRUST_CORE_RUST_MODULE_DIR: &str = "crates/clean-cli/src/cmd_replacement";
+/// `source_sha256` key for the digest of that directory's non-test `.rs` files.
+pub(crate) const TRUST_CORE_RUST_MODULE_TREE_KEY: &str =
+    "crates/clean-cli/src/cmd_replacement/**/*.rs";
 pub(crate) const LINT_SORRY_BYPASS_PATH: &str = "scripts/lint_sorry_bypass.sh";
 pub(crate) const AXIOM_AUDIT_RELEASE_CHECK_PATH: &str = "scripts/axiom_audit_release_check.sh";
 pub(crate) const AXIOM_AUDIT_GATE_COMMAND: &str = "clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json";
@@ -128,21 +133,50 @@ pub(crate) const KERNEL_GATE_PREFLIGHT_GUARDS: &[&str] = &[
     "type_norm is present for every baseline case",
     "REGEN_BASELINE is unset before the parity lane",
 ];
+/// Lane argv mirroring `scripts/kernel_soundness_gate.sh` lane 1.
+pub(crate) const KERNEL_LEAN4_PARITY_LANE_COMMAND: &[&str] = &[
+    "cargo",
+    "test",
+    "--locked",
+    "--message-format=short",
+    "-p",
+    "clean-kernel",
+    "--test",
+    "lean4_parity",
+    "--features",
+    "test-utils",
+    "--",
+    "lean4_parity_check",
+];
+/// Lane argv mirroring `scripts/kernel_soundness_gate.sh` lane 2.
+pub(crate) const ELAB_SOUNDNESS_GATE_LANE_COMMAND: &[&str] = &[
+    "cargo",
+    "run",
+    "--locked",
+    "--message-format=short",
+    "-p",
+    "clean-elab",
+    "--bin",
+    "soundness_gate",
+];
 pub(crate) const KERNEL_SOUNDNESS_EXPECTED_LANES: &[KernelSoundnessLaneExpectation] = &[
     KernelSoundnessLaneExpectation {
         id: "differential_artifact_preflight",
         expected_tests: None,
         expected_output: None,
+        command: None,
     },
     KernelSoundnessLaneExpectation {
         id: "kernel_lean4_parity",
         expected_tests: Some(1),
         expected_output: None,
+        command: Some(KERNEL_LEAN4_PARITY_LANE_COMMAND),
     },
     KernelSoundnessLaneExpectation {
         id: "elab_soundness_gate",
         expected_tests: None,
         expected_output: Some("soundness_gate: PASS"),
+        command: Some(ELAB_SOUNDNESS_GATE_LANE_COMMAND),
     },
 ];
 pub(crate) const DENY_SORRY_EXPECTED_LANES: &[DenySorryLaneExpectation] = &[

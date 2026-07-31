@@ -58,6 +58,7 @@ struct NatTotalityConsts {
     le_rec: Expr,
     le_trans_thm: Expr,
     lt_irrefl_thm: Expr,
+    #[cfg(test)]
     succ_le_succ_thm: Expr,
     le_of_lt_thm: Expr,
     le_or_lt_thm: Expr,
@@ -86,6 +87,7 @@ impl NatTotalityConsts {
             le_rec: Expr::const_(Name::from_string("Nat.le.rec"), vec![]),
             le_trans_thm: Expr::const_(Name::from_string("Nat.le_trans"), vec![]),
             lt_irrefl_thm: Expr::const_(Name::from_string("Nat.lt_irrefl"), vec![]),
+            #[cfg(test)]
             succ_le_succ_thm: Expr::const_(Name::from_string("Nat.succ_le_succ"), vec![]),
             le_of_lt_thm: Expr::const_(Name::from_string("Nat.le_of_lt"), vec![]),
             le_or_lt_thm: Expr::const_(Name::from_string("Nat.le_or_lt"), vec![]),

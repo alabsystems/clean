@@ -73,10 +73,13 @@ pub(super) struct ZonotopeCrownConsts {
     pub(super) nat_zero: Expr,
     pub(super) nat_succ: Expr,
     pub(super) mat_mul: Expr,
+    #[cfg(test)]
     pub(super) mat_transpose: Expr,
     pub(super) zonotope_linear_propagate: Expr,
     pub(super) crown_backward_linear: Expr,
+    #[cfg(test)]
     pub(super) zonotope_to_bounds: Expr,
+    #[cfg(test)]
     pub(super) crown_concretize_linear: Expr,
 }
 
@@ -87,6 +90,7 @@ impl ZonotopeCrownConsts {
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             mat_mul: Expr::const_(Name::from_string("NNVerify.NNMat.mul"), vec![]),
+            #[cfg(test)]
             mat_transpose: Expr::const_(Name::from_string("NNVerify.NNMat.transpose"), vec![]),
             zonotope_linear_propagate: Expr::const_(
                 Name::from_string("NNVerify.Zonotope.linear_propagate"),
@@ -96,10 +100,12 @@ impl ZonotopeCrownConsts {
                 Name::from_string("NNVerify.CROWN.backward_linear"),
                 vec![],
             ),
+            #[cfg(test)]
             zonotope_to_bounds: Expr::const_(
                 Name::from_string("NNVerify.Zonotope.to_bounds"),
                 vec![],
             ),
+            #[cfg(test)]
             crown_concretize_linear: Expr::const_(
                 Name::from_string("NNVerify.CROWN.concretize_linear"),
                 vec![],

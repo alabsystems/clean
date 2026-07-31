@@ -6,7 +6,7 @@
 // square). `include!`d into the step build module.
 
 /// `Rat.mul_mul_mul_comm a b c d : (a·b)·(c·d) = (a·c)·(b·d)`.
-fn mmmc(c: &StepConsts, a: &Expr, bv: &Expr, cc: &Expr, dd: &Expr) -> Expr {
+fn mmmc(_c: &StepConsts, a: &Expr, bv: &Expr, cc: &Expr, dd: &Expr) -> Expr {
     Expr::apps(
         Expr::const_(Name::from_string("Rat.mul_mul_mul_comm"), vec![]),
         [a.clone(), bv.clone(), cc.clone(), dd.clone()],
@@ -128,8 +128,8 @@ fn step_s78_close(
     parent: &EnvDeclBuilder,
     pow8: &Expr,
     n: &Expr,
-    sg: &Expr,
-    sh: &Expr,
+    _sg: &Expr,
+    _sh: &Expr,
     sf: &Expr,
     f: &Expr,
     sg_plus_sh: &Expr,

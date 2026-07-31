@@ -51,7 +51,6 @@
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
-use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles for the scaled dyadic approximation.

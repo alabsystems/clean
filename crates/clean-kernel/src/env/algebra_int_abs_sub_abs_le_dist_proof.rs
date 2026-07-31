@@ -76,13 +76,19 @@
 //! None is a `Declaration::Axiom`, so each registered theorem has an empty
 //! domain-axiom closure (`ProofQuality::Constructive`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across the proof terms.
+#[cfg(test)]
 struct RevTriConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -98,7 +104,9 @@ struct RevTriConsts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl RevTriConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -119,27 +127,34 @@ impl RevTriConsts {
         }
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
+    #[cfg(test)]
     fn neg(&self, x: Expr) -> Expr {
         Expr::app(self.int_neg.clone(), x)
     }
+    #[cfg(test)]
     fn add(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_add.clone(), [x, y])
     }
+    #[cfg(test)]
     fn sub(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_sub.clone(), [x, y])
     }
+    #[cfg(test)]
     fn le(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_le.clone(), [x, y])
     }
+    #[cfg(test)]
     fn dist(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.int_dist.clone(), [x, y])
     }
 
     /// `@Eq.subst.{1} Int motive from to (h : Eq from to) (p : motive from)
     ///   : motive to`.
+    #[cfg(test)]
     fn subst_int(&self, motive: Expr, from: Expr, to: Expr, h: Expr, p: Expr) -> Expr {
         Expr::apps(
             self.eq_subst.clone(),
@@ -147,10 +162,12 @@ impl RevTriConsts {
         )
     }
     /// `@Eq.symm.{1} Int a b h : Eq Int b a`.
+    #[cfg(test)]
     fn symm_int(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.int_type.clone(), a, b, h])
     }
     /// `@congrArg.{1,1} Int Int x y f h : Eq Int (f x) (f y)`.
+    #[cfg(test)]
     fn congr_int_int(&self, x: Expr, y: Expr, f: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -164,6 +181,7 @@ impl RevTriConsts {
 // ---------------------------------------------------------------------------
 
 /// `∀ a b : Int, Int.le (Int.sub (Int.abs a) (Int.abs b)) (Int.abs (Int.sub a b))`.
+#[cfg(test)]
 fn build_fwd_type(c: &RevTriConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -177,6 +195,7 @@ fn build_fwd_type(c: &RevTriConsts) -> Expr {
 }
 
 /// Body — see module docs `## 1`.
+#[cfg(test)]
 fn build_fwd_value(c: &RevTriConsts) -> Expr {
     let abs_add_le = Expr::const_(Name::from_string("Int.abs_add_le"), vec![]);
     let add_le_add_right = Expr::const_(Name::from_string("Int.add_le_add_right"), vec![]);
@@ -293,6 +312,7 @@ fn build_fwd_value(c: &RevTriConsts) -> Expr {
 // ---------------------------------------------------------------------------
 
 /// `∀ t m : Int, Int.le t m → Int.le (Int.neg t) m → Int.le (Int.abs t) m`.
+#[cfg(test)]
 fn build_abs_le_type(c: &RevTriConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (t_id, t) = b.fresh_local(c.int_type.clone());
@@ -318,6 +338,7 @@ fn build_abs_le_type(c: &RevTriConsts) -> Expr {
 ///     (fun (n : Nat) (h1 : ...) (h2 : ...) => h2)   -- abs (negSucc n) ≡ neg (negSucc n)
 ///     t
 /// ```
+#[cfg(test)]
 fn build_abs_le_value(c: &RevTriConsts) -> Expr {
     let int_of_nat = Expr::const_(Name::from_string("Int.ofNat"), vec![]);
     let int_neg_succ = Expr::const_(Name::from_string("Int.negSucc"), vec![]);
@@ -389,6 +410,7 @@ fn build_abs_le_value(c: &RevTriConsts) -> Expr {
 
 /// `∀ a b : Int,
 ///    Int.le (Int.abs (Int.sub (Int.abs a) (Int.abs b))) (Int.dist a b)`.
+#[cfg(test)]
 fn build_dist_type(c: &RevTriConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -402,6 +424,7 @@ fn build_dist_type(c: &RevTriConsts) -> Expr {
 }
 
 /// Body — see module docs `## 2`.
+#[cfg(test)]
 fn build_dist_value(c: &RevTriConsts) -> Expr {
     let fwd = Expr::const_(Name::from_string("Int.abs_sub_abs_le_abs_sub"), vec![]);
     let abs_le = Expr::const_(Name::from_string("Int.abs_le_of_le_of_neg_le"), vec![]);
@@ -473,6 +496,7 @@ fn build_dist_value(c: &RevTriConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register the integer reverse triangle inequalities
     /// `Int.abs_sub_abs_le_abs_sub` (the forward half `|a| - |b| ≤ |a - b|`)
@@ -487,6 +511,7 @@ impl Environment {
     ///          `Int.abs_sub_abs_le_dist` are `Declaration::Theorem`s with
     ///          `proof_quality == Constructive`.
     /// ENSURES: Idempotent — each target is guarded by `get_const`.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_sub_abs_le_dist(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

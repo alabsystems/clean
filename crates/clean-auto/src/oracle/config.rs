@@ -78,7 +78,7 @@ impl OracleConfig {
         Self {
             model_id: "AI Model-opus-4-6-20260410".to_string(),
             fallback_model_ids: Vec::new(),
-            endpoint_url: Some("https://api.example.com".to_string()),
+            endpoint_url: Some("https://api.AI Provider.com".to_string()),
             api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
             max_tokens: 4096,
             num_candidates: 4,
@@ -115,7 +115,7 @@ impl OracleConfig {
         Self {
             model_id: "o4-mini".to_string(),
             fallback_model_ids: Vec::new(),
-            endpoint_url: Some("https://api.example.com/v1".to_string()),
+            endpoint_url: Some("https://api.AI Provider.com/v1".to_string()),
             api_key: std::env::var("OPENAI_API_KEY").ok(),
             max_tokens: 4096,
             num_candidates: 4,

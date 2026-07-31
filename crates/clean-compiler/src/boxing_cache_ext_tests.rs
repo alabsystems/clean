@@ -262,6 +262,11 @@ fn test_detect_no_opportunities_simple_return() {
 }
 
 #[test]
+fn test_unbox_reason_variants_are_distinct() {
+    assert_ne!(UnboxReason::ScalarOnly, UnboxReason::CalleeAcceptsUnboxed);
+}
+
+#[test]
 fn test_detect_unbox_type_mismatch_no_opportunity() {
     // box UInt64 then unbox UInt32 — not a redundant pair
     let body = vdecl(

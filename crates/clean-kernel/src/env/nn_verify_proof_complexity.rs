@@ -30,17 +30,20 @@ use crate::name::Name;
 pub(super) struct ProofComplexityConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
+    #[cfg(test)]
     pub(super) prop: Expr,
     pub(super) type0: Expr,
     pub(super) and: Expr,
     pub(super) le_le: Expr,
     pub(super) lt_lt: Expr,
     pub(super) inst_le_nat: Expr,
+    #[cfg(test)]
     pub(super) inst_lt_nat: Expr,
     pub(super) inst_le_rat: Expr,
     pub(super) inst_lt_rat: Expr,
     pub(super) nat_mul: Expr,
     pub(super) rat_zero: Expr,
+    #[cfg(test)]
     pub(super) rat_div: Expr,
     /// NNVerify.ProofComplexity.CertificateSize : Nat -> Nat
     pub(super) certificate_size: Expr,
@@ -67,17 +70,20 @@ impl ProofComplexityConsts {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             type0: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
             and: Expr::const_(Name::from_string("And"), vec![]),
             le_le: Expr::const_(Name::from_string("LE.le"), vec![Level::zero()]),
             lt_lt: Expr::const_(Name::from_string("LT.lt"), vec![Level::zero()]),
             inst_le_nat: Expr::const_(Name::from_string("instLENat"), vec![]),
+            #[cfg(test)]
             inst_lt_nat: Expr::const_(Name::from_string("instLTNat"), vec![]),
             inst_le_rat: Expr::const_(Name::from_string("instLERat"), vec![]),
             inst_lt_rat: Expr::const_(Name::from_string("instLTRat"), vec![]),
             nat_mul: Expr::const_(Name::from_string("Nat.mul"), vec![]),
             rat_zero: Expr::const_(Name::from_string("Rat.zero"), vec![]),
+            #[cfg(test)]
             rat_div: Expr::const_(Name::from_string("Rat.div"), vec![]),
             certificate_size: Expr::const_(
                 Name::from_string("NNVerify.ProofComplexity.CertificateSize"),

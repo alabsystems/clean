@@ -43,14 +43,21 @@ detect_build_dir() {
     local mathlib_dir="$1"
     local candidate
 
-    for candidate in "$mathlib_dir/.lake/build/lib" "$mathlib_dir/build/lib"; do
+    # LAKE LAYOUT: current Lake emits oleans under .lake/build/lib/lean/, older
+    # versions used .lake/build/lib/. Probe the new path FIRST. Missing it made
+    # this script die "build completed without producing usable .olean files"
+    # even after a fully successful `lake exe cache get` + `lake build` — the
+    # 8,310 oleans were sitting one directory below where it looked.
+    # scripts/kv_ratchet_gate.sh:28 and scripts/lib/mathlib_rebuild_lib.sh:42
+    # already used the lib/lean path; only this script was stale.
+    for candidate in "$mathlib_dir/.lake/build/lib/lean" "$mathlib_dir/.lake/build/lib" "$mathlib_dir/build/lib/lean" "$mathlib_dir/build/lib"; do
         if [ -f "$candidate/Mathlib.olean" ] || [ -d "$candidate/Mathlib" ]; then
             echo "$candidate"
             return 0
         fi
     done
 
-    echo "$mathlib_dir/.lake/build/lib"
+    echo "$mathlib_dir/.lake/build/lib/lean"
 }
 
 count_all_oleans() {
@@ -128,6 +135,24 @@ ensure_lean_toolchain() {
 }
 
 ensure_checkout() {
+    # A DANGLING SYMLINK is the common failure on this layout: data/raw/* are
+    # symlinks into /tmp, and /tmp gets cleaned. `[ -d ]` is false for a dangling
+    # link, so the old code fell through to `git clone`, which then failed with
+    # the opaque "could not create work tree dir: File exists" — the link itself
+    # exists. Detect and clear it, and clone through to the link target so the
+    # established data/raw/<corpus> -> /tmp/<corpus> layout is preserved.
+    if [ -L "$MATHLIB_DIR" ] && [ ! -e "$MATHLIB_DIR" ]; then
+        _link_target="$(readlink "$MATHLIB_DIR")"
+        log "Dangling symlink $MATHLIB_DIR -> $_link_target (target gone; /tmp cleaned?)"
+        if [ -n "$_link_target" ]; then
+            log "Cloning into the link target $_link_target so the symlink layout is kept"
+            mkdir -p "$(dirname "$_link_target")"
+            MATHLIB_DIR="$_link_target"
+        else
+            rm -f "$MATHLIB_DIR"
+        fi
+    fi
+
     if [ -d "$MATHLIB_DIR" ]; then
         if [ -f "$MATHLIB_DIR/lakefile.lean" ] || [ -f "$MATHLIB_DIR/lakefile.toml" ]; then
             log "Mathlib checkout already exists at $MATHLIB_DIR"
@@ -159,7 +184,9 @@ build_mathlib_path() {
             if [ -d "$dep_dir/build/lib" ]; then
                 entries+=("$dep_dir/build/lib")
             fi
-            if [ -d "$dep_dir/.lake/build/lib" ]; then
+            if [ -d "$dep_dir/.lake/build/lib/lean" ]; then
+                entries+=("$dep_dir/.lake/build/lib/lean")
+            elif [ -d "$dep_dir/.lake/build/lib" ]; then
                 entries+=("$dep_dir/.lake/build/lib")
             fi
         done < <(find "$packages_dir" -mindepth 1 -maxdepth 1 -type d -print0)

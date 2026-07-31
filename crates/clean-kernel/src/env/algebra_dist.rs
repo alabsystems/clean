@@ -9,12 +9,18 @@
 //! - init_int_dist: Int.dist metric space properties
 //! - init_nat_dist: Nat.dist metric space properties
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Rat.dist (distance/metric) function and properties
     ///
@@ -34,6 +40,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_dist_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_rat_dist(&mut self) -> Result<(), EnvError> {
         if self.rat_dist_init {
             return Ok(());
@@ -236,6 +243,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_dist_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_dist(&self) -> bool {
         self.rat_dist_init
     }
@@ -258,6 +266,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.int_dist_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_int_dist(&mut self) -> Result<(), EnvError> {
         if self.int_dist_init {
             return Ok(());
@@ -562,6 +571,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_dist_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_dist(&self) -> bool {
         self.int_dist_init
     }
@@ -584,6 +594,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.nat_dist_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_nat_dist(&mut self) -> Result<(), EnvError> {
         if self.nat_dist_init {
             return Ok(());
@@ -797,6 +808,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_dist_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_dist(&self) -> bool {
         self.nat_dist_init
     }

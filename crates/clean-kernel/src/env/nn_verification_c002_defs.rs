@@ -28,6 +28,7 @@ pub(super) struct C002Consts {
     pub(super) rat: Expr,
     pub(super) nn_vec: Expr,
     pub(super) nn_mat: Expr,
+    #[cfg(test)]
     pub(super) ib: Expr,
     pub(super) eq: Expr,
     pub(super) zonotope: Expr,
@@ -36,6 +37,7 @@ pub(super) struct C002Consts {
     pub(super) fresh_zonotope_from_hull: Expr,
     pub(super) layernorm_zonotope: Expr,
     pub(super) layernorm_eff_jacobian: Expr,
+    #[cfg(test)]
     pub(super) firewall_core: Expr,
     pub(super) matrix_rank: Expr,
     pub(super) nat_succ: Expr,
@@ -53,20 +55,31 @@ pub(super) struct C002Consts {
     pub(super) matrix_sub: Expr,
     pub(super) scalar_mat_mul: Expr,
     // Infrastructure for constructive jac_rankdef_core proof (#3307)
+    #[cfg(test)]
     pub(super) identity_minus_projection_rank: Expr,
+    #[cfg(test)]
     pub(super) scalar_mat_rank_le: Expr,
+    #[cfg(test)]
     pub(super) nat_eq_pred_succ_le: Expr,
+    #[cfg(test)]
     pub(super) le_trans_nat: Expr,
+    #[cfg(test)]
     pub(super) nat_succ_le_succ: Expr,
+    #[cfg(test)]
     pub(super) nat_sub: Expr,
+    #[cfg(test)]
     pub(super) nat_zero: Expr,
     // Infrastructure for constructive firewall_algebraic proof (#3307)
+    #[cfg(test)]
     pub(super) zonotope_rankdef_width_eq: Expr,
+    #[cfg(test)]
     pub(super) linear_image_zonotope: Expr,
+    #[cfg(test)]
     pub(super) layernorm_jac_rankdef: Expr,
     // Infrastructure for constructive zonotope projection values (#3307)
     pub(super) zonotope_rec: Expr,
     // Infrastructure for constructive firewall_algebraic proof (#3307 — bridge)
+    #[cfg(test)]
     pub(super) layernorm_ibp_bridge: Expr,
     pub(super) nn_vec_variance: Expr,
 }
@@ -78,6 +91,7 @@ impl C002Consts {
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             nn_mat: Expr::const_(Name::from_string("NNVerify.NNMat"), vec![]),
+            #[cfg(test)]
             ib: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
             zonotope: Expr::const_(Name::from_string("NNVerify.Zonotope"), vec![]),
@@ -98,6 +112,7 @@ impl C002Consts {
                 Name::from_string("NNVerify.C002.layernorm_effective_jacobian"),
                 vec![],
             ),
+            #[cfg(test)]
             firewall_core: Expr::const_(
                 Name::from_string("NNVerify.C002.correlation_firewall_core"),
                 vec![],
@@ -121,31 +136,41 @@ impl C002Consts {
             matrix_sub: Expr::const_(Name::from_string("NNVerify.matrix_sub"), vec![]),
             scalar_mat_mul: Expr::const_(Name::from_string("NNVerify.scalar_mat_mul"), vec![]),
             // Infrastructure for constructive jac_rankdef_core proof (#3307)
+            #[cfg(test)]
             identity_minus_projection_rank: Expr::const_(
                 Name::from_string("NNVerify.identity_minus_projection_rank"),
                 vec![],
             ),
+            #[cfg(test)]
             scalar_mat_rank_le: Expr::const_(
                 Name::from_string("NNVerify.scalar_mat_rank_le"),
                 vec![],
             ),
+            #[cfg(test)]
             nat_eq_pred_succ_le: Expr::const_(
                 Name::from_string("NNVerify.nat_eq_pred_succ_le"),
                 vec![],
             ),
+            #[cfg(test)]
             le_trans_nat: Expr::const_(Name::from_string("NNVerify.le_trans_nat"), vec![]),
+            #[cfg(test)]
             nat_succ_le_succ: Expr::const_(Name::from_string("NNVerify.nat_succ_le_succ"), vec![]),
+            #[cfg(test)]
             nat_sub: Expr::const_(Name::from_string("Nat.sub"), vec![]),
+            #[cfg(test)]
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
             // Infrastructure for constructive firewall_algebraic proof (#3307)
+            #[cfg(test)]
             zonotope_rankdef_width_eq: Expr::const_(
                 Name::from_string("NNVerify.zonotope_rankdef_width_eq"),
                 vec![],
             ),
+            #[cfg(test)]
             linear_image_zonotope: Expr::const_(
                 Name::from_string("NNVerify.linear_image_zonotope"),
                 vec![],
             ),
+            #[cfg(test)]
             layernorm_jac_rankdef: Expr::const_(
                 Name::from_string("NNVerify.C002.layernorm_jacobian_rank_deficient"),
                 vec![],
@@ -156,6 +181,7 @@ impl C002Consts {
                 vec![Level::succ(Level::zero())],
             ),
             // Infrastructure for constructive firewall_algebraic proof (#3307 — bridge)
+            #[cfg(test)]
             layernorm_ibp_bridge: Expr::const_(
                 Name::from_string("NNVerify.layernorm_ibp_bridge"),
                 vec![],

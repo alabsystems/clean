@@ -283,6 +283,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.trans_init == true`
+    #[cfg(test)]
     pub(crate) fn has_trans(&self) -> bool {
         self.trans_init
     }
@@ -596,6 +597,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.preorder_init == true`
+    #[cfg(test)]
     pub(crate) fn has_preorder(&self) -> bool {
         self.preorder_init
     }
@@ -816,6 +818,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.partial_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_partial_order(&self) -> bool {
         self.partial_order_init
     }
@@ -1026,6 +1029,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.linear_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_linear_order(&self) -> bool {
         self.linear_order_init
     }

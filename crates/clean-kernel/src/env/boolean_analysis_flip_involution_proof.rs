@@ -43,6 +43,7 @@ struct FiConsts {
     bfalse: Expr,
     bool_not: Expr,
     nat_beq: Expr,
+    #[cfg(test)]
     nat_xor: Expr,
     nat_succ: Expr,
     nat_zero: Expr,
@@ -72,6 +73,7 @@ impl FiConsts {
             bfalse: Expr::const_(Name::from_string("Bool.false"), vec![]),
             bool_not: Expr::const_(Name::from_string("Bool.not"), vec![]),
             nat_beq: Expr::const_(Name::from_string("Nat.beq"), vec![]),
+            #[cfg(test)]
             nat_xor: Expr::const_(Name::from_string("Nat.xor"), vec![]),
             nat_succ: succ,
             nat_zero: zero,
@@ -111,6 +113,7 @@ impl FiConsts {
     fn val(&self, m: Expr, k: Expr) -> Expr {
         Expr::apps(self.fin_val.clone(), [m, k])
     }
+    #[cfg(test)]
     fn nxor(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nat_xor.clone(), [a, b])
     }

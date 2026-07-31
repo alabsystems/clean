@@ -667,7 +667,7 @@ fn test_lowering_level_zero() {
 fn test_lowering_level_succ() {
     let mut writer = ShardWriter::new();
     let mut ctx = KernelLoweringCtx::new(&mut writer);
-    let idx = ctx.lower_level(&Level::Succ(std::sync::Arc::new(Level::Zero)));
+    let idx = ctx.lower_level(&Level::succ(Level::Zero));
     assert!(idx > 0);
 }
 

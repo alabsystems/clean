@@ -1,0 +1,18 @@
+# Clean builds on ordinary upstream Rust. Nothing here needs a custom rustc:
+# `clean-kernel` is `#![forbid(unsafe_code)]` Rust, and the Trust-facing
+# crates (`clean-autoform`, `clean-reflect`) are consumed *by* Trust from
+# Trust's own checkout, which selects its own toolchain there.
+#
+# This pin exists because rustup resolves a toolchain from the directory a
+# `cargo` command is run in, and a workstation may set `rustup default` to a
+# verifying compiler fork. Without this file, `cargo check` in a fresh clone
+# of Clean inherits that default and dies inside third-party build scripts
+# (libc, unicode-ident, ...) on proof obligations that have nothing to do with
+# Clean. Pinning here makes the build depend on the repository, not on the
+# operator's ambient rustup state — for contributors and for the reproducible
+# release gate alike.
+#
+# MSRV is declared separately as `rust-version` in Cargo.toml; this pin is the
+# toolchain the project builds and gates with, not the floor it supports.
+[toolchain]
+channel = "stable"

@@ -59,6 +59,7 @@ struct SpectralConsts {
     subset_sum_congr: Expr,
     subset_sum_swap: Expr,
     subset_sum_smul: Expr,
+    #[cfg(test)]
     subset_sum_sq_to_double: Expr,
     noise_density: Expr,
     fin: Expr,
@@ -88,6 +89,7 @@ impl SpectralConsts {
             ),
             subset_sum_swap: Expr::const_(Name::from_string("BoolAnalysis.subsetSum_swap"), vec![]),
             subset_sum_smul: Expr::const_(Name::from_string("BoolAnalysis.subsetSum_smul"), vec![]),
+            #[cfg(test)]
             subset_sum_sq_to_double: Expr::const_(
                 Name::from_string("BoolAnalysis.subsetSum_sq_to_double"),
                 vec![],

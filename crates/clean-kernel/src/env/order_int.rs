@@ -225,6 +225,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_ord(&self) -> bool {
         self.int_ord_init
     }
@@ -451,6 +452,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_decidable_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_decidable_ord(&self) -> bool {
         self.int_decidable_ord_init
     }
@@ -497,12 +499,12 @@ impl Environment {
         self.init_true_false()?; // Provides Not
         self.init_classical()?; // Provides Or
 
-        let int_const = Expr::const_(Name::from_string("Int"), vec![]);
-        let le_const = Expr::const_(Name::from_string("Int.le"), vec![]);
-        let lt_const = Expr::const_(Name::from_string("Int.lt"), vec![]);
-        let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
-        let not_const = Expr::const_(Name::from_string("Not"), vec![]);
-        let or_const = Expr::const_(Name::from_string("Or"), vec![]);
+        let _int_const = Expr::const_(Name::from_string("Int"), vec![]);
+        let _le_const = Expr::const_(Name::from_string("Int.le"), vec![]);
+        let _lt_const = Expr::const_(Name::from_string("Int.lt"), vec![]);
+        let _eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
+        let _not_const = Expr::const_(Name::from_string("Not"), vec![]);
+        let _or_const = Expr::const_(Name::from_string("Or"), vec![]);
 
         // Int.le_refl : ∀ a : Int, Int.le a a
         //
@@ -790,6 +792,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_ord_lemmas_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_ord_lemmas(&self) -> bool {
         self.int_ord_lemmas_init
     }
@@ -1071,6 +1074,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.int_linear_order_init == true`
+    #[cfg(test)]
     pub(crate) fn has_int_linear_order(&self) -> bool {
         self.int_linear_order_init
     }

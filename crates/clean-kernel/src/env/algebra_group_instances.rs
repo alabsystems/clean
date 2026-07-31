@@ -11,15 +11,21 @@
 //! - Int AddCommMonoid instance
 //! - Int AddCommGroup instance
 
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(test)]
+use crate::env::{Declaration, EnvError};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
     /// Initialize the Nat AddCommSemigroup instance
     ///
     /// Nat forms an AddCommSemigroup with Nat.add, Nat.add_assoc, Nat.add_comm
+    #[cfg(test)]
     pub(crate) fn init_nat_add_comm_semigroup_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_add_comm_semigroup_inst_init {
             return Ok(());
@@ -64,6 +70,7 @@ impl Environment {
     }
 
     /// Check if Nat AddCommSemigroup instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_add_comm_semigroup_inst(&self) -> bool {
         self.nat_add_comm_semigroup_inst_init
     }
@@ -71,6 +78,7 @@ impl Environment {
     /// Initialize the Int AddCommSemigroup instance
     ///
     /// Int forms an AddCommSemigroup with Int.add, Int.add_assoc, Int.add_comm
+    #[cfg(test)]
     pub(crate) fn init_int_add_comm_semigroup_inst(&mut self) -> Result<(), EnvError> {
         if self.int_add_comm_semigroup_inst_init {
             return Ok(());
@@ -115,6 +123,7 @@ impl Environment {
     }
 
     /// Check if Int AddCommSemigroup instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_add_comm_semigroup_inst(&self) -> bool {
         self.int_add_comm_semigroup_inst_init
     }
@@ -123,6 +132,7 @@ impl Environment {
     ///
     /// Nat forms an AddCommMonoid with Nat.add, Nat.add_assoc, Nat.zero,
     /// Nat.zero_add, Nat.add_zero, Nat.add_comm
+    #[cfg(test)]
     pub(crate) fn init_nat_add_comm_monoid_inst(&mut self) -> Result<(), EnvError> {
         if self.nat_add_comm_monoid_inst_init {
             return Ok(());
@@ -177,6 +187,7 @@ impl Environment {
     }
 
     /// Check if Nat AddCommMonoid instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_nat_add_comm_monoid_inst(&self) -> bool {
         self.nat_add_comm_monoid_inst_init
     }
@@ -185,6 +196,7 @@ impl Environment {
     ///
     /// Int forms an AddCommMonoid with Int.add, Int.add_assoc, Int.zero,
     /// Int.zero_add, Int.add_zero, Int.add_comm
+    #[cfg(test)]
     pub(crate) fn init_int_add_comm_monoid_inst(&mut self) -> Result<(), EnvError> {
         if self.int_add_comm_monoid_inst_init {
             return Ok(());
@@ -239,6 +251,7 @@ impl Environment {
     }
 
     /// Check if Int AddCommMonoid instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_add_comm_monoid_inst(&self) -> bool {
         self.int_add_comm_monoid_inst_init
     }
@@ -247,6 +260,7 @@ impl Environment {
     ///
     /// Int forms an AddCommGroup with Int.add, Int.add_assoc, Int.zero,
     /// Int.zero_add, Int.add_zero, Int.neg, Int.neg_add_self, Int.add_comm
+    #[cfg(test)]
     pub(crate) fn init_int_add_comm_group_inst(&mut self) -> Result<(), EnvError> {
         if self.int_add_comm_group_inst_init {
             return Ok(());
@@ -309,6 +323,7 @@ impl Environment {
     }
 
     /// Check if Int AddCommGroup instance has been initialized
+    #[cfg(test)]
     pub(crate) fn has_int_add_comm_group_inst(&self) -> bool {
         self.int_add_comm_group_inst_init
     }

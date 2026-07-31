@@ -24,7 +24,7 @@ use clean_kernel::name::Name;
 /// Convert a load-ready constant directly from binary, bypassing ParsedExpr.
 pub(super) fn convert_load_constant(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
     elide: ProofValueElision,
 ) -> ConvertedConstant {
@@ -53,7 +53,7 @@ pub(super) fn convert_load_constant(
 /// Convert type expression from raw pointer via the direct converter.
 fn convert_type_expr(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
     stats: &mut ExprSharingStats,
 ) -> Result<Expr, ImportError> {
@@ -68,7 +68,7 @@ fn convert_type_expr(
 /// Convert value expression from raw pointer via the direct converter.
 fn convert_value_expr(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
     stats: &mut ExprSharingStats,
 ) -> Result<Option<Expr>, ImportError> {
@@ -82,7 +82,7 @@ fn convert_value_expr(
 
 fn convert_load_inductive(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
 ) -> (Result<InductiveVal, ImportError>, ExprSharingStats) {
     let mut stats = ExprSharingStats::default();
@@ -120,7 +120,7 @@ fn convert_load_inductive(
 
 fn convert_load_constructor(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
 ) -> (Result<ConstructorVal, ImportError>, ExprSharingStats) {
     let mut stats = ExprSharingStats::default();
@@ -159,7 +159,7 @@ fn convert_load_constructor(
 
 fn convert_load_recursor(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
 ) -> (
     Result<(RecursorVal, Vec<Name>, u32), ImportError>,
@@ -250,7 +250,7 @@ fn convert_load_recursor(
 
 fn convert_load_other(
     constant: &LoadConstant,
-    region: &CompactedRegion,
+    region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
     elide: ProofValueElision,
 ) -> (Result<Declaration, ImportError>, ExprSharingStats) {

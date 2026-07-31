@@ -32,10 +32,6 @@ fn find_c_compiler() -> Option<&'static str> {
     })
 }
 
-fn include_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("include")
-}
-
 /// Symbols the trust-cg path lowers to external calls; each MUST be a defined
 /// external symbol in `runtime_extern.o`.
 const REQUIRED_SYMBOLS: &[&str] = &[

@@ -37,9 +37,8 @@
 //! closure for every theorem. The two `Nat.rec` bridges are universe-1 `Eq`s
 //! over `Rat`. NO `sorry` / `add_decl_unchecked` / `add_decl_structural`.
 
-use super::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::env::{EnvError, Environment};
+use crate::expr::Expr;
 use crate::level::Level;
 use crate::name::Name;
 
@@ -76,15 +75,18 @@ pub(crate) struct SqueezeConsts {
     rat_add_sq: Expr,
     // order bricks
     rat_mul_pos: Expr,
+    #[cfg(test)]
     rat_mul_nonneg: Expr,
     rat_mul_le_left: Expr,
     rat_mul_le_right: Expr,
     rat_le_of_sq_le_sq: Expr,
+    #[cfg(test)]
     rat_le_trans: Expr,
     rat_le_refl: Expr,
     rat_lt_of_le_of_lt: Expr,
     rat_lt_of_lt_of_le: Expr,
     rat_add_le_add: Expr,
+    #[cfg(test)]
     rat_add_le_add_right: Expr,
     rat_lt_iff_le_not_le: Expr,
     // positivity of two-pow + its ne-zero bridge
@@ -93,6 +95,7 @@ pub(crate) struct SqueezeConsts {
     rat_zero_lt_inv_two_pow: Expr,
     // Eq toolkit (Rat is Sort 1)
     eq1: Expr,
+    #[cfg(test)]
     eq_refl1: Expr,
     eq_symm1: Expr,
     eq_subst1: Expr,
@@ -141,21 +144,25 @@ impl SqueezeConsts {
             rat_ofnat_mul: k("Rat.ofNat_mul"),
             rat_add_sq: k("Rat.add_sq"),
             rat_mul_pos: k("Rat.mul_pos"),
+            #[cfg(test)]
             rat_mul_nonneg: k("Rat.mul_nonneg"),
             rat_mul_le_left: k("Rat.mul_le_mul_of_nonneg_left"),
             rat_mul_le_right: k("Rat.mul_le_mul_of_nonneg_right"),
             rat_le_of_sq_le_sq: k("Rat.le_of_sq_le_sq"),
+            #[cfg(test)]
             rat_le_trans: k("Rat.le_trans"),
             rat_le_refl: k("Rat.le_refl"),
             rat_lt_of_le_of_lt: k("Rat.lt_of_le_of_lt"),
             rat_lt_of_lt_of_le: k("Rat.lt_of_lt_of_le"),
             rat_add_le_add: k("Rat.add_le_add"),
+            #[cfg(test)]
             rat_add_le_add_right: k("Rat.add_le_add_right"),
             rat_lt_iff_le_not_le: k("Rat.lt_iff_le_not_le"),
             rat_zero_lt_two_pow: k("Rat.zero_lt_ofNat_two_pow"),
             rat_ne_zero_of_pos: k("Rat.ne_zero_of_pos"),
             rat_zero_lt_inv_two_pow: k("Rat.zero_lt_inv_two_pow"),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
@@ -223,6 +230,7 @@ impl SqueezeConsts {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }
     /// `@Eq.refl Rat a`.
+    #[cfg(test)]
     fn refl(&self, a: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), a])
     }
@@ -301,6 +309,7 @@ impl SqueezeConsts {
         Expr::apps(self.rat_mul_pos.clone(), [a, b, ha, hb])
     }
     /// `Rat.mul_nonneg a b (0≤a)(0≤b) : 0 ≤ a·b`.
+    #[cfg(test)]
     fn mul_nonneg(&self, a: Expr, b: Expr, ha: Expr, hb: Expr) -> Expr {
         Expr::apps(self.rat_mul_nonneg.clone(), [a, b, ha, hb])
     }
@@ -317,6 +326,7 @@ impl SqueezeConsts {
         Expr::apps(self.rat_le_of_sq_le_sq.clone(), [a, b, ha, hb, hsq])
     }
     /// `Rat.le_trans a b c (a≤b)(b≤c) : a ≤ c`.
+    #[cfg(test)]
     fn le_trans(&self, a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.rat_le_trans.clone(), [a, b, c, h1, h2])
     }
@@ -337,6 +347,7 @@ impl SqueezeConsts {
         Expr::apps(self.rat_add_le_add.clone(), [a, b, cc, d, h1, h2])
     }
     /// `Rat.add_le_add_right a b c (a≤b) : (a+c) ≤ (b+c)`.
+    #[cfg(test)]
     fn add_le_add_right(&self, a: Expr, b: Expr, cc: Expr, h: Expr) -> Expr {
         Expr::apps(self.rat_add_le_add_right.clone(), [a, b, cc, h])
     }

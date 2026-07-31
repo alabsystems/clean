@@ -415,9 +415,11 @@ fn all_false(z: Expr) -> Expr {
 fn zip_or(xs: Expr, ys: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::ZIP_OR), [xs, ys])
 }
+#[cfg(test)]
 fn zip_and(xs: Expr, ys: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::ZIP_AND), [xs, ys])
 }
+#[cfg(test)]
 fn zip_xor(xs: Expr, ys: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::ZIP_XOR), [xs, ys])
 }
@@ -451,6 +453,7 @@ fn bv_is_cons(x: Expr) -> Expr {
 }
 /// `@idP Q proof : Q` — ascribe the (un-reduced) Prop type Q via the general
 /// def-eq-carrying combinator; `proof` is checked at Q by full def_eq.
+#[cfg(test)]
 fn idp(q: Expr, proof: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::IDP), [q, proof])
 }
@@ -469,6 +472,7 @@ fn bv_beq(xs: Expr, ys: Expr) -> Expr {
 fn bv_is_zero(xs: Expr) -> Expr {
     Expr::app(Expr::const_str(names::BV_IS_ZERO), xs)
 }
+#[cfg(test)]
 fn lb_bool_arrow() -> Expr {
     Expr::arrow(list_bool(), bool_ty())
 }
@@ -4106,7 +4110,7 @@ impl Environment {
                     ))
                 };
                 let inner_for = |pv: Expr| {
-                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let c = EnvDeclBuilder::child_of(&b);
                     let mot = {
                         let mut d = EnvDeclBuilder::child_of(&c);
                         let (y_id, y) = d.fresh_local(bool_ty());
@@ -5218,7 +5222,7 @@ impl Environment {
                         [nat.clone(), x, y, h],
                     )
                 };
-                let eq_refl_l = |x: Expr| {
+                let _eq_refl_l = |x: Expr| {
                     Expr::apps(
                         Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
                         [list_bool(), x],
@@ -5471,7 +5475,7 @@ impl Environment {
                     let singleton = {
                         // nested Bool.rec a0 → b0 → c, leaf = eq_refl_bool(Not(maj ¬av bv cv)).
                         let mk_c = |av: Expr, bv: Expr, parent: &EnvDeclBuilder| -> Expr {
-                            let mut h = EnvDeclBuilder::child_of(parent);
+                            let h = EnvDeclBuilder::child_of(parent);
                             let cmot = {
                                 let mut k = EnvDeclBuilder::child_of(&h);
                                 let (cv_id, cv) = k.fresh_local(bool_ty());
@@ -5492,7 +5496,7 @@ impl Environment {
                             h.finish_child(rec)
                         };
                         let mk_b = |av: Expr, parent: &EnvDeclBuilder| -> Expr {
-                            let mut h = EnvDeclBuilder::child_of(parent);
+                            let h = EnvDeclBuilder::child_of(parent);
                             // b-motive: `fun bv => sgoal av bv c` (outer c=cc fixed; inner c-rec dispatches c).
                             let bmot = {
                                 let mut k = EnvDeclBuilder::child_of(&h);
@@ -6015,6 +6019,7 @@ impl Environment {
 }
 
 /// `Eq.refl.{1} Nat v` built without consuming an outer hypothesis (local to a builder ctx).
+#[cfg(test)]
 fn eq_refl_nat_local(_c: &EnvDeclBuilder, v: Expr) -> Expr {
     Expr::apps(
         Expr::const_(
@@ -6060,7 +6065,7 @@ fn and_comm_not_local(parent: &EnvDeclBuilder, x: Expr, y: Expr) -> Expr {
     };
     // For a fixed xv, case y: leaf = refl of (and xv yv).
     let mk_y = |xv: Expr| -> Expr {
-        let mut d = EnvDeclBuilder::child_of(parent);
+        let d = EnvDeclBuilder::child_of(parent);
         let ymot = {
             let mut e = EnvDeclBuilder::child_of(&d);
             let (yv_id, yv) = e.fresh_local(Expr::const_str("Bool"));

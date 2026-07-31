@@ -574,7 +574,6 @@ mod tests {
     use clean_kernel::cert::ZFCSetCertKind;
     use clean_kernel::expr::{BinderInfo, FVarId};
     use clean_kernel::{BigNat, Literal};
-    use std::sync::Arc;
 
     /// Helper to create a simple type expression (Sort 0)
     fn type0() -> Box<Expr> {
@@ -593,7 +592,7 @@ mod tests {
     #[test]
     fn test_encode_decode_roundtrip() {
         let cert = ProofCert::Sort {
-            level: Level::Succ(Arc::new(Level::Zero)),
+            level: Level::succ(Level::Zero),
         };
 
         let encoded = encode_cert(&cert).expect("encoding should succeed");
@@ -825,9 +824,9 @@ mod tests {
         // Test all Level variants encode correctly
         let levels = vec![
             Level::Zero,
-            Level::Succ(Arc::new(Level::Zero)),
-            Level::Max(Arc::new(Level::Zero), Arc::new(Level::Zero)),
-            Level::IMax(Arc::new(Level::Zero), Arc::new(Level::Zero)),
+            Level::succ(Level::Zero),
+            Level::Max(Level::Zero.into(), Level::Zero.into()),
+            Level::IMax(Level::Zero.into(), Level::Zero.into()),
             Level::Param(Name::anon()),
         ];
 

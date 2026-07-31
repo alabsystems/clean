@@ -719,6 +719,7 @@ impl Environment {
 /// byte-match the v3 helper body (`friedgut_l2_faithful_body_v3`) and the three
 /// landed case bricks (`case_le`, `case_empty`, `case_threshold`) so the assembled
 /// term's `Exists` slots into the (reducible-unfolded) helper conclusion verbatim.
+#[cfg(test)]
 struct AssemblyConsts {
     nat: Expr,
     rat: Expr,
@@ -741,7 +742,9 @@ struct AssemblyConsts {
     l1: Level,
 }
 
+#[cfg(test)]
 impl AssemblyConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         Self {
@@ -767,18 +770,23 @@ impl AssemblyConsts {
         }
     }
 
+    #[cfg(test)]
     fn bool_fn_of(&self, n: &Expr) -> Expr {
         Expr::app(self.bool_fn.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn variance_of(&self, n: &Expr, f: &Expr) -> Expr {
         Expr::apps(self.variance.clone(), [n.clone(), f.clone()])
     }
+    #[cfg(test)]
     fn total_influence_of(&self, n: &Expr, f: &Expr) -> Expr {
         Expr::apps(self.total_influence.clone(), [n.clone(), f.clone()])
     }
+    #[cfg(test)]
     fn nat_lit(&self, v: u64) -> Expr {
         let mut e = self.nat_zero.clone();
         for _ in 0..v {
@@ -786,40 +794,50 @@ impl AssemblyConsts {
         }
         e
     }
+    #[cfg(test)]
     fn two(&self) -> Expr {
         self.nat_lit(2)
     }
     /// `Nat.pow 2 n`.
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two(), n.clone()])
     }
+    #[cfg(test)]
     fn nmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nat_mul.clone(), [a, b])
     }
     /// `friedgut_budget_v3 e := Nat.mul 48 (Nat.pow 2 e)` — byte-matches the body.
+    #[cfg(test)]
     fn budget_v3(&self, e: &Expr) -> Expr {
         self.nmul(self.nat_lit(48), self.pow2(e))
     }
     /// `B := Nat.pow 2 (48·2^e)` — byte-matches the body's `pow2b`.
+    #[cfg(test)]
     fn big_b(&self, e: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two(), self.budget_v3(e)])
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
     /// `Nat.ble n m : Bool`.
+    #[cfg(test)]
     fn ble(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nat_ble.clone(), [a, b])
     }
     /// `Nat.le a b`.
+    #[cfg(test)]
     fn le_nat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nat_le.clone(), [a, b])
     }
     /// `Nat.lt a b`.
+    #[cfg(test)]
     fn lt_nat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("Nat.lt"), vec![]), [a, b])
     }
     /// `LE.le.{0} Rat instLERat a b`.
+    #[cfg(test)]
     fn le_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("LE.le"), vec![self.l0.clone()]),
@@ -832,18 +850,22 @@ impl AssemblyConsts {
         )
     }
     /// `Rat.lt a b`.
+    #[cfg(test)]
     fn lt_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("Rat.lt"), vec![]), [a, b])
     }
     /// `And P Q`.
+    #[cfg(test)]
     fn and(&self, p: Expr, q: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("And"), vec![]), [p, q])
     }
     /// `Or P Q`.
+    #[cfg(test)]
     fn or(&self, p: Expr, q: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("Or"), vec![]), [p, q])
     }
     /// `@Eq Rat a b`.
+    #[cfg(test)]
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),
@@ -851,6 +873,7 @@ impl AssemblyConsts {
         )
     }
     /// `@Eq Bool a b`.
+    #[cfg(test)]
     fn eq_bool(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),
@@ -858,6 +881,7 @@ impl AssemblyConsts {
         )
     }
     /// `@Eq.refl Bool v`.
+    #[cfg(test)]
     fn refl_bool(&self, v: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.refl"), vec![self.l1.clone()]),
@@ -865,6 +889,7 @@ impl AssemblyConsts {
         )
     }
     /// `@Eq.symm Rat a b h : b = a`.
+    #[cfg(test)]
     fn symm_rat(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.symm"), vec![self.l1.clone()]),
@@ -872,6 +897,7 @@ impl AssemblyConsts {
         )
     }
     /// `@Eq.subst.{1} Rat motive a b h_eq h_a : motive b`.
+    #[cfg(test)]
     fn subst_rat(&self, motive: Expr, a: Expr, b: Expr, h_eq: Expr, h_a: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq.subst"), vec![self.l1.clone()]),
@@ -880,6 +906,7 @@ impl AssemblyConsts {
     }
     /// `Rat.le_trans a b c (a≤b) (b≤c) : a ≤ c` (over the `Rat.le` carrier, def-eq
     /// to the `LE.le instLERat` spelling).
+    #[cfg(test)]
     fn le_trans_rat(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.le_trans"), vec![]),
@@ -887,6 +914,7 @@ impl AssemblyConsts {
         )
     }
     /// `natCast m := Rat.mk (Int.ofNat m) 1` — byte-matches the v3 body / guard.
+    #[cfg(test)]
     fn natcast(&self, m: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Rat.mk"), vec![]),
@@ -905,6 +933,7 @@ impl AssemblyConsts {
 /// the `Exists` of the (reducible-unfolded) helper body. Outer split on
 /// `Nat.ble n B` (`B := 2^(48·2^e)`); on the `n > B` branch a `Rat`-order
 /// trichotomy of `eps` routes to the three landed case bricks.
+#[cfg(test)]
 fn build_friedgut_boolean_assembly(for_value: bool) -> Expr {
     let c = AssemblyConsts::new();
     let u1 = c.l1.clone();
@@ -1374,6 +1403,7 @@ impl Environment {
     /// variance bounds, and the `Rat`/`Nat` order glue. Used by the co-land
     /// (`register_friedgut_boolean_helper` → Definition, `register_friedgut_boolean`
     /// → Theorem). Idempotent; no axiom added or removed.
+    #[cfg(test)]
     pub(crate) fn register_friedgut_boolean_assembly_deps(&mut self) -> Result<(), EnvError> {
         self.init_eq()?;
         self.init_boolean_analysis()?;
@@ -1398,11 +1428,13 @@ impl Environment {
 
     /// Build the assembled `friedgut_boolean` proof term (4-case). The returned
     /// `Expr` has the v3 helper body type (def-eq to `helper n f K eps`).
+    #[cfg(test)]
     pub(crate) fn friedgut_boolean_assembled_proof(&self) -> Expr {
         build_friedgut_boolean_assembly(true)
     }
 
     /// The structural type of the assembled proof (the v3 helper body, re-spelled).
+    #[cfg(test)]
     pub(crate) fn friedgut_boolean_assembled_type(&self) -> Expr {
         build_friedgut_boolean_assembly(false)
     }

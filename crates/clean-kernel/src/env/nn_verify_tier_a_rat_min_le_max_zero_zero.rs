@@ -123,6 +123,7 @@ impl Environment {
     }
 
     /// Check if Tier A `min_le_max_zero_zero` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verify_tier_a_rat_min_le_max_zero_zero(&self) -> bool {
         self.nn_verify_tier_a_rat_min_le_max_zero_zero_init
     }

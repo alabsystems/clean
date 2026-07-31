@@ -1,11 +1,12 @@
 {
-  "note": "Third-party-dependency trust-boundary state (paragon axis 1: 'every dependency verified, continuously gated'). Records the cargo-deny gate outcome over the workspace dependency graph. ENFORCEMENT: `cargo deny check` is wired into scripts/local_gate.sh (FULL mode only — it resolves the whole dep graph against the RustSec advisory DB, too slow for the <30s --fast pre-push path). Config: deny.toml (advisories/licenses/bans/sources; registry locked to crates.io, git locked to carcara). Regenerate this record with `cargo deny check 2>&1` and update on any dep-graph change that shifts a section verdict.",
+  "note": "Historical third-party-dependency trust-boundary measurement (paragon axis 1: 'every dependency verified, continuously gated'). `cargo deny check` remains wired into scripts/local_gate.sh FULL mode. This 2026-06-30 result predates AY's migration from sibling paths to one immutable Git source and is not evidence for the current graph. deny.toml now allow-lists crates.io, carcara, and first-party AY; rerun cargo-deny and replace this measurement before making a current GREEN claim.",
+  "snapshot_status": "STALE_REQUIRES_RERUN_AFTER_AY_GIT_MIGRATION",
   "tool": "cargo-deny",
   "tool_version": "0.19.9",
   "checked_on": "2026-06-30",
-  "overall_verdict": "GREEN",
-  "overall_summary": "advisories ok, bans ok, licenses ok, sources ok (exit 0)",
-  "lock_drift_note": "cargo-deny reads Cargo.lock directly and resolved it cleanly; the benign `../ay` path-dep lock drift did NOT block the check. Cargo.lock stayed clean across the run.",
+  "overall_verdict": "STALE",
+  "overall_summary": "Historical result only: advisories ok, bans ok, licenses ok, sources ok (exit 0) on the pre-AY-Git graph.",
+  "lock_drift_note": "Historical note: this run measured the former ../ay path-dependency graph. The current committed Cargo.lock contains immutable AY Git sources and has not yet been measured by this snapshot.",
   "sections": {
     "advisories": {
       "verdict": "ok",
@@ -33,7 +34,7 @@
       "exit": 0,
       "errors": 0,
       "warnings": 1,
-      "detail": "unknown-registry = 'deny', unknown-git = 'deny'. Every crate source is either crates.io (allow-registry) or the allow-listed carcara git rev. The single `unmatched-source` warning is for the carcara git allow not being encountered: the carcara dep sits behind the off-by-default `carcara-verify` feature in clean-auto, so it is absent from the default-feature graph. Zero unknown/unvetted sources — the boundary is fully locked."
+      "detail": "Historical pre-migration result: every measured source was crates.io or the allow-listed carcara Git revision. The current graph additionally contains immutable first-party AY Git sources; deny.toml permits that exact repository, but this snapshot does not claim a measured source verdict for it."
     }
   },
   "duplicate_crates_warn": [
@@ -42,6 +43,7 @@
     "rand_core", "sha2", "shlex", "toml", "toml_datetime", "unicode-width", "winnow"
   ],
   "follow_ups": [
+    "Rerun `cargo deny check` against the current committed AY Git graph and replace every historical section result before restoring a GREEN verdict.",
     "deny.toml advisories: RUSTSEC-2026-0002 ignore is now stale (lru >= 0.18 resolved) — safe to delete on next dep-boundary cleanup.",
     "deny.toml licenses: BSD-3-Clause / CDLA-Permissive-2.0 / Unicode-DFS-2016 allowances and gmp-mpfr-sys/rug exceptions are currently unmatched on the macOS default-feature graph — keep (they match under other targets/features) but revisit if pruning the allow-list."
   ]

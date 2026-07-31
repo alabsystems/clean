@@ -36,16 +36,6 @@ fn mk_ctor(tag: u32) -> CtorInfo {
     }
 }
 
-fn mk_ctor_n(tag: u32, n_objs: u32) -> CtorInfo {
-    CtorInfo {
-        name: name("Ctor"),
-        tag,
-        num_scalars: 0,
-        num_objects: n_objs,
-        field_types: vec![IRType::Object; n_objs as usize],
-    }
-}
-
 fn identity_decl(fname: &str, pvar: u32) -> IRDecl {
     IRDecl {
         name: name(fname),
@@ -457,8 +447,13 @@ fn test_full_analysis_identity_owned() {
         .summaries
         .get(&fn_id("id"))
         .expect("should have summary");
+    assert_eq!(summary.fn_id, fn_id("id"));
     assert_eq!(summary.param_classes.len(), 1);
     assert_eq!(summary.param_classes[0], BorrowClass::Owned);
+    assert_eq!(summary.escapes, vec![(var(0), EscapeKind::ReturnValue)]);
+    assert!(summary.conflicts.is_empty());
+    assert!(result.unique_vars.contains_key(&fn_id("id")));
+    assert!(result.field_borrows.contains_key(&fn_id("id")));
 }
 
 #[test]
@@ -479,8 +474,8 @@ fn test_full_analysis_tag_only_borrowed() {
         .summaries
         .get(&fn_id("f"))
         .expect("should have summary");
-    // No escape, Unknown resolves to Owned (conservative fallback)
-    assert_eq!(summary.param_classes[0], BorrowClass::Owned);
+    // Tag inspection is read-only and does not make the object escape.
+    assert_eq!(summary.param_classes[0], BorrowClass::Borrowed);
 }
 
 #[test]

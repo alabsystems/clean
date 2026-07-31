@@ -9,14 +9,13 @@
 //! provider-internal behind this explicit re-export list. Part of #2760.
 
 pub use super::ay_backend::{
-    certify_kernel_term, certify_reconstruction, deserialize_context, deserialize_term,
-    reconstruct_and_certify_ay_proof, serialize_context, serialize_term, verify_alethe_proof,
-    AyBackend, AyBackendConfig, AyError, AyLogic, AyProofBackend, AyProofQuality, AyProofResult,
-    AyResult, AySolveEnvelope, AySolveResult, AySolveVerification, AyTerm, AyUnknownReason,
-    AyVerificationLevel, AyVerificationSummary, CertifiedPayload, KernelReconstructionCandidate,
-    NotCertified, ProofProfile, ReconstructionQuality, ReducedContext, ReducedLocalDecl,
-    ResidualTrustSource, ResidualTrustSummary, TriggerPolicy, TrustBudget, VariableMapping,
-    VerifyError,
+    certify_kernel_term, deserialize_context, deserialize_term, reconstruct_and_certify_ay_proof,
+    serialize_context, serialize_term, verify_alethe_proof, AyBackend, AyBackendConfig, AyError,
+    AyLogic, AyProofBackend, AyProofQuality, AyProofResult, AyResult, AySolveEnvelope,
+    AySolveResult, AySolveVerification, AyTerm, AyUnknownReason, AyVerificationLevel,
+    AyVerificationSummary, CertifiedPayload, KernelReconstructionCandidate, NotCertified,
+    ProofProfile, ReconstructionQuality, ReducedContext, ReducedLocalDecl, ResidualTrustSource,
+    ResidualTrustSummary, TriggerPolicy, TrustBudget, VariableMapping, VerifyError,
 };
 
 // Proof-carrying ay, MILESTONE 2 (BV multiplication): the NATIVE bvmul UNSAT
@@ -41,6 +40,31 @@ pub use super::ay_backend::{
 // Re-exported here so downstream crates can name them without adding a direct
 // `ay` dependency. Part of #3014.
 pub use ay::{Model, SolveResult, Sort, Term, UnknownReason};
+
+/// Build identity reported by the AY revision-evidence API linked into Clean.
+///
+/// This is runtime evidence about the code Cargo actually linked, not an
+/// inference from a sibling checkout. Release tooling compares it with the
+/// committed `Cargo.toml` and `Cargo.lock` authority and fails closed when the
+/// value is unknown, dirty, malformed, or divergent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LinkedAyProvenance {
+    /// AY's stable revision-evidence kind.
+    pub revision_kind: &'static str,
+    /// AY build commit embedded by its build script.
+    pub revision: &'static str,
+}
+
+/// Return revision evidence from the AY library actually linked into Clean.
+#[must_use]
+pub fn linked_ay_provenance() -> LinkedAyProvenance {
+    let readiness =
+        ay::symbolic_execution_capability_route_readiness(ay::SolverCapabilityCode::ModelBlocking);
+    LinkedAyProvenance {
+        revision_kind: readiness.current_ay_revision_kind,
+        revision: readiness.current_ay_revision,
+    }
+}
 
 /// Synthetic trust-envelope constructors for cross-crate test fixtures.
 ///

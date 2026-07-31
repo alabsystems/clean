@@ -25,12 +25,17 @@
 //!
 //! Part of #3212.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
 /// Constants for T83 sigmoid proof construction.
+#[cfg(test)]
 struct T83Consts {
     nat: Expr,
     nn_vec: Expr,
@@ -39,7 +44,9 @@ struct T83Consts {
     prop: Expr,
 }
 
+#[cfg(test)]
 impl T83Consts {
+    #[cfg(test)]
     fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -53,14 +60,17 @@ impl T83Consts {
         }
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn ib_of(&self, n: &Expr) -> Expr {
         Expr::app(self.ib.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn contains(&self, n: &Expr, b: &Expr, x: &Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.ib_contains.clone(), n.clone()), b.clone()),
@@ -77,6 +87,7 @@ impl T83Consts {
 ///   contains B x ->
 ///   contains (monotone_bounds n sigma B) (sigma x)
 /// ```
+#[cfg(test)]
 fn build_t83_type(c: &T83Consts) -> Expr {
     let monotone_map = Expr::const_(Name::from_string("NNVerify.monotone_map"), vec![]);
     let monotone_bounds = Expr::const_(Name::from_string("NNVerify.monotone_bounds"), vec![]);
@@ -124,6 +135,7 @@ fn build_t83_type(c: &T83Consts) -> Expr {
     db.finish(e)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize T83 (IBP sigmoid/monotone activation soundness).
     ///
@@ -134,7 +146,7 @@ impl Environment {
     /// - `NNVerify.ibp_sigmoid_sound` — theorem with proof via axiom
     ///
     /// Depends on `init_nn_verify_types()` for IBP base types.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_ibp_sigmoid(&mut self) -> Result<(), EnvError> {
         let check_name = Name::from_string("NNVerify.ibp_sigmoid_sound");
         if self.get_const(&check_name).is_some() {
@@ -152,7 +164,7 @@ impl Environment {
     /// `NNVerify.monotone_map : (n : Nat) -> (NNVec n -> NNVec n) -> Prop`
     ///
     /// Predicate asserting that a map preserves ordering component-wise.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_monotone_map_axiom(&mut self, c: &T83Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.monotone_map");
         if self.get_const(&name).is_some() {
@@ -178,7 +190,7 @@ impl Environment {
     /// `NNVerify.monotone_bounds : (n : Nat) -> (NNVec n -> NNVec n) -> IB n -> IB n`
     ///
     /// Computes output interval bounds for a monotone activation.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_monotone_bounds_axiom(&mut self, c: &T83Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.monotone_bounds");
         if self.get_const(&name).is_some() {
@@ -207,7 +219,7 @@ impl Environment {
     /// T83: `NNVerify.ibp_sigmoid_sound` — monotone activation soundness.
     ///
     /// Registered as axiom + theorem pair for kernel type-checking.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t83_ibp_sigmoid_sound(&mut self, c: &T83Consts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.ibp_sigmoid_sound");
         if self.get_const(&name).is_some() {

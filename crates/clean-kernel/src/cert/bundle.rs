@@ -29,15 +29,19 @@
 //! assert!(bundle.has_theorem("TMir.dce_pure_inst"));
 //! ```
 
-use std::collections::HashMap;
-use std::io::Write;
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::env::{ConstantKind, Environment};
+use crate::env::{CertificationAudit, CertificationIssue, ConstantKind, Environment};
 use crate::name::Name;
 
+use super::compression::limits::{
+    decode_bincode_limited, decode_certificate_bincode_limited, read_unknown_bounded,
+    MAX_COMPRESSED_ARCHIVE_BYTES, MAX_STREAM_CERT_BYTES, MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+};
 use super::cross_project::CrossProjectCert;
 use super::metadata::{ProofArchiveMetadata, TrustLevel};
 use super::types::ProofCert;
@@ -48,6 +52,15 @@ const BUNDLE_VERSION: u32 = 1;
 
 /// Magic bytes at the start of a `.cleancert` file.
 const BUNDLE_MAGIC: &[u8; 8] = b"L5CERT\x00\x01";
+
+/// Maximum theorem/certificate entries in one bundle.
+const MAX_BUNDLE_ENTRIES: usize = 1_000_000;
+
+/// Maximum serialized environment payload in one bundle.
+const MAX_BUNDLE_ENV_BYTES: usize = 256 * 1024 * 1024;
+
+/// Maximum UTF-8 bytes in one serialized theorem-map key.
+const MAX_BUNDLE_NAME_BYTES: usize = 16 * 1024;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Error type
@@ -98,6 +111,14 @@ pub enum CertBundleError {
         /// Hash of the deserialized environment.
         actual: String,
     },
+
+    /// Bundle input exceeds a fail-closed resource or structural limit.
+    #[error("bundle resource limit: {0}")]
+    ResourceLimit(String),
+
+    /// Bundle manifest/content metadata is internally inconsistent.
+    #[error("invalid bundle manifest: {0}")]
+    InvalidManifest(String),
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -304,34 +325,46 @@ impl CertBundle {
         xproj_certs: HashMap<Name, CrossProjectCert>,
         trust_chain: Option<ProofArchiveMetadata>,
     ) -> Result<Self, CertBundleError> {
+        validate_trust_chain_metadata(trust_chain.as_ref())?;
         let env_bytes = bincode::serde::encode_to_vec(&env, bincode::config::standard())
             .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
         let env_hash = sha256_hex(&env_bytes);
 
+        let cert_names: HashSet<&Name> = certs.keys().collect();
+        for name in xproj_certs.keys() {
+            if !cert_names.contains(name) {
+                return Err(CertBundleError::InvalidManifest(format!(
+                    "cross-project certificate '{}' has no scoped proof certificate",
+                    name
+                )));
+            }
+        }
+
+        let mut names: Vec<&Name> = certs.keys().collect();
+        names.sort_by_key(|name| name.to_string());
         let mut entries = Vec::with_capacity(certs.len());
-        let mut min_trust = TrustLevel::KernelVerified;
 
-        for name in certs.keys() {
+        for name in names {
+            let canonical = name.to_string();
+            ensure_canonical_bundle_name(&canonical)?;
+            let (type_hash, proof_hash, sorry_free) = declaration_metadata(&env, name, &canonical)?;
             let xproj = xproj_certs.get(name);
-            let (type_hash, proof_hash) = match xproj {
-                Some(xp) => (xp.theorem_type_hash.clone(), xp.proof_hash.clone()),
-                None => (String::new(), String::new()),
-            };
-
-            let trust = xproj
-                .map(|_| TrustLevel::KernelVerified)
-                .unwrap_or(TrustLevel::Unverified);
-            min_trust = trust_min(min_trust, trust);
-
+            if let Some(xproj) = xproj {
+                validate_cross_project_metadata(&canonical, &type_hash, &proof_hash, xproj, &env)?;
+            }
             entries.push(CertBundleEntry {
-                name: name.to_string(),
+                name: canonical,
                 type_hash,
                 proof_hash,
-                trust_level: trust,
-                sorry_free: true,
+                // A serialized manifest is a claim, not replay evidence.  In
+                // particular, CrossProjectCert is self-authored transport
+                // metadata and cannot establish kernel authority on its own.
+                trust_level: TrustLevel::Unverified,
+                sorry_free,
             });
         }
 
+        let min_trust = aggregate_trust(&entries);
         let manifest = CertBundleManifest {
             version: BUNDLE_VERSION,
             project: project.to_string(),
@@ -341,13 +374,21 @@ impl CertBundle {
             trust_level: min_trust,
         };
 
-        Ok(Self {
+        let bundle = Self {
             manifest,
             env,
             certs,
             xproj_certs,
             trust_chain,
-        })
+        };
+        validate_bundle_contents(
+            &bundle.manifest,
+            &bundle.env,
+            &bundle.certs,
+            &bundle.xproj_certs,
+        )?;
+        bundle.ensure_all_replay_valid()?;
+        Ok(bundle)
     }
 
     // ── Persistence ──────────────────────────────────────────────────────
@@ -359,6 +400,8 @@ impl CertBundle {
     // kernel's soundness rests on).
     #[cfg_attr(trust_verify, trust::skip)]
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), CertBundleError> {
+        validate_bundle_contents(&self.manifest, &self.env, &self.certs, &self.xproj_certs)?;
+        self.ensure_all_replay_valid()?;
         let env_bytes = bincode::serde::encode_to_vec(&self.env, bincode::config::standard())
             .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
 
@@ -383,12 +426,25 @@ impl CertBundle {
             xproj_certs: xproj_map,
             trust_chain: self.trust_chain.clone(),
         };
+        validate_bundle_archive(&archive)?;
 
         let uncompressed = bincode::serde::encode_to_vec(&archive, bincode::config::standard())
             .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
+        if uncompressed.len() > MAX_UNCOMPRESSED_ARCHIVE_BYTES {
+            return Err(CertBundleError::ResourceLimit(format!(
+                "uncompressed bundle size {} exceeds maximum {MAX_UNCOMPRESSED_ARCHIVE_BYTES}",
+                uncompressed.len()
+            )));
+        }
 
         let compressed = zstd::encode_all(uncompressed.as_slice(), 3)
             .map_err(|e| CertBundleError::Compression(e.to_string()))?;
+        if compressed.len() > MAX_COMPRESSED_ARCHIVE_BYTES {
+            return Err(CertBundleError::ResourceLimit(format!(
+                "compressed bundle size {} exceeds maximum {MAX_COMPRESSED_ARCHIVE_BYTES}",
+                compressed.len()
+            )));
+        }
 
         let mut file = std::fs::File::create(path)?;
         file.write_all(BUNDLE_MAGIC)?;
@@ -400,20 +456,43 @@ impl CertBundle {
 
     /// Load a bundle from a `.cleancert` file.
     pub fn load(path: impl AsRef<Path>) -> Result<Self, CertBundleError> {
-        let raw = std::fs::read(path)?;
+        let file = std::fs::File::open(path)?;
+        let raw = read_unknown_bounded(
+            file,
+            MAX_COMPRESSED_ARCHIVE_BYTES + BUNDLE_MAGIC.len(),
+            "certificate bundle file",
+        )
+        .map_err(CertBundleError::ResourceLimit)?;
 
         if raw.len() < BUNDLE_MAGIC.len() || &raw[..BUNDLE_MAGIC.len()] != BUNDLE_MAGIC {
             return Err(CertBundleError::InvalidMagic);
         }
 
         let compressed = &raw[BUNDLE_MAGIC.len()..];
-        let decompressed = zstd::decode_all(compressed)
-            .map_err(|e| CertBundleError::Compression(e.to_string()))?;
+        let mut decoder = zstd::stream::Decoder::new(std::io::Cursor::new(compressed))
+            .map_err(|e| CertBundleError::Compression(e.to_string()))?
+            .single_frame();
+        let decompressed = read_unknown_bounded(
+            &mut decoder,
+            MAX_UNCOMPRESSED_ARCHIVE_BYTES,
+            "certificate bundle payload",
+        )
+        .map_err(CertBundleError::ResourceLimit)?;
+        let mut trailing = [0_u8; 1];
+        if decoder
+            .get_mut()
+            .read(&mut trailing)
+            .map_err(CertBundleError::Io)?
+            != 0
+        {
+            return Err(CertBundleError::Compression(
+                "trailing bytes after bundle zstd frame".to_string(),
+            ));
+        }
 
         let archive: BundleArchive =
-            bincode::serde::decode_from_slice(&decompressed, bincode::config::standard())
-                .map(|(__v, _)| __v)
-                .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
+            decode_bincode_limited(&decompressed).map_err(CertBundleError::Serialization)?;
+        validate_bundle_archive(&archive)?;
 
         if archive.manifest.version != BUNDLE_VERSION {
             return Err(CertBundleError::UnsupportedVersion(
@@ -431,52 +510,56 @@ impl CertBundle {
         }
 
         let env: Environment =
-            bincode::serde::decode_from_slice(&archive.env_bytes, bincode::config::standard())
-                .map(|(__v, _)| __v)
-                .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
+            decode_bincode_limited(&archive.env_bytes).map_err(CertBundleError::Serialization)?;
 
         let mut certs = HashMap::with_capacity(archive.certs.len());
         for (name_str, bytes) in &archive.certs {
-            let cert: ProofCert =
-                bincode::serde::decode_from_slice(bytes, bincode::config::standard())
-                    .map(|(__v, _)| __v)
-                    .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
+            let cert: ProofCert = decode_certificate_bincode_limited(bytes)
+                .map_err(CertBundleError::Serialization)?;
             certs.insert(Name::from_string(name_str), cert);
         }
 
         let mut xproj_certs = HashMap::with_capacity(archive.xproj_certs.len());
         for (name_str, bytes) in &archive.xproj_certs {
             let xproj: CrossProjectCert =
-                bincode::serde::decode_from_slice(bytes, bincode::config::standard())
-                    .map(|(__v, _)| __v)
-                    .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
+                decode_bincode_limited(bytes).map_err(CertBundleError::Serialization)?;
             xproj_certs.insert(Name::from_string(name_str), xproj);
         }
 
-        Ok(Self {
+        validate_bundle_contents(&archive.manifest, &env, &certs, &xproj_certs)?;
+
+        let bundle = Self {
             manifest: archive.manifest,
             env,
             certs,
             xproj_certs,
             trust_chain: archive.trust_chain,
-        })
+        };
+        bundle.ensure_all_replay_valid()?;
+        Ok(bundle)
     }
 
     // ── Verification ─────────────────────────────────────────────────────
 
     /// Verify all certificates in the bundle against the embedded environment.
     pub fn verify_all(&self) -> Result<BundleVerifyResult, CertBundleError> {
+        validate_bundle_contents(&self.manifest, &self.env, &self.certs, &self.xproj_certs)?;
         let mut passed = 0usize;
         let mut failed = 0usize;
         let mut failures = Vec::new();
+        let mut verified_trust = Vec::with_capacity(self.manifest.theorems.len());
 
         for entry in &self.manifest.theorems {
             let name = Name::from_string(&entry.name);
             match self.verify_single(&name) {
-                Ok(()) => passed += 1,
+                Ok(trust) => {
+                    passed += 1;
+                    verified_trust.push(trust);
+                }
                 Err(e) => {
                     failed += 1;
                     failures.push((entry.name.clone(), e.to_string()));
+                    verified_trust.push(TrustLevel::Unverified);
                 }
             }
         }
@@ -485,13 +568,16 @@ impl CertBundle {
             passed,
             failed,
             failures,
-            trust_level: self.manifest.trust_level,
+            trust_level: verified_trust
+                .into_iter()
+                .reduce(trust_min)
+                .unwrap_or(TrustLevel::Unverified),
         })
     }
 
     /// Verify a single named theorem.
     pub fn verify_theorem(&self, name: &Name) -> Result<(), CertBundleError> {
-        self.verify_single(name)
+        self.verify_single(name).map(|_| ())
     }
 
     /// Inspect every theorem listed in the manifest and report bundle readiness.
@@ -527,7 +613,11 @@ impl CertBundle {
         self.certs.contains_key(&n)
     }
 
-    /// Get the trust level of a specific theorem.
+    /// Get the serialized manifest claim for a specific theorem.
+    ///
+    /// Manifest claims deliberately remain [`TrustLevel::Unverified`].
+    /// Established authority is returned only by [`Self::verify_all`], after
+    /// certificate replay and a full environment certification audit.
     #[must_use]
     pub fn trust_level(&self, name: &Name) -> Option<TrustLevel> {
         self.manifest
@@ -551,7 +641,10 @@ impl CertBundle {
         &self.env
     }
 
-    /// Access the trust chain metadata, if present.
+    /// Access informational producer metadata, if present.
+    ///
+    /// This self-authored metadata is structurally validated on ingress but is
+    /// never used to elevate [`BundleVerifyResult::trust_level`].
     #[must_use]
     pub fn trust_chain(&self) -> Option<&ProofArchiveMetadata> {
         self.trust_chain.as_ref()
@@ -576,7 +669,7 @@ impl CertBundle {
     // ── Internal helpers ─────────────────────────────────────────────────
 
     /// Verify a single theorem by name.
-    fn verify_single(&self, name: &Name) -> Result<(), CertBundleError> {
+    fn verify_single(&self, name: &Name) -> Result<TrustLevel, CertBundleError> {
         let manifest_entry = self
             .manifest
             .theorems
@@ -615,13 +708,22 @@ impl CertBundle {
 
         // Use the CertVerifier to replay the certificate against the proof term.
         let mut verifier = CertVerifier::new(&self.env);
-        let _verified_type =
+        let verified_type =
             verifier
                 .verify(cert, value)
                 .map_err(|e| CertBundleError::VerificationFailed {
                     name: name.to_string(),
                     reason: e.to_string(),
                 })?;
+        if !verifier.def_eq(&verified_type, &decl.type_) {
+            return Err(CertBundleError::VerificationFailed {
+                name: name.to_string(),
+                reason: format!(
+                    "replayed proof type {verified_type:?} does not match declaration type {:?}",
+                    decl.type_
+                ),
+            });
+        }
 
         // Verify cross-project cert if present.
         if let Some(xproj) = xproj {
@@ -633,6 +735,24 @@ impl CertBundle {
                 })?;
         }
 
+        if xproj.is_none() {
+            return Ok(TrustLevel::Unverified);
+        }
+
+        // Replay establishes that this certificate matches the stored proof
+        // term.  Strong authority additionally requires a fresh, rooted audit
+        // of the exact `term : goal` judgment and its complete type/value
+        // dependency closure.  This rejects forged or structurally admitted
+        // dependencies and prevents deserialization from minting transient
+        // kernel provenance for value-less kernel objects.
+        let audit = self.env.audit_certification(&decl.type_, value);
+        Ok(trust_from_certification_audit(&audit))
+    }
+
+    fn ensure_all_replay_valid(&self) -> Result<(), CertBundleError> {
+        for entry in &self.manifest.theorems {
+            self.verify_single(&Name::from_string(&entry.name))?;
+        }
         Ok(())
     }
 
@@ -692,6 +812,248 @@ impl CertBundle {
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
+fn validate_bundle_archive(archive: &BundleArchive) -> Result<(), CertBundleError> {
+    if archive.manifest.version != BUNDLE_VERSION {
+        return Err(CertBundleError::UnsupportedVersion(
+            archive.manifest.version,
+        ));
+    }
+    validate_trust_chain_metadata(archive.trust_chain.as_ref())?;
+
+    for (kind, count) in [
+        ("manifest theorem", archive.manifest.theorems.len()),
+        ("certificate", archive.certs.len()),
+        ("cross-project certificate", archive.xproj_certs.len()),
+    ] {
+        if count > MAX_BUNDLE_ENTRIES {
+            return Err(CertBundleError::ResourceLimit(format!(
+                "{kind} count {count} exceeds maximum {MAX_BUNDLE_ENTRIES}"
+            )));
+        }
+    }
+
+    if archive.env_bytes.len() > MAX_BUNDLE_ENV_BYTES {
+        return Err(CertBundleError::ResourceLimit(format!(
+            "environment payload size {} exceeds maximum {MAX_BUNDLE_ENV_BYTES}",
+            archive.env_bytes.len()
+        )));
+    }
+
+    for (kind, entries) in [
+        ("certificate", &archive.certs),
+        ("cross-project certificate", &archive.xproj_certs),
+    ] {
+        for (name, bytes) in entries {
+            if name.len() > MAX_BUNDLE_NAME_BYTES {
+                return Err(CertBundleError::ResourceLimit(format!(
+                    "{kind} name has {} bytes, exceeding maximum {MAX_BUNDLE_NAME_BYTES}",
+                    name.len()
+                )));
+            }
+            if bytes.len() > MAX_STREAM_CERT_BYTES {
+                return Err(CertBundleError::ResourceLimit(format!(
+                    "{kind} '{name}' has {} bytes, exceeding maximum {MAX_STREAM_CERT_BYTES}",
+                    bytes.len()
+                )));
+            }
+        }
+    }
+
+    let mut manifest_names = HashSet::with_capacity(archive.manifest.theorems.len());
+    let mut canonical_names = HashSet::with_capacity(archive.manifest.theorems.len());
+    for entry in &archive.manifest.theorems {
+        if entry.name.len() > MAX_BUNDLE_NAME_BYTES {
+            return Err(CertBundleError::ResourceLimit(format!(
+                "manifest theorem name has {} bytes, exceeding maximum {MAX_BUNDLE_NAME_BYTES}",
+                entry.name.len()
+            )));
+        }
+        let canonical = ensure_canonical_bundle_name(&entry.name)?;
+        if !manifest_names.insert(entry.name.as_str()) || !canonical_names.insert(canonical) {
+            return Err(CertBundleError::InvalidManifest(format!(
+                "duplicate theorem entry '{}'",
+                entry.name
+            )));
+        }
+    }
+
+    let cert_names: HashSet<&str> = archive.certs.keys().map(String::as_str).collect();
+    if cert_names != manifest_names {
+        return Err(CertBundleError::InvalidManifest(
+            "manifest theorem names must exactly match certificate keys".to_string(),
+        ));
+    }
+    let xproj_names: HashSet<&str> = archive.xproj_certs.keys().map(String::as_str).collect();
+    if !xproj_names.is_subset(&manifest_names) {
+        return Err(CertBundleError::InvalidManifest(
+            "cross-project certificate keys must be scoped to manifest theorems".to_string(),
+        ));
+    }
+    if archive.manifest.trust_level != aggregate_trust(&archive.manifest.theorems) {
+        return Err(CertBundleError::InvalidManifest(
+            "aggregate trust level does not match theorem entries".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_trust_chain_metadata(
+    metadata: Option<&ProofArchiveMetadata>,
+) -> Result<(), CertBundleError> {
+    if let Some(metadata) = metadata {
+        metadata.validate_chain().map_err(|error| {
+            CertBundleError::InvalidManifest(format!(
+                "informational trust-chain metadata is malformed: {error}"
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn ensure_canonical_bundle_name(raw: &str) -> Result<Name, CertBundleError> {
+    if raw.is_empty() {
+        return Err(CertBundleError::InvalidManifest(
+            "theorem name must not be empty".to_string(),
+        ));
+    }
+    let name = Name::from_string(raw);
+    if name.to_string() != raw {
+        return Err(CertBundleError::InvalidManifest(format!(
+            "theorem name '{raw}' is not in canonical form"
+        )));
+    }
+    Ok(name)
+}
+
+fn declaration_metadata(
+    env: &Environment,
+    name: &Name,
+    display_name: &str,
+) -> Result<(String, String, bool), CertBundleError> {
+    let declaration = env.get_const(name).ok_or_else(|| {
+        CertBundleError::InvalidManifest(format!(
+            "theorem '{display_name}' is missing from the environment"
+        ))
+    })?;
+    let proof = declaration.value.as_ref().ok_or_else(|| {
+        CertBundleError::InvalidManifest(format!("theorem '{display_name}' has no proof term"))
+    })?;
+    let type_bytes = bincode::serde::encode_to_vec(&declaration.type_, bincode::config::standard())
+        .map_err(|error| CertBundleError::Serialization(error.to_string()))?;
+    let proof_bytes = bincode::serde::encode_to_vec(proof, bincode::config::standard())
+        .map_err(|error| CertBundleError::Serialization(error.to_string()))?;
+    Ok((
+        sha256_hex(&type_bytes),
+        sha256_hex(&proof_bytes),
+        !proof.has_sorry(),
+    ))
+}
+
+fn validate_cross_project_metadata(
+    theorem_name: &str,
+    type_hash: &str,
+    proof_hash: &str,
+    xproj: &CrossProjectCert,
+    env: &Environment,
+) -> Result<(), CertBundleError> {
+    if xproj.theorem_name != theorem_name {
+        return Err(CertBundleError::InvalidManifest(format!(
+            "cross-project certificate key '{theorem_name}' names theorem '{}'",
+            xproj.theorem_name
+        )));
+    }
+    if xproj.theorem_type_hash != type_hash || xproj.proof_hash != proof_hash {
+        return Err(CertBundleError::InvalidManifest(format!(
+            "cross-project hashes for '{theorem_name}' do not match manifest/environment content"
+        )));
+    }
+    xproj.verify(env).map_err(|error| {
+        CertBundleError::InvalidManifest(format!(
+            "cross-project certificate for '{theorem_name}' is invalid: {error}"
+        ))
+    })
+}
+
+fn validate_bundle_contents(
+    manifest: &CertBundleManifest,
+    env: &Environment,
+    certs: &HashMap<Name, ProofCert>,
+    xproj_certs: &HashMap<Name, CrossProjectCert>,
+) -> Result<(), CertBundleError> {
+    if manifest.version != BUNDLE_VERSION {
+        return Err(CertBundleError::UnsupportedVersion(manifest.version));
+    }
+    if manifest.theorems.len() > MAX_BUNDLE_ENTRIES
+        || certs.len() > MAX_BUNDLE_ENTRIES
+        || xproj_certs.len() > MAX_BUNDLE_ENTRIES
+    {
+        return Err(CertBundleError::ResourceLimit(
+            "bundle entry count exceeds maximum".to_string(),
+        ));
+    }
+
+    let mut entries = HashMap::with_capacity(manifest.theorems.len());
+    for entry in &manifest.theorems {
+        let name = ensure_canonical_bundle_name(&entry.name)?;
+        if entries.insert(name, entry).is_some() {
+            return Err(CertBundleError::InvalidManifest(format!(
+                "duplicate canonical theorem entry '{}'",
+                entry.name
+            )));
+        }
+    }
+    if entries.len() != certs.len()
+        || certs.keys().any(|name| !entries.contains_key(name))
+        || entries.keys().any(|name| !certs.contains_key(name))
+    {
+        return Err(CertBundleError::InvalidManifest(
+            "manifest theorem names must exactly match proof certificate keys".to_string(),
+        ));
+    }
+    if xproj_certs.keys().any(|name| !certs.contains_key(name)) {
+        return Err(CertBundleError::InvalidManifest(
+            "cross-project certificate keys must be scoped to proof certificates".to_string(),
+        ));
+    }
+
+    for (name, entry) in entries {
+        let display_name = name.to_string();
+        let (type_hash, proof_hash, sorry_free) = declaration_metadata(env, &name, &display_name)?;
+        if entry.type_hash != type_hash || entry.proof_hash != proof_hash {
+            return Err(CertBundleError::InvalidManifest(format!(
+                "manifest hashes for '{display_name}' do not match the environment"
+            )));
+        }
+        if entry.sorry_free != sorry_free {
+            return Err(CertBundleError::InvalidManifest(format!(
+                "manifest sorry metadata for '{display_name}' does not match the proof term"
+            )));
+        }
+
+        let xproj = xproj_certs.get(&name);
+        // Manifest metadata is never established authority.  Replay and the
+        // rooted environment audit happen only on a live CertBundle.
+        let expected_trust = TrustLevel::Unverified;
+        if entry.trust_level != expected_trust {
+            return Err(CertBundleError::InvalidManifest(format!(
+                "manifest trust for '{display_name}' does not match certificate evidence"
+            )));
+        }
+        if let Some(xproj) = xproj {
+            validate_cross_project_metadata(&display_name, &type_hash, &proof_hash, xproj, env)?;
+        }
+    }
+
+    let actual_trust = aggregate_trust(&manifest.theorems);
+    if manifest.trust_level != actual_trust {
+        return Err(CertBundleError::InvalidManifest(
+            "aggregate trust level does not match theorem evidence".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Compute a SHA-256 hex digest of a byte slice.
 fn sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
@@ -718,6 +1080,31 @@ fn trust_min(a: TrustLevel, b: TrustLevel) -> TrustLevel {
         a
     } else {
         b
+    }
+}
+
+fn aggregate_trust(entries: &[CertBundleEntry]) -> TrustLevel {
+    entries
+        .iter()
+        .map(|entry| entry.trust_level)
+        .reduce(trust_min)
+        .unwrap_or(TrustLevel::Unverified)
+}
+
+fn trust_from_certification_audit(audit: &CertificationAudit) -> TrustLevel {
+    if audit.is_certified() {
+        TrustLevel::KernelVerified
+    } else if !audit.issues.is_empty()
+        && audit
+            .issues
+            .iter()
+            .all(|issue| matches!(issue, CertificationIssue::NonFoundationalAxiom { .. }))
+    {
+        // A checked judgment whose only disclosed authority is an explicit
+        // domain axiom is classified as such, never kernel-verified.
+        TrustLevel::Axiom
+    } else {
+        TrustLevel::Unverified
     }
 }
 
@@ -853,16 +1240,12 @@ mod tests {
             },
         );
 
-        let bundle = CertBundle::build("test-project", "0.1.0", env, certs, HashMap::new(), None)
-            .expect("build bundle");
-
-        let err = bundle
-            .verify_theorem(&axiom_name)
-            .expect_err("axioms should not verify as replayable theorems");
+        let err = CertBundle::build("test-project", "0.1.0", env, certs, HashMap::new(), None)
+            .expect_err("axioms cannot be packaged as replayable theorems");
         assert!(matches!(
             err,
-            CertBundleError::VerificationFailed { ref reason, .. }
-                if reason == "declaration has no proof term"
+            CertBundleError::InvalidManifest(ref reason)
+                if reason.contains("has no proof term")
         ));
     }
 
@@ -910,7 +1293,10 @@ mod tests {
         let name = Name::from_string("Test.trivial");
         let trust = bundle.trust_level(&name);
         assert!(trust.is_some());
-        assert_eq!(trust.unwrap(), TrustLevel::KernelVerified);
+        assert_eq!(trust.unwrap(), TrustLevel::Unverified);
+
+        let verified = bundle.verify_all().expect("establish live trust");
+        assert_eq!(verified.trust_level, TrustLevel::KernelVerified);
     }
 
     #[test]
@@ -927,6 +1313,11 @@ mod tests {
 
         let result = loaded.verify_all().expect("verify_all after load");
         assert!(result.all_passed(), "failures: {:?}", result.failures);
+        assert_eq!(
+            result.trust_level,
+            TrustLevel::Unverified,
+            "deserialization must not mint transient kernel-object provenance"
+        );
     }
 
     #[test]
@@ -979,6 +1370,8 @@ mod tests {
         bundle.save(&path).expect("save bundle");
 
         let mut loaded = CertBundle::load(&path).expect("load bundle");
+        loaded.manifest.theorems[0].trust_level = TrustLevel::KernelVerified;
+        loaded.manifest.trust_level = TrustLevel::KernelVerified;
         loaded.xproj_certs.clear();
 
         let report = loaded.inspect();
@@ -1050,8 +1443,31 @@ mod tests {
             },
         );
 
-        let bundle = CertBundle::build("test-project", "0.1.0", env, certs, HashMap::new(), None)
-            .expect("build bundle");
+        // Inspection intentionally accepts an incomplete in-memory fixture;
+        // construction/persistence reject it because there is no replayable
+        // proof term.
+        let env_bytes =
+            bincode::serde::encode_to_vec(&env, bincode::config::standard()).expect("encode env");
+        let bundle = CertBundle {
+            manifest: CertBundleManifest {
+                version: BUNDLE_VERSION,
+                project: "inspection-only".to_string(),
+                clean_version: "0.1.0".to_string(),
+                env_hash: sha256_hex(&env_bytes),
+                theorems: vec![CertBundleEntry {
+                    name: "Test.assumed".to_string(),
+                    type_hash: String::new(),
+                    proof_hash: String::new(),
+                    trust_level: TrustLevel::Unverified,
+                    sorry_free: true,
+                }],
+                trust_level: TrustLevel::Unverified,
+            },
+            env,
+            certs,
+            xproj_certs: HashMap::new(),
+            trust_chain: None,
+        };
 
         let report = bundle.inspect();
         let entry = &report.entries[0];
@@ -1074,6 +1490,8 @@ mod tests {
         bundle.save(&path).expect("save bundle");
 
         let mut loaded = CertBundle::load(&path).expect("load bundle");
+        loaded.manifest.theorems[0].trust_level = TrustLevel::KernelVerified;
+        loaded.manifest.trust_level = TrustLevel::KernelVerified;
         loaded.xproj_certs.clear();
 
         let name = Name::from_string("Test.trivial");
@@ -1085,6 +1503,201 @@ mod tests {
             CertBundleError::VerificationFailed { ref reason, .. }
                 if reason == "kernel-verified theorem missing cross-project certificate"
         ));
+    }
+
+    #[test]
+    fn bundle_replay_checks_the_declared_theorem_type_before_building() {
+        let mut env = Environment::with_prelude();
+        let name = Name::from_string("Test.falseClaim");
+        env.add_decl_structural(Declaration::Theorem {
+            name: name.clone(),
+            level_params: vec![],
+            type_: Expr::const_(Name::from_string("False"), vec![]),
+            value: Expr::const_(Name::from_string("True.intro"), vec![]),
+        })
+        .expect("structural fixture");
+
+        let mut certs = HashMap::new();
+        certs.insert(
+            name.clone(),
+            ProofCert::Const {
+                name: Name::from_string("True.intro"),
+                levels: vec![],
+                type_: Box::new(Expr::const_(Name::from_string("True"), vec![])),
+            },
+        );
+        let mut xproj = HashMap::new();
+        xproj.insert(
+            name,
+            CrossProjectCert::from_environment(&env, "Test.falseClaim", prover(), vec![])
+                .expect("self-authored transport record"),
+        );
+
+        let error = CertBundle::build("test", "0.1.0", env, certs, xproj, None)
+            .expect_err("transport metadata must not hide a replayed type mismatch");
+        assert!(matches!(
+            error,
+            CertBundleError::VerificationFailed { ref reason, .. }
+                if reason.contains("does not match declaration type")
+        ));
+    }
+
+    #[test]
+    fn forged_dependency_cannot_earn_kernel_verified_bundle_trust() {
+        let mut env = Environment::with_prelude();
+        let fake = Name::from_string("Test.fakeFalse");
+        let target = Name::from_string("Test.bad");
+        let false_ty = Expr::const_(Name::from_string("False"), vec![]);
+
+        env.add_decl_structural(Declaration::Theorem {
+            name: fake.clone(),
+            level_params: vec![],
+            type_: false_ty.clone(),
+            value: Expr::const_(Name::from_string("True.intro"), vec![]),
+        })
+        .expect("structural forged dependency");
+        env.add_decl(Declaration::Theorem {
+            name: target.clone(),
+            level_params: vec![],
+            type_: false_ty.clone(),
+            value: Expr::const_(fake.clone(), vec![]),
+        })
+        .expect("target checks against the dependency's advertised type");
+
+        let mut certs = HashMap::new();
+        certs.insert(
+            target.clone(),
+            ProofCert::Const {
+                name: fake,
+                levels: vec![],
+                type_: Box::new(false_ty),
+            },
+        );
+        let mut xproj = HashMap::new();
+        xproj.insert(
+            target,
+            CrossProjectCert::from_environment(&env, "Test.bad", prover(), vec![])
+                .expect("transport record"),
+        );
+
+        let bundle =
+            CertBundle::build("test", "0.1.0", env, certs, xproj, None).expect("replay succeeds");
+        let result = bundle.verify_all().expect("verification result");
+        assert!(result.all_passed(), "certificate replay should still pass");
+        assert_eq!(
+            result.trust_level,
+            TrustLevel::Unverified,
+            "the rooted audit must expose the forged dependency"
+        );
+    }
+
+    #[test]
+    fn explicit_domain_axiom_is_classified_as_axiom_not_kernel_verified() {
+        let mut env = Environment::with_prelude();
+        let axiom = Name::from_string("Test.domainAssumption");
+        let target = Name::from_string("Test.usesDomainAssumption");
+        let true_ty = Expr::const_(Name::from_string("True"), vec![]);
+        env.add_decl(Declaration::Axiom {
+            name: axiom.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+        })
+        .expect("domain axiom");
+        env.add_decl(Declaration::Theorem {
+            name: target.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+            value: Expr::const_(axiom.clone(), vec![]),
+        })
+        .expect("axiom-dependent theorem");
+
+        let mut certs = HashMap::new();
+        certs.insert(
+            target.clone(),
+            ProofCert::Const {
+                name: axiom,
+                levels: vec![],
+                type_: Box::new(true_ty),
+            },
+        );
+        let mut xproj = HashMap::new();
+        xproj.insert(
+            target,
+            CrossProjectCert::from_environment(&env, "Test.usesDomainAssumption", prover(), vec![])
+                .expect("transport record"),
+        );
+
+        let bundle = CertBundle::build("test", "0.1.0", env, certs, xproj, None).expect("bundle");
+        let result = bundle.verify_all().expect("verification result");
+        assert!(result.all_passed());
+        assert_eq!(result.trust_level, TrustLevel::Axiom);
+    }
+
+    #[test]
+    fn verify_all_never_reports_manifest_trust_after_replay_failure() {
+        let (env, certs, xproj_certs) = test_env_and_certs();
+        let mut bundle = CertBundle::build("test-project", "0.1.0", env, certs, xproj_certs, None)
+            .expect("build bundle");
+        bundle.certs.insert(
+            Name::from_string("Test.trivial"),
+            ProofCert::Sort {
+                level: crate::Level::zero(),
+            },
+        );
+
+        let result = bundle
+            .verify_all()
+            .expect("metadata remains internally valid");
+        assert_eq!(result.passed, 0);
+        assert_eq!(result.failed, 1);
+        assert_eq!(result.trust_level, TrustLevel::Unverified);
+    }
+
+    #[test]
+    fn manifest_cannot_claim_established_trust() {
+        let (env, certs, xproj_certs) = test_env_and_certs();
+        let mut bundle = CertBundle::build("test-project", "0.1.0", env, certs, xproj_certs, None)
+            .expect("build bundle");
+        bundle.manifest.theorems[0].trust_level = TrustLevel::KernelVerified;
+        bundle.manifest.trust_level = TrustLevel::KernelVerified;
+
+        assert!(matches!(
+            bundle.verify_all(),
+            Err(CertBundleError::InvalidManifest(message))
+                if message.contains("does not match certificate evidence")
+        ));
+    }
+
+    #[test]
+    fn bundle_loader_rejects_trailing_or_concatenated_zstd_data() {
+        use std::io::Write as _;
+
+        let (env, certs, xproj_certs) = test_env_and_certs();
+        let bundle = CertBundle::build("test-project", "0.1.0", env, certs, xproj_certs, None)
+            .expect("build bundle");
+        let dir = tempfile::tempdir().expect("temp dir");
+
+        for (index, suffix) in [
+            vec![0x42],
+            zstd::encode_all(&b"second frame"[..], 3).expect("second zstd frame"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let path = dir.path().join(format!("bad-{index}.cleancert"));
+            bundle.save(&path).expect("save bundle");
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .expect("open append")
+                .write_all(&suffix)
+                .expect("append suffix");
+            assert!(matches!(
+                CertBundle::load(&path),
+                Err(CertBundleError::Compression(message))
+                    if message.contains("trailing bytes")
+            ));
+        }
     }
 
     #[test]

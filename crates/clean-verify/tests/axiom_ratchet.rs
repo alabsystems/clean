@@ -55,6 +55,21 @@ struct GoldenAxiom {
 struct Golden {
     count: usize,
     axioms: Vec<GoldenAxiom>,
+    #[serde(rename = "_trust_breakdown")]
+    trust_breakdown: TrustBreakdown,
+}
+
+/// The 3/4/4 partition that backs the headline "genuine axiomatic trust = 3".
+/// Until this was deserialized and asserted, the split existed only as JSON
+/// prose: nothing stopped a census entry from being uncategorized, from
+/// appearing in two buckets, or from the headline count drifting off its own
+/// list.
+#[derive(serde::Deserialize)]
+struct TrustBreakdown {
+    genuine_foundational_axioms: Vec<String>,
+    genuine_foundational_axiom_count: usize,
+    quotient_primitives_not_axioms: Vec<String>,
+    honesty_tripwires_anti_trust: Vec<String>,
 }
 
 fn load_golden() -> Golden {
@@ -101,6 +116,104 @@ fn no_new_admitted_axioms_in_spec() {
          the addition shows up as a visible, reviewable diff.",
         new_names.len(),
         new_names.join("\n  ")
+    );
+}
+
+/// THE 3/4/4 PARTITION, code-enforced.
+///
+/// The census headline is "genuine axiomatic trust = 3"; the other 8 entries are
+/// the 4 `Quot` type-formers (CIC primitives, which Lean's `#print axioms` never
+/// lists) and the 4 anti-trust tripwires the closure-honesty gate proves
+/// unreachable. That claim lived only in `_trust_breakdown` prose, so nothing
+/// caught the three ways it could rot:
+///   - an entry added to `axioms` and categorized in NO bucket (silently
+///     inflating the census while the headline still reads 3);
+///   - an entry in TWO buckets (double-counted, so the sum lies); or
+///   - `genuine_foundational_axiom_count` drifting off its own name list.
+///
+/// This makes the partition EXHAUSTIVE (union == the full census) and DISJOINT,
+/// and pins the foundational set to exactly the finish-line triple. Combined
+/// with `no_new_admitted_axioms_in_spec` (which ties the golden to the LIVE
+/// kernel env), a new axiom must now be both explicitly admitted AND explicitly
+/// categorized to land — it cannot hide in a bucket boundary.
+#[test]
+fn trust_partition_is_exhaustive_disjoint_and_headline_is_three() {
+    let golden = load_golden();
+    let tb = &golden.trust_breakdown;
+
+    let genuine: BTreeSet<&str> = tb
+        .genuine_foundational_axioms
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let quotient: BTreeSet<&str> = tb
+        .quotient_primitives_not_axioms
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let tripwires: BTreeSet<&str> = tb
+        .honesty_tripwires_anti_trust
+        .iter()
+        .map(String::as_str)
+        .collect();
+
+    // The headline must equal its own list, and that list must be exactly the
+    // 3-axiom finish line — not a superset that grew quietly.
+    assert_eq!(
+        tb.genuine_foundational_axiom_count,
+        genuine.len(),
+        "genuine_foundational_axiom_count disagrees with genuine_foundational_axioms"
+    );
+    let finish_line: BTreeSet<&str> = ["Classical.choice", "Quot.sound", "propext"]
+        .into_iter()
+        .collect();
+    assert_eq!(
+        genuine, finish_line,
+        "the foundational set must be exactly {{propext, Quot.sound, Classical.choice}}; \
+         a change here is a change to the TCB and must be argued in the certificate, \
+         not slipped into a data file"
+    );
+
+    // Pairwise disjoint: no entry may be counted under two headings.
+    for (a_name, a, b_name, b) in [
+        ("genuine", &genuine, "quotient", &quotient),
+        ("genuine", &genuine, "tripwires", &tripwires),
+        ("quotient", &quotient, "tripwires", &tripwires),
+    ] {
+        let overlap: Vec<&&str> = a.intersection(b).collect();
+        assert!(
+            overlap.is_empty(),
+            "{a_name} and {b_name} buckets overlap on {overlap:?} — the census sum would double-count"
+        );
+    }
+
+    // Exhaustive: the three buckets must cover the census exactly.
+    let categorized: BTreeSet<&str> = genuine
+        .union(&quotient)
+        .copied()
+        .collect::<BTreeSet<&str>>()
+        .union(&tripwires)
+        .copied()
+        .collect();
+    let census: BTreeSet<&str> = golden.axioms.iter().map(|a| a.name.as_str()).collect();
+
+    let uncategorized: Vec<&&str> = census.difference(&categorized).collect();
+    assert!(
+        uncategorized.is_empty(),
+        "census entries in NO trust bucket: {uncategorized:?}. Every admitted entry must be \
+         classified as a foundational axiom, a Quot type-former, or an anti-trust tripwire — \
+         an uncategorized entry inflates the census while the headline still claims 3."
+    );
+    let phantom: Vec<&&str> = categorized.difference(&census).collect();
+    assert!(
+        phantom.is_empty(),
+        "trust buckets name entries absent from the census: {phantom:?}"
+    );
+
+    assert_eq!(
+        genuine.len() + quotient.len() + tripwires.len(),
+        golden.count,
+        "3/4/4 partition does not sum to the recorded census count"
     );
 }
 

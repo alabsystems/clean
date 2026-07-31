@@ -8,7 +8,7 @@ Clean support is currently **best-effort**. The canonical public channel is **Gi
 2. **Feature requests**: Open an issue with the `feature` or `enhancement` label describing the desired functionality.
 3. **Questions**: Open an issue with the `question` label.
 
-If the problem is obviously documentation or install/toolchain related, say that in the title and include the exact commands you ran. For current CLI state, run `clean --help` from a local build.
+If the problem is obviously documentation or install/toolchain related, say that in the title and include the exact commands you ran. For current CLI/docs state, see docs/cli/index.md. For current public demo status, follow docs/PUBLIC_DEMO.md and include the generated public-demo logs in the issue. For benchmark-claim questions, follow docs/BENCHMARKS.md and include the generated benchmark summary. For release-readiness status, see docs/RELEASE_READINESS.md. For trust/correctness status, see docs/VERIFICATION_AUDIT.md.
 
 ## Security Issues
 

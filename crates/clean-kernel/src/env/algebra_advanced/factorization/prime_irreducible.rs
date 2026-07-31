@@ -254,6 +254,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_prime_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_prime(&self) -> bool {
         self.nat_prime_init
     }
@@ -441,6 +442,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.irreducible_init == true`
+    #[cfg(test)]
     pub(crate) fn has_irreducible(&self) -> bool {
         self.irreducible_init
     }

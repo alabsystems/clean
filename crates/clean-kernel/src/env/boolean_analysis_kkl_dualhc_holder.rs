@@ -234,6 +234,7 @@ impl HolderConsts {
         self.order.subst(motive, a, b, h_eq, h_ma)
     }
     /// `@Eq.refl Rat x : x = x`.
+    #[cfg(test)]
     fn eq_refl(&self, x: Expr) -> Expr {
         Expr::apps(self.order.eq_refl.clone(), [self.rat(), x])
     }

@@ -12,18 +12,25 @@
 //! - metric_totally_bounded.rs: Metric.TotallyBounded
 //! - metric_separable.rs: Metric.Dense, Metric.Separable
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Cauchy sequence type and related axioms for metric spaces.
     ///
     /// Adds: Metric.CauchySeq, cauchy_const, cauchy_tail,
     ///       cauchy_of_uniform_continuous, Metric.Converges,
     ///       cauchy_of_converges, converges_const
+    #[cfg(test)]
     pub(crate) fn init_metric_cauchy_seq(&mut self) -> Result<(), EnvError> {
         if self.metric_cauchy_seq_init {
             return Ok(());
@@ -46,11 +53,13 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_metric_cauchy_seq(&self) -> bool {
         self.metric_cauchy_seq_init
     }
 
     /// Metric.CauchySeq : {α : Type u} → [MetricSpace α] → (Nat → α) → Prop
+    #[cfg(test)]
     fn add_metric_cauchy_seq_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -76,6 +85,7 @@ impl Environment {
     }
 
     /// Metric.cauchy_const : ∀ (c : α), Metric.CauchySeq (fun _ => c)
+    #[cfg(test)]
     fn add_metric_cauchy_const(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -108,6 +118,7 @@ impl Environment {
     }
 
     /// Metric.cauchy_tail : CauchySeq seq → CauchySeq (fun n => seq (n + k))
+    #[cfg(test)]
     fn add_metric_cauchy_tail(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -168,6 +179,7 @@ impl Environment {
     }
 
     /// Metric.cauchy_of_uniform_continuous : UC f → CauchySeq seq → CauchySeq (f ∘ seq)
+    #[cfg(test)]
     fn add_metric_cauchy_of_uc(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -246,6 +258,7 @@ impl Environment {
     }
 
     /// Metric.Converges : {α : Type u} → [MetricSpace α] → (Nat → α) → α → Prop
+    #[cfg(test)]
     fn add_metric_converges_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -274,6 +287,7 @@ impl Environment {
     }
 
     /// Metric.cauchy_of_converges : Converges seq limit → CauchySeq seq
+    #[cfg(test)]
     fn add_metric_cauchy_of_converges(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -323,6 +337,7 @@ impl Environment {
     }
 
     /// Metric.converges_const : ∀ (c : α), Converges (fun _ => c) c
+    #[cfg(test)]
     fn add_metric_converges_const(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());

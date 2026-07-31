@@ -14,13 +14,19 @@
 //! Type and operation definitions live here; theorem registrations are in
 //! `tree_width_resolution_theorems.rs`.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all tree-width resolution declarations.
+#[cfg(test)]
 pub(super) struct TreeWidthResConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -35,7 +41,9 @@ pub(super) struct TreeWidthResConsts {
     pub(super) resolution_proof: Expr,
 }
 
+#[cfg(test)]
 impl TreeWidthResConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -55,10 +63,12 @@ impl TreeWidthResConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize tree-width bounds for general resolution proofs.
     ///
     /// Depends on: `init_bool()`, `init_nat()`, `init_resolution_complexity()`.
+    #[cfg(test)]
     pub(crate) fn init_tree_width_resolution(&mut self) -> Result<(), EnvError> {
         if self.tree_width_resolution_init {
             return Ok(());
@@ -101,6 +111,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.PrimalGraph : Type` -- the primal graph of a CNF.
+    #[cfg(test)]
     fn register_primal_graph_type(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.PrimalGraph"))
@@ -116,6 +127,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.primal_graph : ResComplexity.CNF -> TreeWidthRes.PrimalGraph`
+    #[cfg(test)]
     fn register_primal_graph(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.primal_graph"))
@@ -132,6 +144,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.TreeDecomposition : Type` -- a tree decomposition with bags.
+    #[cfg(test)]
     fn register_tree_decomposition(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.TreeDecomposition"))
@@ -148,6 +161,7 @@ impl Environment {
 
     /// `TreeWidthRes.is_valid_decomposition :
     ///     TreeWidthRes.PrimalGraph -> TreeWidthRes.TreeDecomposition -> Prop`
+    #[cfg(test)]
     fn register_is_valid_decomposition(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.is_valid_decomposition"))
@@ -176,6 +190,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.bag_size : TreeWidthRes.TreeDecomposition -> Nat`
+    #[cfg(test)]
     fn register_bag_size(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.bag_size"))
@@ -200,6 +215,7 @@ impl Environment {
     /// Tree-width of a specific decomposition = max bag size - 1.
     /// Registered as an opaque axiom; the semantic content "bag_size(td) - 1"
     /// is captured informally to avoid depending on Nat.sub reduction.
+    #[cfg(test)]
     fn register_tree_width_of(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.tree_width_of"))
@@ -220,6 +236,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.tree_width : TreeWidthRes.PrimalGraph -> Nat`
+    #[cfg(test)]
     fn register_tree_width(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.tree_width"))
@@ -236,6 +253,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.ResolutionProof : Type` -- a general DAG-like resolution proof.
+    #[cfg(test)]
     fn register_tree_width_res_resolution_proof(
         &mut self,
         c: &TreeWidthResConsts,
@@ -254,6 +272,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.res_proof_width : TreeWidthRes.ResolutionProof -> Nat`
+    #[cfg(test)]
     fn register_res_proof_width(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.res_proof_width"))
@@ -274,6 +293,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.resolution_width : ResComplexity.CNF -> Nat`
+    #[cfg(test)]
     fn register_resolution_width(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.resolution_width"))
@@ -290,6 +310,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.res_proof_size : TreeWidthRes.ResolutionProof -> Nat`
+    #[cfg(test)]
     fn register_res_proof_size(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.res_proof_size"))
@@ -310,6 +331,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.resolution_size : ResComplexity.CNF -> Nat`
+    #[cfg(test)]
     fn register_resolution_size(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.resolution_size"))
@@ -326,6 +348,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.initial_width : ResComplexity.CNF -> Nat`
+    #[cfg(test)]
     fn register_initial_width(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.initial_width"))
@@ -342,6 +365,7 @@ impl Environment {
     }
 
     /// `TreeWidthRes.num_variables : ResComplexity.CNF -> Nat`
+    #[cfg(test)]
     fn register_num_variables(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.num_variables"))
@@ -359,6 +383,7 @@ impl Environment {
 
     /// `TreeWidthRes.is_refutation :
     ///     TreeWidthRes.ResolutionProof -> ResComplexity.CNF -> Prop`
+    #[cfg(test)]
     fn register_is_refutation(&mut self, c: &TreeWidthResConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("TreeWidthRes.is_refutation"))

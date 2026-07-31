@@ -1133,7 +1133,7 @@ impl Environment {
             };
             let x_branch = |gx: &Expr, parent: &EnvDeclBuilder| -> Expr {
                 // rec_y over y at fixed gx.
-                let mut d = EnvDeclBuilder::child_of(parent);
+                let d = EnvDeclBuilder::child_of(parent);
                 let motive_y = {
                     let mut e = EnvDeclBuilder::child_of(&d);
                     let (mid, m) = e.fresh_local(bool_ty());
@@ -1288,7 +1288,7 @@ impl Environment {
                 let (x3_id, x3) = c.fresh_local(bool_ty());
                 let xbits = [x0.clone(), x1.clone(), x2.clone(), x3.clone()];
                 let inner = {
-                    let mut d = EnvDeclBuilder::child_of(&c);
+                    let d = EnvDeclBuilder::child_of(&c);
                     let xmk = bv_mk(xbits.clone());
                     let motive_y = {
                         let mut e = EnvDeclBuilder::child_of(&d);
@@ -1522,7 +1522,7 @@ impl Environment {
                 let abits = [a0.clone(), a1.clone(), a2.clone(), a3.clone()];
                 // inner rec on b
                 let inner = {
-                    let mut d = EnvDeclBuilder::child_of(&c);
+                    let d = EnvDeclBuilder::child_of(&c);
                     let amk = bv_mk(abits.clone());
                     let motive_b = {
                         let mut e = EnvDeclBuilder::child_of(&d);
@@ -1819,7 +1819,7 @@ fn rec_split(
         }
         let head = &rest[0];
         let tail = &rest[1..];
-        let mut c = EnvDeclBuilder::child_of(parent);
+        let c = EnvDeclBuilder::child_of(parent);
         // motive : fun (w : Bool) => goal(prefix ++ [w] ++ remaining-symbolic-tail)
         let motive = {
             let mut d = EnvDeclBuilder::child_of(&c);

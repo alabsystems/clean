@@ -400,7 +400,7 @@ fn build_invariant_value(c: &CbrtInvConsts, motive_body: &dyn Fn(&Expr, &Expr) -
 
 /// BASE: `((ofNat 0·ofNat 0)·ofNat 0) ≤ x · 1`. (cnum x 0 ≡ 0, pow8 0 ≡ 1.)
 fn build_base(c: &CbrtInvConsts, parent: &EnvDeclBuilder, x: &Expr, h: &Expr) -> Expr {
-    let mut b = EnvDeclBuilder::child_of(parent);
+    let b = EnvDeclBuilder::child_of(parent);
     let of0 = c.rofnat(c.nat_zero.clone());
     let lhs = c.cube_expr(of0.clone()); // (of0·of0)·of0
     let rhs = c.rmul(x.clone(), c.rat_one.clone()); // x · 1

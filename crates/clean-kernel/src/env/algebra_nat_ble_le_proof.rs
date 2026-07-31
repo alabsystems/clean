@@ -425,7 +425,7 @@ impl Environment {
             };
             // base : C 0 = ∀ a, ble a 0 = true → Nat.le a 0  (Nat.rec on a)
             let base = {
-                let mut b = EnvDeclBuilder::new();
+                let b = EnvDeclBuilder::new();
                 // E a := ble a 0 = true → Nat.le a 0
                 let e_pi = |aexpr: &Expr, bld: &EnvDeclBuilder| {
                     let mut c = EnvDeclBuilder::child_of(bld);

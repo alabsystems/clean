@@ -1,10 +1,11 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! De Bruijn closedness bundle (census-11 drain, Stage 2A).
 //!
 //! Ports the PROVED closedness bundle from
-//! `scratch/aristotle-debruijn-lt/DeBruijnLt.lean` (real `Lt`/`Le` vocabulary)
+//! `scratch/aristotle-harvest/aristotle-debruijn-lt/aristotle-debruijn-lt_aristotle/DeBruijnLt.lean`
+//! (real `Lt`/`Le` vocabulary)
 //! as explicit Clean `value_src` terms:
 //!
 //!   * `is_closed_at_lam_body` / `is_closed_at_pi_body` — the body-component

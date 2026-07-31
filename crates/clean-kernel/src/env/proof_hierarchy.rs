@@ -14,13 +14,19 @@
 //! Type and operation definitions live here; theorem registrations are in
 //! `proof_hierarchy_theorems.rs`.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all proof hierarchy declarations.
+#[cfg(test)]
 pub(super) struct ProofHierarchyConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -35,7 +41,9 @@ pub(super) struct ProofHierarchyConsts {
     pub(super) extended_frege_proof: Expr,
 }
 
+#[cfg(test)]
 impl ProofHierarchyConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -52,10 +60,12 @@ impl ProofHierarchyConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize proof hierarchy declarations for p-simulation relations.
     ///
     /// Depends on: `init_nat()`.
+    #[cfg(test)]
     pub(crate) fn init_proof_hierarchy(&mut self) -> Result<(), EnvError> {
         if self.proof_hierarchy_init {
             return Ok(());
@@ -86,6 +96,7 @@ impl Environment {
     ///
     /// Represents tautologies / propositional formulas that proof systems
     /// operate on.
+    #[cfg(test)]
     fn register_formula(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.Formula"))
@@ -106,6 +117,7 @@ impl Environment {
     /// `verify : String -> Formula -> Bool` such that for every tautology f,
     /// there exists a proof string pi with `verify pi f = true`.
     /// Registered as an opaque axiom type.
+    #[cfg(test)]
     fn register_proof_system(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.ProofSystem"))
@@ -129,6 +141,7 @@ impl Environment {
     ///
     /// Reference: Cook & Reckhow (1979), "The Relative Efficiency of
     /// Propositional Proof Systems".
+    #[cfg(test)]
     fn register_p_simulation(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.PSimulation"))
@@ -164,6 +177,7 @@ impl Environment {
     ///
     /// The axiom schemas are a fixed, finite set that is implicationally
     /// complete for propositional logic.
+    #[cfg(test)]
     fn register_frege_proof(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.FregeProof"))
@@ -186,6 +200,7 @@ impl Environment {
     ///
     /// Extended Frege is equivalent to substitution Frege (up to polynomial
     /// simulation).
+    #[cfg(test)]
     fn register_extended_frege_proof(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.ExtendedFregeProof"))
@@ -204,6 +219,7 @@ impl Environment {
     ///
     /// The number of symbols (lines times average line length) in the proof.
     /// This is the standard size measure for proof complexity lower bounds.
+    #[cfg(test)]
     fn register_frege_proof_size(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.frege_proof_size"))
@@ -224,6 +240,7 @@ impl Environment {
     /// The ratio of proof sizes: max over all proofs of f in Q of
     /// (min proof size in P) / (proof size in Q). Captures how much
     /// more expensive P-proofs are compared to Q-proofs for formula f.
+    #[cfg(test)]
     fn register_simulation_gap(&mut self, c: &ProofHierarchyConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("ProofTheory.simulation_gap"))

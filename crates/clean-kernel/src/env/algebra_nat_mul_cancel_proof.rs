@@ -58,6 +58,7 @@ struct NatMulCancelConsts {
     or_rec: Expr,
     eq_const: Expr,
     eq_subst: Expr,
+    #[cfg(test)]
     false_const: Expr,
     false_elim: Expr,
 }
@@ -88,6 +89,7 @@ impl NatMulCancelConsts {
             or_rec: Expr::const_(Name::from_string("Or.rec"), vec![]),
             eq_const: Expr::const_(Name::from_string("Eq"), vec![type1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![type1]),
+            #[cfg(test)]
             false_const: Expr::const_(Name::from_string("False"), vec![]),
             false_elim: Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]),
         }

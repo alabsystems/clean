@@ -116,6 +116,7 @@ impl Environment {
     }
 
     /// Check if NNVerification foundation has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nn_verification(&self) -> bool {
         self.nn_verification_init
     }

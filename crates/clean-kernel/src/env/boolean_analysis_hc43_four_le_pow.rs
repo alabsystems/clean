@@ -55,6 +55,7 @@ struct FourPowConsts {
     rat_mul: Expr,
     rat_le: Expr,
     pow_nat: Expr,
+    #[cfg(test)]
     nnreal: Expr,
     l1: Level,
     // proof leaves
@@ -83,6 +84,7 @@ impl FourPowConsts {
             rat_mul: k("Rat.mul"),
             rat_le: k("Rat.le"),
             pow_nat: k("Rat.powNat"),
+            #[cfg(test)]
             nnreal: k("NNReal"),
             l1: l1.clone(),
             le_refl: k("Rat.le_refl"),
@@ -153,6 +155,7 @@ impl FourPowConsts {
     fn pow_succ(&self, b: &Expr, e: &Expr) -> Expr {
         Expr::apps(self.pow_succ.clone(), [b.clone(), e.clone()])
     }
+    #[cfg(test)]
     fn eq_rat(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),

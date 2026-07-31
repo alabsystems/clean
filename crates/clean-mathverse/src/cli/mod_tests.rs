@@ -871,6 +871,31 @@ fn test_graduate_parse_baseline_index_flag() {
 }
 
 #[test]
+fn test_graduate_parse_decided_at_flag() {
+    let h = Harness::try_parse_from([
+        "clean",
+        "mathverse",
+        "graduate",
+        "--project",
+        "p.json",
+        "--candidates",
+        "GradPilot.imp_self",
+        "--out",
+        "/tmp/g",
+        "--decided-at",
+        "1700000000",
+    ])
+    .expect("parse");
+    let Top::Mathverse(args) = h.command;
+    match args.command {
+        MathverseCommands::Graduate(g) => {
+            assert_eq!(g.decided_at, Some(1_700_000_000));
+        }
+        _ => panic!("expected Graduate"),
+    }
+}
+
+#[test]
 fn test_index_build_parse_defaults() {
     let h = Harness::try_parse_from([
         "clean",

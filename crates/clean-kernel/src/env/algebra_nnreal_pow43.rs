@@ -57,6 +57,7 @@ pub(crate) struct Pow43Consts {
     rat_lt_of_le_of_lt: Expr,
     rat_cbrt_approx: Expr,
     rat_zero_le_cbrt_approx: Expr,
+    #[cfg(test)]
     nnrat_of_rat: Expr,
     nnreal: Expr,
     nnreal_le: Expr,
@@ -86,6 +87,7 @@ impl Pow43Consts {
             rat_lt_of_le_of_lt: k("Rat.lt_of_le_of_lt"),
             rat_cbrt_approx: k("Rat.cbrtDyadicApprox"),
             rat_zero_le_cbrt_approx: k("Rat.zero_le_cbrtDyadicApprox"),
+            #[cfg(test)]
             nnrat_of_rat: k("NNRat.ofRat"),
             nnreal: k("NNReal"),
             nnreal_le: k("NNReal.le"),

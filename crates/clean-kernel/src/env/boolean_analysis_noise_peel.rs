@@ -205,6 +205,7 @@ impl NoisePeelConsts {
         )
     }
     /// `@Eq Bool l r`.
+    #[cfg(test)]
     fn eq_bool(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),
@@ -278,6 +279,7 @@ impl Environment {
     }
 
     /// Whether the noise-density point-peel lemmas have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_noise_peel(&self) -> bool {
         self.boolean_analysis_noise_peel_init
     }

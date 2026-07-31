@@ -19,7 +19,7 @@ TLA+ formal specifications of Clean's state machines for model checking and veri
 3. Create a model with appropriate constants
 4. Run TLC model checker
 
-### With ty (Rust)
+### With tla2 (Rust)
 
 ```bash
 # From Clean root

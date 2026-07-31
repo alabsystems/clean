@@ -135,7 +135,7 @@ fn build_one_base() -> (Expr, Expr) {
     };
 
     let value = {
-        let mut b = EnvDeclBuilder::new();
+        let b = EnvDeclBuilder::new();
 
         // motive : fun (k : Nat) => 1^k = 1
         let motive = {

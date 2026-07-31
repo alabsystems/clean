@@ -77,7 +77,7 @@ mod synth_order;
 // `throwError` raised inside a computed `macro_rules` body. The module's items
 // are individually `pub(crate)` only where that reuse requires it.
 pub(crate) mod user_tactic;
-mod user_term;
+pub(crate) mod user_term;
 mod wf_recursion;
 pub(in crate::infer) use elab_types::{is_out_param_type, is_semi_out_param_type};
 // `pub(crate)`: `register::register_param_names` (B01) converts surface binder

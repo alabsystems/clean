@@ -3,7 +3,7 @@
 #
 # Reproducibly build and test the `clean-kernel` crate in a STANDALONE
 # single-crate Cargo workspace, with no dependency on the rest of the
-# `clean` workspace (in particular, no SMT-solver sibling crates).
+# `clean` workspace (in particular, no AY/SMT dependency graph).
 #
 # Why this exists
 # ---------------
@@ -11,8 +11,8 @@
 # (e.g. `NNVerify::farkas_combine_list`, the exact-rational cert parser) to
 # be re-checkable on machines that only have a checkout of `clean` and a
 # stock crates.io toolchain -- without building the full workspace. The full
-# workspace pulls in the SMT solver and other heavy/optional siblings that are not always
-# present. This script reproduces, deterministically and without any manual
+# workspace resolves AY and other heavy optional surfaces. This script
+# reproduces, deterministically and without any manual
 # scratch setup, the verified recipe:
 #
 #   * copy crates/clean-kernel/{src,tests,benches} into a scratch tree;

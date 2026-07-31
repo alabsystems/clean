@@ -17,6 +17,8 @@
 //! - `infer_zfc.rs` — ZFC + impredicative mode helpers (#2594)
 //! - `infer_proj.rs` — projection typing, batch cache, `is_prop` (#2594)
 
+#[cfg(not(debug_assertions))]
+use crate::cert::ProofCert;
 use crate::expr::stack_safe;
 use crate::expr::{Expr, ExprKind};
 use crate::level::Level;
@@ -77,7 +79,19 @@ impl<'env> TypeChecker<'env> {
     /// to verify kernel correctness. Any disagreement causes a panic.
     ///
     /// In release builds, uses a fast path without certificate generation for performance.
-    /// The typing logic is identical between debug and release modes.
+    ///
+    /// # Debug/release contract
+    ///
+    /// The typing logic is identical between the debug and release bodies in
+    /// check mode (`infer_only = false`). In infer-only mode (`infer_only =
+    /// true`, the default for `infer_type`) the debug body is STRICTLY
+    /// STRICTER: certificate construction makes it infer the App argument,
+    /// the Lam domain, and the Let type/value unconditionally
+    /// (`tc/cert/infer_core.rs` App/Lam/Let arms), while the release body
+    /// guards each of those inferences behind `!infer_only`
+    /// (`infer_type_fast_impl` App/Lam/Let arms). Debug can therefore `Err`
+    /// on inputs where release `Ok`s; it never accepts more. The deployed
+    /// behavior is the release body.
     ///
     /// # Contract
     ///
@@ -159,7 +173,18 @@ impl<'env> TypeChecker<'env> {
     /// Infer the type of an expression (release mode - fast path)
     ///
     /// Uses fast unchecked inference without certificate generation.
-    /// Typing logic is identical to debug mode.
+    ///
+    /// # Debug/release contract
+    ///
+    /// Typing logic is identical to the debug body in check mode
+    /// (`infer_only = false`). In infer-only mode (`infer_only = true`, the
+    /// default for `infer_type`) this release body is STRICTLY MORE
+    /// PERMISSIVE: it guards inference of the App argument, the Lam domain,
+    /// and the Let type/value behind `!infer_only` (see the App/Lam/Let arms
+    /// of `infer_type_fast_impl`), where the debug body infers all three
+    /// unconditionally for certificate construction
+    /// (`tc/cert/infer_core.rs`). Debug can `Err` where this body `Ok`s.
+    /// This release body is the deployed behavior.
     ///
     /// # Contract
     ///
@@ -201,8 +226,12 @@ impl<'env> TypeChecker<'env> {
     /// Fast type inference without certificate generation.
     ///
     /// This function implements the same typing logic as `infer_type_with_cert`
-    /// but without the overhead of generating proof certificates. Used in release
-    /// mode for performance.
+    /// in check mode (`infer_only = false`), without the overhead of generating
+    /// proof certificates. Used in release mode for performance. In infer-only
+    /// mode the two bodies are NOT identical: this one skips inferring the App
+    /// argument, the Lam domain, and the Let type/value (each guarded behind
+    /// `!infer_only` in the arms below), while `infer_type_with_cert` infers
+    /// them unconditionally — so debug can `Err` where this body `Ok`s.
     ///
     /// When type caching is enabled and the local context is empty (closed term),
     /// results are cached for reuse on subsequent calls with the same expression.
@@ -291,12 +320,9 @@ impl<'env> TypeChecker<'env> {
     /// read — fast inference returns only the type. Pins the `Arc` so its address
     /// cannot be reused while the entry lives.
     #[cfg(not(debug_assertions))]
-    pub(super) fn infer_type_fast_arc(
-        &self,
-        arc: &std::sync::Arc<Expr>,
-    ) -> Result<Expr, TypeError> {
+    pub(super) fn infer_type_fast_arc(&self, arc: &Arc<Expr>) -> Result<Expr, TypeError> {
         let key = (
-            std::sync::Arc::as_ptr(arc) as usize,
+            Arc::as_ptr(arc) as usize,
             self.infer_only.get(),
             self.ctx_len(),
         );
@@ -309,8 +335,8 @@ impl<'env> TypeChecker<'env> {
             (
                 arc.clone(),
                 ty.clone(),
-                crate::cert::ProofCert::Sort {
-                    level: crate::level::Level::zero(),
+                ProofCert::Sort {
+                    level: Level::zero(),
                 },
             ),
         );
@@ -509,8 +535,10 @@ impl<'env> TypeChecker<'env> {
                 self.expr_loc_push(ExprPathStep::LamBody);
                 let body_type = self.infer_type_fast_impl(&body_with_fvar);
                 self.expr_loc_pop();
-                let body_type = body_type?;
+                // Pop BEFORE `?`: an Err must not leak the binder's FVar into
+                // self.ctx (see infer_sort_inner below for the same ordering).
                 self.ctx_pop();
+                let body_type = body_type?;
 
                 let body_type_abstract = body_type.abstract_fvar(fvar_id);
                 Ok(Expr::from_kind(ExprKind::Pi(
@@ -538,8 +566,9 @@ impl<'env> TypeChecker<'env> {
                 self.expr_loc_push(ExprPathStep::PiBody);
                 let body_sort = self.infer_type_fast_impl(&body_with_fvar);
                 self.expr_loc_pop();
-                let body_sort = body_sort?;
+                // Pop BEFORE `?` so an Err leaves self.ctx unchanged.
                 self.ctx_pop();
+                let body_sort = body_sort?;
 
                 let body_sort_whnf = self.whnf_impl(&body_sort);
                 let ExprKind::Sort(l2) = &body_sort_whnf.kind else {
@@ -605,8 +634,9 @@ impl<'env> TypeChecker<'env> {
                 self.expr_loc_push(ExprPathStep::LetBody);
                 let body_type = self.infer_type_fast_impl(&body_with_fvar);
                 self.expr_loc_pop();
-                let body_type = body_type?;
+                // Pop BEFORE `?` so an Err leaves self.ctx unchanged.
                 self.ctx_pop();
+                let body_type = body_type?;
 
                 // Substitute FVar(fvar_id) → val directly (zeta-reduction).
                 // Lean 4 abstracts then reconstructs Let binders (local_ctx.cpp:95-108),

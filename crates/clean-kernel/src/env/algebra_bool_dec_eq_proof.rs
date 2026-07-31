@@ -101,7 +101,7 @@ impl Environment {
             };
             // inner motive for the b-split given a fixed `lhs`
             let inner_rec = |lhs: Expr, parent: &EnvDeclBuilder| {
-                let mut c = EnvDeclBuilder::child_of(parent);
+                let c = EnvDeclBuilder::child_of(parent);
                 let motive_b = {
                     let mut d = EnvDeclBuilder::child_of(&c);
                     let (bp_id, bp) = d.fresh_local(bool_c.clone());

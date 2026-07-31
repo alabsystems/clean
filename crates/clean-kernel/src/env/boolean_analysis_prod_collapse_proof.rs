@@ -642,7 +642,7 @@ fn factor_vanish_value(c: &ProdCollapseConsts) -> Expr {
 
     // Build the inner b-split for a fixed `lhs` (a constructor).
     let inner = |lhs: Expr, parent: &EnvDeclBuilder| -> Expr {
-        let mut d = EnvDeclBuilder::child_of(parent);
+        let d = EnvDeclBuilder::child_of(parent);
         // motive_b : fun b' => (Bool.xor lhs b' = true) → goal lhs b'
         let motive_b = {
             let mut e = EnvDeclBuilder::child_of(&d);

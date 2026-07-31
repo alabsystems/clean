@@ -402,9 +402,9 @@ impl Environment {
         // Source environments using the legacy casesOn recursor layout need a
         // canonical pair rebuilt against the registered recursor metadata.
         let cases_on_name = Name::from_string(&format!("{member}.casesOn"));
-        self.recursors.get(&cases_on_name).is_some_and(|recursor| {
-            recursor.arg_order == crate::inductive::RecursorArgOrder::MajorAfterMinors
-        })
+        self.recursors
+            .get(&cases_on_name)
+            .is_some_and(|recursor| recursor.arg_order == RecursorArgOrder::MajorAfterMinors)
     }
 
     pub(super) fn no_confusion_prerequisite_issue(
@@ -1332,23 +1332,23 @@ impl Environment {
                 let nbody = Self::remap_bvars(body, depth + 1, map_bvar);
                 Expr::from_kind(ExprKind::Let(
                     name.clone(),
-                    std::sync::Arc::new(nty),
-                    std::sync::Arc::new(nval),
-                    std::sync::Arc::new(nbody),
+                    Arc::new(nty),
+                    Arc::new(nval),
+                    Arc::new(nbody),
                     *nd,
                 ))
             }
             ExprKind::Proj(name, idx, e_inner) => {
                 let ne = Self::remap_bvars(e_inner, depth, map_bvar);
-                Expr::from_kind(ExprKind::Proj(name.clone(), *idx, std::sync::Arc::new(ne)))
+                Expr::from_kind(ExprKind::Proj(name.clone(), *idx, Arc::new(ne)))
             }
             ExprKind::MData(md, e_inner) => {
                 let ne = Self::remap_bvars(e_inner, depth, map_bvar);
-                Expr::from_kind(ExprKind::MData(md.clone(), std::sync::Arc::new(ne)))
+                Expr::from_kind(ExprKind::MData(md.clone(), Arc::new(ne)))
             }
             ExprKind::Squash(e_inner) => {
                 let ne = Self::remap_bvars(e_inner, depth, map_bvar);
-                Expr::from_kind(ExprKind::Squash(std::sync::Arc::new(ne)))
+                Expr::from_kind(ExprKind::Squash(Arc::new(ne)))
             }
             // Extension variants (SProp, Cubical, etc.) — not expected in ctor field types
             _ => e.clone(),

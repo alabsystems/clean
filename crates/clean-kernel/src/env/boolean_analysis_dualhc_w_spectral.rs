@@ -66,6 +66,7 @@ struct WSpectralConsts {
     subset_sum_smul: Expr,
     subset_sum_swap: Expr,
     noise_compose: Expr,
+    #[cfg(test)]
     noise_density_symm: Expr,
     chi: Expr,
     rat_mul_comm: Expr,
@@ -98,6 +99,7 @@ impl WSpectralConsts {
             subset_sum_smul: k("BoolAnalysis.subsetSum_smul"),
             subset_sum_swap: k("BoolAnalysis.subsetSum_swap"),
             noise_compose: k("BoolAnalysis.noiseDensityW_compose"),
+            #[cfg(test)]
             noise_density_symm: k("BoolAnalysis.noiseDensityW_symm"),
             chi: k("BoolAnalysis.chi"),
             rat_mul_comm: k("Rat.mul_comm"),
@@ -216,6 +218,7 @@ impl WSpectralConsts {
         )
     }
     /// `noiseDensityW_symm ρ n x y : dens(ρ,x,y) = dens(ρ,y,x)`.
+    #[cfg(test)]
     fn dens_symm(&self, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         Expr::apps(
             self.noise_density_symm.clone(),

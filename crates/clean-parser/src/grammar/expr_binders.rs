@@ -335,7 +335,7 @@ impl Parser {
     /// `BinderInfo.strictImplicit`; the ASCII `{{x : T}}` form is handled by
     /// [`Self::implicit_binders`]). The type annotation is optional (untyped
     /// `⦃x⦄` is legal and elaborates to a metavariable type).
-    fn strict_implicit_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
+    pub(super) fn strict_implicit_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
         self.expect(&TokenKind::StrictLBrace)?;
         let mut names = Vec::new();
         loop {

@@ -11,12 +11,18 @@
 //! Since `Rat.sub x y` is reducible to `Rat.add x (Rat.neg y)`, the proof is
 //! just associativity plus one commutation of `z` and `-y`.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 struct RatSubAddAssocConsts {
     rat: Expr,
     rat_add: Expr,
@@ -31,7 +37,9 @@ struct RatSubAddAssocConsts {
     rat_add_comm: Expr,
 }
 
+#[cfg(test)]
 impl RatSubAddAssocConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -49,30 +57,37 @@ impl RatSubAddAssocConsts {
         }
     }
 
+    #[cfg(test)]
     fn add(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.rat_add.clone(), [lhs, rhs])
     }
 
+    #[cfg(test)]
     fn neg(&self, value: Expr) -> Expr {
         Expr::app(self.rat_neg.clone(), value)
     }
 
+    #[cfg(test)]
     fn sub(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.rat_sub.clone(), [lhs, rhs])
     }
 
+    #[cfg(test)]
     fn rat_eq(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq.clone(), [self.rat.clone(), lhs, rhs])
     }
 
+    #[cfg(test)]
     fn refl(&self, value: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [self.rat.clone(), value])
     }
 
+    #[cfg(test)]
     fn symm(&self, lhs: Expr, rhs: Expr, proof: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), lhs, rhs, proof])
     }
 
+    #[cfg(test)]
     fn trans(&self, lhs: Expr, mid: Expr, rhs: Expr, first: Expr, second: Expr) -> Expr {
         Expr::apps(
             self.eq_trans.clone(),
@@ -80,6 +95,7 @@ impl RatSubAddAssocConsts {
         )
     }
 
+    #[cfg(test)]
     fn subst(&self, motive: Expr, lhs: Expr, rhs: Expr, eq: Expr, proof: Expr) -> Expr {
         Expr::apps(
             self.eq_subst.clone(),
@@ -88,6 +104,7 @@ impl RatSubAddAssocConsts {
     }
 }
 
+#[cfg(test)]
 fn build_type(c: &RatSubAddAssocConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (x_id, x) = b.fresh_local(c.rat.clone());
@@ -102,6 +119,7 @@ fn build_type(c: &RatSubAddAssocConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_value(c: &RatSubAddAssocConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (x_id, x) = b.fresh_local(c.rat.clone());
@@ -143,8 +161,10 @@ fn build_value(c: &RatSubAddAssocConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Rat.sub_add_assoc : (x - y) + z = (x + z) - y`.
+    #[cfg(test)]
     pub(crate) fn register_rat_sub_add_assoc_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.sub_add_assoc");
         if self.get_const(&name).is_some() {

@@ -287,6 +287,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_gcd_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_gcd(&self) -> bool {
         self.nat_gcd_init
     }

@@ -3,12 +3,12 @@
 # Run locally with `cargo deny check` (advisories, licenses, bans, sources).
 # WIRED INTO THE GATE: scripts/local_gate.sh runs `cargo deny check` in FULL
 # mode (not the <30s --fast pre-push path) — a new dependency that violates
-# advisories/licenses/bans/sources fails the gate fail-closed. The current
-# dep-boundary state (GREEN: all four sections ok) is recorded in
-# data/dep_boundary_state.json. There is no hosted CI; enforcement is local and
-# fail-closed (matches the rest of local_gate.sh). If a new dependency violates
-# this policy, either fix the dependency or justify the exception here with a
-# comment.
+# advisories/licenses/bans/sources fails the gate fail-closed. The historical
+# result in data/dep_boundary_state.json is marked stale after AY's Git
+# migration and must be refreshed before a current GREEN claim. There is no
+# hosted CI; enforcement is local and fail-closed (matches the rest of
+# local_gate.sh). If a new dependency violates this policy, either fix the
+# dependency or justify the exception here with a comment.
 #
 # Schema reference: https://embarkstudios.github.io/cargo-deny/
 
@@ -71,8 +71,8 @@ allow = [
 # Per-crate license clarifications. Each entry is documented.
 exceptions = [
     # gmp-mpfr-sys and rug are Rust bindings to the GMP and MPFR C
-    # libraries used by `ay-lra` (rational arithmetic in the sibling
-    # ay SMT workspace). Both are LGPL-3.0-or-later. We consume them
+    # libraries used by `ay-lra` (rational arithmetic in the first-party
+    # AY solver graph). Both are LGPL-3.0-or-later. We consume them
     # only through their published, dynamically-linkable C ABI;
     # clean itself is Apache-2.0 and does not redistribute GMP/MPFR
     # source. The LGPL exception is scoped narrowly to these two
@@ -101,14 +101,15 @@ license-files = [
 
 [bans]
 multiple-versions = "warn"
-# The workspace ships 30+ path-only crates and consumes the sister `ay`
-# workspace via `{ path = "../ay/..." }`. None of these are published to
-# crates.io (no `publish = false` is set because they're never released),
-# so cargo-deny's `allow-wildcard-paths` workaround does not apply (it
-# only covers crates explicitly marked unpublishable). We therefore allow
-# wildcard deps unconditionally and rely on rustc / Cargo.lock to keep
-# the resolved versions stable. If any crate here ever publishes, switch
-# this to "deny" and set `publish = false` on the remaining members.
+# The workspace ships 30+ in-repository path-only crates. AY is not one of
+# them: its crates use one immutable Git revision recorded in Cargo.lock.
+# The path-only workspace crates are not published to crates.io (no
+# `publish = false` is set because they're never released), so cargo-deny's
+# `allow-wildcard-paths` workaround does not apply (it only covers crates
+# explicitly marked unpublishable). We therefore allow wildcard deps
+# unconditionally and rely on rustc / Cargo.lock to keep the resolved versions
+# stable. If any crate here ever publishes, switch this to "deny" and set
+# `publish = false` on the remaining members.
 wildcards = "allow"
 highlight = "all"
 workspace-default-features = "allow"
@@ -146,6 +147,10 @@ allow-git = [
     # feature in clean-auto. Pinned to a specific rev in
     # crates/clean-auto/Cargo.toml.
     "https://github.com/ufmg-smite/carcara",
+    # AY: first-party internal solver authority. All seven root manifest
+    # entries and all 37 lock sources are required to share one immutable
+    # revision by the factory/update/consumer-smoke gates.
+    "https://github.com/alabsystems/ay.git",
 ]
 
 [sources.allow-org]

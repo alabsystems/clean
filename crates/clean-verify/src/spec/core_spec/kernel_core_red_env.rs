@@ -33,8 +33,9 @@
 //! 1. **Name interning** — real string names -> `Name.str Name.anonymous
 //!    <unary Nat tag>` via the emitted INJECTIVE table
 //!    (`generated/kernel_core_red_env.interning.tsv`).
-//! 2. **Level erasure** — sorts -> `KExpr.sort <Nat depth>`, const universe
-//!    args -> param-free spec `Level` terms; reduction-faithful because
+//! 2. **Level erasure** — sort levels collapse to a numeric height re-encoded
+//!    as `KExpr.sort (Level.succ^n Level.zero)`; const universe args become
+//!    param-free spec `Level` terms; reduction-faithful because
 //!    `iota_reduct`/`delta_reduct` never inspect sorts or const levels.
 //! 3. **Coverage-with-skips** — Quot rules, K-like reduction, struct eta,
 //!    native reducers, literals, and unrepresentable nodes are OUTSIDE the
@@ -63,9 +64,10 @@ use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
 /// The generated def SCRIPT (one Lean-syntax `def` per line: the `kcre_nat_*`
-/// unary pool, the `kcre_name_*` interned-name constants, then the
-/// `kernel_core_red_env : RedEnv` term with atom leaves — the shape forced by
-/// the parser's measured `MAX_EXPR_DEPTH = 128` guard).
+/// unary pool, the `kcre_name_*` interned-name constants, generated semantic
+/// non-vacuity witness helpers, then the `kernel_core_red_env : RedEnv` term
+/// with atom leaves — the shape forced by the parser's measured
+/// `MAX_EXPR_DEPTH = 128` guard).
 /// GENERATED FILE — do not edit by hand; regenerate with the
 /// `red_env_reflect` bin. The fidelity gate pins it to the live kernel env.
 const KERNEL_CORE_RED_ENV_SCRIPT: &str = include_str!("generated/kernel_core_red_env.defs.txt");
@@ -77,7 +79,20 @@ impl Specification {
     /// generated def script in order. Every line is a value-ful `def`
     /// (census-neutral).
     pub(super) fn add_kernel_core_red_env(&mut self) -> Result<(), SpecError> {
-        for line in KERNEL_CORE_RED_ENV_SCRIPT.lines() {
+        if let Some(script) = self.red_env_script_override.take() {
+            self.add_kernel_core_red_env_script(&script)
+        } else {
+            self.add_kernel_core_red_env_script(KERNEL_CORE_RED_ENV_SCRIPT)
+        }
+    }
+
+    /// Replay a generated red-environment script.
+    ///
+    /// Kept separate from the committed include so the generator can validate
+    /// a fresh in-memory script against an artifact-independent seed before
+    /// publishing it.
+    pub(super) fn add_kernel_core_red_env_script(&mut self, script: &str) -> Result<(), SpecError> {
+        for line in script.lines() {
             let line = line.trim();
             if line.is_empty() {
                 continue;
@@ -98,6 +113,12 @@ impl Specification {
                  (interning tags, RecMeta counts, field counts, bvar indices, sort depths). \
                  Exists because the parser's MAX_EXPR_DEPTH=128 guard rejects the fully-inlined \
                  unary literal (measured depth 163). Value-ful def: census-neutral."
+            } else if line.starts_with("def kcre_witness_") {
+                "Generated semantic non-vacuity helper for kernel_core_red_env: the reflected \
+                 complete Nat.rec/Nat.zero redex or reduct, or a real reflected delta head/value. \
+                 The iota pair is constructed from live RecMeta counts and the selected rule, \
+                 so no consumer duplicates the recursor spine shape. Generated from the same \
+                 Reflection object as kernel_core_red_env; value-ful and census-neutral."
             } else {
                 "Generated interned-name constant for kernel_core_red_env (Front #1 Stage 2, \
                  trust edge 1): kcre_name_<tag> := Name.str Name.anonymous kcre_nat_<tag>, the \

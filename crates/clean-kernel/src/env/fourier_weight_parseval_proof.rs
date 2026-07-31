@@ -172,7 +172,7 @@ impl Environment {
 
         // value : @Nat.rec.{0} outer_c z_case s_case
         let value = {
-            let mut b = EnvDeclBuilder::new();
+            let b = EnvDeclBuilder::new();
 
             // outer motive : fun (a : Nat) => ∀ b, Nat.beq a b = true → a = b
             let outer_c = {
@@ -184,7 +184,7 @@ impl Environment {
 
             // ── zCase (a = 0): inner Nat.rec on b ──
             let z_case = {
-                let mut d = EnvDeclBuilder::child_of(&b);
+                let d = EnvDeclBuilder::child_of(&b);
                 let z_motive = c.inner_motive(&d, &c.zero);
                 // b = 0 : fun (h : Nat.beq 0 0 = true) => Eq.refl 0
                 let z_inner_z = {
@@ -297,6 +297,7 @@ struct CollapseConsts {
     btrue: Expr,
     bfalse: Expr,
     nat_succ: Expr,
+    #[cfg(test)]
     nat_lt: Expr,
     nat_beq: Expr,
     nat_beq_refl: Expr,
@@ -334,6 +335,7 @@ impl CollapseConsts {
             btrue: Expr::const_(Name::from_string("Bool.true"), vec![]),
             bfalse: Expr::const_(Name::from_string("Bool.false"), vec![]),
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
+            #[cfg(test)]
             nat_lt: Expr::const_(Name::from_string("Nat.lt"), vec![]),
             nat_beq: Expr::const_(Name::from_string("Nat.beq"), vec![]),
             nat_beq_refl: Expr::const_(Name::from_string("Nat.beq_refl"), vec![]),
@@ -377,6 +379,7 @@ impl CollapseConsts {
         Expr::apps(self.eq1.clone(), [self.bool_c.clone(), l, r])
     }
     /// `@Eq Nat l r`.
+    #[cfg(test)]
     fn eq_nat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nat.clone(), l, r])
     }
@@ -799,7 +802,7 @@ impl Environment {
         };
 
         let value = {
-            let mut b = EnvDeclBuilder::new();
+            let b = EnvDeclBuilder::new();
 
             // motive : fun (n : Nat) => ∀ g, (∀ i, g i ≤ 1) → Fin.sumNat n g ≤ n
             let motive = {

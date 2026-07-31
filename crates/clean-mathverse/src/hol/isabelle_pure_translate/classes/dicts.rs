@@ -66,6 +66,146 @@ pub(crate) fn scan_method_dicts(proof: &IsaProof, out: &mut Vec<DictEquation>) {
     }
 }
 
+/// The **dictionary-form implementation constant** name for an overloaded method
+/// `<Theory>.<c>_class.<method>`: collapse the `_class.` class-marker segment to a
+/// bare `.` (`Num.numeral_class.numeral` → `Num.numeral.numeral`,
+/// `Power.power_class.power` → `Power.power.power`,
+/// `Nat.semiring_1_class.of_nat` → `Nat.semiring_1.of_nat`,
+/// `Rings.dvd_class.dvd` → `Rings.dvd.dvd`). This is Isabelle's stable naming
+/// convention for the class→dictionary translation: the method's dictionary
+/// implementation lives at the same theory/name path with the `_class` marker
+/// dropped. Only the FIRST `_class.` (the class segment — the same one
+/// [`is_overloaded_method_const`] keys on) is collapsed.
+pub(crate) fn dict_impl_name(method: &str) -> String {
+    method.replacen("_class.", ".", 1)
+}
+
+/// Scan a proof for **zproof-encoding** overloaded-method dictionary rewrites and
+/// recover their [`DictEquation`]s, complementing the legacy-spine
+/// [`scan_method_dicts`].
+///
+/// In the fully-typed (`zproof` / v3.2) export the `…_dict` unfolding is NOT an
+/// explicit `Pure.symmetric % LHS % RHS` term-application spine — the
+/// `Pure.symmetric` axiom carries its schematic operands in its `tminst` table
+/// (as the derivation box's internal `Free` placeholders, not the equation sides),
+/// so [`dict_equation_from_symmetric`] recovers nothing. The dictionary rewrite's
+/// two goals are instead carried by the enclosing `Pure.equal_elim` axiom's `A`/`B`
+/// schematic term arguments (its `tminst`): `A` is the dictionary-form goal, `B`
+/// the overloaded-method-form goal (the theorem's own statement). We recover every
+/// method dictionary equation by structurally diffing those two sides
+/// ([`dict_equations_from_rewrite`]). Gated on the proof actually referencing a
+/// `…_dict` axiom, so the `A`/`B` term diff runs only on genuine dictionary
+/// consumers (never on an ordinary congruence's `equal_elim`).
+pub(crate) fn scan_method_dicts_zproof(proof: &IsaProof, out: &mut Vec<DictEquation>) {
+    let mut pairs: Vec<(&IsaTerm, &IsaTerm)> = Vec::new();
+    let mut saw_dict = false;
+    collect_equal_elim_pairs(proof, &mut pairs, &mut saw_dict);
+    if !saw_dict {
+        return;
+    }
+    for (a, b) in pairs {
+        dict_equations_from_rewrite(a, b, out);
+    }
+}
+
+/// Single-walk helper for [`scan_method_dicts_zproof`]: collect every
+/// `Pure.equal_elim` axiom's `A`/`B` schematic term-argument pair (from its
+/// `tminst`) and note whether any `…_dict` axiom leaf is present in the proof.
+fn collect_equal_elim_pairs<'a>(
+    proof: &'a IsaProof,
+    pairs: &mut Vec<(&'a IsaTerm, &'a IsaTerm)>,
+    saw_dict: &mut bool,
+) {
+    if let IsaProof::Axm { name, tminst, .. } = proof {
+        if name.ends_with("_dict") {
+            *saw_dict = true;
+        } else if name == "Pure.equal_elim" {
+            let a = tminst.iter().find(|e| e.n == "A").map(|e| &e.t);
+            let b = tminst.iter().find(|e| e.n == "B").map(|e| &e.t);
+            if let (Some(a), Some(b)) = (a, b) {
+                pairs.push((a, b));
+            }
+        }
+    }
+    match proof {
+        IsaProof::AppP { f, a } => {
+            collect_equal_elim_pairs(f, pairs, saw_dict);
+            collect_equal_elim_pairs(a, pairs, saw_dict);
+        }
+        IsaProof::AppT { f, .. } | IsaProof::AbsP { b: f, .. } | IsaProof::Abst { b: f, .. } => {
+            collect_equal_elim_pairs(f, pairs, saw_dict);
+        }
+        _ => {}
+    }
+}
+
+/// Diff a dictionary rewrite's two sides (`A`/`B` of a `Pure.equal_elim`, in
+/// either order) to recover the [`DictEquation`]s it unfolds.
+///
+/// The two terms are structurally identical except at the rewrite sites, where one
+/// side is a saturated overloaded-method application `c_class.method arg₁ … argₖ`
+/// and the other is the parallel dictionary-form application
+/// `c.method op₁ … opₙ arg₁ … argₖ` — the implementation constant `c.method`
+/// ([`dict_impl_name`] of the method) applied to the class operations `op₁ … opₙ`
+/// ahead of the method's own `k` arguments. We walk both terms in parallel; at each
+/// rewrite site we emit `DictEquation { method_name, method_ty, impl_const, ops }`
+/// (each `opᵢ` must be a bare `Const` — a compound operation is not a dictionary
+/// op, so that site is skipped) and recurse on the trailing argument pairs; away
+/// from a rewrite site we recurse structurally into the aligned children (equal-
+/// arity applications, or a shared `Abs` binder body). Orientation-agnostic: either
+/// side may hold the method / dictionary form. The recovered equation feeds
+/// [`build_method_def`], and the kernel re-checks the registered `Definition`, so a
+/// spurious recovery is rejected by `add_decl`, never registered wrong.
+pub(crate) fn dict_equations_from_rewrite(x: &IsaTerm, y: &IsaTerm, out: &mut Vec<DictEquation>) {
+    let (hx, ax) = term_app_spine(x);
+    let (hy, ay) = term_app_spine(y);
+    // A rewrite site: one side's head is an overloaded method `Const`, the other's
+    // is that method's dictionary implementation `Const`. Try both orientations.
+    for (mh, margs, ih, iargs) in [(hx, &ax, hy, &ay), (hy, &ay, hx, &ax)] {
+        let (IsaTerm::Const { n: mname, t: mty }, IsaTerm::Const { n: iname, t: ity }) = (mh, ih)
+        else {
+            continue;
+        };
+        if !is_overloaded_method_const(mname)
+            || *iname != dict_impl_name(mname)
+            || iargs.len() < margs.len()
+        {
+            continue;
+        }
+        let n = iargs.len() - margs.len();
+        let ops: Option<Vec<(String, IsaType)>> = iargs[..n]
+            .iter()
+            .map(|&op| match op {
+                IsaTerm::Const { n, t } => Some((n.clone(), t.clone())),
+                _ => None,
+            })
+            .collect();
+        let Some(ops) = ops else {
+            continue;
+        };
+        out.push(DictEquation {
+            method_name: mname.clone(),
+            method_ty: mty.clone(),
+            impl_const: (iname.clone(), ity.clone()),
+            ops,
+        });
+        // Recurse on the trailing (method arg, dictionary arg) pairs — the method's
+        // own arguments may themselves carry a nested dictionary rewrite.
+        for i in 0..margs.len() {
+            dict_equations_from_rewrite(margs[i], iargs[n + i], out);
+        }
+        return;
+    }
+    // Not a rewrite site — recurse structurally into aligned subterms.
+    if !ax.is_empty() && ax.len() == ay.len() {
+        for (a, b) in ax.iter().zip(ay.iter()) {
+            dict_equations_from_rewrite(a, b, out);
+        }
+    } else if let (IsaTerm::Abs { b: bx, .. }, IsaTerm::Abs { b: by, .. }) = (x, y) {
+        dict_equations_from_rewrite(bx, by, out);
+    }
+}
+
 /// Given the function side `f` of a `…_dict`-consuming `Pure.symmetric % LHS % RHS`
 /// application, extract the dictionary equation. The spine is
 /// `Pure.symmetric % LHS % RHS` (two `%` term arguments); `LHS` is the overloaded

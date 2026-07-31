@@ -69,6 +69,7 @@ pub(crate) struct CubeReflConsts {
     rat: Expr,
     rat_zero: Expr,
     nnrat_val: Expr,
+    #[cfg(test)]
     nnrat_mul: Expr,
     nnrat_property: Expr,
     causeq: Expr,
@@ -84,7 +85,9 @@ pub(crate) struct CubeReflConsts {
     // Rat lemmas.
     rat_add_cube: Expr,
     rat_le_of_cube_le_cube: Expr,
+    #[cfg(test)]
     rat_cube_lt_cube: Expr,
+    #[cfg(test)]
     rat_mul_comm: Expr,
     rat_add_assoc: Expr,
     rat_add_comm: Expr,
@@ -106,6 +109,7 @@ pub(crate) struct CubeReflConsts {
     exists_c: Expr,
     exists_intro: Expr,
     exists_elim: Expr,
+    #[cfg(test)]
     eq_rat: Expr,
     eq_trans: Expr,
     eq_symm: Expr,
@@ -124,6 +128,7 @@ impl CubeReflConsts {
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
             nnrat_val: k("NNRat.val"),
+            #[cfg(test)]
             nnrat_mul: k("NNRat.mul"),
             nnrat_property: k("NNRat.property"),
             causeq: k("NNReal.CauSeq"),
@@ -138,7 +143,9 @@ impl CubeReflConsts {
             nat_le: k("Nat.le"),
             rat_add_cube: k("Rat.add_cube"),
             rat_le_of_cube_le_cube: k("Rat.le_of_cube_le_cube"),
+            #[cfg(test)]
             rat_cube_lt_cube: k("Rat.cube_lt_cube_of_lt_of_nonneg"),
+            #[cfg(test)]
             rat_mul_comm: k("Rat.mul_comm"),
             rat_add_assoc: k("Rat.add_assoc"),
             rat_add_comm: k("Rat.add_comm"),
@@ -159,6 +166,7 @@ impl CubeReflConsts {
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             exists_elim: Expr::const_(Name::from_string("Exists.elim"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
@@ -233,6 +241,7 @@ impl CubeReflConsts {
         Expr::apps(self.rat_le_of_cube_le_cube.clone(), [a, b, ha, hb, h])
     }
     /// `Rat.cube_lt_cube_of_lt_of_nonneg a b (0≤b)(b<a) : b³ < a³`.
+    #[cfg(test)]
     fn cube_lt_cube(&self, a: Expr, b: Expr, hb: Expr, hlt: Expr) -> Expr {
         Expr::apps(self.rat_cube_lt_cube.clone(), [a, b, hb, hlt])
     }

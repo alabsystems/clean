@@ -36,12 +36,18 @@
 //! `Rat.left_distrib`, `Rat.mul_zero`, `pm_false_add_pm_true_eq_zero`, and
 //! `congrArg` / `Eq.*` built-ins — all axiom-free or foundational.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 struct OffDiagConsts {
     nat: Expr,
     rat: Expr,
@@ -85,7 +91,9 @@ struct OffDiagConsts {
     pm_cancel: Expr,
 }
 
+#[cfg(test)]
 impl OffDiagConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
@@ -152,54 +160,69 @@ impl OffDiagConsts {
         }
     }
 
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(
             Expr::const_(Name::from_string("BoolAnalysis.HCPoint"), vec![]),
             n.clone(),
         )
     }
+    #[cfg(test)]
     fn succ(&self, n: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n.clone())
     }
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two.clone(), n.clone()])
     }
+    #[cfg(test)]
     fn nadd(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nat_add.clone(), [a, b])
     }
+    #[cfg(test)]
     fn radd(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_add.clone(), [a, b])
     }
+    #[cfg(test)]
     fn rmul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn val(&self, n: &Expr, i: &Expr) -> Expr {
         Expr::apps(self.fin_val.clone(), [n.clone(), i.clone()])
     }
+    #[cfg(test)]
     fn chi(&self, n: Expr, s: Expr, x: Expr) -> Expr {
         Expr::apps(self.chi.clone(), [n, s, x])
     }
+    #[cfg(test)]
     fn pm(&self, b: Expr) -> Expr {
         Expr::app(self.pm.clone(), b)
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn refl_rat(&self, x: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), x])
     }
+    #[cfg(test)]
     fn trans_rat(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans1.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
+    #[cfg(test)]
     fn last(&self, n: &Expr) -> Expr {
         Expr::app(self.fin_last.clone(), n.clone())
     }
 
     /// `fun (i : Fin n) => p (Fin.castSucc n i)` — restrict a `HCPoint (n+1)`
     /// to its first `n` coordinates (matches `chi_succ`'s `restrict`).
+    #[cfg(test)]
     fn restrict(&self, parent: &EnvDeclBuilder, n: &Expr, p: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -209,6 +232,7 @@ impl OffDiagConsts {
     }
 
     /// `castP n (idx_map (2^n) (2^n) i) : Fin (2^(n+1))`.
+    #[cfg(test)]
     fn cast_p(&self, parent: &EnvDeclBuilder, n: &Expr, idx_map: &Expr, i: &Expr) -> Expr {
         let p2n = self.pow2(n);
         let mapped = Expr::apps(idx_map.clone(), [p2n.clone(), p2n.clone(), i.clone()]);
@@ -231,6 +255,7 @@ impl OffDiagConsts {
     }
 
     /// `hcDecode (n+1) (castP n (idx_map .. i)) : HCPoint (n+1)`.
+    #[cfg(test)]
     fn decoded(&self, parent: &EnvDeclBuilder, n: &Expr, idx_map: &Expr, i: &Expr) -> Expr {
         let cp = self.cast_p(parent, n, idx_map, i);
         Expr::apps(self.hc_decode.clone(), [self.succ(n), cp])
@@ -238,6 +263,7 @@ impl OffDiagConsts {
 }
 
 /// Build the per-index pair-cancellation theorem.
+#[cfg(test)]
 fn build_type(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -271,6 +297,7 @@ fn build_type(c: &OffDiagConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_value(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -701,6 +728,7 @@ fn build_value(c: &OffDiagConsts) -> Expr {
 /// `child_of(parent)` so any free variables captured from the outer
 /// declaration scope (`n`, `i`, `U`, …) stay bound.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn bin_congr(
     c: &OffDiagConsts,
     parent: &EnvDeclBuilder,
@@ -748,13 +776,16 @@ fn bin_congr(
 // chi_offdiag_numerator_zero — the full off-diagonal numerator vanishes.
 // ===========================================================================
 
+#[cfg(test)]
 impl OffDiagConsts {
     /// `Fin.sum n f`.
+    #[cfg(test)]
     fn fsum(&self, n: Expr, f: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("Fin.sum"), vec![]), [n, f])
     }
     /// `fun (k : Fin (2^(n+1))) => chi (n+1) U (hcDecode (n+1) k)` — the
     /// numerator integrand (= `Expect`'s numerator summand for `g = χ_U`).
+    #[cfg(test)]
     fn numerator_fn(&self, parent: &EnvDeclBuilder, n: &Expr, u: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let sn = self.succ(n);
@@ -766,6 +797,7 @@ impl OffDiagConsts {
     }
     /// `fun (x : HCPoint (n+1)) => chi (n+1) U x` — the character as a function,
     /// the `g` fed to `hcSumSplit`.
+    #[cfg(test)]
     fn chi_u_fn(&self, parent: &EnvDeclBuilder, n: &Expr, u: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let sn = self.succ(n);
@@ -776,6 +808,7 @@ impl OffDiagConsts {
     }
     /// `fun (i : Fin (2^n)) => chi (n+1) U (hcDecode (n+1) (castP (idx_map .. i)))`
     /// — one cube-split half-sum integrand.
+    #[cfg(test)]
     fn half_fn(&self, parent: &EnvDeclBuilder, n: &Expr, u: &Expr, idx_map: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let p2n = self.pow2(n);
@@ -785,6 +818,7 @@ impl OffDiagConsts {
         b.finish_child(b.mk_lam(i_id, BinderInfo::Default, self.fin_of(&p2n), body))
     }
     /// `fun (_ : Fin (2^n)) => Rat.zero`.
+    #[cfg(test)]
     fn zero_fn(&self, parent: &EnvDeclBuilder, n: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let p2n = self.pow2(n);
@@ -798,6 +832,7 @@ impl OffDiagConsts {
     }
 }
 
+#[cfg(test)]
 fn build_numerator_type(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -821,6 +856,7 @@ fn build_numerator_type(c: &OffDiagConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_numerator_value(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -931,9 +967,11 @@ fn build_numerator_value(c: &OffDiagConsts) -> Expr {
 // chi_inner_offdiag_zero — E[χ_S·χ_T] = 0 when S, T differ at the top coord.
 // ===========================================================================
 
+#[cfg(test)]
 impl OffDiagConsts {
     /// `fun (i : Fin (n+1)) => Bool.xor (S i) (T i)` — the symmetric difference
     /// `S Δ T`, the witness `U` fed to `chi_expect_zero`.
+    #[cfg(test)]
     fn symm_diff_fn(&self, parent: &EnvDeclBuilder, sn: &Expr, s: &Expr, t: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_sn = self.fin_of(sn);
@@ -945,6 +983,7 @@ impl OffDiagConsts {
         b.finish_child(b.mk_lam(i_id, BinderInfo::Default, fin_sn, body))
     }
     /// `BoolAnalysis.Expect (n+1) (fun x => Rat.mul (chi (n+1) S x) (chi (n+1) T x))`.
+    #[cfg(test)]
     fn expect_inner(&self, parent: &EnvDeclBuilder, sn: &Expr, s: &Expr, t: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(sn);
@@ -961,6 +1000,7 @@ impl OffDiagConsts {
     }
 }
 
+#[cfg(test)]
 fn build_inner_offdiag_type(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -986,6 +1026,7 @@ fn build_inner_offdiag_type(c: &OffDiagConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_inner_offdiag_value(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -1032,6 +1073,7 @@ fn build_inner_offdiag_value(c: &OffDiagConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.chi_inner_offdiag_zero`: the off-diagonal
     /// character inner product vanishes, `E[χ_S·χ_T] = 0`, whenever `S` and `T`
@@ -1040,6 +1082,7 @@ impl Environment {
     /// (`E[χ_S·χ_T] = E[χ_{SΔT}]`) and the off-diagonal average `chi_expect_zero`
     /// (`E[χ_{SΔT}] = 0`). Together with the diagonal `chi_self_inner_eq_one`
     /// this is character orthonormality. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_chi_inner_offdiag_zero_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_inner_offdiag_zero");
         if self.get_const(&name).is_some() {
@@ -1062,8 +1105,10 @@ impl Environment {
 // chi_expect_zero — E[χ_U] = 0 (the off-diagonal average) via numerator/2^n.
 // ===========================================================================
 
+#[cfg(test)]
 impl OffDiagConsts {
     /// The Expect denominator `D := Rat.mk (Int.ofNat (2^(n+1))) 1`.
+    #[cfg(test)]
     fn expect_denom(&self, sn: &Expr) -> Expr {
         let p2sn = self.pow2(sn);
         Expr::apps(
@@ -1077,13 +1122,16 @@ impl OffDiagConsts {
             ],
         )
     }
+    #[cfg(test)]
     fn rdiv(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(Expr::const_(Name::from_string("Rat.div"), vec![]), [a, b])
     }
+    #[cfg(test)]
     fn rinv(&self, a: Expr) -> Expr {
         Expr::app(Expr::const_(Name::from_string("Rat.inv"), vec![]), a)
     }
     /// `BoolAnalysis.Expect (n+1) (fun x => chi (n+1) U x)`.
+    #[cfg(test)]
     fn expect_chi_u(&self, parent: &EnvDeclBuilder, n: &Expr, u: &Expr) -> Expr {
         let sn = self.succ(n);
         Expr::apps(
@@ -1093,6 +1141,7 @@ impl OffDiagConsts {
     }
 }
 
+#[cfg(test)]
 fn build_expect_zero_type(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -1114,6 +1163,7 @@ fn build_expect_zero_type(c: &OffDiagConsts) -> Expr {
     b.finish(ty)
 }
 
+#[cfg(test)]
 fn build_expect_zero_value(c: &OffDiagConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -1182,11 +1232,13 @@ fn build_expect_zero_value(c: &OffDiagConsts) -> Expr {
     b.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.chi_expect_zero`: the off-diagonal character
     /// average vanishes, `E[χ_U] = 0`, for `U` with top coordinate present.
     /// The numerator (`chi_offdiag_numerator_zero`) is `0`, and `0 / 2^(n+1) = 0`
     /// (`Rat.div 0 D ≡ Rat.mul 0 (inv D)` then `Rat.zero_mul`). Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_chi_expect_zero_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_expect_zero");
         if self.get_const(&name).is_some() {
@@ -1213,6 +1265,7 @@ impl Environment {
     /// Register `BoolAnalysis.chi_offdiag_numerator_zero`: the full
     /// `2^(n+1)`-cube character numerator vanishes when the top coordinate of
     /// `U` is present. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_chi_offdiag_numerator_zero_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_offdiag_numerator_zero");
         if self.get_const(&name).is_some() {
@@ -1239,9 +1292,11 @@ impl Environment {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.chi_offdiag_pair_cancel` as a kernel-checked,
     /// constructive theorem. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_chi_offdiag_pair_cancel_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_offdiag_pair_cancel");
         if self.get_const(&name).is_some() {

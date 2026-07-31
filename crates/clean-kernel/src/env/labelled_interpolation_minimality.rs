@@ -27,13 +27,19 @@
 //!            Schlaipfer & Weissenbacher (2016), "Labelled Interpolation
 //!            Systems for Hyper-Resolution, Clausal, and Local Proofs", JAR.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all labelled interpolation minimality declarations.
+#[cfg(test)]
 pub(super) struct LabelledInterpolationConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -51,7 +57,9 @@ pub(super) struct LabelledInterpolationConsts {
     pub(super) interp_system: Expr,
 }
 
+#[cfg(test)]
 impl LabelledInterpolationConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -73,10 +81,12 @@ impl LabelledInterpolationConsts {
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize labelled interpolation minimality declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`, `init_craig_interpolation()`.
+    #[cfg(test)]
     pub(crate) fn init_labelled_interpolation_minimality(&mut self) -> Result<(), EnvError> {
         if self.labelled_interpolation_minimality_init {
             return Ok(());
@@ -114,6 +124,7 @@ impl Environment {
 
     /// `LabellingFunction : Type` — labels pivots as A-local or B-local/shared.
     /// Determines the interpolation rule at each resolution DAG node.
+    #[cfg(test)]
     fn register_labelling_function(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -139,6 +150,7 @@ impl Environment {
 
     /// `InterpolationSystem : Type` — bundles a labelling with validity.
     /// Projections: `labelling`, `valid`.
+    #[cfg(test)]
     fn register_interpolation_system(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -184,6 +196,7 @@ impl Environment {
 
     /// `labelled_interpolant : PropFormula -> PropFormula -> Proof -> LabellingFunction -> PropFormula`
     /// Extract interpolant from (A, B, proof) parameterized by labelling L.
+    #[cfg(test)]
     fn register_labelled_interpolant(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -227,6 +240,7 @@ impl Environment {
     /// `mcmillan_labelling : PropFormula -> PropFormula -> LabellingFunction`
     /// McMillan's labelling: A-only pivots are A-local, rest B-local.
     /// Produces the weakest interpolant (D'Silva lattice bottom).
+    #[cfg(test)]
     fn register_mcmillan_labelling(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -266,6 +280,7 @@ impl Environment {
     /// `reverse_mcmillan_labelling : PropFormula -> PropFormula -> LabellingFunction`
     /// Reverse McMillan: B-only pivots are B-local, rest A-local.
     /// Produces the strongest interpolant (D'Silva lattice top).
+    #[cfg(test)]
     fn register_reverse_mcmillan_labelling(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -304,6 +319,7 @@ impl Environment {
 
     /// `variable_support : PropFormula -> VarSet`
     /// Variables appearing in formula f. Used in minimality statements.
+    #[cfg(test)]
     fn register_variable_support(
         &mut self,
         c: &LabelledInterpolationConsts,
@@ -333,6 +349,7 @@ impl Environment {
     // ====================================================================
 
     /// `var_subset : VarSet -> VarSet -> Prop` — subset relation on variable sets.
+    #[cfg(test)]
     fn register_var_subset(&mut self, c: &LabelledInterpolationConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string(
@@ -368,6 +385,7 @@ impl Environment {
 
     /// `interpolant_implies : PropFormula -> PropFormula -> Prop`
     /// Logical implication i1 |= i2. The lattice ordering.
+    #[cfg(test)]
     fn register_interpolant_implies(
         &mut self,
         c: &LabelledInterpolationConsts,

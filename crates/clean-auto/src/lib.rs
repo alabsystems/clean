@@ -5,8 +5,6 @@
 // The automation crate keeps staged solver bridge APIs compiled before every
 // downstream call path is wired; keep consumer builds quiet while narrower
 // hygiene lints remain active.
-#![allow(dead_code)]
-
 //! clean Native Automation Engine
 //!
 //! Provides automatic theorem proving without external process calls:

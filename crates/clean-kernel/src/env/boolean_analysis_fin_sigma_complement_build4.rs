@@ -35,7 +35,7 @@ fn involutive_type(c: &SigmaComplementConsts) -> Expr {
 
 fn involutive_value(c: &SigmaComplementConsts) -> Expr {
     let mut pre = make_cprefix(c);
-    let succ_k = c.succ(&pre.k);
+    let _succ_k = c.succ(&pre.k);
     let (j_id, j) = pre.b.fresh_local(pre.fin_k.clone());
     let val_j = c.val(&pre.k, &j);
     let val_p = c.val(&pre.k, &pre.p);

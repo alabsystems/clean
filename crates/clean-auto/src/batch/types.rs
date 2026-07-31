@@ -11,7 +11,6 @@
 
 use crate::ProofResult;
 use clean_kernel::Expr;
-use std::time::Duration;
 
 /// Unique identifier for a query within a batch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -60,11 +59,6 @@ impl BatchQuery {
     pub fn with_hypotheses(mut self, hypotheses: Vec<Expr>) -> Self {
         self.hypotheses = hypotheses;
         self
-    }
-
-    /// Convert the timeout to a [`Duration`].
-    pub(crate) fn timeout_duration(&self) -> Duration {
-        Duration::from_millis(self.timeout_ms)
     }
 }
 

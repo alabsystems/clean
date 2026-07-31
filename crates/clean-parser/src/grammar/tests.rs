@@ -1638,9 +1638,8 @@ fn test_parse_instance_multiple_lambda_fields() {
 }
 
 // B53 guard: a non-lambda field value followed by another field must still
-// bound correctly (the existing bespoke `instance_field_app_expr` path), and a
-// trailing lambda field at the end of the where-block parses with no following
-// boundary.
+// bound correctly through the shared expression grammar, and a trailing lambda
+// field at the end of the where-block parses with no following boundary.
 #[test]
 fn test_parse_instance_lambda_field_last_in_block() {
     let decl =
@@ -1743,10 +1742,8 @@ fn test_parse_instance_struct_literal_field_value() {
 
 // B53 boundary guard: a lambda field value whose body is a *bare projection*
 // (`fun _ => Nat.zero`, no application argument) must still terminate at the
-// next `ident :=` field. The projection consumes its `.zero` via the `Dot`
-// branch of `instance_field_app_expr`, which is a distinct code path from the
-// application-argument path; this pins that the boundary fires after the
-// projection and `tag` is recognised as a separate field rather than eaten as
+// next `ident :=` field. This pins that the boundary fires after the projection
+// and `tag` is recognised as a separate field rather than eaten as
 // `Nat.zero tag`.
 #[test]
 fn test_parse_instance_lambda_field_bare_proj_body_bounded() {

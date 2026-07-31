@@ -26,19 +26,27 @@
 //!
 //! Part of #3167.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 const NS: &str = "InfoTheory.EntropyClauseQuality";
 
+#[cfg(test)]
 pub(super) fn ns(suffix: &str) -> String {
     format!("{NS}.{suffix}")
 }
 
 /// Shared constants used across all entropy clause quality declarations.
+#[cfg(test)]
 pub(super) struct EntropyClauseQualityConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,
@@ -55,7 +63,9 @@ pub(super) struct EntropyClauseQualityConsts {
     pub(super) real_nonneg: Expr,
 }
 
+#[cfg(test)]
 impl EntropyClauseQualityConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -71,6 +81,7 @@ impl EntropyClauseQualityConsts {
 }
 
 /// Register an axiom with idempotency check.
+#[cfg(test)]
 fn add_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvError> {
     if env.get_const(&Name::from_string(name)).is_some() {
         return Ok(());
@@ -82,11 +93,12 @@ fn add_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvEr
     })
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize entropy-based clause quality declarations.
     ///
     /// Depends on: `init_nat()`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_entropy_clause_quality(&mut self) -> Result<(), EnvError> {
         if self.entropy_clause_quality_init {
             return Ok(());
@@ -130,7 +142,7 @@ impl Environment {
     // ====================================================================
 
     /// `AssignmentSpace : Type` -- the `2^n` Boolean assignment space.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_assignment_space(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -139,7 +151,7 @@ impl Environment {
     }
 
     /// `CNFFormula : Type` -- an abstract CNF formula.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_cnf_formula(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -148,7 +160,7 @@ impl Environment {
     }
 
     /// `CNFClause : Type` -- a single clause in a CNF formula.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_cnf_clause(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -157,7 +169,7 @@ impl Environment {
     }
 
     /// `SatisfyingSet : Type` -- the set of satisfying assignments of a CNF.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_satisfying_set_type(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -166,7 +178,7 @@ impl Environment {
     }
 
     /// `RealNonneg : Type` -- non-negative real values used for entropy.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_real_nonneg(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -179,7 +191,7 @@ impl Environment {
     // ====================================================================
 
     /// `num_variables : CNFFormula -> Nat`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_num_variables(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -192,7 +204,7 @@ impl Environment {
     }
 
     /// `satisfying_set : CNFFormula -> SatisfyingSet`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_satisfying_set(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -209,7 +221,7 @@ impl Environment {
     }
 
     /// `sat_count : SatisfyingSet -> Nat`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_sat_count(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -224,7 +236,7 @@ impl Environment {
     /// `solution_entropy : CNFFormula -> RealNonneg`
     ///
     /// Intended semantics: `H(F) = log(|Sat(F)|)`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_solution_entropy(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -243,7 +255,7 @@ impl Environment {
     /// `information_gain : CNFClause -> CNFFormula -> RealNonneg`
     ///
     /// Intended semantics: `I(C|F) = H(F) - H(F AND C)`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_information_gain(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -265,7 +277,7 @@ impl Environment {
     }
 
     /// `formula_union : CNFFormula -> CNFFormula -> CNFFormula`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_formula_union(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -289,7 +301,7 @@ impl Environment {
     /// `formula_add_clause : CNFFormula -> CNFClause -> CNFFormula`
     ///
     /// Intended semantics: `F AND C`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_formula_add_clause(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -313,7 +325,7 @@ impl Environment {
     /// `formula_entails_clause : CNFFormula -> CNFClause -> Prop`
     ///
     /// Intended semantics: `F |= C`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_formula_entails_clause(
         &mut self,
         c: &EntropyClauseQualityConsts,
@@ -335,7 +347,7 @@ impl Environment {
     }
 
     /// `assignment_satisfies_formula : AssignmentSpace -> CNFFormula -> Prop`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_entropy_clause_quality_assignment_satisfies_formula(
         &mut self,
         c: &EntropyClauseQualityConsts,

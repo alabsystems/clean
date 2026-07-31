@@ -242,6 +242,10 @@ pub(super) fn valid_kernel_soundness_launch_artifact(
             sha256_repo_artifact(path).expect("source sha256"),
         );
     }
+    source_sha256.insert(
+        TRUST_CORE_RUST_MODULE_TREE_KEY.to_string(),
+        sha256_repo_module_tree(TRUST_CORE_RUST_MODULE_DIR).expect("module tree sha256"),
+    );
 
     KernelSoundnessLaunchEvidenceArtifact {
         schema_version: KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_SCHEMA_VERSION.to_string(),
@@ -307,6 +311,10 @@ pub(super) fn valid_deny_sorry_launch_artifact(
             sha256_repo_artifact(path).expect("source sha256"),
         );
     }
+    source_sha256.insert(
+        TRUST_CORE_RUST_MODULE_TREE_KEY.to_string(),
+        sha256_repo_module_tree(TRUST_CORE_RUST_MODULE_DIR).expect("module tree sha256"),
+    );
 
     DenySorryLaunchEvidenceArtifact {
         schema_version: DENY_SORRY_LAUNCH_EVIDENCE_SCHEMA_VERSION.to_string(),

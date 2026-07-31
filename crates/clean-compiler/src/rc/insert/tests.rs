@@ -420,7 +420,7 @@ fn count_rc_ops(code: &Code, op: &str, target: FVarId) -> usize {
 
 fn rc_body(decl: &Decl) -> &Code {
     match &decl.body {
-        crate::lcnf::DeclValue::Code(code) => code,
+        DeclValue::Code(code) => code,
         other => panic!("expected code body, got {other:?}"),
     }
 }

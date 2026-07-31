@@ -121,6 +121,7 @@ pub(super) fn build_inner_prop(
 ///
 /// Takes the induction hypothesis at k and produces the result at succ k.
 /// Uses C004 at the LayerNorm boundary between blocks k and k+1.
+#[cfg(test)]
 pub(super) fn build_blockwise_step_type(c: &BlockwiseCrownConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (k_id, k) = b.fresh_local(c.nat.clone());
@@ -195,6 +196,7 @@ pub(super) fn build_blockwise_step_type(c: &BlockwiseCrownConsts) -> Expr {
 ///     (Block.compose k block_dim crown_block ln_gamma ln_beta ln_eps B)
 ///     (Block.monolithic_crown k block_dim crown_block ln_gamma ln_beta ln_eps B)
 /// ```
+#[cfg(test)]
 pub(super) fn build_blockwise_equals_monolithic_type(c: &BlockwiseCrownConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (k_id, k) = b.fresh_local(c.nat.clone());

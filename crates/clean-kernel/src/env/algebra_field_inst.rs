@@ -10,9 +10,8 @@
 //!
 //! Extracted from `algebra_field.rs` for maintainability.
 
-use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::expr::Expr;
 use crate::level::Level;
 use crate::name::Name;
 
@@ -186,6 +185,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_field_inst_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_field_inst(&self) -> bool {
         self.rat_field_inst_init
     }

@@ -514,6 +514,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.semiring_init == true`
+    #[cfg(test)]
     pub(crate) fn has_semiring(&self) -> bool {
         self.semiring_init
     }

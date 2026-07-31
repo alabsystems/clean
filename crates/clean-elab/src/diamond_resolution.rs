@@ -11,8 +11,6 @@
 //! expressions associated with the diamond class, and provides coherence checks
 //! before resolution commits to one path.
 
-#![allow(dead_code)] // Reserved for instance-coherence integration.
-
 use crate::stack_safe;
 use clean_kernel::expr::{Expr, ExprKind};
 use std::collections::{HashMap, HashSet, VecDeque};

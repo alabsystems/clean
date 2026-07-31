@@ -72,6 +72,7 @@ impl BranchSharingCache {
     }
 
     #[cfg(any(debug_assertions, test))]
+    #[cfg(test)]
     pub(super) fn verified_pair_count(&self) -> usize {
         self.verified_pairs.len()
     }

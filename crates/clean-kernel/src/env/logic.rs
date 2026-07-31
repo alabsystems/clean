@@ -106,6 +106,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_propext()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_propext(&self) -> bool {
         self.propext_init
     }
@@ -160,6 +161,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_quot_sound()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_quot_sound(&self) -> bool {
         self.quot_sound_init
     }
@@ -495,6 +497,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_funext()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_funext(&self) -> bool {
         self.funext_init
     }

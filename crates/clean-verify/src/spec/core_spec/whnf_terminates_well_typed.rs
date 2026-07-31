@@ -7,7 +7,8 @@
 //! (`whnf_lemmas.rs`).
 //!
 //! Clean-kernel port of the Aristotle-proven Lean development
-//! `scratch/aristotle-typed-sn/TypedSn.lean` **Part 1** (0 sorry,
+//! `scratch/aristotle-typed-sn-COMPLETE/output-final_aristotle/TypedSn.lean`
+//! **Part 1** (0 sorry,
 //! `#print axioms` = propext + Quot.sound). The Lean file is the STRATEGY
 //! guide; every term here is a closed spec proof term re-checked by the Clean
 //! kernel at spec build (`DerivedProved`, empty non-foundational closure). No
@@ -29,7 +30,7 @@
 //! It is provable — NOT Gödel-blocked — because the spec's `Typing` judgment is
 //! CONTEXT-FREE: it is generated solely by `sort / pi / lam / app` (+ the
 //! subject-preserving `conv`), with NO `bvar` rule and NO `const` rule
-//! (`typing_def_eq.rs:44-104`). Hence every typable term is simultaneously
+//! (`typing_def_eq.rs:117-127`). Hence every typable term is simultaneously
 //! `bvar`-free AND `const`-free, and three consequences close SN elementarily:
 //!
 //!   * `const`-free ⇒ neither δ nor ι ever fires: both `delta_reduct` and
@@ -561,7 +562,8 @@ impl Specification {
                 "applies, threading beta_bd_step_preserves_ceiling_zero (bvar-freeness) and ",
                 "const_free_preserved_bd (const-freeness). Bvar/const-freeness of typable terms come ",
                 "from typable_bvar_ceiling_zero / typable_const_free. Kernel-checked port of ",
-                "scratch/aristotle-typed-sn/TypedSn.lean Part 1 (whnf_terminates_well_typed, 0 sorry, ",
+                "scratch/aristotle-typed-sn-COMPLETE/output-final_aristotle/TypedSn.lean Part 1 ",
+                "(whnf_terminates_well_typed, 0 sorry, ",
                 "#print axioms = propext + Quot.sound). HONEST SCOPE: this discharges SN for the ",
                 "spec's ACTUAL has_type = the context-free Typing fragment, which is DEGENERATE (no ",
                 "var/const rule ⇒ constant lambdas, no δ/ι) — a genuine proof of the axiom AS STATED, ",

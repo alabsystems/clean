@@ -105,7 +105,7 @@ fn test_finish_extracts_cert() {
     let prop = builder.sort(Level::zero()).unwrap();
     let cert = builder.finish(prop).unwrap();
 
-    assert!(matches!(cert, ProofCert::Sort { level } if level == Level::zero()));
+    assert!(matches!(&cert, ProofCert::Sort { level } if *level == Level::zero()));
 }
 
 #[test]

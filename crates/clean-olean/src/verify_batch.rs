@@ -421,7 +421,7 @@ pub fn typecheck_constants(
 
     let check = |name: &str,
                  type_: &Expr,
-                 tc: &TypeChecker,
+                 tc: &TypeChecker<'_>,
                  pass: &mut usize,
                  fail: &mut usize,
                  errors: &mut BTreeMap<String, String>| {
@@ -720,7 +720,7 @@ pub fn verify_one_module_with_mode(
         load_only,
         mode,
         max_heartbeats,
-        clean_kernel::env::ProofValueElision::None,
+        ProofValueElision::None,
         &mut visited,
     )
 }
@@ -730,9 +730,9 @@ pub fn verify_one_module_with_mode(
 /// short-circuits before any `.olean` re-read — eliminating the O(modules ×
 /// closure) re-parse on the type-checking path too. Per-call no-confusion
 /// regeneration is retained (the per-module type-check needs it). The loaded
-/// environment is identical to the per-module-reload path (verified by
-/// `import::tests::diag_full_shared_vs_perloop`), so type-check results are
-/// unchanged.
+/// environment is identical to the per-module-reload path (the
+/// `diag_full_shared_vs_perloop` qualification example compares their complete
+/// name inventories), so type-check results are unchanged.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_one_module_with_mode_shared(
     env: &mut Environment,
@@ -743,7 +743,7 @@ pub fn verify_one_module_with_mode_shared(
     load_only: bool,
     mode: ValidationMode,
     max_heartbeats: u32,
-    elide_proof_values: clean_kernel::env::ProofValueElision,
+    elide_proof_values: ProofValueElision,
     visited: &mut hashbrown::HashSet<String>,
 ) -> ModuleResult {
     let start = Instant::now();
@@ -1048,7 +1048,7 @@ pub fn preload_init_with_snapshot(
         if path.exists() {
             let hash = init_closure_hash(search_paths);
             let expected = clean_kernel::env::SnapshotHeader::current(hash);
-            match clean_kernel::env::Environment::load_snapshot(&path, &expected) {
+            match Environment::load_snapshot(&path, &expected) {
                 Ok(clean_kernel::env::SnapshotLoadOutcome::Loaded(snap_env)) => {
                     let warm_start = Instant::now();
                     let added = snap_env.constants().count();

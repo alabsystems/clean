@@ -232,11 +232,67 @@ impl<'de> Deserialize<'de> for NameInner {
 /// assert!(anon.is_anon());
 /// ```
 #[cfg_attr(not(kani), derive(Clone))]
-#[derive(Debug)]
 pub struct Name {
     inner: NameInner,
     /// Cached hash value, computed at creation time
     cached_hash: u64,
+}
+
+impl std::fmt::Debug for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        enum Component<'a> {
+            Str(&'a str),
+            Num(u64),
+        }
+
+        let mut suffix = SmallVec::<[Component<'_>; 3]>::new();
+        let mut depth = 0usize;
+        let mut current = self;
+        loop {
+            match &current.inner {
+                NameInner::Anon => break,
+                NameInner::Str(parent, value) => {
+                    if suffix.len() < 3 {
+                        suffix.push(Component::Str(value));
+                    }
+                    depth = depth.saturating_add(1);
+                    current = parent;
+                }
+                NameInner::Num(parent, value) => {
+                    if suffix.len() < 3 {
+                        suffix.push(Component::Num(*value));
+                    }
+                    depth = depth.saturating_add(1);
+                    current = parent;
+                }
+            }
+        }
+
+        write!(f, "Name {{ depth: {depth}, suffix: [",)?;
+        for (index, component) in suffix.iter().rev().enumerate() {
+            if index != 0 {
+                f.write_str(", ")?;
+            }
+            match component {
+                Component::Str(value) => fmt_truncated_name_component(value, f)?,
+                Component::Num(value) => write!(f, "{value}")?,
+            }
+        }
+        write!(f, "], lean4_hash: {:016x} }}", self.cached_hash)
+    }
+}
+
+fn fmt_truncated_name_component(value: &str, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    const MAX_CHARS: usize = 32;
+    let end = value
+        .char_indices()
+        .nth(MAX_CHARS)
+        .map_or(value.len(), |(index, _)| index);
+    std::fmt::Debug::fmt(&&value[..end], f)?;
+    if end != value.len() {
+        f.write_str("…")?;
+    }
+    Ok(())
 }
 
 // Custom Serialize: only serialize the inner value
@@ -296,7 +352,7 @@ impl Clone for Name {
         // Name is singly-linked: Str(parent, s) and Num(parent, n).
         // Phase 1: Walk from leaf to root, collecting components.
         enum Comp {
-            Str(Box<str>),
+            Str(String),
             Num(u64),
         }
 
@@ -306,8 +362,7 @@ impl Clone for Name {
             match &current.inner {
                 NameInner::Anon => break,
                 NameInner::Str(parent, s) => {
-                    // Clone the Box<str> (single heap alloc, no recursion)
-                    components.push(Comp::Str(s.clone()));
+                    components.push(Comp::Str(s.to_string()));
                     current = parent;
                 }
                 NameInner::Num(parent, n) => {
@@ -321,7 +376,7 @@ impl Clone for Name {
         let mut result = Name::anon();
         for comp in components.into_iter().rev() {
             match comp {
-                Comp::Str(s) => result = result.str(&*s),
+                Comp::Str(s) => result = result.str(s),
                 Comp::Num(n) => result = result.num(n),
             }
         }
@@ -378,8 +433,24 @@ impl PartialEq for Name {
         if self.cached_hash != other.cached_hash {
             return false;
         }
-        // Hashes match, need full comparison
-        self.inner == other.inner
+        // Hashes match, compare the singly-linked chains iteratively. This is
+        // collision-safe without recursive Arc<Name>::eq descent.
+        let mut left = self;
+        let mut right = other;
+        loop {
+            match (&left.inner, &right.inner) {
+                (NameInner::Anon, NameInner::Anon) => return true,
+                (NameInner::Str(lp, ls), NameInner::Str(rp, rs)) if ls == rs => {
+                    left = lp;
+                    right = rp;
+                }
+                (NameInner::Num(lp, ln), NameInner::Num(rp, rn)) if ln == rn => {
+                    left = lp;
+                    right = rp;
+                }
+                _ => return false,
+            }
+        }
     }
 }
 
@@ -396,6 +467,37 @@ impl PartialEq for Name {
 }
 
 impl Eq for Name {}
+
+#[cfg(not(kani))]
+impl Drop for Name {
+    fn drop(&mut self) {
+        let mut inner = std::mem::replace(&mut self.inner, NameInner::Anon);
+        loop {
+            let parent = match inner {
+                NameInner::Anon => return,
+                NameInner::Str(parent, component) => {
+                    drop(component);
+                    parent
+                }
+                NameInner::Num(parent, _) => parent,
+            };
+
+            match Arc::try_unwrap(parent) {
+                Ok(mut unique_parent) => {
+                    inner = std::mem::replace(&mut unique_parent.inner, NameInner::Anon);
+                    // `unique_parent` now contains no recursive edge, so its
+                    // normal Drop is shallow.
+                }
+                Err(shared_parent) => {
+                    // Another owner keeps the parent alive; decrementing this
+                    // Arc cannot trigger recursive destruction.
+                    drop(shared_parent);
+                    return;
+                }
+            }
+        }
+    }
+}
 
 impl PartialOrd for Name {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -658,27 +760,40 @@ impl std::fmt::Display for Name {
     /// ENSURES: Anonymous names render as `[anonymous]`
     /// ENSURES: Non-anonymous names render with dotted components
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
-            NameInner::Anon => write!(f, "[anonymous]"),
-            NameInner::Str(prefix, s) => {
-                // Bind through auto-deref coercion: works for both
-                // Arc<Name> (production) and ManuallyDrop<Box<Name>> (kani).
-                let p: &Name = prefix;
-                if p.is_anon() {
-                    write!(f, "{s}")
-                } else {
-                    write!(f, "{p}.{s}")
+        enum Component<'a> {
+            Str(&'a str),
+            Num(u64),
+        }
+
+        let mut components = SmallVec::<[Component<'_>; 8]>::new();
+        let mut current = self;
+        loop {
+            match &current.inner {
+                NameInner::Anon => break,
+                NameInner::Str(parent, component) => {
+                    components.push(Component::Str(component));
+                    current = parent;
                 }
-            }
-            NameInner::Num(prefix, n) => {
-                let p: &Name = prefix;
-                if p.is_anon() {
-                    write!(f, "{n}")
-                } else {
-                    write!(f, "{p}.{n}")
+                NameInner::Num(parent, component) => {
+                    components.push(Component::Num(*component));
+                    current = parent;
                 }
             }
         }
+
+        if components.is_empty() {
+            return f.write_str("[anonymous]");
+        }
+        for (index, component) in components.iter().rev().enumerate() {
+            if index != 0 {
+                f.write_str(".")?;
+            }
+            match component {
+                Component::Str(value) => f.write_str(value)?,
+                Component::Num(value) => write!(f, "{value}")?,
+            }
+        }
+        Ok(())
     }
 }
 

@@ -81,6 +81,7 @@ struct CancelLeftConsts {
     iff_mp: Expr,
     or_c: Expr,
     or_rec: Expr,
+    #[cfg(test)]
     eq_c: Expr,
     eq_symm: Expr,
     eq_trans: Expr,
@@ -116,6 +117,7 @@ impl CancelLeftConsts {
             iff_mp: k("Iff.mp"),
             or_c: k("Or"),
             or_rec: k("Or.rec"),
+            #[cfg(test)]
             eq_c: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
@@ -136,9 +138,11 @@ impl CancelLeftConsts {
     fn inv(&self, a: Expr) -> Expr {
         Expr::app(self.rat_inv.clone(), a)
     }
+    #[cfg(test)]
     fn nonneg(&self, a: Expr) -> Expr {
         self.le(self.rat_zero.clone(), a)
     }
+    #[cfg(test)]
     fn eq(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq_c.clone(), [self.rat.clone(), a, b])
     }

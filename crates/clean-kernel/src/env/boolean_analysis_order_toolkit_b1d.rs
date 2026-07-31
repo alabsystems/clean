@@ -118,6 +118,7 @@ impl Environment {
     }
 
     /// Check if the B1d square-root monotonicity toolkit has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_order_toolkit_b1d(&self) -> bool {
         self.boolean_analysis_order_toolkit_b1d_init
     }

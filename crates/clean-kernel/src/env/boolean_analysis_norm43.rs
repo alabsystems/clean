@@ -93,6 +93,7 @@ pub(crate) struct Norm43Consts {
     nnreal_mul: Expr,
     nnreal_add: Expr,
     nnreal_finsum: Expr,
+    #[cfg(test)]
     nnreal_finsum_zero: Expr,
     nnreal_finsum_succ: Expr,
     pow43_gen: Expr,
@@ -124,6 +125,7 @@ impl Norm43Consts {
             nnreal_mul: k("NNReal.mul"),
             nnreal_add: k("NNReal.add"),
             nnreal_finsum: k("NNReal.finSum"),
+            #[cfg(test)]
             nnreal_finsum_zero: k("NNReal.finSum_zero"),
             nnreal_finsum_succ: k("NNReal.finSum_succ"),
             pow43_gen: k("NNReal.pow43Gen"),
@@ -384,7 +386,7 @@ fn norm43_type(c: &Norm43Consts, out: &Expr) -> Expr {
 }
 
 /// `BoolAnalysis.norm43 n g s r hs : NNReal` (applied form).
-fn norm43_app(c: &Norm43Consts, n: &Expr, g: &Expr, s: &Expr, r: &Expr, hs: &Expr) -> Expr {
+fn norm43_app(_c: &Norm43Consts, n: &Expr, g: &Expr, s: &Expr, r: &Expr, hs: &Expr) -> Expr {
     Expr::apps(
         Expr::const_(Name::from_string("BoolAnalysis.norm43"), vec![]),
         [n.clone(), g.clone(), s.clone(), r.clone(), hs.clone()],

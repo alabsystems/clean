@@ -37,6 +37,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_spectral_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_spectral(&mut self) -> Result<(), EnvError> {
         if self.topology_spectral_init {
             return Ok(());
@@ -73,6 +74,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_spectral_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_spectral(&self) -> bool {
         self.topology_spectral_init
     }
@@ -133,6 +135,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_sheaf_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_sheaf(&self) -> bool {
         self.topology_sheaf_init
     }
@@ -181,6 +184,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_scheme_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_scheme(&self) -> bool {
         self.topology_scheme_init
     }
@@ -204,6 +208,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_cobordism_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_cobordism(&mut self) -> Result<(), EnvError> {
         if self.topology_cobordism_init {
             return Ok(());
@@ -235,6 +240,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_cobordism_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_cobordism(&self) -> bool {
         self.topology_cobordism_init
     }
@@ -255,6 +261,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_characteristic_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_characteristic(&mut self) -> Result<(), EnvError> {
         if self.topology_characteristic_init {
             return Ok(());
@@ -287,6 +294,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_characteristic_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_characteristic(&self) -> bool {
         self.topology_characteristic_init
     }

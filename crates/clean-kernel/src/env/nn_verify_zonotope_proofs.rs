@@ -33,16 +33,20 @@
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
+use crate::expr::ExprKind;
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
 /// Shared constants for zonotope proof construction.
 pub(super) struct ZonoProofConsts {
     pub(super) nat: Expr,
+    #[cfg(test)]
     pub(super) prop: Expr,
     pub(super) nn_vec: Expr,
     pub(super) nn_mat: Expr,
+    #[cfg(test)]
     pub(super) ib: Expr,
     pub(super) ib_contains: Expr,
     pub(super) zonotope: Expr,
@@ -73,9 +77,11 @@ impl ZonoProofConsts {
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
+            #[cfg(test)]
             prop: Expr::from_kind(ExprKind::Sort(Level::zero())),
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             nn_mat: Expr::const_(Name::from_string("NNVerify.NNMat"), vec![]),
+            #[cfg(test)]
             ib: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
             ib_contains: Expr::const_(
                 Name::from_string("NNVerify.IntervalBounds.contains"),
@@ -152,6 +158,7 @@ impl ZonoProofConsts {
         Expr::app(Expr::app(self.nn_mat.clone(), m.clone()), n.clone())
     }
 
+    #[cfg(test)]
     pub(super) fn ib_of(&self, d: &Expr) -> Expr {
         Expr::app(self.ib.clone(), d.clone())
     }

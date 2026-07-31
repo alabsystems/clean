@@ -275,7 +275,7 @@ fn build_sign_pair_sum_value(c: &SignConsts) -> Expr {
     // For a fixed concrete `sv`, split on `t` and emit Eq.refl leaves
     // (each leaf lhs(sv,tv) ≡ rhs(sv,tv) by ground Rat reduction).
     let inner_rec = |sv: Expr, parent: &EnvDeclBuilder| {
-        let mut d = EnvDeclBuilder::child_of(parent);
+        let d = EnvDeclBuilder::child_of(parent);
         // motive_t : fun (t' : Bool) => lhs(sv,t') = rhs(sv,t')
         let motive_t = {
             let mut e = EnvDeclBuilder::child_of(&d);

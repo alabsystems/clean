@@ -14,28 +14,39 @@
 //! [`Unsupported`] the guard proves (never a plausible guess).
 
 pub(super) mod arithmetic;
+pub(super) mod binders;
 pub(super) mod connectives;
 pub(super) mod lists;
 pub(super) mod orders;
 pub(super) mod sets;
 pub(super) mod sublists;
 
-use super::super::isabelle_pure::IsaTerm;
+use super::super::isabelle_pure::{IsaTerm, IsaType};
 use super::term::translate_term;
 use super::types::{LeanTerm, Unsupported};
 
-/// Route an application head `n` (applied to `args`) to the pattern library.
+/// Route an application head `n` (with its own constant type `head_ty`, applied
+/// to `args`) to the pattern library.
 ///
 /// Returns `None` iff **no** fragment recognizes `n` (the caller reports
 /// [`Unsupported::UnknownConst`]); `Some(Ok)` for a faithful rendering; and
 /// `Some(Err)` when a fragment recognizes the constant but a guard declines
 /// (e.g. a polymorphic order/lattice) — the honest "recognized-but-unfaithful"
 /// signal.
-pub(super) fn dispatch(n: &str, args: &[&IsaTerm]) -> Option<Result<LeanTerm, Unsupported>> {
-    connectives::try_translate(n, args)
+///
+/// `head_ty` is the head `Const`'s already-instantiated type; the set fragment
+/// consumes it to guard the **nullary** lattice constants (`bot`/`top`), which
+/// carry no argument to inspect. Every other fragment guards on its arguments.
+pub(super) fn dispatch(
+    n: &str,
+    head_ty: &IsaType,
+    args: &[&IsaTerm],
+) -> Option<Result<LeanTerm, Unsupported>> {
+    binders::try_translate(n, args)
+        .or_else(|| connectives::try_translate(n, args))
         .or_else(|| arithmetic::try_translate(n, args))
         .or_else(|| lists::try_translate(n, args))
-        .or_else(|| sets::try_translate(n, args))
+        .or_else(|| sets::try_translate(n, head_ty, args))
         .or_else(|| orders::try_translate(n, args))
         .or_else(|| sublists::try_translate(n, args))
 }

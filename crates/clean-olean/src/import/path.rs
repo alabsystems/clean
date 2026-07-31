@@ -91,7 +91,11 @@ where
     paths
 }
 
-pub(crate) fn collect_default_search_paths<F, R>(mut var_lookup: F, mut read_dir: R) -> Vec<PathBuf>
+pub(crate) fn collect_default_search_paths_with_pinned<F, R>(
+    mut var_lookup: F,
+    mut read_dir: R,
+    pinned_lean_lib: Option<PathBuf>,
+) -> Vec<PathBuf>
 where
     F: for<'a> FnMut(&'a str) -> Option<std::ffi::OsString>,
     R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,
@@ -132,6 +136,15 @@ where
         }
     }
 
+    // The checkout's exact `lean-toolchain` pin is the only implicit stdlib
+    // path with version authority. Keep explicit caller paths above it, but
+    // place it before the deterministic, compatibility-only fallback scan.
+    if let Some(lib_path) = pinned_lean_lib {
+        if lib_path.exists() && seen.insert(lib_path.clone()) {
+            paths.push(lib_path);
+        }
+    }
+
     for var in ["HOME", "USERPROFILE"] {
         let Some(home) = var_lookup(var) else {
             continue;
@@ -142,7 +155,9 @@ where
             continue;
         };
 
-        for entry in entries.flatten() {
+        let mut entries: Vec<_> = entries.flatten().collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
             let name = entry.file_name();
             if name.to_string_lossy().contains("lean4") {
                 let lib_path = entry.path().join("lib/lean");
@@ -154,6 +169,15 @@ where
     }
 
     paths
+}
+
+#[cfg(test)]
+pub(crate) fn collect_default_search_paths<F, R>(var_lookup: F, read_dir: R) -> Vec<PathBuf>
+where
+    F: for<'a> FnMut(&'a str) -> Option<std::ffi::OsString>,
+    R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,
+{
+    collect_default_search_paths_with_pinned(var_lookup, read_dir, None)
 }
 
 pub fn toolchain_versions_from_search_paths(paths: &[PathBuf]) -> Vec<String> {
@@ -204,8 +228,9 @@ pub fn alias_resolvable_toolchain_versions(paths: &[PathBuf]) -> Option<Vec<Stri
 /// 2. `LEAN_PATH` environment variable entries (first match wins)
 /// 3. `LEAN_PACKAGES_PATH` lake project roots (discovers `build/lib` and
 ///    `.lake/packages/*/build/lib` under each root)
-/// 4. Lean4 toolchains under `.elan/toolchains/*/lib/lean` using `HOME` or
-///    `USERPROFILE` as the base directory
+/// 4. The exact Lean stdlib named by this checkout's `lean-toolchain`
+/// 5. Other Lean4 toolchains under `.elan/toolchains/*/lib/lean`, sorted by
+///    directory name, as compatibility-only fallbacks
 ///
 /// # REQUIRES
 /// - Environment variables may be unset; function must handle missing vars.
@@ -213,11 +238,12 @@ pub fn alias_resolvable_toolchain_versions(paths: &[PathBuf]) -> Option<Vec<Stri
 /// # ENSURES
 /// - Returns a de-duplicated list of existing paths.
 /// - Order preserves priority: `MATHLIB_PATH`, then `LEAN_PATH`, then packages,
-///   then toolchains.
+///   then the repository pin, then deterministic fallback toolchains.
 pub fn default_search_paths() -> Vec<PathBuf> {
-    collect_default_search_paths(
+    collect_default_search_paths_with_pinned(
         |key: &str| env::var_os(key),
         |path: &Path| std::fs::read_dir(path),
+        crate::pinned_lean_lib_path(),
     )
 }
 

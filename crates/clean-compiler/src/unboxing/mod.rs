@@ -226,7 +226,7 @@ pub fn count_box_unbox_ops(decl: &IRDecl) -> (u32, u32) {
 // ---------------------------------------------------------------------------
 
 /// Core optimization: transform an IR body, eliminating unnecessary box/unbox.
-fn optimize_body(body: &IRBody, ctx: &mut UnboxingContext) -> IRBody {
+fn optimize_body(body: &IRBody, ctx: &mut UnboxingContext<'_>) -> IRBody {
     match body {
         IRBody::VDecl {
             var,
@@ -274,7 +274,7 @@ fn optimize_case(
     scrutinee: VarId,
     alts: &[IRAlt],
     default: &Option<Box<IRBody>>,
-    ctx: &mut UnboxingContext,
+    ctx: &mut UnboxingContext<'_>,
 ) -> IRBody {
     let alts = alts
         .iter()
@@ -292,7 +292,7 @@ fn optimize_case(
 }
 
 /// Handle body variants that pass through unchanged (only recurse into rest).
-fn optimize_body_passthrough(body: &IRBody, ctx: &mut UnboxingContext) -> IRBody {
+fn optimize_body_passthrough(body: &IRBody, ctx: &mut UnboxingContext<'_>) -> IRBody {
     match body {
         IRBody::Inc { var, n, rest } => IRBody::Inc {
             var: *var,

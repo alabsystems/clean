@@ -48,7 +48,7 @@ pub(crate) use crate::object_model::{ctor_scalar_ptr, expect, expect_obj_kind};
 pub(crate) use crate::object_model::obj_fields_ptr;
 
 // Kani-only re-exports (used by kani_pointer_layout_tests.rs).
-#[cfg(any(test, kani))]
+#[cfg(kani)]
 pub(crate) use crate::object_model::{
     closure_args_ptr, closure_layout, ctor_layout, string_layout, OBJ_ALIGN,
 };

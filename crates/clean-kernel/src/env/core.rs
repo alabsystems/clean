@@ -224,6 +224,129 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // Prod.map : {α : Type u₁} {β : Type u₂} {γ : Type v₁} {δ : Type v₂} →
+        //   (α → β) → (γ → δ) → Prod α γ → Prod β δ
+        // Lean `Init/Prelude.lean`:
+        //   @[reducible] def Prod.map (f : α → β) (g : γ → δ) : α × γ → β × δ
+        //     | (a, c) => (f a, g c)
+        // Registered as a reducible axiom-free projection fold. Non-recursive:
+        // no recursor is needed — the pair is destructured with `Expr::proj`
+        // (mirroring `Prod.swap`). Without this, `p.map f g` / `Prod.map f g p`
+        // failed (missing const). The four universe params are in
+        // binder-appearance order [α, β, γ, δ] (see the Prod.swap fidelity note).
+        if self.get_const(&Name::from_string("Prod.map")).is_none() {
+            let ua = Name::from_string("u_1");
+            let ub = Name::from_string("u_2");
+            let uc = Name::from_string("u_3");
+            let ud = Name::from_string("u_4");
+            let type_ua = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(ua.clone()))));
+            let type_ub = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(ub.clone()))));
+            let type_uc = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(uc.clone()))));
+            let type_ud = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(ud.clone()))));
+            // Prod α γ (input, universes [u₁, v₁]) and Prod β δ (output, [u₂, v₂]).
+            let prod_ac = Expr::const_(
+                Name::from_string("Prod"),
+                vec![Level::param(ua.clone()), Level::param(uc.clone())],
+            );
+            let prod_bd = Expr::const_(
+                Name::from_string("Prod"),
+                vec![Level::param(ub.clone()), Level::param(ud.clone())],
+            );
+            let prod_mk_bd = Expr::const_(
+                Name::from_string("Prod.mk"),
+                vec![Level::param(ub.clone()), Level::param(ud.clone())],
+            );
+
+            // Prod.map type
+            let prod_map_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_ua.clone());
+                let (beta_id, beta) = b.fresh_local(type_ub.clone());
+                let (gamma_id, gamma) = b.fresh_local(type_uc.clone());
+                let (delta_id, delta) = b.fresh_local(type_ud.clone());
+                // f : α → β  (child builder — references parent fvars α, β)
+                let f_ty = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (a_id, _a) = c.fresh_local(alpha.clone());
+                    let r = c.mk_pi(a_id, BinderInfo::Default, alpha.clone(), beta.clone());
+                    c.finish_child(r)
+                };
+                // g : γ → δ
+                let g_ty = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (a_id, _a) = c.fresh_local(gamma.clone());
+                    let r = c.mk_pi(a_id, BinderInfo::Default, gamma.clone(), delta.clone());
+                    c.finish_child(r)
+                };
+                let (f_id, _f) = b.fresh_local(f_ty.clone());
+                let (g_id, _g) = b.fresh_local(g_ty.clone());
+                let prod_in = Expr::app(Expr::app(prod_ac.clone(), alpha.clone()), gamma.clone());
+                let (p_id, _p) = b.fresh_local(prod_in.clone());
+                let result = Expr::app(Expr::app(prod_bd.clone(), beta.clone()), delta.clone());
+                let e = b.mk_pi(p_id, BinderInfo::Default, prod_in, result);
+                let e = b.mk_pi(g_id, BinderInfo::Default, g_ty, e);
+                let e = b.mk_pi(f_id, BinderInfo::Default, f_ty, e);
+                let e = b.mk_pi(delta_id, BinderInfo::Implicit, type_ud.clone(), e);
+                let e = b.mk_pi(gamma_id, BinderInfo::Implicit, type_uc.clone(), e);
+                let e = b.mk_pi(beta_id, BinderInfo::Implicit, type_ub.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_ua.clone(), e);
+                b.finish(e)
+            };
+
+            // Prod.map value:
+            //   λ {α}{β}{γ}{δ} (f : α→β) (g : γ→δ) (p : Prod α γ) =>
+            //     @Prod.mk β δ (f p.1) (g p.2)
+            let prod_map_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_ua.clone());
+                let (beta_id, beta) = b.fresh_local(type_ub.clone());
+                let (gamma_id, gamma) = b.fresh_local(type_uc.clone());
+                let (delta_id, delta) = b.fresh_local(type_ud.clone());
+                let f_ty = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (a_id, _a) = c.fresh_local(alpha.clone());
+                    let r = c.mk_pi(a_id, BinderInfo::Default, alpha.clone(), beta.clone());
+                    c.finish_child(r)
+                };
+                let g_ty = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (a_id, _a) = c.fresh_local(gamma.clone());
+                    let r = c.mk_pi(a_id, BinderInfo::Default, gamma.clone(), delta.clone());
+                    c.finish_child(r)
+                };
+                let (f_id, f) = b.fresh_local(f_ty.clone());
+                let (g_id, g) = b.fresh_local(g_ty.clone());
+                let prod_in = Expr::app(Expr::app(prod_ac.clone(), alpha.clone()), gamma.clone());
+                let (p_id, p) = b.fresh_local(prod_in.clone());
+                // @Prod.mk β δ (f p.1) (g p.2)
+                let fst = Expr::app(f, Expr::proj(Name::from_string("Prod"), 0, p.clone()));
+                let snd = Expr::app(g, Expr::proj(Name::from_string("Prod"), 1, p));
+                let body = Expr::app(
+                    Expr::app(
+                        Expr::app(Expr::app(prod_mk_bd.clone(), beta.clone()), delta.clone()),
+                        fst,
+                    ),
+                    snd,
+                );
+                let e = b.mk_lam(p_id, BinderInfo::Default, prod_in, body);
+                let e = b.mk_lam(g_id, BinderInfo::Default, g_ty, e);
+                let e = b.mk_lam(f_id, BinderInfo::Default, f_ty, e);
+                let e = b.mk_lam(delta_id, BinderInfo::Implicit, type_ud.clone(), e);
+                let e = b.mk_lam(gamma_id, BinderInfo::Implicit, type_uc.clone(), e);
+                let e = b.mk_lam(beta_id, BinderInfo::Implicit, type_ub.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_ua.clone(), e);
+                b.finish(e)
+            };
+
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("Prod.map"),
+                level_params: vec![ua, ub, uc, ud],
+                type_: prod_map_type,
+                value: prod_map_value,
+                is_reducible: true,
+            })?;
+        }
+
         // Register structure fields for dot-projection support
         self.register_structure_fields(
             Name::from_string("Prod"),

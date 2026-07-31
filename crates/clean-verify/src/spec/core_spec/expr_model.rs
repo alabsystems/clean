@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! Kernel expression model: KExpr, lift, instantiate (PART 4 + lift_at lemmas)
@@ -15,7 +15,7 @@ impl Specification {
         // =========================================================
         // PART 4: Kernel Expression Model
         // =========================================================
-        // KExpr models the 6-constructor fragment of kernel expressions used by
+        // KExpr models the 9-constructor fragment of kernel expressions used by
         // the current refinement packet.
         // This enables formal reasoning about type checking operations.
 

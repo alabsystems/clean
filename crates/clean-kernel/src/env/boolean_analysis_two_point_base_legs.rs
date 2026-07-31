@@ -76,16 +76,20 @@ struct TwoPointLegConsts {
     rat_mk: Expr,
     rat_add: Expr,
     rat_mul: Expr,
+    #[cfg(test)]
     rat_sub: Expr,
     rat_le: Expr,
     rat_add_cube: Expr,
+    #[cfg(test)]
     rat_left_distrib: Expr,
     rat_right_distrib: Expr,
+    #[cfg(test)]
     rat_mul_comm: Expr,
     rat_mul_assoc: Expr,
     rat_add_assoc: Expr,
     rat_one_mul: Expr,
     rat_mul_one: Expr,
+    #[cfg(test)]
     rat_le_of_sub_nonneg: Expr,
     rat_le_add_of_nonneg_right: Expr,
     rat_le_trans: Expr,
@@ -135,16 +139,20 @@ impl TwoPointLegConsts {
             rat_mk: k("Rat.mk"),
             rat_add: k("Rat.add"),
             rat_mul: k("Rat.mul"),
+            #[cfg(test)]
             rat_sub: k("Rat.sub"),
             rat_le: k("Rat.le"),
             rat_add_cube: k("Rat.add_cube"),
+            #[cfg(test)]
             rat_left_distrib: k("Rat.left_distrib"),
             rat_right_distrib: k("Rat.right_distrib"),
+            #[cfg(test)]
             rat_mul_comm: k("Rat.mul_comm"),
             rat_mul_assoc: k("Rat.mul_assoc"),
             rat_add_assoc: k("Rat.add_assoc"),
             rat_one_mul: k("Rat.one_mul"),
             rat_mul_one: k("Rat.mul_one"),
+            #[cfg(test)]
             rat_le_of_sub_nonneg: k("Rat.le_of_sub_nonneg"),
             rat_le_add_of_nonneg_right: k("Rat.le_add_of_nonneg_right"),
             rat_le_trans: k("Rat.le_trans"),
@@ -200,6 +208,7 @@ impl TwoPointLegConsts {
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn sub(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_sub.clone(), [a, b])
     }
@@ -234,6 +243,7 @@ impl TwoPointLegConsts {
             [self.rat.clone(), motive, a, b, h_eq, h],
         )
     }
+    #[cfg(test)]
     fn congr_rat(&self, a: Expr, b: Expr, f: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg11.clone(),
@@ -306,6 +316,7 @@ impl TwoPointLegConsts {
             [a.clone(), b.clone(), cc.clone()],
         )
     }
+    #[cfg(test)]
     fn mul_comm(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.rat_mul_comm.clone(), [a.clone(), b.clone()])
     }
@@ -331,6 +342,7 @@ impl TwoPointLegConsts {
         )
     }
     /// `Rat.le_of_sub_nonneg a b (0 ≤ b−a) : a ≤ b`.
+    #[cfg(test)]
     fn le_of_sub_nonneg(&self, a: &Expr, b: &Expr, h: Expr) -> Expr {
         Expr::apps(self.rat_le_of_sub_nonneg.clone(), [a.clone(), b.clone(), h])
     }
@@ -423,6 +435,7 @@ impl TwoPointLegConsts {
     fn ofrat(&self, x: &Expr, h: &Expr) -> Expr {
         Expr::apps(self.nnreal_of_rat.clone(), [x.clone(), h.clone()])
     }
+    #[cfg(test)]
     fn eq_nn(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nnreal.clone(), a, b])
     }

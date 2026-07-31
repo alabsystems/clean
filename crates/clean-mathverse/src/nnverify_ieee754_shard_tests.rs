@@ -7,12 +7,11 @@
 use super::*;
 use clean_kernel::Name;
 
-/// TEMP inventory probe (run once to confirm the published set matches what the
-/// kernel registers): print every float-theory constant + its kind + axiom-dep
-/// count. Ignored so it never runs in the normal suite.
+/// The published declaration inventory must exactly match the float-theory
+/// constants registered by the kernel. This catches both missing declarations
+/// and accidental publication drift.
 #[test]
-#[ignore = "inventory probe; run explicitly with --ignored"]
-fn probe_ieee754_inventory() {
+fn published_decls_match_registered_inventory() {
     let env = seed_ieee754_environment().expect("seed");
     let mut names: Vec<String> = env
         .constants()
@@ -25,16 +24,12 @@ fn probe_ieee754_inventory() {
         })
         .collect();
     names.sort();
-    for n in &names {
-        let info = env.get_const(&Name::from_string(n)).unwrap();
-        let deps = env
-            .axiom_deps(&Name::from_string(n))
-            .map(|d| d.len())
-            .unwrap_or(usize::MAX);
-        eprintln!("{:?}\t{}\tdeps={}", info.kind, n, deps);
-    }
-    eprintln!("TOTAL_FLOAT_CONSTANTS={}", names.len());
-    eprintln!("PUBLISHED={}", NNVERIFY_IEEE754_DECLS.len());
+    let mut published: Vec<String> = NNVERIFY_IEEE754_DECLS
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect();
+    published.sort();
+    assert_eq!(names, published);
 }
 
 /// Every published name in [`NNVERIFY_IEEE754_DECLS`] is actually registered by
@@ -241,31 +236,4 @@ fn register_is_idempotent() {
         count, 1,
         "re-registration must not duplicate the manifest entry"
     );
-}
-
-/// MANUAL one-shot: write the shard + manifest entry into the REAL in-repo
-/// library at `data/mathverse-library/`. Ignored so the normal suite never
-/// mutates the repo; run explicitly to (re)generate the registered shard.
-#[test]
-#[ignore = "writes into data/mathverse-library; run explicitly to register"]
-fn register_into_repo_library() {
-    let root =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/mathverse-library");
-    let reg = register_nnverify_ieee754_shard(&root).expect("register into repo library");
-    let shard_path = root
-        .join(NNVERIFY_IEEE754_SHARD_SUBDIR)
-        .join(format!("{NNVERIFY_IEEE754_SHARD_NAME}.mathverse"));
-    let verify = verify_nnverify_ieee754_shard(&shard_path).expect("verify");
-    eprintln!(
-        "REGISTERED path={} hash={} constants={} exprs={}",
-        reg.entry.path, reg.entry.content_hash, reg.entry.constant_count, reg.entry.expr_count
-    );
-    eprintln!(
-        "VERIFY total={} rechecked={} empty_closure_verified={} clean={}",
-        verify.total,
-        verify.kernel_rechecked,
-        verify.empty_closure_verified.len(),
-        verify.is_clean()
-    );
-    assert!(verify.is_clean());
 }

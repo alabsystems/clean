@@ -93,6 +93,7 @@ struct AsmConsts {
     noise_op: Expr,
     noise_fn: Expr,
     subset_sum: Expr,
+    #[cfg(test)]
     subset_sum_congr: Expr,
     fin_sum_nonneg: Expr,
     mul_nonneg: Expr,
@@ -136,6 +137,7 @@ impl AsmConsts {
             noise_op: k("BoolAnalysis.noiseOp"),
             noise_fn: k("BoolAnalysis.noiseFn"),
             subset_sum: k("BoolAnalysis.subsetSum"),
+            #[cfg(test)]
             subset_sum_congr: k("BoolAnalysis.subsetSum_congr"),
             fin_sum_nonneg: k("Fin.sum_nonneg"),
             mul_nonneg: k("Rat.mul_nonneg"),
@@ -168,6 +170,7 @@ impl AsmConsts {
     fn le(&self, a: Expr, b: Expr) -> Expr {
         self.order.rat_le(a, b)
     }
+    #[cfg(test)]
     fn le0(&self, a: Expr) -> Expr {
         self.le(self.zero(), a)
     }
@@ -225,6 +228,7 @@ impl AsmConsts {
     fn hcpoint_of(&self, n: &Expr) -> Expr {
         Expr::app(self.hcpoint.clone(), n.clone())
     }
+    #[cfg(test)]
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat())
     }
@@ -264,6 +268,7 @@ impl AsmConsts {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
     /// `subsetSum_congr n G H pw`.
+    #[cfg(test)]
     fn ssum_congr(&self, n: &Expr, g: Expr, h: Expr, pw: Expr) -> Expr {
         Expr::apps(self.subset_sum_congr.clone(), [n.clone(), g, h, pw])
     }

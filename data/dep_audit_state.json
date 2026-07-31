@@ -1,11 +1,12 @@
 {
-  "note": "Per-crate supply-chain AUDIT state (paragon axis 1: 'every third-party dependency verified'). This is the per-crate human/imported attestation layer that complements the cargo-deny GATE recorded in data/dep_boundary_state.json. cargo-deny checks advisories/licenses/bans/sources over the whole graph; cargo-vet adds per-crate audit attestation: each third-party crate-version is either (a) covered by a trusted imported audit registry (Mozilla/Google/Bytecode Alliance/Embark/ISRG/Zcash), (b) audited locally in supply-chain/audits.toml, or (c) carried as an exemption (the unaudited baseline snapshotted by `cargo vet init`). Goal is a MONOTONIC tracker: the audited fraction only rises (exemptions only shrink) as more crates are covered by imports or locally audited. ENFORCEMENT: a SOFT/informational `cargo vet` step in scripts/local_gate.sh (FULL mode) prints coverage % and the unaudited count as a tracked metric — it is intentionally NOT a hard fail-closed gate while exemptions remain, so it does not block every push.",
+  "note": "Historical per-crate supply-chain AUDIT measurement (paragon axis 1: 'every third-party dependency verified'). cargo-vet remains a SOFT/informational FULL-mode tracker, but the figures below predate AY's migration from sibling paths to an immutable Git source. They must not be presented as current graph coverage until cargo-vet is rerun and first-party AY is classified explicitly.",
+  "snapshot_status": "STALE_REQUIRES_RERUN_AFTER_AY_GIT_MIGRATION",
   "tool": "cargo-vet",
   "tool_version": "0.10.2",
   "checked_on": "2026-06-30",
   "supply_chain_dir": "supply-chain/ (config.toml + audits.toml + imports.lock — audit attestations only, ~70KB; NOT vendored crate source)",
-  "scope_note": "First-party code is OUT of scope for third-party accounting: cargo-vet treats the 27 clean workspace crates and the ../ay path-dep stack (69 path packages incl ../ay) as first-party/exempt-by-source. The audit accounting below covers ONLY the crates.io registry third-party crates.",
-  "vet_status": "Vetting Succeeded (exemptions cover the unaudited remainder; cargo vet exits 0)",
+  "scope_note": "Historical scope: cargo-vet treated the 27 Clean workspace crates and the former ../ay path stack as first-party/exempt-by-source. AY is now an immutable first-party Git source, so the current classification and counts require a fresh run. The figures below cover only the 2026-06-30 pre-migration graph.",
+  "vet_status": "STALE: historical Vetting Succeeded result; current AY Git graph not yet measured",
   "coverage_package_versions": {
     "comment": "cargo-vet's authoritative count is by crate-VERSION over the default-target resolved graph (this is what the gate reports).",
     "total": 384,
@@ -23,6 +24,7 @@
     "audited_fraction_pct": 20.4
   },
   "graph_breakdown": {
+    "measurement_status": "historical_pre_AY_git_migration",
     "total_packages": 432,
     "workspace_members_first_party": 27,
     "path_deps_first_party_incl_ay": 69,
@@ -74,10 +76,11 @@
     ]
   },
   "vendoring_status": {
-    "summary": "cargo-vet records audit ATTESTATIONS only (small supply-chain/ dir). It does NOT vendor crate source. The VENDORING half of axis 1 is now implemented as tooling + a release artifact (NOT committed to git), resolving the prior 'deferred' decision.",
-    "implemented": "A `cargo vendor --versioned-dirs vendor/` tree (385 crates: 384 crates.io + 1 git carcara, ~522.6MB source -> ~63MB tar.zst) is produced as an OFFLINE-REPRODUCIBLE, TAMPER-EVIDENT artifact. Following the repo's release-artifact convention (like .mathverse shards / mathverse-library-v*.tar.zst), the vendor/ tree is GITIGNORED and published as vendor-sources-v*.tar.zst, NOT committed. See docs/SUPPLY_CHAIN_VENDORING.md.",
+    "summary": "cargo-vet records audit ATTESTATIONS only; it does not vendor source. The historical pre-AY-Git graph had an external-source release artifact, but vendoring for the current graph is BLOCKED until third-party-only staging and separate first-party AY/NY subrepo provisioning are implemented.",
+    "internal_repository_policy": "AY and every other Andrew Yates internal repository are first-party subrepos and MUST NOT be copied into vendor/ or a vendor release artifact. The recorded artifact predates AY's Git migration; do not refresh it with raw `cargo vendor` until a third-party-only staging flow is in place.",
+    "implemented": "Historical pre-AY-Git artifact: a `cargo vendor --versioned-dirs vendor/` tree (385 external crates: 384 crates.io + 1 git carcara, ~522.6MB source -> ~63MB tar.zst) was produced as an OFFLINE-REPRODUCIBLE, TAMPER-EVIDENT release artifact. It remains GITIGNORED and was never committed. The raw command is no longer a valid refresh recipe because it would copy first-party AY.",
     "tamper_evidence": "data/vendor_manifest.json pins every vendored crate by name+version+checksum. crates.io crates use the registry sha256 (asserted equal to Cargo.lock's `checksum =` at generation time); the git crate uses a deterministic sha256 over cargo's per-file checksum map. Regenerate with scripts/gen_vendor_manifest.py and diff to detect source drift.",
-    "offline_wiring": "OPT-IN via .cargo/config.offline.toml (NEVER the default .cargo/config.toml — that would force vendored resolution and break checkouts lacking the gitignored tree). Invoked via `cargo --config .cargo/config.offline.toml --offline ...` or scripts/build_offline.sh. Verified: default online build unchanged; offline build resolves + compiles clean-kernel from vendor/.",
+    "offline_wiring": "Historical result only: the opt-in .cargo/config.offline.toml resolved the pre-migration graph and compiled clean-kernel. It has no current AY subrepo authority. scripts/build_offline.sh now rejects the stale artifact/current lock pairing before Cargo; no current offline-build claim is made.",
     "package_verify": "scripts/package_vendor.sh {package,verify} tar.zst's the tree with a sha256 sidecar and a re-extract+re-checksum verify step, mirroring crates/clean-mathverse/src/release.rs's package/verify pattern."
   },
   "enforcement": {
@@ -85,8 +88,9 @@
     "ratchet_contract": "audited fraction monotonic-up / exemption count monotonic-down. Regenerate after any dep-graph change or new local audit; re-run `cargo vet` + the by-name accounting and update this file. A future hard-gate flip is possible once exemptions reach 0."
   },
   "follow_ups": [
+    "Rerun cargo-vet against the current AY Git graph, classify first-party AY explicitly, and replace the historical counts before claiming current coverage.",
     "Locally audit the 9 highest-risk unaudited crates (5 native-C/FFI + 4 large-unsafe) in supply-chain/audits.toml to shrink the exemption set where no trusted import exists.",
     "Re-import the trusted registries periodically (cargo vet import --update) to pick up newly-published audits and shrink exemptions for free.",
-    "Vendoring DONE (release-artifact convention): vendor/ gitignored, published as vendor-sources-v*.tar.zst, tamper-evidence in data/vendor_manifest.json. Regenerate the vendor tree + manifest on any Cargo.lock change (cargo vendor --versioned-dirs vendor/ && python3 scripts/gen_vendor_manifest.py); see docs/SUPPLY_CHAIN_VENDORING.md."
+    "Implement a third-party-only staging flow before refreshing vendor-sources-v*.tar.zst. It must provision AY/NY as separate first-party subrepos and prove no internal source enters vendor/ or the release artifact; raw `cargo vendor` is forbidden for the current graph."
   ]
 }

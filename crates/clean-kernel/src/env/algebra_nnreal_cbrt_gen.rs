@@ -223,6 +223,7 @@ impl CbrtGenConsts {
             ],
         )
     }
+    #[cfg(test)]
     fn symm_nn(&self, a: &Expr, b: &Expr, h: Expr) -> Expr {
         Expr::apps(
             self.eq_symm1.clone(),

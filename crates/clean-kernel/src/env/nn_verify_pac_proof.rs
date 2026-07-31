@@ -76,6 +76,7 @@ pub(super) struct PacProofConsts {
     pub(super) lt_lt: Expr,
     pub(super) inst_le_rat: Expr,
     pub(super) inst_lt_rat: Expr,
+    #[cfg(test)]
     pub(super) and: Expr,
     pub(super) real_exp: Expr,
     pub(super) neg: Expr,
@@ -86,6 +87,7 @@ pub(super) struct PacProofConsts {
     pub(super) coverage_volume: Expr,
     pub(super) miss_probability: Expr,
     pub(super) proof_certificate: Expr,
+    #[cfg(test)]
     pub(super) pac_confidence: Expr,
 }
 
@@ -106,6 +108,7 @@ impl PacProofConsts {
             lt_lt: Expr::const_(Name::from_string("LT.lt"), vec![Level::zero()]),
             inst_le_rat: Expr::const_(Name::from_string("instLERat"), vec![]),
             inst_lt_rat: Expr::const_(Name::from_string("instLTRat"), vec![]),
+            #[cfg(test)]
             and: Expr::const_(Name::from_string("And"), vec![]),
             real_exp: Expr::const_(Name::from_string("NNVerify.Lipschitz.real_exp"), vec![]),
             neg: Expr::const_(Name::from_string("Rat.neg"), vec![]),
@@ -131,6 +134,7 @@ impl PacProofConsts {
                 Name::from_string("NNVerify.PacProof.proof_certificate"),
                 vec![],
             ),
+            #[cfg(test)]
             pac_confidence: Expr::const_(
                 Name::from_string("NNVerify.PacProof.pac_confidence"),
                 vec![],

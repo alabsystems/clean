@@ -10,14 +10,21 @@
 //!
 //! Reference: Lean 4 `Init/WF.lean` lines 60-120.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::wf_recursion_support::mk_rel_type;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Build `∀ (y : α), r y x → T y` as a child expression.
+#[cfg(test)]
 fn mk_forall_r_implies(
     parent: &EnvDeclBuilder,
     alpha: &Expr,
@@ -40,6 +47,7 @@ fn mk_forall_r_implies(
 }
 
 /// Build `C` type `(α → Sort v)` as a child expression.
+#[cfg(test)]
 fn mk_c_type(parent: &EnvDeclBuilder, alpha: &Expr, sort_v: &Expr) -> Expr {
     let mut s = EnvDeclBuilder::child_of(parent);
     let (a_id, _) = s.fresh_local(alpha.clone());
@@ -48,6 +56,7 @@ fn mk_c_type(parent: &EnvDeclBuilder, alpha: &Expr, sort_v: &Expr) -> Expr {
 }
 
 /// Build `F` type `((x : α) → ((y : α) → r y x → C y) → C x)`.
+#[cfg(test)]
 fn mk_step_type(parent: &EnvDeclBuilder, alpha: &Expr, r: &Expr, c: &Expr) -> Expr {
     let mut s = EnvDeclBuilder::child_of(parent);
     let (x_id, x) = s.fresh_local(alpha.clone());
@@ -63,11 +72,13 @@ fn mk_step_type(parent: &EnvDeclBuilder, alpha: &Expr, r: &Expr, c: &Expr) -> Ex
     s.finish_child(t)
 }
 
+#[cfg(test)]
 impl Environment {
     /// `Acc.inv` — given `Acc r x` and `r y x`, produce `Acc r y`.
     ///
     /// Implemented via `@Acc.rec` with motive `fun x' _ => ∀ y, r y x' → Acc r y`.
     /// The step function just returns the sub-accessibility field `h`.
+    #[cfg(test)]
     pub(super) fn init_acc_inv(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -221,6 +232,7 @@ impl Environment {
     /// `axiom_deps(WellFounded.fixFEq)` is EMPTY: the proof references only
     /// `Acc.rec` (kernel recursor), `WellFounded.fixF`, `Acc.inv`, `Acc.intro`,
     /// and `Eq`/`Eq.refl` — all axiom-free Definitions / inductives.
+    #[cfg(test)]
     pub(super) fn init_fix_f_eq(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let v = Name::from_string("v");
@@ -445,6 +457,7 @@ impl Environment {
     /// `WellFounded.recursion` — alias for `WellFounded.fix`.
     ///
     /// Some equation compiler paths reference this name instead of `fix`.
+    #[cfg(test)]
     pub(super) fn init_wf_recursion(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let v = Name::from_string("v");

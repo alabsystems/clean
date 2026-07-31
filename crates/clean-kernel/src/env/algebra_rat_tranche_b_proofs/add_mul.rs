@@ -25,6 +25,7 @@ use crate::name::Name;
 /// Returns `h_num : Int.add zero_times_den numa_times_one = num_a`
 /// built from `Int.zero_mul + Int.zero_add + Int.mul_one` and two `Eq.trans`
 /// through a single `congrArg (fun x => Int.add x numa_times_one)`.
+#[cfg(any(test, feature = "math-overlays"))]
 fn build_zero_add_num_chain(
     sym: &TrancheBSymbols,
     b: &EnvDeclBuilder,
@@ -99,6 +100,7 @@ fn build_zero_add_num_chain(
 /// Returns `h_num : Int.add numa_times_one zero_times_den = num_a` built
 /// from `Int.mul_one + Int.zero_mul + Int.add_zero` and two `Eq.trans`
 /// through two `congrArg`s (one on each side of `Int.add`).
+#[cfg(any(test, feature = "math-overlays"))]
 fn build_add_zero_num_chain(
     sym: &TrancheBSymbols,
     b: &EnvDeclBuilder,
@@ -192,6 +194,7 @@ impl Environment {
     ///
     /// Numerator chain via `build_zero_add_num_chain`; denominator chain
     /// is the single lemma `Nat.one_mul (Rat.denom a)`.
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(crate) fn register_rat_zero_add_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.zero_add");
         if self.get_const(&name).is_some() {
@@ -264,6 +267,7 @@ impl Environment {
     /// Register `Rat.add_zero : ∀ a : Rat, Rat.add a Rat.zero = a`.
     /// Symmetric to `Rat.zero_add`; numerator chain via
     /// `build_add_zero_num_chain`; denominator is `Nat.mul_one (Rat.denom a)`.
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(crate) fn register_rat_add_zero_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.add_zero");
         if self.get_const(&name).is_some() {
@@ -336,6 +340,7 @@ impl Environment {
     /// ```
     ///
     /// Numerator: `Int.one_mul (Rat.num a)`. Denominator: `Nat.one_mul (Rat.denom a)`.
+    #[cfg(test)]
     pub(crate) fn register_rat_one_mul_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.one_mul");
         if self.get_const(&name).is_some() {
@@ -389,6 +394,7 @@ impl Environment {
 
     /// Register `Rat.mul_one : ∀ a : Rat, Rat.mul a Rat.one = a`.
     /// Symmetric to `Rat.one_mul`.
+    #[cfg(test)]
     pub(crate) fn register_rat_mul_one_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.mul_one");
         if self.get_const(&name).is_some() {

@@ -28,6 +28,7 @@ struct NNFoundationConsts {
     nn_vec: Expr,
     nn_mat: Expr,
     interval_bounds: Expr,
+    #[cfg(test)]
     zonotope: Expr,
     rat_abs: Expr,
     rat_sub: Expr,
@@ -43,6 +44,7 @@ impl NNFoundationConsts {
             nn_vec: Expr::const_(Name::from_string("NNVerify.NNVec"), vec![]),
             nn_mat: Expr::const_(Name::from_string("NNVerify.NNMat"), vec![]),
             interval_bounds: Expr::const_(Name::from_string("NNVerify.IntervalBounds"), vec![]),
+            #[cfg(test)]
             zonotope: Expr::const_(Name::from_string("NNVerify.Zonotope"), vec![]),
             rat_abs: Expr::const_(Name::from_string("Rat.abs"), vec![]),
             rat_sub: Expr::const_(Name::from_string("Rat.sub"), vec![]),
@@ -62,6 +64,7 @@ impl NNFoundationConsts {
         Expr::app(self.interval_bounds.clone(), d.clone())
     }
 
+    #[cfg(test)]
     fn zono_of(&self, n: &Expr, k: &Expr) -> Expr {
         Expr::app(Expr::app(self.zonotope.clone(), n.clone()), k.clone())
     }

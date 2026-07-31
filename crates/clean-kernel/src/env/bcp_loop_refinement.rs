@@ -15,13 +15,19 @@
 //! `isasat_refinement.rs`: it registers only the type and operation surfaces
 //! needed by later theorem modules.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared constants used across all BCP loop refinement declarations.
+#[cfg(test)]
 pub(super) struct BCPLoopConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,
@@ -41,7 +47,9 @@ pub(super) struct BCPLoopConsts {
     pub(super) bcp_result: Expr,
 }
 
+#[cfg(test)]
 impl BCPLoopConsts {
+    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -59,6 +67,7 @@ impl BCPLoopConsts {
 }
 
 /// Register an axiom with idempotency check.
+#[cfg(test)]
 fn add_bcp_loop_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<(), EnvError> {
     if env.get_const(&Name::from_string(name)).is_some() {
         return Ok(());
@@ -70,11 +79,12 @@ fn add_bcp_loop_axiom(env: &mut Environment, name: &str, type_: Expr) -> Result<
     })
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize BCP loop refinement declarations.
     ///
     /// Depends on: `init_bool()`, `init_nat()`, `init_isasat_refinement()`.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_bcp_loop_refinement(&mut self) -> Result<(), EnvError> {
         if self.bcp_loop_refinement_init {
             return Ok(());
@@ -120,7 +130,7 @@ impl Environment {
     // ====================================================================
 
     /// `Literal : Type` -- Nat-indexed literal surface.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_literal(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(self, "BCPLoop.Literal", c.type0.clone())?;
         add_bcp_loop_axiom(
@@ -131,7 +141,7 @@ impl Environment {
     }
 
     /// `WatchEntry : Type` -- watched-literal entry for one clause occurrence.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_watch_entry(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(self, "BCPLoop.WatchEntry", c.type0.clone())?;
         add_bcp_loop_axiom(
@@ -169,13 +179,13 @@ impl Environment {
     }
 
     /// `WatchList : Type` -- mutable array of watch entries.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_watch_list(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(self, "BCPLoop.WatchList", c.type0.clone())
     }
 
     /// `ImperativeState : Type` -- mutable BCP loop state with scan pointers.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_imperative_state(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         let isasat_trail = Expr::const_(Name::from_string("IsaSAT.Trail"), vec![]);
 
@@ -229,14 +239,14 @@ impl Environment {
 
     /// `AbstractBCPState : Type` -- abstract propagation state used by the
     /// high-level BCP specification.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_abstract_bcp_state(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(self, "BCPLoop.AbstractBCPState", c.type0.clone())
     }
 
     /// `BCPResult : Type` -- propagation outcome with `ok` and `conflict`
     /// constructors.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_bcp_result(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(self, "BCPLoop.BCPResult", c.type0.clone())?;
         add_bcp_loop_axiom(self, "BCPLoop.BCPResult.ok", c.bcp_result.clone())?;
@@ -250,7 +260,7 @@ impl Environment {
     /// `propagate_abstract : AbstractBCPState -> BCPResult`.
     ///
     /// The abstract BCP specification over the propagation state.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_propagate_abstract(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(
             self,
@@ -266,7 +276,7 @@ impl Environment {
     /// `propagate_imperative : ImperativeState -> BCPResult`.
     ///
     /// The imperative BCP loop using a mutable watch array and two-pointer scan.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_propagate_imperative(
         &mut self,
         c: &BCPLoopConsts,
@@ -286,7 +296,7 @@ impl Environment {
     ///
     /// Given a watch entry and one watched literal, recover the other watched
     /// literal using the usual XOR trick.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_xor_other_watched(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -308,7 +318,7 @@ impl Environment {
     ///
     /// Fast-path check: if the blocker literal is satisfied, the watch entry can
     /// stay in place without scanning the full clause body.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_blocker_check(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -330,7 +340,7 @@ impl Environment {
     ///
     /// Detect whether the watched clause is binary, enabling the direct
     /// propagation/conflict fast path.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_is_binary_clause(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(
             self,
@@ -343,7 +353,7 @@ impl Environment {
     ///
     /// One in-place watch-list compaction step using the standard `j <= i`
     /// invariant of the imperative two-pointer scan.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_bcp_loop_compaction_step(&mut self, c: &BCPLoopConsts) -> Result<(), EnvError> {
         add_bcp_loop_axiom(
             self,

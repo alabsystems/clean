@@ -118,14 +118,12 @@ impl ReleaseReadinessSmokeRunner {
         self.require_file("docs/plans/LEAN4_REPLACEMENT_PLAN.md");
         self.require_file("Cargo.toml");
         self.require_file("README.md");
-        self.require_file("CHANGELOG.md");
         self.require_file("CITATION.cff");
         self.require_file("SUPPORT.md");
         self.require_file("docs/BENCHMARKS.md");
         self.require_file("docs/DESIGN.md");
         self.require_file("docs/PUBLIC_DEMO.md");
         self.require_file("docs/VERIFICATION_AUDIT.md");
-        self.require_file("docs/VERIFICATION_METRICS.md");
         self.require_file("demos/public/kernel_check_success.lean");
         self.require_file("demos/public/kernel_check_reject_sorry.lean");
         self.require_file("scripts/run_public_demo.sh");

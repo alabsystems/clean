@@ -25,8 +25,11 @@
 //!
 //! Part of #3189.
 
+#[cfg(test)]
 use super::abstract_interpretation::AbstractInterpConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -42,6 +45,7 @@ use crate::expr::{BinderInfo, Expr};
 /// In the classical framework (Cousot & Cousot 1977), this is
 /// `F : P(State) -> P(State)` — the concrete transfer function whose
 /// least fixpoint gives the collecting semantics.
+#[cfg(test)]
 pub(super) fn build_concrete_semantics_type(c: &AbstractInterpConsts) -> Expr {
     // ConcreteSemantics : AbstractState -> AbstractState
     Expr::pi(
@@ -56,6 +60,7 @@ pub(super) fn build_concrete_semantics_type(c: &AbstractInterpConsts) -> Expr {
 /// Abstract semantics: a monotone function on abstract lattice elements.
 /// Models `F# : AbstractState -> AbstractState` — the abstract transfer
 /// function that over-approximates the concrete semantics.
+#[cfg(test)]
 pub(super) fn build_abstract_semantics_type(c: &AbstractInterpConsts) -> Expr {
     // AbstractSemantics : AbstractState -> AbstractState
     Expr::pi(
@@ -75,6 +80,7 @@ pub(super) fn build_abstract_semantics_type(c: &AbstractInterpConsts) -> Expr {
 /// Key property: `a <= widen(a, b)` and `b <= widen(a, b)`, and the
 /// widening chain `a0, widen(a0, F#(a0)), widen(..., F#(...)), ...`
 /// stabilizes.
+#[cfg(test)]
 pub(super) fn build_widening_type(c: &AbstractInterpConsts) -> Expr {
     // Widening : AbstractState -> AbstractState -> AbstractState
     Expr::pi(
@@ -97,6 +103,7 @@ pub(super) fn build_widening_type(c: &AbstractInterpConsts) -> Expr {
 ///
 /// Key property: `narrow(a, b) <= a` (refining) and if `b <= a` then
 /// `b <= narrow(a, b)` (soundness preservation).
+#[cfg(test)]
 pub(super) fn build_narrowing_type(c: &AbstractInterpConsts) -> Expr {
     // Narrowing : AbstractState -> AbstractState -> AbstractState
     Expr::pi(
@@ -124,6 +131,7 @@ pub(super) fn build_narrowing_type(c: &AbstractInterpConsts) -> Expr {
 /// - `init` : initial abstract state (typically bottom)
 ///
 /// Returns the widened fixpoint approximation after `fuel` steps.
+#[cfg(test)]
 pub(super) fn build_fixpoint_iteration_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     // f : AbstractState -> AbstractState
@@ -176,6 +184,7 @@ pub(super) fn build_fixpoint_iteration_type(c: &AbstractInterpConsts) -> Expr {
 /// over-approximates the concrete transfer function.
 /// (The real mathematical content — that this holds for all reachable
 /// states under the Galois connection — is in the backing axiom.)
+#[cfg(test)]
 pub(super) fn build_soundness_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     // f_concrete : AbstractState -> AbstractState
@@ -209,6 +218,7 @@ pub(super) fn build_soundness_type(c: &AbstractInterpConsts) -> Expr {
 /// the descending chain condition (finite height of widened chains),
 /// this ensures termination of the widened Kleene iteration.
 /// The real content (that widened chains stabilize) is in the backing axiom.
+#[cfg(test)]
 pub(super) fn build_widening_termination_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let widen_ty = Expr::pi(
@@ -243,6 +253,7 @@ pub(super) fn build_widening_termination_type(c: &AbstractInterpConsts) -> Expr 
 /// Narrowing is a refinement: if b <= a (the new iterate is below the
 /// current), then narrow(a, b) <= a (the narrowed result is still below
 /// the current — it descends monotonically).
+#[cfg(test)]
 pub(super) fn build_narrowing_refines_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let narrow_ty = Expr::pi(
@@ -282,6 +293,7 @@ pub(super) fn build_narrowing_refines_type(c: &AbstractInterpConsts) -> Expr {
 /// The computed fixpoint (via widened Kleene iteration) is a sound
 /// over-approximation: it is a post-fixpoint of the concrete semantics.
 /// This means every concrete reachable state is below the computed fixpoint.
+#[cfg(test)]
 pub(super) fn build_fixpoint_sound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let f_ty = Expr::pi(
@@ -334,6 +346,7 @@ pub(super) fn build_fixpoint_sound_type(c: &AbstractInterpConsts) -> Expr {
 /// individually over-approximate a state, then their composition (reduced
 /// product) also over-approximates. This is the foundation for combining
 /// multiple abstract domains (e.g., intervals + octagons + polyhedra).
+#[cfg(test)]
 pub(super) fn build_domain_product_sound_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let f_ty = Expr::pi(

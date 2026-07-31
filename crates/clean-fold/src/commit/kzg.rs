@@ -391,13 +391,12 @@ mod tests {
     #[test]
     fn test_kzg_with_cert() {
         use clean_kernel::Level;
-        use std::sync::Arc;
 
         let mut rng = test_rng();
         let kzg = KzgScheme::setup(1024, &mut rng).expect("setup should succeed");
 
         let cert = ProofCert::Sort {
-            level: Level::Succ(Arc::new(Level::Zero)),
+            level: Level::succ(Level::Zero),
         };
 
         let commitment = kzg.commit(&cert).expect("commit should succeed");

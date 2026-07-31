@@ -8,6 +8,8 @@
 //! `translate_term`, and negated assertion of classified propositions via
 //! `translate_negated_classified`.
 
+// AY decommission debt: see the ay_backend note in bridge/mod.rs.
+#[allow(dead_code)]
 mod inductive_to_dt;
 mod keys;
 mod negated_goal;

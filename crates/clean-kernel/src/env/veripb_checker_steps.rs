@@ -7,14 +7,21 @@
 //! Registers the VeriPbStep inductive type constructors and the
 //! execute_step / verify_certificate / rup_check verifier surface.
 
+#[cfg(test)]
 use super::veripb_checker::VeriPbCheckerConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// `VeriPB.VeriPbStep : Type` -- a single VeriPB proof step.
+    #[cfg(test)]
     pub(super) fn register_veripb_step(&mut self, c: &VeriPbCheckerConsts) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("VeriPB.VeriPbStep"))
@@ -31,6 +38,7 @@ impl Environment {
 
     /// `VeriPB.VeriPbStep.PolAdd :
     ///    PbConstraint -> PbConstraint -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_pol_add(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -63,6 +71,7 @@ impl Environment {
 
     /// `VeriPB.VeriPbStep.PolMul :
     ///    PbConstraint -> Nat -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_pol_mul(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -95,6 +104,7 @@ impl Environment {
 
     /// `VeriPB.VeriPbStep.PolDiv :
     ///    PbConstraint -> Nat -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_pol_div(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -126,6 +136,7 @@ impl Environment {
     }
 
     /// `VeriPB.VeriPbStep.PolSat : PbConstraint -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_pol_sat(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -150,6 +161,7 @@ impl Environment {
 
     /// `VeriPB.VeriPbStep.Weaken :
     ///    PbConstraint -> PbVar -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_weaken(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -181,6 +193,7 @@ impl Environment {
     }
 
     /// `VeriPB.VeriPbStep.Rup : PbConstraint -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_rup(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -204,6 +217,7 @@ impl Environment {
     }
 
     /// `VeriPB.VeriPbStep.Del : Nat -> VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_del(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -223,6 +237,7 @@ impl Environment {
     }
 
     /// `VeriPB.VeriPbStep.Conclude : VeriPbStep`.
+    #[cfg(test)]
     pub(super) fn register_veripb_step_conclude(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -242,6 +257,7 @@ impl Environment {
 
     /// `VeriPB.execute_step :
     ///    ConstraintDb -> VeriPbStep -> ConstraintDb`.
+    #[cfg(test)]
     pub(super) fn register_veripb_execute_step(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -274,6 +290,7 @@ impl Environment {
 
     /// `VeriPB.verify_certificate :
     ///    ConstraintDb -> List VeriPbStep -> Bool`.
+    #[cfg(test)]
     pub(super) fn register_veripb_verify_certificate(
         &mut self,
         c: &VeriPbCheckerConsts,
@@ -305,6 +322,7 @@ impl Environment {
     }
 
     /// `VeriPB.rup_check : ConstraintDb -> PbConstraint -> Bool`.
+    #[cfg(test)]
     pub(super) fn register_veripb_rup_check(
         &mut self,
         c: &VeriPbCheckerConsts,

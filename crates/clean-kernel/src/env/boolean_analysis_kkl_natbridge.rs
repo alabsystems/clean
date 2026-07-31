@@ -94,6 +94,7 @@ struct NatBridgeConsts {
     // Rat / Quot machinery.
     rat_mk: Expr,
     rat_add: Expr,
+    #[cfg(test)]
     rat_one: Expr,
     fin_sum: Expr,
     fin_sum_nat: Expr,
@@ -154,6 +155,7 @@ impl NatBridgeConsts {
             congr_arg: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
             rat_mk: Expr::const_(Name::from_string("Rat.mk"), vec![]),
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
+            #[cfg(test)]
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
             fin_sum: Expr::const_(Name::from_string("Fin.sum"), vec![]),
             fin_sum_nat: Expr::const_(Name::from_string("Fin.sumNat"), vec![]),
@@ -241,6 +243,7 @@ impl NatBridgeConsts {
     fn eq_rat(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), x, y])
     }
+    #[cfg(test)]
     fn eq_int(&self, x: Expr, y: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.int.clone(), x, y])
     }
@@ -277,6 +280,7 @@ impl NatBridgeConsts {
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn fin_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.fin_of(n), self.rat.clone())
     }
@@ -381,6 +385,7 @@ impl NatBridgeConsts {
         Expr::apps(self.nat_ble.clone(), [k, m])
     }
     /// `@Eq.subst Rat motive a b h_eq h_motive_a`.
+    #[cfg(test)]
     fn subst_rat(&self, motive: Expr, a: Expr, b: Expr, h_eq: Expr, h_a: Expr) -> Expr {
         Expr::apps(
             self.eq_subst.clone(),
@@ -1329,6 +1334,7 @@ struct ThresholdNatAtoms {
     eq_symm: Expr,
     eq_subst: Expr,
     eq_bool: Expr,
+    #[cfg(test)]
     u1: Level,
 }
 
@@ -1358,6 +1364,7 @@ impl ThresholdNatAtoms {
                 vec![Level::succ(Level::zero())],
             ),
             eq_bool: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+            #[cfg(test)]
             u1: Level::succ(Level::zero()),
         }
     }

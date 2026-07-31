@@ -483,6 +483,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_iff()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_iff(&self) -> bool {
         self.iff_init
     }

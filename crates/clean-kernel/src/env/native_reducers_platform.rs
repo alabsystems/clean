@@ -31,7 +31,6 @@
 
 use crate::env::Environment;
 use crate::expr::Expr;
-use std::sync::LazyLock;
 
 /// Well-known names for platform native reducers.
 mod names {

@@ -6,7 +6,9 @@
 //!
 //! POSITIVE: a real `BvBlastProof` from `ay_proof::export_bv_blast_proof`
 //! reconstructs to a kernel `False` proof that `check_type`s against the negated
-//! slice goal, certifies with `trust_count == 0`, and round-trips.
+//! slice goal.  The slice layer is axiomatic, so the rooted authority gate must
+//! reject promotion to `Certified`; kernel type checking alone is not proof
+//! authority.
 //!
 //! M2 (operand swap): the correct proof term, certified against the WRONG
 //! (operand-swapped) obligation goal, is REJECTED by the kernel.
@@ -23,7 +25,10 @@ use ay_proof::bv_blast_export::{export_bv_blast_proof, BvOp, SliceObligation};
 use clean_kernel::bitvec_compute;
 use clean_kernel::bitvec_slice;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr, FVarId, LocalContext, TypeChecker};
+use clean_kernel::{
+    BinderInfo, CertificationIssue, Declaration, Environment, Expr, FVarId, LocalContext,
+    TypeChecker,
+};
 
 /// Fresh env with the slice layer + two free `BV` operands `a`, `b`.
 fn slice_env() -> Environment {
@@ -99,26 +104,28 @@ fn test_bvsub_identical_slice_reconstructs_to_false() {
 }
 
 #[test]
-fn test_bvsub_identical_slice_certifies_zero_trust_and_roundtrips() {
+fn test_bvsub_identical_slice_is_authority_rejected() {
     let (env, result, ctx, _goal) = reconstruct_and_close(BvOp::Sub);
 
-    let payload: CertifiedPayload = certify_reconstruction(&result, &env, &ctx)
-        .expect("identical bvsub slice must certify zero-trust");
-    assert_eq!(payload.trust_count, 0, "CertifiedPayload trust_count == 0");
-
-    // Round-trip: re-deserialize the term and re-check to False.
-    let term = deserialize_term(&payload.term_bytes).expect("term deserializes");
-    let tc = TypeChecker::with_context(&env, ctx);
-    tc.check_type(&term, &false_expr())
-        .expect("deserialized term still kernel-checks to False");
+    let err = certify_reconstruction(&result, &env, &ctx)
+        .expect_err("axiomatic BV slice semantics must not certify");
+    assert!(matches!(
+        err,
+        NotCertified::AuthorityRejected { ref issues }
+            if issues.iter().any(|issue| matches!(
+                issue,
+                CertificationIssue::NonFoundationalAxiom { name }
+                    if name.to_string().starts_with("Clean.BV")
+            ))
+    ));
 }
 
 #[test]
-fn test_bvadd_identical_slice_certifies_zero_trust() {
+fn test_bvadd_identical_slice_is_authority_rejected() {
     let (env, result, ctx, _goal) = reconstruct_and_close(BvOp::Add);
-    let payload =
-        certify_reconstruction(&result, &env, &ctx).expect("identical bvadd slice must certify");
-    assert_eq!(payload.trust_count, 0);
+    let err = certify_reconstruction(&result, &env, &ctx)
+        .expect_err("axiomatic BV slice semantics must not certify");
+    assert!(matches!(err, NotCertified::AuthorityRejected { .. }));
 }
 
 /// MUTATION M2: take the CORRECT proof term, attempt to certify it against the
@@ -184,23 +191,27 @@ fn test_swapped_obligation_has_no_producer_proof() {
 // theorem (`Clean.BV4.bvSub_self`), whose axiom closure is ⊆ foundational.
 // ────────────────────────────────────────────────────────────────────────────
 
-/// Fresh env with the COMPUTATIONAL bv layer + a symbolic `Clean.BV4` operand.
-fn compute_env() -> (Environment, Expr) {
+/// Fresh env with the COMPUTATIONAL bv layer + a local symbolic `Clean.BV4`
+/// operand.  The operand is a context binder, not an environment axiom, so the
+/// rooted authority audit closes it into the certified judgment.
+fn compute_env() -> (Environment, LocalContext, Expr) {
     let mut env = Environment::with_prelude();
     env.init_bv_compute().expect("init_bv_compute");
     env.init_classical().expect("init_classical");
-    env.add_decl(Declaration::Axiom {
-        name: Name::from_string("a"),
-        level_params: vec![],
-        type_: Expr::const_str(bitvec_compute::names::BV),
-    })
-    .expect("operand a");
-    (env, Expr::const_str("a"))
+    let a_id = FVarId::new(650);
+    let mut ctx = LocalContext::new();
+    ctx.push_with_id(
+        a_id,
+        Name::from_string("a"),
+        Expr::const_str(bitvec_compute::names::BV),
+        BinderInfo::Default,
+    );
+    (env, ctx, Expr::fvar(a_id))
 }
 
 #[test]
 fn test_bvsub_self_nonreflexive_certifies_zero_trust() {
-    let (env, a) = compute_env();
+    let (env, mut ctx, a) = compute_env();
     let neg_fvar = FVarId::new(700);
     let rec = reconstruct_bv_compute_identity(BvComputeIdentity::SubSelf, &a, neg_fvar);
     assert_eq!(rec.theorem, "Clean.BV4.bvSub_self");
@@ -213,7 +224,6 @@ fn test_bvsub_self_nonreflexive_certifies_zero_trust() {
     let rhs = Expr::const_str(bitvec_compute::names::BV_ZERO);
     assert_ne!(lhs, rhs, "non-reflexive: bvSub a a != bvZero syntactically");
 
-    let mut ctx = LocalContext::new();
     ctx.push_with_id(
         neg_fvar,
         Name::from_string("h_neg"),
@@ -258,11 +268,10 @@ fn test_bvsub_self_nonreflexive_certifies_zero_trust() {
 
 #[test]
 fn test_bvadd_zero_nonreflexive_certifies_zero_trust() {
-    let (env, a) = compute_env();
+    let (env, mut ctx, a) = compute_env();
     let neg_fvar = FVarId::new(701);
     let rec = reconstruct_bv_compute_identity(BvComputeIdentity::AddZero, &a, neg_fvar);
 
-    let mut ctx = LocalContext::new();
     ctx.push_with_id(
         neg_fvar,
         Name::from_string("h_neg"),
@@ -290,7 +299,7 @@ fn test_bvadd_zero_nonreflexive_certifies_zero_trust() {
 /// goal), so certification fails closed.
 #[test]
 fn test_false_compute_identity_bvsub_self_eq_a_is_rejected() {
-    let (env, a) = compute_env();
+    let (env, mut ctx, a) = compute_env();
     let neg_fvar = FVarId::new(702);
     let rec = reconstruct_bv_compute_identity(BvComputeIdentity::SubSelf, &a, neg_fvar);
 
@@ -304,7 +313,6 @@ fn test_false_compute_identity_bvsub_self_eq_a_is_rejected() {
         bitvec_compute::bv_eq(lhs, a.clone()),
     );
 
-    let mut ctx = LocalContext::new();
     ctx.push_with_id(
         neg_fvar,
         Name::from_string("h_neg_bogus"),

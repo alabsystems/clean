@@ -20,14 +20,44 @@ use crate::module::{
 };
 use crate::payload::CleanPayload;
 use clean_kernel::env::{
-    attr_ext_idx, instance_ext_idx, simp_ext_idx, AttrExtState, ConstantOrigin, EnvExtensionEntry,
-    EnvExtensionEntryData, Environment, InstanceExtState, KernelClassInfo, KernelInstanceInfo,
-    ProofValueElision, Reducibility, SimpExtState, SimpPriority, TrustedEnvExt,
+    attr_ext_idx, instance_ext_idx, simp_ext_idx, AttrExtState, ConstantKind as KernelConstantKind,
+    ConstantOrigin, EnvExtensionEntry, EnvExtensionEntryData, Environment, InstanceExtState,
+    KernelClassInfo, KernelInstanceInfo, ProofValueElision, Reducibility, SimpExtState,
+    SimpPriority, TrustedEnvExt,
 };
 use clean_kernel::expr::{BinderInfo, Expr, ExprKind};
 use clean_kernel::inductive::{allows_large_elim, Constructor};
 use clean_kernel::name::Name;
 use hashbrown::{HashMap, HashSet};
+
+/// Preserve non-safe definition authority after trusted `.olean` registration.
+///
+/// Lean's replay checker excludes both `unsafe` and `partial` definitions.
+/// Keeping only the former silently upgraded partial implementation
+/// declarations to ordinary safe definitions in Clean's strict checker and
+/// axiom audit.
+fn apply_definition_safety_marks(
+    env: &mut Environment,
+    marks: impl IntoIterator<Item = (Name, DefinitionSafety)>,
+) {
+    for (name, safety) in marks {
+        // Conversion/structural validation or an axiom-stub upgrade can reject
+        // a definition. Require the accepted kernel declaration itself to be a
+        // definition: name presence alone is insufficient because a failed
+        // `.olean.private` upgrade leaves the original axiom stub in place.
+        let Some(info) = env.get_const(&name) else {
+            continue;
+        };
+        if info.kind != KernelConstantKind::Definition {
+            continue;
+        }
+        match safety {
+            DefinitionSafety::Unsafe => env.mark_unsafe(name),
+            DefinitionSafety::Partial => env.mark_partial(name),
+            DefinitionSafety::Safe => {}
+        }
+    }
+}
 
 /// Detect Lean compiler / code-generator auxiliary declarations that are not
 /// kernel-checkable logical declarations.
@@ -1333,6 +1363,15 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         })
         .map(|(_i, c)| c)
         .collect();
+    let safety_marks: Vec<_> = constants
+        .iter()
+        .copied()
+        .chain(upgrade_indices.iter().map(|&i| &module.constants[i]))
+        .filter_map(|c| {
+            c.definition_safety
+                .map(|safety| (Name::interned(&c.name), safety))
+        })
+        .collect();
 
     summary.duplicate_constants += duplicate_filtered;
     summary.skipped_constants.extend(cstage_skipped);
@@ -1417,6 +1456,8 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         summary.added_constants += upgraded;
     }
 
+    apply_definition_safety_marks(env, safety_marks);
+
     if !module.entries.is_empty() {
         summary.extension_undecoded_entries =
             module.entries.iter().map(|ext| ext.undecoded_entries).sum();
@@ -1467,6 +1508,7 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
 ///
 /// This is the fast path: expressions are converted directly from binary data
 /// to kernel `Expr` without materializing intermediate `ParsedExpr` trees.
+#[cfg(test)]
 pub(crate) fn load_module_direct_with_cache(
     env: &mut Environment,
     module: &LoadModule,
@@ -1583,6 +1625,15 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         })
         .map(|(_i, c)| c)
         .collect();
+    let safety_marks: Vec<_> = constants
+        .iter()
+        .copied()
+        .chain(upgrade_indices.iter().map(|&i| &module.constants[i]))
+        .filter_map(|c| {
+            c.definition_safety
+                .map(|safety| (Name::interned(&c.name), safety))
+        })
+        .collect();
 
     summary.duplicate_constants += duplicate_filtered;
     summary.skipped_constants.extend(cstage_skipped);
@@ -1617,18 +1668,6 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         policy.proof_elision(),
         policy.import_kinds(),
     );
-
-    // Record Lean's `DefinitionSafety::Unsafe` flag for every `unsafe def` in
-    // the module (trusted eager import). Lean's kernel structurally bars safe
-    // decls from referencing unsafe ones upstream, and Clean's default checker
-    // keeps `allow_unsafe = true`, so this is pure bookkeeping here — it lets
-    // strict checkers (`TypeChecker::set_allow_unsafe(false)`) and trust
-    // reporting see the flag instead of silently upgrading `unsafe` to safe.
-    for c in &module.constants {
-        if c.definition_safety == Some(DefinitionSafety::Unsafe) {
-            env.mark_unsafe(Name::interned(&c.name));
-        }
-    }
 
     // Upgrade axiom stubs with definitions from .olean.private (#3134).
     // When Lean 4.29+ exports definitions as axiom stubs in the base .olean,
@@ -1677,6 +1716,8 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         let upgraded = env.upgrade_axiom_stubs(upgrade_others.into_iter());
         summary.added_constants += upgraded;
     }
+
+    apply_definition_safety_marks(env, safety_marks);
 
     if !module.entries.is_empty() {
         summary.extension_undecoded_entries =
@@ -1935,6 +1976,74 @@ fn register_converted_constants(
             name: name.to_string(),
             reason: format!("structural validation failed: {err}"),
         });
+    }
+}
+
+#[cfg(test)]
+mod definition_safety_registration_tests {
+    use super::apply_definition_safety_marks;
+    use crate::module::DefinitionSafety;
+    use clean_kernel::env::{ConstantInfo, ConstantKind, Environment, Reducibility, TrustedEnvExt};
+    use clean_kernel::expr::Expr;
+    use clean_kernel::name::Name;
+
+    fn seed(env: &mut Environment, name: &str) -> Name {
+        let name = Name::from_string(name);
+        env.extend_constants_unchecked(std::iter::once(ConstantInfo::new(
+            name.clone(),
+            vec![],
+            Expr::type_(),
+            Some(Expr::prop()),
+            false,
+        )));
+        name
+    }
+
+    #[test]
+    fn unsafe_and_partial_are_both_preserved_as_non_safe_authority() {
+        let mut env = Environment::new();
+        let unsafe_name = seed(&mut env, "Test.ImportedUnsafe");
+        let partial_name = seed(&mut env, "Test.ImportedPartial");
+        let safe_name = seed(&mut env, "Test.ImportedSafe");
+
+        apply_definition_safety_marks(
+            &mut env,
+            [
+                (unsafe_name.clone(), DefinitionSafety::Unsafe),
+                (partial_name.clone(), DefinitionSafety::Partial),
+                (safe_name.clone(), DefinitionSafety::Safe),
+            ],
+        );
+
+        assert!(env.is_unsafe(&unsafe_name));
+        assert!(!env.is_partial(&unsafe_name));
+        assert!(env.is_partial(&partial_name));
+        assert!(!env.is_unsafe(&partial_name));
+        assert!(!env.is_unsafe(&safe_name));
+        assert!(!env.is_partial(&safe_name));
+    }
+
+    #[test]
+    fn rejected_or_absent_constant_does_not_leave_a_latent_mark() {
+        let mut env = Environment::new();
+        let absent = Name::from_string("Test.AbsentPartial");
+        apply_definition_safety_marks(&mut env, [(absent.clone(), DefinitionSafety::Partial)]);
+        assert!(!env.is_partial(&absent));
+
+        let axiom_stub = Name::from_string("Test.RejectedPrivateUpgrade");
+        env.extend_constants_unchecked(std::iter::once(ConstantInfo::new_with_reducibility(
+            axiom_stub.clone(),
+            vec![],
+            Expr::type_(),
+            None,
+            Reducibility::Opaque,
+            ConstantKind::Axiom,
+        )));
+        apply_definition_safety_marks(&mut env, [(axiom_stub.clone(), DefinitionSafety::Partial)]);
+        assert!(
+            !env.is_partial(&axiom_stub),
+            "a rejected private upgrade must not mark the surviving axiom stub"
+        );
     }
 }
 

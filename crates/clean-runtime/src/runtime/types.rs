@@ -12,6 +12,7 @@
 pub use crate::object_model::{CleanExternalClass, CleanObj, LeanObjPtr};
 
 #[inline]
+#[cfg(any(test, kani))]
 pub(crate) fn closure_layout(num_fixed: u16) -> std::alloc::Layout {
     crate::object_model::closure_layout(num_fixed)
 }

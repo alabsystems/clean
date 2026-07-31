@@ -480,7 +480,7 @@ impl Environment {
                 let ss = c.mul(s.clone(), s.clone());
                 let ss_xx = c.mul(ss.clone(), xx.clone());
                 let sx_sx = c.mul(sx.clone(), sx.clone());
-                let eps_xx = c.mul(eps.clone(), xx.clone());
+                let _eps_xx = c.mul(eps.clone(), xx.clone());
 
                 // h_sq_le : r·r ≤ ε·(x·x)
                 let sq_le = Expr::const_(

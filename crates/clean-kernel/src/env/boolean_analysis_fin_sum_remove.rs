@@ -177,7 +177,7 @@ fn sum_remove_last_type(c: &RemoveConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (k_id, k) = b.fresh_local(c.nat.clone());
     let succ_k = c.succ(&k);
-    let fin_succ = c.fin_of(&succ_k);
+    let _fin_succ = c.fin_of(&succ_k);
     let fin_k = c.fin_of(&k);
     let f_ty = c.fin_to_rat(&succ_k);
     let (f_id, f) = b.fresh_local(f_ty.clone());
@@ -272,7 +272,7 @@ fn sum_remove_last_value(c: &RemoveConsts) -> Expr {
     // step3 : Rat.add (F last) (Fin.sum k cast_fn) = Rat.add (F last) (Fin.sum k skip_fn)
     //   := congrArg (Rat.add (F last)) leg_sum_sym
     let add_flast = Expr::app(c.rat_add.clone(), f_last.clone());
-    let rat_to_rat = Expr::pi(BinderInfo::Default, c.rat.clone(), c.rat.clone());
+    let _rat_to_rat = Expr::pi(BinderInfo::Default, c.rat.clone(), c.rat.clone());
     let final_rhs = c.add(f_last.clone(), sum_skip.clone());
     let step3 = Expr::apps(
         c.congr_arg.clone(),

@@ -143,8 +143,10 @@ impl<'env> TypeChecker<'env> {
                     BinderInfo::Default,
                 );
                 let body_with_fvar = self.open_bvar(body, fvar_id);
-                let (body_type, body_cert_raw) = self.infer_type_with_cert_impl(&body_with_fvar)?;
+                let body_result = self.infer_type_with_cert_impl(&body_with_fvar);
+                // Pop BEFORE `?` so an Err leaves self.ctx unchanged.
                 self.ctx_pop();
+                let (body_type, body_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
                 let body_cert = convert_fvar_cert_to_bvar(body_cert_raw, fvar_id, 0);

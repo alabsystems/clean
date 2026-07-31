@@ -7,8 +7,6 @@
 //!
 //! Builds on `proof_search.rs` and `ai_verify_loop.rs` infrastructure.
 //! All proof terms are kernel-verified via `try_verify_proof`.
-#![allow(dead_code)]
-
 use crate::env::{ConstantInfo, ConstantKind, Environment};
 use crate::expr::{Expr, ExprKind};
 use crate::level::Level;

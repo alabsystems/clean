@@ -15,7 +15,18 @@ use serde::Serialize;
 
 const CHECK_PASS: &str = "pass";
 const CHECK_FAIL: &str = "fail";
-const AY_REPO_URL: &str = "https://github.com/alabsystems/ay";
+const AY_REPO_URL: &str = "https://github.com/alabsystems/ay.git";
+const AY_MAIN_REF: &str = "refs/heads/main";
+const AY_MANIFEST_KEYS: [&str; 7] = [
+    "ay",
+    "ay-dpll",
+    "ay-core",
+    "ay-lean-bridge",
+    "ay-proof",
+    "ay-frontend",
+    "ay-translate",
+];
+const AY_LOCK_SOURCE_COUNT: usize = 37;
 
 /// Verbs under `clean factory`.
 #[derive(Debug, Clone, Subcommand)]
@@ -165,7 +176,7 @@ and route proof work through trust-visible Lean tooling.",
         commands: vec![
             GuideCommand {
                 cmd: "clean factory status --json",
-                why: "machine-readable health gate: tracked lockfile, git hygiene, Rust toolchain, sibling ay path, and ay pin freshness",
+                why: "machine-readable health gate: tracked lockfile, git hygiene, Rust toolchain, committed ay Git graph, and remote-pin freshness",
             },
             GuideCommand {
                 cmd: "clean factory decl-index --root . --json",
@@ -289,130 +300,329 @@ fn check_cargo_lock(repo_root: &Path) -> HealthCheck {
     }
 }
 
-// The SMT-solver sibling repo is `ay` (alabsystems/ay) and the
-// workspace now path-depends on `../ay/crates/*` (the `ay*` Cargo keys are kept
-// as aliases pointing at the `ay-*` packages). The serialized check keys stay
-// `ay_path` / `ay_updates` for release-readiness contract stability
-// (docs/RELEASE_READINESS.md), but the checks below operate on `../ay`.
+// The serialized `ay_path` / `ay_updates` keys predate the migration from a
+// sibling path dependency to an immutable Git dependency. Keep the keys for
+// consumers of the v1 status schema, but validate the committed graph they now
+// represent: seven root manifest entries, all 37 AY lockfile sources, and the
+// intended remote revision. No sibling checkout participates in this evidence.
 
 fn check_ay_path(repo_root: &Path) -> HealthCheck {
-    let ay_path = repo_root.parent().unwrap_or(repo_root).join("ay");
-
-    if ay_path.is_dir() {
-        HealthCheck::pass(format!(
-            "../ay path dependency present at {}",
-            ay_path.display()
-        ))
-    } else {
-        HealthCheck::fail(format!(
-            "missing ../ay path dependency at {} (see Cargo.toml ay* = {{ package = \"ay-*\", path = \"../ay/crates/ay-*\" }} entries)",
-            ay_path.display()
-        ))
+    match read_ay_pin_evidence(repo_root) {
+        Ok(evidence) => HealthCheck::pass(format!(
+            "committed ay Git graph is coherent: {} manifest pins and {} lock sources use query {} and resolve to {}",
+            evidence.manifest_entries,
+            evidence.lock_sources,
+            evidence.lock_query_rev,
+            evidence.lock_resolved_rev
+        )),
+        Err(message) => HealthCheck::fail(format!(
+            "committed ay Git graph is invalid: {message}"
+        )),
     }
 }
 
 fn check_ay_updates(repo_root: &Path) -> HealthCheck {
-    // `ay` is consumed as a path dependency, so there is no pinned git rev to
-    // compare. Freshness instead means: is the local `../ay` checkout at the
-    // same commit as the `ay` remote HEAD? A drifted checkout means Cargo.lock
-    // may not reflect upstream and must be re-resolved before release.
-    let ay_path = repo_root.parent().unwrap_or(repo_root).join("ay");
-    if !ay_path.is_dir() {
-        return HealthCheck::fail(format!(
-            "ay update freshness: missing ../ay checkout at {}",
-            ay_path.display()
-        ));
-    }
-
-    let local_head = match ay_local_head(&ay_path) {
-        Ok(rev) => rev,
+    let evidence = match read_ay_pin_evidence(repo_root) {
+        Ok(evidence) => evidence,
         Err(message) => return HealthCheck::fail(format!("ay update freshness: {message}")),
     };
-    let remote_head = match ay_remote_head() {
+    let remote_main = match ay_remote_main() {
         Ok(rev) => rev,
         Err(message) => return HealthCheck::fail(format!("ay update freshness: {message}")),
     };
 
-    if revs_match(&local_head, &remote_head) {
+    ay_update_check_from_revisions(&evidence.manifest_rev, &remote_main)
+}
+
+fn ay_update_check_from_revisions(pinned: &str, remote_main: &str) -> HealthCheck {
+    if pinned == remote_main {
         HealthCheck::pass(format!(
-            "ay dependency is up to date: local ../ay HEAD {local_head} matches remote HEAD {remote_head}"
+            "ay dependency is up to date: committed manifest/lock revision {pinned} matches remote main {remote_main}"
         ))
     } else {
         HealthCheck::fail(format!(
-            "ay dependency is stale: local ../ay HEAD {local_head}, remote HEAD {remote_head}; \
-             pull ../ay and re-run `cargo update` so Cargo.lock matches before release"
+            "ay dependency is stale: committed manifest/lock revision {pinned}, remote main {remote_main}; \
+             review ay, update all seven manifest pins, and regenerate Cargo.lock before release"
         ))
     }
 }
 
-fn ay_local_head(ay_path: &Path) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(ay_path)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .map_err(|error| format!("git rev-parse for local ../ay HEAD failed to start: {error}"))?;
-
-    if !output.status.success() {
-        let text = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(if text.is_empty() {
-            format!(
-                "git rev-parse for local ../ay HEAD exited with {}",
-                output.status
-            )
-        } else {
-            format!("git rev-parse for local ../ay HEAD failed: {text}")
-        });
-    }
-
-    let head = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if head.is_empty() {
-        return Err("git rev-parse for local ../ay HEAD returned no revision".to_owned());
-    }
-    Ok(head)
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AyPinEvidence {
+    manifest_rev: String,
+    lock_query_rev: String,
+    lock_resolved_rev: String,
+    manifest_entries: usize,
+    lock_sources: usize,
 }
 
-fn ay_remote_head() -> Result<String, String> {
-    let output = Command::new("git")
-        .args(["ls-remote", AY_REPO_URL, "HEAD"])
-        .output()
-        .map_err(|error| format!("git ls-remote for ay HEAD failed to start: {error}"))?;
+fn is_ay_package_name(name: &str) -> bool {
+    name == "ay" || name.starts_with("ay-")
+}
 
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
-    .trim()
-    .to_owned();
+fn is_ay_git_url(url: &str) -> bool {
+    let normalized = url.trim_end_matches('/').trim_end_matches(".git");
+    normalized == "https://github.com/alabsystems/ay"
+        || normalized.ends_with("github.com/alabsystems/ay")
+        || normalized.ends_with("github.com:alabsystems/ay")
+}
+
+fn is_ay_path(path: &str) -> bool {
+    path.split(['/', '\\']).any(is_ay_package_name)
+}
+
+fn dependency_mentions_ay(key: &str, value: &toml::Value) -> bool {
+    if is_ay_package_name(key) {
+        return true;
+    }
+    let Some(entry) = value.as_table() else {
+        return false;
+    };
+    entry
+        .get("package")
+        .and_then(toml::Value::as_str)
+        .is_some_and(is_ay_package_name)
+        || entry
+            .get("git")
+            .and_then(toml::Value::as_str)
+            .is_some_and(is_ay_git_url)
+        || entry
+            .get("path")
+            .and_then(toml::Value::as_str)
+            .is_some_and(is_ay_path)
+}
+
+fn read_ay_pin_evidence(repo_root: &Path) -> Result<AyPinEvidence, String> {
+    let manifest_path = repo_root.join("Cargo.toml");
+    let manifest_text = std::fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("could not read {}: {error}", manifest_path.display()))?;
+    let manifest: toml::Value = toml::from_str(&manifest_text)
+        .map_err(|error| format!("could not parse {}: {error}", manifest_path.display()))?;
+    let dependencies = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| "Cargo.toml has no [workspace.dependencies] table".to_owned())?;
+
+    let mut actual_ay_keys: Vec<_> = dependencies
+        .iter()
+        .filter(|(key, value)| dependency_mentions_ay(key, value))
+        .map(|(key, _)| key.as_str())
+        .collect();
+    actual_ay_keys.sort_unstable();
+    let mut expected_ay_keys = AY_MANIFEST_KEYS.to_vec();
+    expected_ay_keys.sort_unstable();
+    if actual_ay_keys != expected_ay_keys {
+        return Err(format!(
+            "Cargo.toml AY workspace dependency keys must be exactly {expected_ay_keys:?}, found {actual_ay_keys:?}"
+        ));
+    }
+
+    let mut manifest_revs = Vec::with_capacity(AY_MANIFEST_KEYS.len());
+    for key in AY_MANIFEST_KEYS {
+        let entry = dependencies
+            .get(key)
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| format!("Cargo.toml `{key}` dependency is not a table"))?;
+        let git = entry
+            .get("git")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("Cargo.toml `{key}` dependency has no Git URL"))?;
+        if git != AY_REPO_URL {
+            return Err(format!(
+                "Cargo.toml `{key}` dependency uses `{git}`, expected `{AY_REPO_URL}`"
+            ));
+        }
+        let package = entry
+            .get("package")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("Cargo.toml `{key}` dependency has no package name"))?;
+        if package != key {
+            return Err(format!(
+                "Cargo.toml `{key}` dependency targets package `{package}`, expected `{key}`"
+            ));
+        }
+        if entry.contains_key("path") {
+            return Err(format!(
+                "Cargo.toml `{key}` dependency must use the committed Git graph, not a path"
+            ));
+        }
+
+        let rev = entry
+            .get("rev")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("Cargo.toml `{key}` dependency has no immutable revision"))?;
+        validate_full_git_revision(rev)
+            .map_err(|message| format!("Cargo.toml `{key}` revision {message}"))?;
+        manifest_revs.push(rev.to_owned());
+    }
+
+    let manifest_rev = manifest_revs
+        .first()
+        .cloned()
+        .ok_or_else(|| "internal AY manifest-key inventory is empty".to_owned())?;
+    if manifest_revs.iter().any(|rev| rev != &manifest_rev) {
+        return Err(format!(
+            "Cargo.toml ay dependencies do not share one revision: {}",
+            manifest_revs.join(", ")
+        ));
+    }
+
+    let lock_path = repo_root.join("Cargo.lock");
+    let lock_text = std::fs::read_to_string(&lock_path)
+        .map_err(|error| format!("could not read {}: {error}", lock_path.display()))?;
+    let lock: toml::Value = toml::from_str(&lock_text)
+        .map_err(|error| format!("could not parse {}: {error}", lock_path.display()))?;
+    let packages = lock
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "Cargo.lock has no package inventory".to_owned())?;
+    let source_prefix = format!("git+{AY_REPO_URL}");
+    let mut ay_sources = Vec::new();
+    for package in packages {
+        let package = package
+            .as_table()
+            .ok_or_else(|| "Cargo.lock package entry is not a table".to_owned())?;
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| "Cargo.lock package entry has no name".to_owned())?;
+        let source = package.get("source").and_then(toml::Value::as_str);
+        let is_ay_package = is_ay_package_name(name);
+        let is_ay_source = source.is_some_and(|source| source.starts_with(source_prefix.as_str()));
+        if is_ay_package && !is_ay_source {
+            return Err(format!(
+                "Cargo.lock AY package `{name}` does not use the canonical AY Git source"
+            ));
+        }
+        if !is_ay_package && is_ay_source {
+            return Err(format!(
+                "Cargo.lock non-AY package `{name}` unexpectedly uses the AY Git source"
+            ));
+        }
+        if is_ay_package {
+            ay_sources.push(
+                source.ok_or_else(|| format!("Cargo.lock AY package `{name}` has no source"))?,
+            );
+        }
+    }
+    if ay_sources.len() != AY_LOCK_SOURCE_COUNT {
+        return Err(format!(
+            "Cargo.lock must contain exactly {AY_LOCK_SOURCE_COUNT} ay Git sources, found {}",
+            ay_sources.len()
+        ));
+    }
+
+    let source_revision_prefix = format!("{source_prefix}?rev=");
+    let mut query_revs = Vec::with_capacity(ay_sources.len());
+    let mut resolved_revs = Vec::with_capacity(ay_sources.len());
+    for source in ay_sources {
+        let revisions = source
+            .strip_prefix(source_revision_prefix.as_str())
+            .ok_or_else(|| format!("malformed Cargo.lock AY source: {source}"))?;
+        let (query_rev, resolved_rev) = revisions
+            .split_once('#')
+            .ok_or_else(|| format!("Cargo.lock AY source has no resolved fragment: {source}"))?;
+        validate_full_git_revision(query_rev)
+            .map_err(|message| format!("Cargo.lock AY query revision {message}"))?;
+        validate_full_git_revision(resolved_rev)
+            .map_err(|message| format!("Cargo.lock AY resolved revision {message}"))?;
+        query_revs.push(query_rev.to_owned());
+        resolved_revs.push(resolved_rev.to_owned());
+    }
+
+    let lock_query_rev = query_revs
+        .first()
+        .cloned()
+        .ok_or_else(|| "internal AY lock-source count is zero".to_owned())?;
+    let lock_resolved_rev = resolved_revs
+        .first()
+        .cloned()
+        .ok_or_else(|| "internal AY lock-source count is zero".to_owned())?;
+    if query_revs.iter().any(|rev| rev != &lock_query_rev) {
+        return Err("Cargo.lock ay query revisions are not identical".to_owned());
+    }
+    if resolved_revs.iter().any(|rev| rev != &lock_resolved_rev) {
+        return Err("Cargo.lock ay resolved fragments are not identical".to_owned());
+    }
+    if lock_query_rev != manifest_rev {
+        return Err(format!(
+            "Cargo.lock ay query revision {lock_query_rev} does not match Cargo.toml {manifest_rev}"
+        ));
+    }
+    if lock_resolved_rev != manifest_rev {
+        return Err(format!(
+            "Cargo.lock ay resolved revision {lock_resolved_rev} does not match Cargo.toml {manifest_rev}"
+        ));
+    }
+
+    Ok(AyPinEvidence {
+        manifest_rev,
+        lock_query_rev,
+        lock_resolved_rev,
+        manifest_entries: AY_MANIFEST_KEYS.len(),
+        lock_sources: AY_LOCK_SOURCE_COUNT,
+    })
+}
+
+fn validate_full_git_revision(revision: &str) -> Result<(), String> {
+    if revision.len() == 40 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "must be a full 40-character hexadecimal commit, got `{revision}`"
+        ))
+    }
+}
+
+fn ay_remote_main() -> Result<String, String> {
+    let output = Command::new("git")
+        .args(["ls-remote", AY_REPO_URL, AY_MAIN_REF])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()
+        .map_err(|error| format!("git ls-remote for AY main failed to start: {error}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
     if !output.status.success() {
-        return Err(if text.is_empty() {
-            format!("git ls-remote for ay HEAD exited with {}", output.status)
+        let diagnostic = format!("{stdout}\n{stderr}").trim().to_owned();
+        return Err(if diagnostic.is_empty() {
+            format!("git ls-remote for AY main exited with {}", output.status)
         } else {
-            format!("git ls-remote for ay HEAD failed: {text}")
+            format!("git ls-remote for AY main failed: {diagnostic}")
         });
     }
 
-    let head = text
+    let revisions: Vec<_> = stdout
         .lines()
         .filter_map(|line| {
             let mut parts = line.split_whitespace();
             let rev = parts.next()?;
             let reference = parts.next()?;
-            if reference == "HEAD" {
+            if reference == AY_MAIN_REF && parts.next().is_none() {
                 Some(rev.to_owned())
             } else {
                 None
             }
         })
-        .next();
-
-    head.ok_or_else(|| "git ls-remote for ay HEAD returned no HEAD revision".to_owned())
-}
-
-fn revs_match(left: &str, right: &str) -> bool {
-    left == right || left.starts_with(right) || right.starts_with(left)
+        .collect();
+    let revision = match revisions.as_slice() {
+        [revision] => revision.clone(),
+        [] => {
+            return Err(format!(
+                "git ls-remote returned no `{AY_MAIN_REF}` revision"
+            ))
+        }
+        _ => {
+            return Err(format!(
+                "git ls-remote returned multiple `{AY_MAIN_REF}` revisions"
+            ));
+        }
+    };
+    validate_full_git_revision(&revision)
+        .map_err(|message| format!("AY remote main revision {message}"))?;
+    Ok(revision)
 }
 
 fn check_local_toolchain() -> HealthCheck {
@@ -741,9 +951,10 @@ migration. The initial surface emits `schema_version`, `summary.status`, and \
 `checks.ay_updates.status` so release \
 automation can begin moving away from `scripts/system_health_check.py` while \
 remaining fail-closed for missing tracked lockfiles, stale Git \
-garbage-collection logs, unavailable local Rust toolchains, a missing sibling \
-`../ay` path-dependency checkout, or an `../ay` checkout whose HEAD has drifted \
-from the `ay` remote.",
+garbage-collection logs, unavailable local Rust toolchains, incoherent \
+committed ay manifest/lock revisions, or an ay pin that has drifted from the \
+remote `refs/heads/main`. The legacy `ay_path` field name is retained for schema stability; \
+it no longer requires or inspects a sibling checkout.",
     category: Category::Dev,
     stability: Stability::Experimental,
     examples: &[
@@ -1030,6 +1241,34 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
+    const TEST_REV: &str = "0123456789abcdef0123456789abcdef01234567";
+    const OTHER_REV: &str = "89abcdef0123456789abcdef0123456789abcdef";
+
+    fn write_ay_pin_fixture(
+        repo_root: &Path,
+        manifest_revs: &[&str; 7],
+        lock_query_rev: &str,
+        lock_resolved_rev: &str,
+        lock_sources: usize,
+    ) {
+        std::fs::create_dir_all(repo_root).expect("mkdir fixture");
+        let mut manifest = String::from("[workspace.dependencies]\n");
+        for (key, revision) in AY_MANIFEST_KEYS.iter().zip(manifest_revs) {
+            manifest.push_str(&format!(
+                "{key} = {{ package = \"{key}\", git = \"{AY_REPO_URL}\", rev = \"{revision}\" }}\n"
+            ));
+        }
+        std::fs::write(repo_root.join("Cargo.toml"), manifest).expect("write Cargo.toml");
+
+        let mut lock = String::new();
+        for index in 0..lock_sources {
+            lock.push_str(&format!(
+                "[[package]]\nname = \"ay-fixture-{index}\"\nsource = \"git+{AY_REPO_URL}?rev={lock_query_rev}#{lock_resolved_rev}\"\n"
+            ));
+        }
+        std::fs::write(repo_root.join("Cargo.lock"), lock).expect("write Cargo.lock");
+    }
+
     #[test]
     fn cargo_lock_passes_when_lockfile_exists() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1087,32 +1326,120 @@ mod tests {
     }
 
     #[test]
-    fn ay_path_passes_when_sibling_checkout_exists() {
+    fn ay_path_compatibility_field_passes_for_coherent_committed_git_graph() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        write_ay_pin_fixture(
+            repo.path(),
+            &[TEST_REV; 7],
+            TEST_REV,
+            TEST_REV,
+            AY_LOCK_SOURCE_COUNT,
+        );
+
+        let check = check_ay_path(repo.path());
+
+        assert_eq!(check.status, CHECK_PASS);
+        assert!(check.message.contains("committed ay Git graph is coherent"));
+        assert!(check.message.contains("7 manifest pins"));
+        assert!(check.message.contains("37 lock sources"));
+        assert!(check.message.contains(TEST_REV));
+    }
+
+    #[test]
+    fn ay_path_compatibility_field_does_not_require_a_sibling_checkout() {
         let workspace = tempfile::tempdir().expect("tempdir");
         let repo_root = workspace.path().join("clean");
-        let ay_path = workspace.path().join("ay");
-        std::fs::create_dir_all(&repo_root).expect("mkdir clean");
-        std::fs::create_dir_all(&ay_path).expect("mkdir ay");
+        write_ay_pin_fixture(
+            &repo_root,
+            &[TEST_REV; 7],
+            TEST_REV,
+            TEST_REV,
+            AY_LOCK_SOURCE_COUNT,
+        );
 
         let check = check_ay_path(&repo_root);
 
         assert_eq!(check.status, CHECK_PASS);
-        assert!(check.message.contains("../ay path dependency present"));
-        let ay_display = ay_path.display().to_string();
-        assert!(check.message.contains(ay_display.as_str()));
+        assert!(!workspace.path().join("ay").exists());
     }
 
     #[test]
-    fn ay_path_fails_closed_when_sibling_checkout_is_missing() {
-        let workspace = tempfile::tempdir().expect("tempdir");
-        let repo_root = workspace.path().join("clean");
-        std::fs::create_dir_all(&repo_root).expect("mkdir clean");
+    fn ay_pin_graph_fails_closed_for_nonidentical_manifest_revisions() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        let mut manifest_revs = [TEST_REV; 7];
+        manifest_revs[6] = OTHER_REV;
+        write_ay_pin_fixture(
+            repo.path(),
+            &manifest_revs,
+            TEST_REV,
+            TEST_REV,
+            AY_LOCK_SOURCE_COUNT,
+        );
 
-        let check = check_ay_path(&repo_root);
+        let check = check_ay_path(repo.path());
 
         assert_eq!(check.status, CHECK_FAIL);
-        assert!(check.message.contains("missing ../ay path dependency"));
-        assert!(check.message.contains("../ay/crates/ay-*"));
+        assert!(check.message.contains("do not share one revision"));
+    }
+
+    #[test]
+    fn ay_pin_graph_rejects_a_non_ay_key_aliasing_an_ay_package() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        write_ay_pin_fixture(
+            repo.path(),
+            &[TEST_REV; 7],
+            TEST_REV,
+            TEST_REV,
+            AY_LOCK_SOURCE_COUNT,
+        );
+        let manifest_path = repo.path().join("Cargo.toml");
+        let mut manifest = std::fs::read_to_string(&manifest_path).expect("read Cargo.toml");
+        manifest.push_str(
+            "legacy-solver = { package = \"ay-sat\", git = \"https://example.invalid/solver.git\", rev = \"0123456789abcdef0123456789abcdef01234567\" }\n",
+        );
+        std::fs::write(manifest_path, manifest).expect("rewrite Cargo.toml");
+
+        let check = check_ay_path(repo.path());
+
+        assert_eq!(check.status, CHECK_FAIL);
+        assert!(check.message.contains("must be exactly"));
+        assert!(check.message.contains("legacy-solver"));
+    }
+
+    #[test]
+    fn ay_pin_graph_fails_closed_for_lock_query_or_resolved_drift() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        write_ay_pin_fixture(
+            repo.path(),
+            &[TEST_REV; 7],
+            TEST_REV,
+            OTHER_REV,
+            AY_LOCK_SOURCE_COUNT,
+        );
+
+        let check = check_ay_path(repo.path());
+
+        assert_eq!(check.status, CHECK_FAIL);
+        assert!(check.message.contains("resolved revision"));
+        assert!(check.message.contains("does not match Cargo.toml"));
+    }
+
+    #[test]
+    fn ay_pin_graph_fails_closed_unless_all_37_lock_sources_are_present() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        write_ay_pin_fixture(
+            repo.path(),
+            &[TEST_REV; 7],
+            TEST_REV,
+            TEST_REV,
+            AY_LOCK_SOURCE_COUNT - 1,
+        );
+
+        let check = check_ay_path(repo.path());
+
+        assert_eq!(check.status, CHECK_FAIL);
+        assert!(check.message.contains("exactly 37 ay Git sources"));
+        assert!(check.message.contains("found 36"));
     }
 
     #[test]
@@ -1143,10 +1470,7 @@ mod tests {
     }
 
     #[test]
-    fn ay_updates_fails_closed_when_ay_checkout_is_missing() {
-        // No `../ay` sibling next to the repo root -> freshness cannot be
-        // determined (path deps have no pinned rev to compare), so the check
-        // must fail closed rather than silently passing.
+    fn ay_updates_fails_closed_when_committed_pin_evidence_is_missing() {
         let workspace = tempfile::tempdir().expect("tempdir");
         let repo_root = workspace.path().join("clean");
         std::fs::create_dir_all(&repo_root).expect("mkdir clean");
@@ -1155,17 +1479,21 @@ mod tests {
 
         assert_eq!(check.status, CHECK_FAIL);
         assert!(check.message.contains("ay update freshness"));
-        assert!(check.message.contains("missing ../ay checkout"));
+        assert!(check.message.contains("could not read"));
+        assert!(check.message.contains("Cargo.toml"));
     }
 
     #[test]
-    fn revs_match_accepts_prefix_and_exact() {
-        assert!(revs_match("abc123", "abc123"));
-        // git ls-remote returns the full 40-char sha; `rev-parse HEAD` also
-        // returns the full sha, but accept abbreviated-prefix matches too.
-        assert!(revs_match("abc123def", "abc123"));
-        assert!(revs_match("abc123", "abc123def"));
-        assert!(!revs_match("abc123", "xyz789"));
+    fn ay_remote_freshness_requires_an_exact_full_revision_match() {
+        let current = ay_update_check_from_revisions(TEST_REV, TEST_REV);
+        assert_eq!(current.status, CHECK_PASS);
+
+        let abbreviated = ay_update_check_from_revisions(TEST_REV, &TEST_REV[..12]);
+        assert_eq!(abbreviated.status, CHECK_FAIL);
+
+        let stale = ay_update_check_from_revisions(TEST_REV, OTHER_REV);
+        assert_eq!(stale.status, CHECK_FAIL);
+        assert!(stale.message.contains("review ay"));
     }
 
     #[test]
@@ -1196,7 +1524,7 @@ mod tests {
                 "git gc logs: none found under .git/gc.log or .git/worktrees".to_owned(),
             ),
             HealthCheck::pass("local Rust toolchain available".to_owned()),
-            HealthCheck::pass("../ay path dependency present".to_owned()),
+            HealthCheck::pass("committed ay Git graph is coherent".to_owned()),
             HealthCheck::pass("ay dependency is up to date".to_owned()),
         );
         let value: Value = serde_json::to_value(report).expect("json");
@@ -1212,14 +1540,14 @@ mod tests {
     }
 
     #[test]
-    fn status_report_fails_closed_when_ay_path_is_missing() {
+    fn status_report_fails_closed_when_ay_git_graph_is_invalid() {
         let report = FactoryStatusReport::from_checks(
             HealthCheck::pass("Cargo.lock present".to_owned()),
             HealthCheck::pass(
                 "git gc logs: none found under .git/gc.log or .git/worktrees".to_owned(),
             ),
             HealthCheck::pass("local Rust toolchain available".to_owned()),
-            HealthCheck::fail("missing ../ay path dependency".to_owned()),
+            HealthCheck::fail("committed ay Git graph is invalid".to_owned()),
             HealthCheck::pass("ay dependency is up to date".to_owned()),
         );
         let value: Value = serde_json::to_value(&report).expect("json");
@@ -1227,7 +1555,9 @@ mod tests {
         assert_eq!(value["summary"]["status"], CHECK_FAIL);
         assert_eq!(value["summary"]["errors"], 1);
         assert_eq!(value["checks"]["ay_path"]["status"], CHECK_FAIL);
-        assert!(report.failure_message().contains("missing ../ay"));
+        assert!(report
+            .failure_message()
+            .contains("committed ay Git graph is invalid"));
     }
 
     #[test]
@@ -1238,7 +1568,7 @@ mod tests {
                 "git gc logs: none found under .git/gc.log or .git/worktrees".to_owned(),
             ),
             HealthCheck::pass("local Rust toolchain available".to_owned()),
-            HealthCheck::pass("../ay path dependency present".to_owned()),
+            HealthCheck::pass("committed ay Git graph is coherent".to_owned()),
             HealthCheck::pass("ay dependency is up to date".to_owned()),
         );
         let value: Value = serde_json::to_value(&report).expect("json");
@@ -1257,7 +1587,7 @@ mod tests {
                 "git gc logs: none found under .git/gc.log or .git/worktrees".to_owned(),
             ),
             HealthCheck::fail("local Rust toolchain unavailable".to_owned()),
-            HealthCheck::pass("../ay path dependency present".to_owned()),
+            HealthCheck::pass("committed ay Git graph is coherent".to_owned()),
             HealthCheck::pass("ay dependency is up to date".to_owned()),
         );
         let value: Value = serde_json::to_value(&report).expect("json");
@@ -1278,7 +1608,7 @@ mod tests {
                 "git gc logs: none found under .git/gc.log or .git/worktrees".to_owned(),
             ),
             HealthCheck::pass("local Rust toolchain available".to_owned()),
-            HealthCheck::pass("../ay path dependency present".to_owned()),
+            HealthCheck::pass("committed ay Git graph is coherent".to_owned()),
             HealthCheck::fail("ay dependency is stale".to_owned()),
         );
         let value: Value = serde_json::to_value(&report).expect("json");

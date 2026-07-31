@@ -10,8 +10,12 @@
 //!
 //! Part of #3084 - IO/FFI/Native epic.
 
-use crate::ir::{IRArg, IRBody, IRDecl, IRExpr};
+#[cfg(test)]
+use crate::ir::IRDecl;
+use crate::ir::{IRArg, IRBody, IRExpr};
+#[cfg(test)]
 use clean_kernel::Name;
+#[cfg(test)]
 use std::collections::HashMap;
 
 // -----------------------------------------------------------------------
@@ -23,6 +27,7 @@ use std::collections::HashMap;
 /// Each `VDecl`, `JDecl`, `Inc`, `Dec`, `Set`, `SetTag`, `USet`, `SSet`,
 /// `Case`, `Jmp`, `Ret`, and `Unreachable` counts as one node.
 /// Case alternatives add their body sizes.
+#[cfg(test)]
 pub(crate) fn estimate_size(body: &IRBody) -> usize {
     match body {
         IRBody::VDecl { rest, .. } => 1 + estimate_size(rest),
@@ -51,6 +56,7 @@ pub(crate) fn estimate_size(body: &IRBody) -> usize {
 // -----------------------------------------------------------------------
 
 /// Count how many times each function name is called across all declarations.
+#[cfg(test)]
 pub(crate) fn compute_call_counts(decls: &[IRDecl]) -> HashMap<Name, usize> {
     let mut counts: HashMap<Name, usize> = HashMap::new();
     for decl in decls {
@@ -59,6 +65,7 @@ pub(crate) fn compute_call_counts(decls: &[IRDecl]) -> HashMap<Name, usize> {
     counts
 }
 
+#[cfg(test)]
 fn count_calls_in_body(body: &IRBody, counts: &mut HashMap<Name, usize>) {
     match body {
         IRBody::VDecl { value, rest, .. } => {
@@ -93,6 +100,7 @@ fn count_calls_in_body(body: &IRBody, counts: &mut HashMap<Name, usize>) {
     }
 }
 
+#[cfg(test)]
 fn count_calls_in_expr(expr: &IRExpr, counts: &mut HashMap<Name, usize>) {
     match expr {
         IRExpr::Apply { fn_id, .. } | IRExpr::PartialApply { fn_id, .. } => {
@@ -107,11 +115,13 @@ fn count_calls_in_expr(expr: &IRExpr, counts: &mut HashMap<Name, usize>) {
 // -----------------------------------------------------------------------
 
 /// Check whether `decl` directly calls itself (direct recursion).
+#[cfg(test)]
 pub(crate) fn is_recursive(decl: &IRDecl) -> bool {
     body_references_name(&decl.body, &decl.name)
 }
 
 /// Check whether `body` contains any call to the given `name`.
+#[cfg(test)]
 pub(crate) fn body_references_name(body: &IRBody, name: &Name) -> bool {
     match body {
         IRBody::VDecl { value, rest, .. } => {
@@ -138,6 +148,7 @@ pub(crate) fn body_references_name(body: &IRBody, name: &Name) -> bool {
     }
 }
 
+#[cfg(test)]
 fn expr_references_name(expr: &IRExpr, name: &Name) -> bool {
     match expr {
         IRExpr::Apply { fn_id, .. } | IRExpr::PartialApply { fn_id, .. } => fn_id.0 == *name,

@@ -15,8 +15,8 @@
 //! Distance metrics are in `algebra_dist`.
 
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType};
-use crate::expr::{BinderInfo, Expr, ExprKind};
+use crate::env::{Declaration, EnvError, Environment};
+use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
@@ -79,6 +79,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat(&self) -> bool {
         self.rat_init
     }
@@ -89,6 +90,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_arith_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_arith(&self) -> bool {
         self.rat_arith_init
     }
@@ -173,6 +175,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_normalize_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_rat_normalize(&mut self) -> Result<(), EnvError> {
         if self.rat_normalize_init {
             return Ok(());
@@ -214,6 +217,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_normalize_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_normalize(&self) -> bool {
         self.rat_normalize_init
     }
@@ -322,6 +326,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_ord(&self) -> bool {
         self.rat_ord_init
     }

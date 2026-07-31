@@ -11,12 +11,14 @@
 //! - `rebind` — FVar→BVar certificate conversion
 //! - `abstract_fvar` — FVar abstraction in expressions
 
+#[cfg(test)]
 mod abstract_fvar;
 mod infer_core;
 mod infer_modes;
 mod infer_zfc;
 mod rebind;
 
+#[cfg(test)]
 pub(crate) use abstract_fvar::abstract_fvar_in_expr;
 pub(crate) use rebind::convert_fvar_cert_to_bvar;
 

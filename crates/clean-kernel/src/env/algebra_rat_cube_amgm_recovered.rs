@@ -117,6 +117,7 @@ impl CubeAmGmConstsRecovered {
     fn one(&self) -> Expr {
         self.r.one()
     }
+    #[cfg(test)]
     fn two(&self) -> Expr {
         self.r.two()
     }
@@ -135,9 +136,11 @@ impl CubeAmGmConstsRecovered {
     fn sub(&self, a: Expr, b: Expr) -> Expr {
         self.r.sub(a, b)
     }
+    #[cfg(test)]
     fn le(&self, a: Expr, b: Expr) -> Expr {
         self.o.le(a, b)
     }
+    #[cfg(test)]
     fn eq(&self, a: Expr, b: Expr) -> Expr {
         self.r.eq(a, b)
     }
@@ -202,6 +205,7 @@ impl CubeAmGmConstsRecovered {
     fn one_mul(&self, a: Expr) -> Expr {
         self.r.one_mul(a)
     }
+    #[cfg(test)]
     fn mneg(&self, a: Expr, b: Expr) -> Expr {
         self.r.mneg(a, b)
     }

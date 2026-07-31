@@ -72,7 +72,9 @@ struct EmptyConsts {
     subset_sum: Expr,
     subset_sum_congr: Expr,
     subset_sum_sub: Expr,
+    #[cfg(test)]
     mul_comm: Expr,
+    #[cfg(test)]
     mul_sub: Expr,
     congr_c: Expr,
 }
@@ -122,7 +124,9 @@ impl EmptyConsts {
                 vec![],
             ),
             subset_sum_sub: Expr::const_(Name::from_string("BoolAnalysis.subsetSum_sub"), vec![]),
+            #[cfg(test)]
             mul_comm: Expr::const_(Name::from_string("Rat.mul_comm"), vec![]),
+            #[cfg(test)]
             mul_sub: Expr::const_(Name::from_string("Rat.mul_sub"), vec![]),
             congr_c: Expr::const_(
                 Name::from_string("congr"),
@@ -349,14 +353,17 @@ impl EmptyConsts {
         Expr::apps(self.fourier.clone(), [n.clone(), f.clone(), s.clone()])
     }
     /// `Rat.mul_comm a b : a·b = b·a`.
+    #[cfg(test)]
     fn mul_comm_of(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.mul_comm.clone(), [a, b])
     }
     /// `Rat.mul_sub a b c : a·(b−c) = a·b − a·c`.
+    #[cfg(test)]
     fn mul_sub_of(&self, a: Expr, b: Expr, cc: Expr) -> Expr {
         Expr::apps(self.mul_sub.clone(), [a, b, cc])
     }
     /// `Rat.mul_one a : a·1 = a`.
+    #[cfg(test)]
     fn mul_one_of2(&self, a: Expr) -> Expr {
         Expr::app(self.rat_mul_one.clone(), a)
     }
@@ -473,14 +480,14 @@ impl Environment {
         let beq0 = |m: Expr| Expr::apps(nat_beq.clone(), [m, c.nat_zero.clone()]);
         let ss_nat = |n: &Expr, s: Expr| Expr::apps(set_size_nat.clone(), [n.clone(), s]);
         let decode = |n: &Expr, j: Expr| Expr::apps(hc_decode.clone(), [n.clone(), j]);
-        let val_at = |n: &Expr, k: &Expr| Expr::apps(fin_val.clone(), [n.clone(), k.clone()]);
+        let _val_at = |n: &Expr, k: &Expr| Expr::apps(fin_val.clone(), [n.clone(), k.clone()]);
         let eq_fin = |n: &Expr, a: Expr, b: Expr| {
             Expr::apps(
                 Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
                 [fin_of(n), a, b],
             )
         };
-        let eq_nat = |a: Expr, b: Expr| {
+        let _eq_nat = |a: Expr, b: Expr| {
             Expr::apps(
                 Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
                 [nat.clone(), a, b],
@@ -832,7 +839,7 @@ impl Environment {
         let fin_islt = Expr::const_(Name::from_string("Fin.isLt"), vec![]);
         let hc_decode = Expr::const_(Name::from_string("BoolAnalysis.hcDecode"), vec![]);
         let set_size_nat = Expr::const_(Name::from_string("BoolAnalysis.setSizeNat"), vec![]);
-        let fin_sum_nat = Expr::const_(Name::from_string("Fin.sumNat"), vec![]);
+        let _fin_sum_nat = Expr::const_(Name::from_string("Fin.sumNat"), vec![]);
         let fin_sum_nat_eq_zero = Expr::const_(Name::from_string("Fin.sumNat_eq_zero"), vec![]);
         let indnat_eq_zero = Expr::const_(Name::from_string("BoolAnalysis.indNat_eq_zero"), vec![]);
         let testbit = Expr::const_(Name::from_string("Nat.testBit"), vec![]);
@@ -1539,7 +1546,7 @@ impl Environment {
         let fin_islt = Expr::const_(Name::from_string("Fin.isLt"), vec![]);
         let fin_last_cases = Expr::const_(Name::from_string("Fin.lastCases"), vec![l0.clone()]);
         let nat_lt = Expr::const_(Name::from_string("Nat.lt"), vec![]);
-        let nat_add = Expr::const_(Name::from_string("Nat.add"), vec![]);
+        let _nat_add = Expr::const_(Name::from_string("Nat.add"), vec![]);
         let not_succ_le_zero = Expr::const_(Name::from_string("Nat.not_succ_le_zero"), vec![]);
         let false_elim = Expr::const_(Name::from_string("False.elim"), vec![l0.clone()]);
         let and_left = Expr::const_(Name::from_string("And.left"), vec![]);
@@ -1557,7 +1564,7 @@ impl Environment {
         let fin_to_nat = |n: &Expr| Expr::pi(BinderInfo::Default, fin_of(n), nat.clone());
         let sum_nat = |n: Expr, g: Expr| Expr::apps(fin_sum_nat.clone(), [n, g]);
         let succ = |x: Expr| Expr::app(c.nat_succ.clone(), x);
-        let and_of =
+        let _and_of =
             |p: Expr, q: Expr| Expr::apps(Expr::const_(Name::from_string("And"), vec![]), [p, q]);
         // g ∘ castSucc k : fun (i : Fin k) => g (Fin.castSucc k i)
         let comp_cast = |parent: &EnvDeclBuilder, k: &Expr, g: &Expr| -> Expr {
@@ -2230,7 +2237,7 @@ impl Environment {
         let sub_self = Expr::const_(Name::from_string("Rat.sub_self"), vec![]);
         let sub_zero = Expr::const_(Name::from_string("Rat.sub_zero"), vec![]);
         let succ = |x: Expr| Expr::app(c.nat_succ.clone(), x);
-        let one_nat = succ(c.nat_zero.clone());
+        let _one_nat = succ(c.nat_zero.clone());
 
         // goal at a given m, a: sub a (ind(beq m 0)·a) = ind(ble 1 m)·a
         let goal_at = |m: Expr, a: &Expr| {

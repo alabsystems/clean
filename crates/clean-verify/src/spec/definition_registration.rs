@@ -136,6 +136,41 @@ impl Specification {
         Ok(())
     }
 
+    /// Register a definition ONLY if that name is not already registered.
+    ///
+    /// For declarations that legitimately appear in more than one module. The
+    /// kernel rejects a second `add_decl` for the same name, so a module that
+    /// re-registers a shared lemma cannot be wired into the live bundle
+    /// alongside the module that already supplies it.
+    ///
+    /// SOUNDNESS CONDITION, and it is not automatic: this silently keeps the
+    /// FIRST registration, so it is only correct when the two definitions agree.
+    /// Every current caller was checked pairwise before adoption (byte-identical
+    /// or alpha-equivalent). Do NOT reach for this to paper over a genuine
+    /// disagreement — there the right fix is a rename, because skipping would
+    /// silently change which statement the spec means.
+    pub(crate) fn add_definition_if_absent(
+        &mut self,
+        def: SpecDefinition,
+    ) -> Result<(), SpecError> {
+        if self.definitions.contains_key(&def.name) {
+            return Ok(());
+        }
+        self.add_definition(def)
+    }
+
+    /// `add_definition_structural`, skipped when the name is already registered.
+    /// Same soundness condition as [`Self::add_definition_if_absent`].
+    pub(crate) fn add_definition_structural_if_absent(
+        &mut self,
+        def: SpecDefinition,
+    ) -> Result<(), SpecError> {
+        if self.definitions.contains_key(&def.name) {
+            return Ok(());
+        }
+        self.add_definition_structural(def)
+    }
+
     /// Register a spec definition for a declaration that already exists in the
     /// environment.
     ///

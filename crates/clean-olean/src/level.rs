@@ -289,19 +289,7 @@ mod tests {
     use super::*;
 
     fn get_lean_lib_path() -> Option<std::path::PathBuf> {
-        let home = std::env::var("HOME").ok()?;
-        let elan_path = std::path::PathBuf::from(home).join(".elan/toolchains");
-
-        if elan_path.exists() {
-            for entry in std::fs::read_dir(&elan_path).ok()? {
-                let entry = entry.ok()?;
-                let name = entry.file_name();
-                if name.to_string_lossy().contains("lean4") {
-                    return Some(entry.path().join("lib/lean"));
-                }
-            }
-        }
-        None
+        crate::pinned_lean_lib_path()
     }
 
     #[test]

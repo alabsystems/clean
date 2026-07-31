@@ -63,6 +63,7 @@ pub const GIVEBACK_READ_AFTER_WRITE: &str = "RustSem.GiveBack.read_after_write";
 /// foundation for generic `&mut T`).
 pub const GIVEBACK_READ_AFTER_WRITE_POLY: &str = "RustSem.GiveBack.read_after_write_poly";
 /// Fully-qualified name of the store frame / non-interference law.
+#[cfg(any(test, feature = "math-overlays"))]
 pub const GIVEBACK_FRAME: &str = "RustSem.GiveBack.frame";
 /// Fully-qualified name of the incr give-back-over-store law.
 pub const GIVEBACK_INCR_STORE: &str = "RustSem.GiveBack.incr_store";
@@ -413,6 +414,7 @@ pub const GIVEBACK_STEP_SEQ: &str = "RustSem.GiveBack.step_seqWriteLastWins";
 /// **§3.5 disjoint-Place frame (step level)**: a write step does NOT affect any
 /// other address — `a' ≠ a → gbLookup (gbStep s a (some v)) a' = gbLookup s a'`.
 /// (cfg-gated: needs `Nat.beq_eq_false_of_ne`, like the store frame law.)
+#[cfg(any(test, feature = "math-overlays"))]
 pub const GIVEBACK_STEP_FRAME: &str = "RustSem.GiveBack.step_frameDisjoint";
 /// **§3.5 memory-level GIVE-BACK ROUND-TRIP**: the operational statement that the give-back
 /// recovers the original store value at the mutated address. After incrementing address `a`
@@ -909,7 +911,7 @@ impl Environment {
         let frame_val = {
             let mut b = EnvDeclBuilder::new();
             let (p_id, p) = b.fresh_local(pair_t.clone());
-            let (v_id, v) = b.fresh_local(nat.clone());
+            let (v_id, _v) = b.fresh_local(nat.clone());
             let body = refl_nat(snd(&p));
             let e = b.mk_lam(v_id, BinderInfo::Default, nat.clone(), body);
             b.finish(b.mk_lam(p_id, BinderInfo::Default, pair_t.clone(), e))
@@ -4615,39 +4617,38 @@ impl Environment {
 
         // Admit `genericRaw_T : ∀ (s:Nat→T)(k:Nat)(v:T), gbLookupP T (gbUpdateP T s k v) k = v`
         //   := read_after_write_poly T    (the poly law specialized; T : Type 0 = Sort 1).
-        let mut admit_inst =
-            |env: &mut Environment, name: &str, t: &Expr| -> Result<(), EnvError> {
-                let store_t = Expr::arrow(nat.clone(), t.clone());
-                let ty = {
-                    let mut b = EnvDeclBuilder::new();
-                    let (s_id, s) = b.fresh_local(store_t.clone());
-                    let (k_id, k) = b.fresh_local(nat.clone());
-                    let (v_id, v) = b.fresh_local(t.clone());
-                    let lhs = Expr::apps(
-                        gb_lookup_p.clone(),
-                        [
-                            t.clone(),
-                            Expr::apps(
-                                gb_update_p.clone(),
-                                [t.clone(), s.clone(), k.clone(), v.clone()],
-                            ),
-                            k.clone(),
-                        ],
-                    );
-                    let concl = Expr::apps(eq1.clone(), [t.clone(), lhs, v.clone()]);
-                    let e = b.mk_pi(v_id, BinderInfo::Default, t.clone(), concl);
-                    let e = b.mk_pi(k_id, BinderInfo::Default, nat.clone(), e);
-                    let e = b.mk_pi(s_id, BinderInfo::Default, store_t.clone(), e);
-                    b.finish(e)
-                };
-                let val = Expr::app(poly.clone(), t.clone());
-                env.add_decl(Declaration::Theorem {
-                    name: Name::from_string(name),
-                    level_params: vec![],
-                    type_: ty,
-                    value: val,
-                })
+        let admit_inst = |env: &mut Environment, name: &str, t: &Expr| -> Result<(), EnvError> {
+            let store_t = Expr::arrow(nat.clone(), t.clone());
+            let ty = {
+                let mut b = EnvDeclBuilder::new();
+                let (s_id, s) = b.fresh_local(store_t.clone());
+                let (k_id, k) = b.fresh_local(nat.clone());
+                let (v_id, v) = b.fresh_local(t.clone());
+                let lhs = Expr::apps(
+                    gb_lookup_p.clone(),
+                    [
+                        t.clone(),
+                        Expr::apps(
+                            gb_update_p.clone(),
+                            [t.clone(), s.clone(), k.clone(), v.clone()],
+                        ),
+                        k.clone(),
+                    ],
+                );
+                let concl = Expr::apps(eq1.clone(), [t.clone(), lhs, v.clone()]);
+                let e = b.mk_pi(v_id, BinderInfo::Default, t.clone(), concl);
+                let e = b.mk_pi(k_id, BinderInfo::Default, nat.clone(), e);
+                let e = b.mk_pi(s_id, BinderInfo::Default, store_t.clone(), e);
+                b.finish(e)
             };
+            let val = Expr::app(poly.clone(), t.clone());
+            env.add_decl(Declaration::Theorem {
+                name: Name::from_string(name),
+                level_params: vec![],
+                type_: ty,
+                value: val,
+            })
+        };
         admit_inst(self, GIVEBACK_GEN_NAT, &nat.clone())?;
         admit_inst(self, GIVEBACK_GEN_BOOL, &bool_c)?;
         admit_inst(self, GIVEBACK_GEN_PROD, &prod_nat_nat)?;

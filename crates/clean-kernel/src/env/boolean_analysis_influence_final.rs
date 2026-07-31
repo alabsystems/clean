@@ -241,6 +241,7 @@ fn influence_fourier_value(c: &InflConsts) -> Expr {
 /// Type `∀ n f i, @Eq Rat (Influence n f i) (subsetSum n (fun S => ind(S i)·f̂(S)²))`
 /// — the registered `influence_fourier` statement (def-eq to
 /// `∀ n f i, influence_fourier_helper n f i`).
+#[cfg(test)]
 fn influence_fourier_type(c: &InflConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());

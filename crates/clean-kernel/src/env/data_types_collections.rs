@@ -151,6 +151,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_ulift` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_ulift(&self) -> bool {
         self.ulift_init
     }
@@ -634,6 +635,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_char` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_char(&self) -> bool {
         self.char_init
     }
@@ -1209,6 +1211,238 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // ── List.drop {α : Type u} (n : Nat) (l : List α) : List α ─────────
+        // Lean `Init/Data/List/Basic.lean`: `drop 0 l = l`, `drop _ [] = []`,
+        // `drop (n+1) (_::l) = drop n l`. Recursing on `n` and dropping one head
+        // per step:
+        //   drop n l = (@Nat.rec (λ _ => List α → List α)
+        //                 (λ x => x)                       -- drop 0
+        //                 (λ _ ih => λ x => ih (tail x))   -- drop (k+1)
+        //                 n) l
+        // The motive returns `List α → List α : Sort (u+1)`, so `Nat.rec.{succ u}`
+        // (same function-motive shape as `List.rangeAux` below). `tail` is inlined
+        // as a `List.rec.{succ u, u}` (`[] ↦ []`, `_::tl ↦ tl`) so no dependency on
+        // registration order of a separate `List.tail`. All-fundamental primitives.
+        if self.get_const(&Name::from_string("List.drop")).is_none() {
+            let nat_rec_u = Expr::const_(
+                Name::from_string("Nat.rec"),
+                vec![Level::succ(u_lvl.clone())],
+            );
+            let list_rec_u = Expr::const_(
+                Name::from_string("List.rec"),
+                vec![Level::succ(u_lvl.clone()), u_lvl.clone()],
+            );
+            let list_nil_u = Expr::const_(Name::from_string("List.nil"), vec![u_lvl.clone()]);
+
+            let drop_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let list_alpha = Expr::app(list_const_u.clone(), alpha.clone());
+                let (n_id, _n) = b.fresh_local(nat_const.clone());
+                let (l_id, _l) = b.fresh_local(list_alpha.clone());
+                let e = list_alpha.clone();
+                let e = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_pi(n_id, BinderInfo::Default, nat_const.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let drop_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let list_alpha = Expr::app(list_const_u.clone(), alpha.clone());
+                let (n_id, n) = b.fresh_local(nat_const.clone());
+                let (l_id, l) = b.fresh_local(list_alpha.clone());
+                let list_fn_ty =
+                    Expr::pi(BinderInfo::Default, list_alpha.clone(), list_alpha.clone());
+
+                // motive: λ (_ : Nat) => (List α → List α)
+                let (mn_id, _mn) = b.fresh_local(nat_const.clone());
+                let motive = b.mk_lam(
+                    mn_id,
+                    BinderInfo::Default,
+                    nat_const.clone(),
+                    list_fn_ty.clone(),
+                );
+
+                // zero case: λ (x : List α) => x
+                let (x0_id, x0) = b.fresh_local(list_alpha.clone());
+                let zero_case = b.mk_lam(x0_id, BinderInfo::Default, list_alpha.clone(), x0);
+
+                // succ case: λ (_m : Nat) (ih : List α → List α) => λ (x : List α) =>
+                //              ih (tail x), where tail x =
+                //                @List.rec α (λ _ => List α) (List.nil α)
+                //                          (λ _hd tl _ih => tl) x
+                let (m_id, _m) = b.fresh_local(nat_const.clone());
+                let (ih_id, ih) = b.fresh_local(list_fn_ty.clone());
+                let (x_id, x) = b.fresh_local(list_alpha.clone());
+                // tail motive: λ (_ : List α) => List α
+                let (tm_id, _tm) = b.fresh_local(list_alpha.clone());
+                let tail_motive = b.mk_lam(
+                    tm_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    list_alpha.clone(),
+                );
+                // tail cons: λ (_hd : α) (tl : List α) (_ih : List α) => tl
+                let (thd_id, _thd) = b.fresh_local(alpha.clone());
+                let (ttl_id, ttl) = b.fresh_local(list_alpha.clone());
+                let (tih_id, _tih) = b.fresh_local(list_alpha.clone());
+                let tail_cons = b.mk_lam(tih_id, BinderInfo::Default, list_alpha.clone(), ttl);
+                let tail_cons =
+                    b.mk_lam(ttl_id, BinderInfo::Default, list_alpha.clone(), tail_cons);
+                let tail_cons = b.mk_lam(thd_id, BinderInfo::Default, alpha.clone(), tail_cons);
+                let nil_alpha = Expr::app(list_nil_u.clone(), alpha.clone());
+                let tail_x = Expr::apps(
+                    list_rec_u.clone(),
+                    [alpha.clone(), tail_motive, nil_alpha, tail_cons, x.clone()],
+                );
+                let ih_tail = Expr::app(ih.clone(), tail_x);
+                let succ_inner = b.mk_lam(x_id, BinderInfo::Default, list_alpha.clone(), ih_tail);
+                let succ_case =
+                    b.mk_lam(ih_id, BinderInfo::Default, list_fn_ty.clone(), succ_inner);
+                let succ_case = b.mk_lam(m_id, BinderInfo::Default, nat_const.clone(), succ_case);
+
+                // (@Nat.rec.{succ u} motive zero succ n) l
+                let rec_fn =
+                    Expr::apps(nat_rec_u.clone(), [motive, zero_case, succ_case, n.clone()]);
+                let body = Expr::app(rec_fn, l.clone());
+                let e = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
+                let e = b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.drop"),
+                level_params: vec![u.clone()],
+                type_: drop_type,
+                value: drop_value,
+                is_reducible: true,
+            })?;
+        }
+
+        // ── List.take {α : Type u} (n : Nat) (l : List α) : List α ─────────
+        // Lean `Init/Data/List/Basic.lean`: `take 0 _ = []`, `take _ [] = []`,
+        // `take (n+1) (a::l) = a :: take n l`. Same `Nat.rec.{succ u}`-into-
+        // `(List α → List α)` shape as `List.drop` above, but the base case is
+        // `List.nil` (take 0 = []) and the succ case CONSES the head instead of
+        // composing tail:
+        //   take n l = (@Nat.rec (λ _ => List α → List α)
+        //                 (λ _ => List.nil)                         -- take 0
+        //                 (λ _ ih => λ x =>                         -- take (k+1)
+        //                    @List.rec α (λ _ => List α) List.nil
+        //                      (λ hd tl _ => List.cons hd (ih tl)) x)
+        //                 n) l
+        // All-fundamental primitives (Nat.rec/List.rec/List.cons/List.nil).
+        if self.get_const(&Name::from_string("List.take")).is_none() {
+            let nat_rec_u = Expr::const_(
+                Name::from_string("Nat.rec"),
+                vec![Level::succ(u_lvl.clone())],
+            );
+            let list_rec_u = Expr::const_(
+                Name::from_string("List.rec"),
+                vec![Level::succ(u_lvl.clone()), u_lvl.clone()],
+            );
+            let list_nil_u = Expr::const_(Name::from_string("List.nil"), vec![u_lvl.clone()]);
+            let list_cons_u = Expr::const_(Name::from_string("List.cons"), vec![u_lvl.clone()]);
+
+            let take_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let list_alpha = Expr::app(list_const_u.clone(), alpha.clone());
+                let (n_id, _n) = b.fresh_local(nat_const.clone());
+                let (l_id, _l) = b.fresh_local(list_alpha.clone());
+                let e = list_alpha.clone();
+                let e = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), e);
+                let e = b.mk_pi(n_id, BinderInfo::Default, nat_const.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let take_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let list_alpha = Expr::app(list_const_u.clone(), alpha.clone());
+                let (n_id, n) = b.fresh_local(nat_const.clone());
+                let (l_id, l) = b.fresh_local(list_alpha.clone());
+                let list_fn_ty =
+                    Expr::pi(BinderInfo::Default, list_alpha.clone(), list_alpha.clone());
+                let nil_alpha = Expr::app(list_nil_u.clone(), alpha.clone());
+
+                // motive: λ (_ : Nat) => (List α → List α)
+                let (mn_id, _mn) = b.fresh_local(nat_const.clone());
+                let motive = b.mk_lam(
+                    mn_id,
+                    BinderInfo::Default,
+                    nat_const.clone(),
+                    list_fn_ty.clone(),
+                );
+
+                // zero case: λ (_x : List α) => List.nil  (take 0 = [])
+                let (x0_id, _x0) = b.fresh_local(list_alpha.clone());
+                let zero_case = b.mk_lam(
+                    x0_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    nil_alpha.clone(),
+                );
+
+                // succ case: λ (_m : Nat) (ih : List α → List α) => λ (x : List α) =>
+                //   @List.rec α (λ _ => List α) List.nil
+                //             (λ hd tl _ => List.cons hd (ih tl)) x
+                let (m_id, _m) = b.fresh_local(nat_const.clone());
+                let (ih_id, ih) = b.fresh_local(list_fn_ty.clone());
+                let (x_id, x) = b.fresh_local(list_alpha.clone());
+                // inner List.rec motive: λ (_ : List α) => List α
+                let (im_id, _im) = b.fresh_local(list_alpha.clone());
+                let inner_motive = b.mk_lam(
+                    im_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    list_alpha.clone(),
+                );
+                // inner cons: λ (hd : α) (tl : List α) (_ih2 : List α) =>
+                //               List.cons hd (ih tl)
+                let (hd_id, hd) = b.fresh_local(alpha.clone());
+                let (tl_id, tl) = b.fresh_local(list_alpha.clone());
+                let (ih2_id, _ih2) = b.fresh_local(list_alpha.clone());
+                let ih_tl = Expr::app(ih.clone(), tl.clone());
+                let cons_hd = Expr::apps(list_cons_u.clone(), [alpha.clone(), hd.clone(), ih_tl]);
+                let inner_cons = b.mk_lam(ih2_id, BinderInfo::Default, list_alpha.clone(), cons_hd);
+                let inner_cons =
+                    b.mk_lam(tl_id, BinderInfo::Default, list_alpha.clone(), inner_cons);
+                let inner_cons = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), inner_cons);
+                let inner_rec = Expr::apps(
+                    list_rec_u.clone(),
+                    [
+                        alpha.clone(),
+                        inner_motive,
+                        nil_alpha.clone(),
+                        inner_cons,
+                        x.clone(),
+                    ],
+                );
+                let succ_inner = b.mk_lam(x_id, BinderInfo::Default, list_alpha.clone(), inner_rec);
+                let succ_case =
+                    b.mk_lam(ih_id, BinderInfo::Default, list_fn_ty.clone(), succ_inner);
+                let succ_case = b.mk_lam(m_id, BinderInfo::Default, nat_const.clone(), succ_case);
+
+                // (@Nat.rec.{succ u} motive zero succ n) l
+                let rec_fn =
+                    Expr::apps(nat_rec_u.clone(), [motive, zero_case, succ_case, n.clone()]);
+                let body = Expr::app(rec_fn, l.clone());
+                let e = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
+                let e = b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Definition {
+                name: Name::from_string("List.take"),
+                level_params: vec![u.clone()],
+                type_: take_type,
+                value: take_value,
+                is_reducible: true,
+            })?;
+        }
+
         // ── List.range (n : Nat) : List Nat ────────────────────────────────
         // `List.range n = [0, 1, …, n-1]`. Built by a `Nat.rec` that, at each
         // step, appends `n-1` to the front-recursion via an auxiliary
@@ -1305,7 +1539,7 @@ impl Environment {
             b.finish(body)
         };
         let range_aux_type = {
-            let mut b = EnvDeclBuilder::new();
+            let b = EnvDeclBuilder::new();
             // Nat → Nat → List Nat
             let e = Expr::pi(
                 BinderInfo::Default,
@@ -1358,6 +1592,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_list` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_list(&self) -> bool {
         self.list_init
     }
@@ -1921,6 +2156,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_string` has completed successfully
     /// ENSURES: Pure - no side effects
+    #[cfg(test)]
     pub(crate) fn has_string(&self) -> bool {
         self.string_init
     }

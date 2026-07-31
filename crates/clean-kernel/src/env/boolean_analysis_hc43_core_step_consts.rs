@@ -84,6 +84,7 @@ impl Hc43StepConsts {
     pub(super) fn four_rat(&self) -> Expr {
         self.o.four_rat()
     }
+    #[cfg(test)]
     pub(super) fn contribution(&self, f: &Expr, s: &Expr, r: &Expr, hs: &Expr, x: &Expr) -> Expr {
         self.o.contribution(f, s, r, hs, x)
     }
@@ -124,6 +125,7 @@ impl Hc43StepConsts {
 
     // ── NNReal order/transitivity leaves (landed) ────────────────────────────
     /// `NNReal.le.trans a b c hab hbc : NNReal.le a c`.
+    #[cfg(test)]
     pub(super) fn nnle_trans(&self, a: &Expr, b: &Expr, cc: &Expr, hab: Expr, hbc: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("NNReal.le.trans"), vec![]),
@@ -131,6 +133,7 @@ impl Hc43StepConsts {
         )
     }
     /// `NNReal.le.refl a : NNReal.le a a`.
+    #[cfg(test)]
     pub(super) fn nnle_refl(&self, a: &Expr) -> Expr {
         Expr::app(
             Expr::const_(Name::from_string("NNReal.le.refl"), vec![]),
@@ -138,6 +141,7 @@ impl Hc43StepConsts {
         )
     }
     /// `NNReal.add_le_add a b c d hab hcd : add a c ≤ add b d`.
+    #[cfg(test)]
     pub(super) fn add_le_add(
         &self,
         a: &Expr,
@@ -153,6 +157,7 @@ impl Hc43StepConsts {
         )
     }
     /// `NNReal.mul_le_mul a b c d hab hcd : mul a c ≤ mul b d`.
+    #[cfg(test)]
     pub(super) fn mul_le_mul(
         &self,
         a: &Expr,
@@ -170,6 +175,7 @@ impl Hc43StepConsts {
 
     // ── finSum bridges (landed) ──────────────────────────────────────────────
     /// `NNReal.finSum_le n f g h : finSum n f ≤ finSum n g`.
+    #[cfg(test)]
     pub(super) fn finsum_le(&self, n: &Expr, f: &Expr, g: &Expr, h: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("NNReal.finSum_le"), vec![]),
@@ -184,6 +190,7 @@ impl Hc43StepConsts {
         )
     }
     /// `NNReal.finSum_congr n f g h : finSum n f = finSum n g`.
+    #[cfg(test)]
     pub(super) fn finsum_congr(&self, n: &Expr, f: &Expr, g: &Expr, h: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("NNReal.finSum_congr"), vec![]),
@@ -224,6 +231,7 @@ impl Hc43StepConsts {
         )
     }
     /// `BoolAnalysis.norm43_card_succ m Φ : finSum (m+1) Φ = finSum m (Φ∘castSucc) + Φ(last m)`.
+    #[cfg(test)]
     pub(super) fn norm43_card_succ(&self, m: &Expr, phi: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("BoolAnalysis.norm43_card_succ"), vec![]),
@@ -231,6 +239,7 @@ impl Hc43StepConsts {
         )
     }
     /// `BoolAnalysis.finSum_cube_split n A B`.
+    #[cfg(test)]
     pub(super) fn finsum_cube_split(&self, n: &Expr, a: &Expr, bv: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("BoolAnalysis.finSum_cube_split"), vec![]),
@@ -238,6 +247,7 @@ impl Hc43StepConsts {
         )
     }
     /// `NNReal.cube_superadd u v : u³ + v³ ≤ (u+v)³`.
+    #[cfg(test)]
     pub(super) fn cube_superadd(&self, u: &Expr, v: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("NNReal.cube_superadd"), vec![]),
@@ -285,15 +295,18 @@ impl Hc43StepConsts {
     pub(super) fn noise_fn(&self, rho: &Expr, n: &Expr, f: &Expr, jx: &Expr) -> Expr {
         self.o.noise_fn(rho, n, f, jx)
     }
+    #[cfg(test)]
     pub(super) fn decode(&self, n: &Expr, k: &Expr) -> Expr {
         self.o.decode(n, k)
     }
+    #[cfg(test)]
     pub(super) fn eq_rat(&self, a: &Expr, b: &Expr) -> Expr {
         self.o.eq_rat(a, b)
     }
     pub(super) fn trans_rat(&self, a: &Expr, b: &Expr, cc: &Expr, h1: Expr, h2: Expr) -> Expr {
         self.o.trans_rat(a, b, cc, h1, h2)
     }
+    #[cfg(test)]
     pub(super) fn symm_rat(&self, a: &Expr, b: &Expr, h: Expr) -> Expr {
         self.o.symm_rat(a, b, h)
     }
@@ -330,6 +343,7 @@ impl Hc43StepConsts {
     }
     /// `NNReal.finSum_ofRat`-style consts already added above; here the inverse
     /// `Fin.sum_add n f g : Fin.sum n (fun i => f i + g i) = Fin.sum n f + Fin.sum n g`.
+    #[cfg(test)]
     pub(super) fn fin_sum_add(&self, n: &Expr, f: &Expr, g: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Fin.sum_add"), vec![]),
@@ -390,6 +404,7 @@ impl Hc43StepConsts {
         Expr::app(ndrec, hb.clone())
     }
     /// `@congrArg Rat NNReal from to f h`.
+    #[cfg(test)]
     pub(super) fn congr_arg_rat_nn(&self, from: &Expr, to: &Expr, f: Expr, h: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("congrArg"), vec![self.l1(), self.l1()]),

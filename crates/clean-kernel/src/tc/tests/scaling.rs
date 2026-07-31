@@ -25,6 +25,34 @@
 
 use std::time::{Duration, Instant};
 
+/// Samples taken per measurement; the fastest is kept.
+///
+/// One sample is not enough: the public-release gate runs these tests as five
+/// concurrent shard processes (`run_public_release_libraries.sh`, `--jobs 5`),
+/// and `serial_test_guard()` is a process-local Mutex, so it provides no
+/// exclusion there. A single sample can then be inflated by an unrelated
+/// process and fail a threshold the algorithm actually meets — observed
+/// 2026-07-29 on `test_infer_type_scaling_nested_lambda`, which reported 48.8x
+/// under load and 2.1x/linear when re-run alone.
+const SCALING_SAMPLES: usize = 3;
+
+/// Time `f` `samples` times and return the fastest run with its last value.
+///
+/// Contention can only ever ADD time, so the minimum is the sample least
+/// contaminated by scheduling noise. The threshold is unchanged, so a genuine
+/// complexity regression still fails: it would be slow in every sample.
+fn min_nanos<T>(samples: usize, mut f: impl FnMut() -> T) -> (u128, T) {
+    let mut best = u128::MAX;
+    let mut value = None;
+    for _ in 0..samples.max(1) {
+        let start = Instant::now();
+        let produced = f();
+        best = best.min(start.elapsed().as_nanos());
+        value = Some(produced);
+    }
+    (best, value.expect("at least one sample"))
+}
+
 use super::helpers::{
     build_nested_beta_redex, build_nested_lambda, build_nested_lets, build_nested_pi,
     run_with_timeout, SCALING_TEST_TIMEOUT,
@@ -78,12 +106,11 @@ fn test_infer_type_scaling_nested_lambda() {
 
             for &n in &sizes {
                 let expr = build_nested_lambda(n);
-                let tc = TypeChecker::new(&env);
-
-                let start = Instant::now();
-                let ty = tc.infer_type(&expr).unwrap();
-                let elapsed = start.elapsed();
-                times.push(elapsed.as_nanos());
+                let (nanos, ty) = min_nanos(SCALING_SAMPLES, || {
+                    let tc = TypeChecker::new(&env);
+                    tc.infer_type(&expr).unwrap()
+                });
+                times.push(nanos);
 
                 // Verify the result is a Pi type (lambda of Type→Type has Pi type)
                 assert!(
@@ -122,12 +149,11 @@ fn test_infer_type_scaling_nested_pi() {
 
             for &n in &sizes {
                 let expr = build_nested_pi(n);
-                let tc = TypeChecker::new(&env);
-
-                let start = Instant::now();
-                let ty = tc.infer_type(&expr).unwrap();
-                let elapsed = start.elapsed();
-                times.push(elapsed.as_nanos());
+                let (nanos, ty) = min_nanos(SCALING_SAMPLES, || {
+                    let tc = TypeChecker::new(&env);
+                    tc.infer_type(&expr).unwrap()
+                });
+                times.push(nanos);
 
                 // Nested Pi type has Sort type
                 assert!(
@@ -162,12 +188,11 @@ fn test_infer_type_scaling_wide_app() {
 
             for &n in &sizes {
                 let (env, expr) = build_wide_app_with_env(n);
-                let tc = TypeChecker::new(&env);
-
-                let start = Instant::now();
-                let ty = tc.infer_type(&expr).unwrap();
-                let elapsed = start.elapsed();
-                times.push(elapsed.as_nanos());
+                let (nanos, ty) = min_nanos(SCALING_SAMPLES, || {
+                    let tc = TypeChecker::new(&env);
+                    tc.infer_type(&expr).unwrap()
+                });
+                times.push(nanos);
 
                 // Wide application f Prop Prop ... Prop with f : Type→...→Type
                 // should reduce to Type when fully applied
@@ -205,11 +230,11 @@ fn test_infer_type_with_cert_scaling() {
 
             for &n in &sizes {
                 let expr = build_nested_lambda(n);
-                let tc = TypeChecker::new(&env);
 
-                let start = Instant::now();
-                let (ty, _cert) = tc.infer_type_with_cert(&expr).unwrap();
-                let elapsed = start.elapsed();
+                let (nanos, (ty, _cert)) = min_nanos(SCALING_SAMPLES, || {
+                    let tc = TypeChecker::new(&env);
+                    tc.infer_type_with_cert(&expr).unwrap()
+                });
 
                 // Certified path should agree with non-certified: nested lambda has Pi type
                 assert!(
@@ -217,7 +242,7 @@ fn test_infer_type_with_cert_scaling() {
                     "infer_type_with_cert of nested lambda should return Pi type, got {:?}",
                     ty.kind
                 );
-                times.push(elapsed.as_nanos());
+                times.push(nanos);
             }
 
             let ratio = times[2] as f64 / times[0].max(1) as f64;
@@ -268,7 +293,7 @@ fn build_stuck_app_chain(width: usize) -> (Environment, Expr) {
 /// Fast steady-state reductions can quantize to 0ns after integer averaging.
 /// The scaling assertions clamp a 0ns baseline to 1ns so coarse timer
 /// resolution still enforces the regression guard instead of skipping it.
-fn measure_whnf_avg_nanos(tc: &TypeChecker, expr: &Expr) -> u128 {
+fn measure_whnf_avg_nanos(tc: &TypeChecker<'_>, expr: &Expr) -> u128 {
     use std::hint::black_box;
 
     // Warm up caches so we're measuring the steady-state path.

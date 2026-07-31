@@ -62,6 +62,7 @@ fn checked_eq_cong_keeps_domain_and_codomain_universes_distinct() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
         spec.add_inductive(
             r"inductive Eq (α : Sort u) : α → α → Prop
@@ -195,6 +196,7 @@ fn test_eq_inductive_registration_821() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
 
         // Add Nat first (prerequisite for Eq test expression).
@@ -269,6 +271,7 @@ fn test_eq_inductive_with_nat_add_context_821() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
 
         // Add Nat inductive (arrow syntax; parser doesn't handle binder form).
@@ -339,6 +342,7 @@ fn test_eq_inductive_isolation_findings_821() {
             let mut spec = Specification {
                 env: Environment::new(),
                 definitions: HashMap::new(),
+                red_env_script_override: None,
             };
 
             // Add Eq inductive FIRST (before Nat or anything else).
@@ -393,6 +397,7 @@ fn test_eq_inductive_nat_add_zero_value_821() {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
+            red_env_script_override: None,
         };
 
         // Using "Type u" triggers auto-binding of universe param u.

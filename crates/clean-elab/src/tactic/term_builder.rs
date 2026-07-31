@@ -4,7 +4,6 @@
 
 //! Shared term construction utilities for typeclass method applications.
 // WIP: not yet wired into tactic dispatch — suppress dead_code until integration
-#![allow(dead_code)]
 //!
 //! Eliminates the implicit-arg-omission bug class (#2078) by providing
 //! correctly-arity'd builder functions for common typeclass methods.

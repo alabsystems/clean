@@ -2,8 +2,8 @@
   parser parse-parity ground-truth regeneration recipe
   =====================================================
   Toolchain oracle (pinned): leanprover/lean4 v4.30.0-rc2 (commit 3dc1a088),
-    $HOME/.elan/toolchains/leanprover--lean4---v4.30.0-rc2/bin/lean
-  Source probes: 8 verified family specs (
+    the elan toolchain `leanprover--lean4---v4.30.0-rc2`, `bin/lean`
+  Source probes: scratchpad/parser_specs/*.json (8 verified family specs,
     228 probes captured live from that binary on 2026-07-08).
 
   This is the REPRODUCTION RECIPE for the `lean_tree` column of

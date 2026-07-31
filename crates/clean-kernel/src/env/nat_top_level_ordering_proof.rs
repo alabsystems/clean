@@ -122,6 +122,7 @@ impl Environment {
     }
 
     /// Check if top-level Nat ordering promotions have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_nat_top_level_ordering(&self) -> bool {
         self.nat_top_level_ordering_init
     }

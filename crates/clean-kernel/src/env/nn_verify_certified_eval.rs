@@ -30,16 +30,23 @@
 //!
 //! Part of #3186.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::nn_verify_certified_eval_defs::CertEvalConsts;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize certified evaluation definitions and axioms.
     ///
     /// Depends on: `init_nn_verify_types()`, `init_eq()`, `init_list()`.
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_certified_eval(&mut self) -> Result<(), EnvError> {
         if self.nn_verify_certified_eval_init {
             return Ok(());
@@ -81,6 +88,7 @@ impl Environment {
     ///
     /// If the eval trace and certificate are verified, the output equals
     /// the network applied to the input.
+    #[cfg(test)]
     fn register_eval_trace_sound(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -137,6 +145,7 @@ impl Environment {
     /// ```
     ///
     /// Every correct evaluation has a verifiable certificate.
+    #[cfg(test)]
     fn register_eval_certificate_complete(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -187,6 +196,7 @@ impl Environment {
     /// ```
     ///
     /// Same input always produces the same output (functional correctness).
+    #[cfg(test)]
     fn register_eval_deterministic(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -243,6 +253,7 @@ impl Environment {
     /// ```
     ///
     /// Composing certified evals for chained networks is certified.
+    #[cfg(test)]
     fn register_certified_eval_composition(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();
@@ -313,6 +324,7 @@ impl Environment {
     ///
     /// If input is within IBP bounds and the network maps all bounded
     /// inputs to bounded outputs, then the concrete output is within bounds.
+    #[cfg(test)]
     fn register_eval_within_bounds(&mut self, c: &CertEvalConsts) -> Result<(), EnvError> {
         let ty = {
             let mut b = EnvDeclBuilder::new();

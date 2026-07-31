@@ -432,31 +432,23 @@ impl<'a> ElabCtx<'a> {
                 )
             }
 
-            // Coinductive (Part of #191) - elaborated same as inductive for now.
-            // Parser support complete; semantic difference (greatest vs least fixpoint)
-            // is handled at the kernel/type-checking level. When kernel-level
-            // coinductive support is added, this may need adjustment.
-            SurfaceDecl::Coinductive {
-                name,
-                universe_params,
-                binders,
-                ty,
-                ctors,
-                deriving,
-                modifiers,
-                ..
-            } => {
-                self.universe_params = universe_params.clone();
+            // Coinductive (#191): parsed but NOT semantically supported yet.
+            // Fail closed: elaborating a greatest-fixpoint declaration through
+            // `elab_inductive` would silently mint the least fixpoint (with an
+            // induction principle it must not have) — proofs would check while
+            // meaning something other than what the user wrote. The planned
+            // closure is a gfp lowering over complete lattices (Lean 4.25-style
+            // coinductive predicates), not kernel codata; until that lands this
+            // arm must reject.
+            SurfaceDecl::Coinductive { name, .. } => {
                 let qname = self.qualify_name(name);
-                self.elab_inductive(
-                    &qname,
-                    universe_params,
-                    binders,
-                    ty,
-                    ctors,
-                    deriving,
-                    modifiers,
-                )
+                Err(ElabError::Unsupported {
+                    feature: format!(
+                        "coinductive declaration `{qname}`: greatest-fixpoint \
+                         semantics are not implemented; refusing to elaborate \
+                         it as an inductive (least fixpoint)"
+                    ),
+                })
             }
 
             SurfaceDecl::Structure {

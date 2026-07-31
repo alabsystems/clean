@@ -34,7 +34,7 @@ use super::types::{FlatExpr, FlatFlags, FlatLevel, FlatTag};
 ///
 /// Reconstructs the expression at `idx` and all of its transitive
 /// dependencies. For batch reconstruction, use `reconstruct_all_exprs`.
-pub fn reconstruct_expr(db: &FlatDb, idx: u32) -> Result<Expr, FlatError> {
+pub fn reconstruct_expr(db: &FlatDb<'_>, idx: u32) -> Result<Expr, FlatError> {
     let levels = reconstruct_all_levels(db)?;
     let count = db.expr_count() as u32;
 
@@ -60,7 +60,7 @@ pub fn reconstruct_expr(db: &FlatDb, idx: u32) -> Result<Expr, FlatError> {
 ///
 /// Returns a Vec indexed by flat expression index, where each entry is
 /// the corresponding kernel Expr.
-pub fn reconstruct_all_exprs(db: &FlatDb) -> Result<Vec<Expr>, FlatError> {
+pub fn reconstruct_all_exprs(db: &FlatDb<'_>) -> Result<Vec<Expr>, FlatError> {
     let levels = reconstruct_all_levels(db)?;
     let count = db.expr_count() as u32;
     let mut exprs: Vec<Option<Expr>> = vec![None; count as usize];
@@ -81,7 +81,7 @@ pub fn reconstruct_all_exprs(db: &FlatDb) -> Result<Vec<Expr>, FlatError> {
 /// Reconstruct a single level from a FlatDb (with pre-built level memo).
 ///
 /// For cases where only one level is needed without building the full table.
-pub fn reconstruct_level(db: &FlatDb, idx: u32) -> Result<Level, FlatError> {
+pub fn reconstruct_level(db: &FlatDb<'_>, idx: u32) -> Result<Level, FlatError> {
     let levels = reconstruct_all_levels(db)?;
     levels
         .into_iter()
@@ -92,7 +92,7 @@ pub fn reconstruct_level(db: &FlatDb, idx: u32) -> Result<Level, FlatError> {
 /// Reconstruct all levels from a FlatDb into kernel Level values.
 ///
 /// Returns a Vec indexed by flat level index.
-fn reconstruct_all_levels(db: &FlatDb) -> Result<Vec<Level>, FlatError> {
+fn reconstruct_all_levels(db: &FlatDb<'_>) -> Result<Vec<Level>, FlatError> {
     let count = db.level_count();
     let mut levels: Vec<Option<Level>> = vec![None; count as usize];
 
@@ -111,7 +111,7 @@ fn reconstruct_all_levels(db: &FlatDb) -> Result<Vec<Level>, FlatError> {
 
 /// Reconstruct a single FlatLevel into a kernel Level.
 fn reconstruct_single_level(
-    db: &FlatDb,
+    db: &FlatDb<'_>,
     flat: &FlatLevel,
     levels: &[Option<Level>],
 ) -> Result<Level, FlatError> {
@@ -152,7 +152,7 @@ fn reconstruct_single_level(
 
 /// Reconstruct a single FlatExpr into a kernel Expr.
 fn reconstruct_single_expr(
-    db: &FlatDb,
+    db: &FlatDb<'_>,
     flat: &FlatExpr,
     levels: &[Level],
     exprs: &[Option<Expr>],
@@ -234,7 +234,7 @@ fn reconstruct_single_expr(
         }
 
         FlatTag::LitNat => {
-            if flat.flags().contains(super::types::FlatFlags::NAT_BIG) {
+            if flat.flags().contains(FlatFlags::NAT_BIG) {
                 // BigNat > u64: data[0..4] is a string index to the comma-joined
                 // decimal little-endian u64 limbs (see flat::convert).
                 let str_idx = flat.read_u32(0)?;

@@ -55,8 +55,18 @@ pub(crate) mod names {
         LazyLock::new(|| Name::from_string("instHMulNatNatNat"));
     pub(crate) static INST_HDIV_NAT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("instHDivNatNatNat"));
+    /// The homogeneous Nat `HDiv` instance registered by `with_prelude`
+    /// (`init_nat_hdiv_inst`), distinct from the triple-Nat olean name. Both
+    /// project to `Nat.div`.
+    pub(crate) static INST_HDIV_NAT_HOMO: LazyLock<Name> =
+        LazyLock::new(|| Name::from_string("instHDivNat"));
     pub(crate) static INST_HMOD_NAT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("instHModNatNatNat"));
+    /// The homogeneous Nat `HMod` instance registered by `with_prelude`
+    /// (`init_nat_hmod_inst`), distinct from the triple-Nat olean name. Both
+    /// project to `Nat.mod`.
+    pub(crate) static INST_HMOD_NAT_HOMO: LazyLock<Name> =
+        LazyLock::new(|| Name::from_string("instHModNat"));
     pub(crate) static INST_HPOW_NAT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("instHPowNatNatNat"));
 }
@@ -169,6 +179,30 @@ fn reduce_hdiv_hdiv(args: &[&Expr]) -> Option<Expr> {
         return native_reducers_arith::reduce_nat_div(&[args[4], args[5]]);
     }
 
+    // prelude-path `instHDivNat` (homogeneous `HDiv Nat Nat Nat`): the kernel
+    // does not unfold this reducible-instance projection on its own, so even
+    // `7 / 3` stalls at `HDiv.hDiv`. Delegate to `Nat.div a b` — the exact term
+    // the projection unfolds to — so the kernel's own `Nat.div` reduction takes
+    // over. The literal case folds to a literal.
+    //
+    // SOUNDNESS: `instHDivNat := @HDiv.mk Nat Nat Nat Nat.div` is a reducible
+    // definition (algebra_hetero.rs `init_nat_hdiv_inst`), so
+    // `@HDiv.hDiv Nat Nat Nat instHDivNat a b` is definitionally `Nat.div a b`;
+    // returning it is a faithful def-unfolding the kernel would perform anyway.
+    // Any proof built atop the reduced form is re-checked by the kernel, so a
+    // mis-reduction would fail closed, never produce a false proof. Mirrors the
+    // `instHAddNat` homogeneous arm above.
+    if *inst_name == *names::INST_HDIV_NAT_HOMO {
+        if let Some(lit) = native_reducers_arith::reduce_nat_div(&[args[4], args[5]]) {
+            return Some(lit);
+        }
+        let nat_div = Expr::const_(native_reducers_arith::names::NAT_DIV.clone(), vec![]);
+        return Some(Expr::app(
+            Expr::app(nat_div, args[4].clone()),
+            args[5].clone(),
+        ));
+    }
+
     None
 }
 
@@ -184,6 +218,30 @@ fn reduce_hmod_hmod(args: &[&Expr]) -> Option<Expr> {
 
     if *inst_name == *names::INST_HMOD_NAT {
         return native_reducers_arith::reduce_nat_mod(&[args[4], args[5]]);
+    }
+
+    // prelude-path `instHModNat` (homogeneous `HMod Nat Nat Nat`): the kernel
+    // does not unfold this reducible-instance projection on its own, so even
+    // `7 % 3` stalls at `HMod.hMod`. Delegate to `Nat.mod a b` — the exact term
+    // the projection unfolds to — so the kernel's own `Nat.mod` reduction takes
+    // over. The literal case folds to a literal.
+    //
+    // SOUNDNESS: `instHModNat := @HMod.mk Nat Nat Nat Nat.mod` is a reducible
+    // definition (algebra_hetero.rs `init_nat_hmod_inst`), so
+    // `@HMod.hMod Nat Nat Nat instHModNat a b` is definitionally `Nat.mod a b`;
+    // returning it is a faithful def-unfolding the kernel would perform anyway.
+    // Any proof built atop the reduced form is re-checked by the kernel, so a
+    // mis-reduction would fail closed, never produce a false proof. Mirrors the
+    // `instHAddNat` homogeneous arm above.
+    if *inst_name == *names::INST_HMOD_NAT_HOMO {
+        if let Some(lit) = native_reducers_arith::reduce_nat_mod(&[args[4], args[5]]) {
+            return Some(lit);
+        }
+        let nat_mod = Expr::const_(native_reducers_arith::names::NAT_MOD.clone(), vec![]);
+        return Some(Expr::app(
+            Expr::app(nat_mod, args[4].clone()),
+            args[5].clone(),
+        ));
     }
 
     None

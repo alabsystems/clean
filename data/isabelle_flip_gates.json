@@ -44,6 +44,39 @@
       "lines": 14418,
       "added": "2026-07-17",
       "round": "conj-tree-assoc-2026-07-17"
+    },
+    {
+      "serial": 107054,
+      "name": "<anon.s107054>",
+      "description": "waves 6-7 arms (locale reassembly / pin+OfClass projection / guarded conjunct)",
+      "slice": "~/isabelle-work/corpora/flip_gates/s107054.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "60ffec6153389a44bad7f97a7f1b076e1d84ca5cd7d2b351e60ce2ed3306e35d",
+      "lines": 14519,
+      "added": "2026-07-19",
+      "round": "waves-6-7-2026-07-19"
+    },
+    {
+      "serial": 310624,
+      "name": "<anon.s310624>",
+      "description": "waves 6-7 arms (locale reassembly / pin+OfClass projection / guarded conjunct)",
+      "slice": "~/isabelle-work/corpora/flip_gates/s310624.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "90740344c2d81b00bcbd08c7e60c8e6bccc2e0128581e4c32fffe04f2d4d80f2",
+      "lines": 14375,
+      "added": "2026-07-19",
+      "round": "waves-6-7-2026-07-19"
+    },
+    {
+      "serial": 311396,
+      "name": "<anon.s311396>",
+      "description": "waves 6-7 arms (locale reassembly / pin+OfClass projection / guarded conjunct)",
+      "slice": "~/isabelle-work/corpora/flip_gates/s311396.jsonl",
+      "expected": "KernelVerified",
+      "blake3": "90740344c2d81b00bcbd08c7e60c8e6bccc2e0128581e4c32fffe04f2d4d80f2",
+      "lines": 14375,
+      "added": "2026-07-19",
+      "round": "waves-6-7-2026-07-19"
     }
   ]
 }

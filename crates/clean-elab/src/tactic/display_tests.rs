@@ -8,8 +8,6 @@
 //! hypotheses, proof state formatting for single and multiple goals,
 //! and expression formatting for the major ExprKind variants.
 
-use std::sync::Arc;
-
 use clean_kernel::{BinderInfo, Environment, Expr, FVarId, Level};
 
 use super::core::{Goal, LocalDecl, ProofState};
@@ -102,7 +100,7 @@ fn test_format_expr_prop() {
 fn test_format_expr_type() {
     let env = setup_env();
     let config = ExprFormatter::default();
-    let type_expr = Expr::sort(Level::Succ(Arc::new(Level::Zero)));
+    let type_expr = Expr::sort(Level::succ(Level::Zero));
     let result = format_expr(&type_expr, &env, &config);
     assert_eq!(result, "Type");
 }
@@ -112,9 +110,7 @@ fn test_format_expr_type_n() {
     let env = setup_env();
     let config = ExprFormatter::default();
     // Type 2 = Sort 3
-    let type2 = Expr::sort(Level::Succ(Arc::new(Level::Succ(Arc::new(Level::Succ(
-        Arc::new(Level::Zero),
-    ))))));
+    let type2 = Expr::sort(Level::succ(Level::succ(Level::succ(Level::Zero))));
     let result = format_expr(&type2, &env, &config);
     assert_eq!(result, "Type 2");
 }

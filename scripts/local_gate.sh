@@ -30,6 +30,21 @@ echo "== local gate: cross-repo dependency boundary =="
 python3 scripts/check_workspace_dependency_boundary.py \
   || fail "Clean must consume shared verification vocabulary through trust-ir-contract, never the Trust workspace"
 
+echo "== local gate: first-party Rust contains no ignored tests or doctests =="
+if ignore_hits="$(
+  git grep --line-number --extended-regexp \
+    '(^[[:space:]]*#[[:space:]]*!?[[:space:]]*\[[[:space:]]*(ignore([[:space:]]*=|[[:space:]]*\])|cfg_attr\([^]]*,[[:space:]]*ignore([[:space:]]*=|[[:space:]]*[,)])))|(^[[:space:]]*(///|//!|\*)[[:space:]]*```([^`,[:space:]]+,)?ignore([,[:space:]]|$))' \
+    -- '*.rs' ':(exclude)vendor/**' ':(exclude)third_party/**' \
+      ':(exclude)reference/**'
+)"; then
+  printf '%s\n' "$ignore_hits" >&2
+  fail "ignored first-party tests/doctests are forbidden; make bounded tests active or move qualification/measurement code to an explicit Rust tool"
+else
+  ignore_scan_status=$?
+  [[ $ignore_scan_status -eq 1 ]] \
+    || fail "the first-party #[ignore] scanner failed with status $ignore_scan_status"
+fi
+
 echo "== local gate: soundness certificate =="
 cargo test -p clean-kernel --lib --locked --features math-overlays -q \
   -- test_soundness_certificate golden_matches_live_axioms tests_false_axiom_prevention soundness_nested_arg \
@@ -79,6 +94,10 @@ echo "== local gate: portable Isabelle/Trust operations =="
 python3 scripts/test_isabelle_ops_portability.py \
   || fail "Isabelle/Trust operations portability regression"
 
+echo "== local gate: Aristotle model-guide corpus (static) =="
+python3 scripts/aristotle_corpus_gate.py --fast \
+  || fail "Aristotle corpus gate — a banned construct in code, a new vacuous Classical.propDecidable inhabitant of a Decidable target, a rung that gained an undischarged hypothesis, or composition byte-identity drift (which silently breaks the cross-file confluence discharge); see data/aristotle_corpus_ratchet.json. Elaboration is checked separately by 'just corpus-gate-full'."
+
 if [[ $FAST -eq 0 ]]; then
   echo "== local gate: workspace check =="
   cargo check --locked -q || fail "workspace check"
@@ -87,13 +106,14 @@ if [[ $FAST -eq 0 ]]; then
   # continuously gated"). Runs the cargo-deny policy in deny.toml over the whole
   # resolved dep graph: advisories (RustSec DB), licenses (SPDX allow-list),
   # bans (rustls-only: no openssl/native-tls), sources (registry locked to
-  # crates.io, git locked to carcara). FULL-mode only — it resolves the entire
-  # graph against the advisory DB, too slow for the <30s --fast pre-push path.
-  # Current state recorded in data/dep_boundary_state.json (GREEN: all four
-  # sections ok). SKIPs green with a notice if cargo-deny is not installed, so a
-  # contributor without the tool is not blocked (install: cargo install
-  # cargo-deny --locked). cargo-deny reads Cargo.lock directly, so the benign
-  # ../ay path-dep lock drift does not block it.
+  # crates.io, git locked to carcara plus immutable first-party AY). FULL-mode
+  # only — it resolves the entire graph against the advisory DB, too slow for
+  # the <30s --fast pre-push path. The historical state in
+  # data/dep_boundary_state.json is explicitly stale after AY's Git migration
+  # until this gate is rerun. SKIPs green with a notice if cargo-deny is not
+  # installed, so a contributor without the tool is not blocked (install:
+  # cargo install cargo-deny --locked). cargo-deny reads the committed
+  # Cargo.lock, including AY's immutable Git sources.
   echo "== local gate: dependency trust boundary (cargo-deny) =="
   if command -v cargo-deny >/dev/null 2>&1; then
     cargo deny check \
@@ -107,14 +127,14 @@ if [[ $FAST -eq 0 ]]; then
   # deny checks advisories/licenses/bans/sources; vet adds per-crate human/imported
   # audit attestation (supply-chain/config.toml + audits.toml + imports.lock against
   # the trusted Mozilla/Google/Bytecode-Alliance/Embark/ISRG/Zcash registries).
-  # SOFT/INFORMATIONAL by design — `cargo vet` exits 0 today because the remaining
-  # unaudited crates are carried as exemptions (the snapshotted baseline), so this is
+  # SOFT/INFORMATIONAL by design — the historical graph exited 0 because the
+  # remaining unaudited crates were carried as exemptions. The recorded state is
+  # explicitly stale after AY's Git migration and must be refreshed. This remains
   # a MONOTONIC coverage tracker (audited fraction only rises / exemptions only
-  # shrink), NOT a fail-closed gate that would block every push. It prints the
+  # shrink), NOT a fail-closed gate that blocks every push. It prints the
   # audited-vs-exempted counts as a tracked metric. State: data/dep_audit_state.json.
   # SKIPs green with a notice if cargo-vet is absent (install: cargo install
-  # cargo-vet --locked). cargo-vet reads the resolved graph, so the benign ../ay
-  # path-dep lock drift does not block it.
+  # cargo-vet --locked). cargo-vet reads the committed resolved graph.
   echo "== local gate: dependency supply-chain audit (cargo-vet, soft tracker) =="
   if command -v cargo-vet >/dev/null 2>&1; then
     if vet_out="$(cargo vet 2>&1)"; then
@@ -143,8 +163,12 @@ if [[ $FAST -eq 0 ]]; then
   # Full-mode only: re-stamping the slice costs ~75s, so the --fast pre-push hook
   # skips it (same contract as the elision gate it replaces + the full kernel suite).
   echo "== local gate: KernelVerified gate (re-stamps pinned slice) =="
+  KV_GATE_VERDICT_FILE="$(mktemp "${TMPDIR:-/tmp}/kv_verdict.XXXXXX")"
+  export KV_GATE_VERDICT_FILE
   scripts/kv_ratchet_gate.sh \
     || fail "KernelVerified gate — re-stamping the pinned slice dropped a KernelVerified verdict (ratchet regression or elision subset breach); see data/mathlib_kv_ratchet.json + data/kv_ratchet_slice.txt"
+  KV_VERDICT="$(cat "$KV_GATE_VERDICT_FILE" 2>/dev/null || echo 'KV_GATE=unknown')"
+  rm -f "$KV_GATE_VERDICT_FILE"; unset KV_GATE_VERDICT_FILE
 
   # CLEAN_LAZY_CLOSURE no-weaker invariance gate. Now ALWAYS-ON: seeded by the
   # committed Minimal.olean fixture, it runs the truly-independent eager-vs-lazy
@@ -152,8 +176,12 @@ if [[ $FAST -eq 0 ]]; then
   # shard-format encoder divergence is caught without a Mathlib checkout. The
   # corpus-scale binary leg still activates when KV_GATE_* are set.
   echo "== local gate: CLEAN_LAZY_CLOSURE no-weaker invariance gate =="
+  KVINV_GATE_VERDICT_FILE="$(mktemp "${TMPDIR:-/tmp}/kvinv_verdict.XXXXXX")"
+  export KVINV_GATE_VERDICT_FILE
   scripts/kv_invariance_gate.sh \
     || fail "kv invariance gate — lazy closure loading is not no-weaker than eager (an independent-parity unit test or the corpus leg failed)"
+  KVINV_VERDICT="$(cat "$KVINV_GATE_VERDICT_FILE" 2>/dev/null || echo 'KVINV_GATE=unknown')"
+  rm -f "$KVINV_GATE_VERDICT_FILE"; unset KVINV_GATE_VERDICT_FILE
 
   # Full clean-kernel lib suite (slow, ~30min). The soundness step above runs only
   # a name-filtered SUBSET; the full suite catches the rest — e.g. the env::tests
@@ -191,6 +219,23 @@ else
   else
     fail "Trust stage1 discovery is invalid or ambiguous; set TRUST_STAGE1_BIN explicitly"
   fi
+fi
+
+# What the KV gates actually DID, not merely that they exited 0. Both have
+# skip-green paths that fire routinely (absent corpus, low free RAM), so "the
+# local gate is green" does NOT by itself mean the KernelVerified claim was
+# re-measured. Surfacing the verdict here means nobody has to reconstruct which
+# of the six paths a run took by re-reading stdout.
+if [[ -n "${KV_VERDICT:-}${KVINV_VERDICT:-}" ]]; then
+  echo "== local gate: KV measurement verdicts =="
+  [[ -n "${KV_VERDICT:-}" ]]    && echo "  ${KV_VERDICT}"
+  [[ -n "${KVINV_VERDICT:-}" ]] && echo "  ${KVINV_VERDICT}"
+  case "${KV_VERDICT:-}" in
+    KV_GATE=measured) ;;
+    *) echo "  NOTE: the KernelVerified slice was NOT re-measured on this run."
+       echo "        A green gate here is the ABSENCE of a measurement, not a passing one."
+       echo "        Re-run with KV_GATE_REQUIRE_MEASURED=1 to make that a hard failure." ;;
+  esac
 fi
 
 echo "LOCAL GATE: PASS"

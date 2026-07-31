@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! WHNF and reduction types, expression operations (PARTs 9-10)
@@ -332,6 +332,57 @@ impl Specification {
 | lit : forall (v : Nat) (d : Nat), is_closed_at (KExpr.lit v) d",
             "is_closed_at e depth holds if all bound variables in e have index < depth. \
              Inductive definition enables structural induction on closedness proofs.",
+        )?;
+
+        // ── THE COMPLETENESS ORDER ──────────────────────────────────────────
+        //
+        // `below x y` : x is one step BELOW y, in the union order the conversion
+        // completeness recursion descends on — either y weak-head-reduces to x,
+        // or x is an immediate subexpression of y. Both halves already exist
+        // above (`whnf_step`, `subexpr_step`); this is the union, its transitive
+        // closure, and the corresponding accessibility predicate.
+        //
+        // WHY THIS SHAPE. The Aristotle conversion corpus proves structural
+        // (beta/iota/delta/zeta) completeness by well-founded recursion on
+        // exactly this order. A mechanical check of that corpus (11 probe files,
+        // Lean v4.30.0-rc2, all rc=0) established that its `sn` hypothesis is a
+        // DEAD parameter in the engine: it is consumed at exactly one point, to
+        // manufacture `Acc BelowPlus a`, and deleting it in favour of that
+        // accessibility witness re-elaborates unchanged with a foundational-only
+        // closure. So the engine is SN-PARAMETRIC — it needs a well-foundedness
+        // WITNESS, not a proof of SN.
+        //
+        // That is what makes the port viable here. Clean's SN is
+        // CandModel-conditional (a labeled hypothesis, permanent by Godel-2, not
+        // a false one), and a labeled hypothesis is exactly what an
+        // SN-parametric engine can consume. See
+        // docs/plans/DEFEQ_COMPLETENESS_PROGRAM_2026-07-25.md.
+        //
+        // Census-NEUTRAL: three Inductive/Constructor/Recursor bundles, no axioms.
+        self.add_inductive(
+            r"inductive below : KExpr -> KExpr -> Type
+| red : forall (x : KExpr) (y : KExpr), whnf_step y x -> below x y
+| sub : forall (x : KExpr) (y : KExpr), subexpr_step x y -> below x y",
+            "below x y: x lies one step below y in the completeness order — either y \
+             weak-head-steps TO x (the `red` arm; note the reversed argument order, since \
+             reduction goes downward) or x is an immediate subexpression of y (`sub`). The \
+             union order the structural conversion-completeness recursion descends on.",
+        )?;
+        self.add_inductive(
+            r"inductive below_plus : KExpr -> KExpr -> Type
+| base : forall (x : KExpr) (y : KExpr), below x y -> below_plus x y
+| step : forall (x : KExpr) (y : KExpr) (z : KExpr), below x y -> below_plus y z -> below_plus x z",
+            "below_plus: the transitive closure of `below`. The completeness recursion \
+             descends on this, not on `below`, because a single conversion round may both \
+             reduce and then enter a subterm.",
+        )?;
+        self.add_inductive(
+            r"inductive below_plus_acc : KExpr -> Type
+| intro : forall (e : KExpr), (forall (e2 : KExpr), below_plus e2 e -> below_plus_acc e2) -> below_plus_acc e",
+            "below_plus_acc e: e is accessible in the transitive below order — every term \
+             strictly below e is itself accessible. This is the well-foundedness WITNESS the \
+             SN-parametric completeness engine consumes, and the intended replacement for the \
+             corpus's `sn` parameter. Mirrors the shape of `whnf_acc` above.",
         )?;
 
         // is_closed is is_closed_at with depth 0

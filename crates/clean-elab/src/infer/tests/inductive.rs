@@ -1290,3 +1290,25 @@ fn test_recursive_repr_is_materialized_from_registered_constructor_metadata() {
         .expect("registered Repr instance must have an auditable closure");
     assert!(deps.is_empty(), "derived Repr must be axiom-free: {deps:?}");
 }
+
+#[test]
+fn test_elab_coinductive_fails_closed() {
+    // A `coinductive` declaration must NOT silently elaborate as an inductive:
+    // that would mint the least fixpoint (plus an induction principle the
+    // greatest fixpoint must not have) for a declaration whose meaning is the
+    // greatest fixpoint. Until the gfp lowering lands, this is fail-closed.
+    let result = elab_decl(
+        r"coinductive Bisim : Nat → Nat → Prop
+| step : Bisim m n → Bisim m n",
+    );
+
+    match result {
+        Err(ElabError::Unsupported { feature }) => {
+            assert!(
+                feature.contains("coinductive") && feature.contains("Bisim"),
+                "diagnostic must name the construct and declaration: {feature}"
+            );
+        }
+        other => panic!("coinductive must fail closed with Unsupported, got {other:?}"),
+    }
+}

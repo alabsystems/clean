@@ -176,6 +176,7 @@ impl Environment {
     }
 
     /// Check if the B1b lt↔sub bridge toolkit has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_order_toolkit_b1b(&self) -> bool {
         self.boolean_analysis_order_toolkit_b1b_init
     }

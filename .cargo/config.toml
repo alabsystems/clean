@@ -23,15 +23,11 @@ rustflags = ["-C", "target-cpu=x86-64"]
 # See #1455.
 RUST_MIN_STACK = { value = "67108864", force = false }
 
-# Local development override for ay co-development.
-# The workspace already path-depends on ../ay (see Cargo.toml ay* aliases);
-# uncomment below only to point at a differently-located ay checkout.
-# [patch."ssh://git@github.com/alabsystems/ay"]
-# ay = { package = "ay", path = "../ay/crates/ay" }
-# ay-dpll = { package = "ay-dpll", path = "../ay/crates/ay-dpll" }
-# ay-core = { package = "ay-core", path = "../ay/crates/ay-core" }
-# ay-proof = { package = "ay-proof", path = "../ay/crates/ay-proof" }
-# ay-frontend = { package = "ay-frontend", path = "../ay/crates/ay-frontend" }
+# Optional, uncommitted local-development override for AY co-development.
+# The committed workspace and lockfile use one immutable AY Git revision; no
+# sibling checkout is required. A developer may place an explicit patch in a
+# separate local Cargo config, but release and consumer-smoke evidence must use
+# the committed Git-pinned graph. Do not commit a local AY patch here.
 
 # Tooling aliases that replace thin shell wrappers under scripts/.
 # Use these instead of running `scripts/*.sh` for common workflows.

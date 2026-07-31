@@ -1,4 +1,4 @@
-// Copyright 2026 Andrew Yates
+// Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
 //! de Bruijn keystone: instantiate_at is the identity above the free-variable
@@ -38,7 +38,12 @@ use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 
 impl Specification {
-    pub(super) fn add_expr_model_inst_ceiling(&mut self) -> Result<(), SpecError> {
+    /// Register only the recursive ceiling definition.
+    ///
+    /// The artifact-independent red-environment reflection seed needs this
+    /// allowlisted definition without the much larger keystone proof layer
+    /// that normally follows it in the full bundle.
+    pub(super) fn add_bvar_ceiling_definition(&mut self) -> Result<(), SpecError> {
         // bvar_ceiling: ADD-based strict over-approximation of the free de
         // Bruijn ceiling. sort/const are closed leaves (0); bvar i contributes
         // succ i; app/lam/pi sum the children (binders do NOT subtract — looser
@@ -59,6 +64,11 @@ impl Specification {
             "ADD-based strict over-approximation of the free de Bruijn ceiling \
              (binders do not subtract). Stage-0 Brick 1.",
         )?;
+        Ok(())
+    }
+
+    pub(super) fn add_expr_model_inst_ceiling(&mut self) -> Result<(), SpecError> {
+        self.add_bvar_ceiling_definition()?;
 
         // bvar_ceiling_bvar: unfolding — bvar_ceiling (bvar i) = succ i.
         self.add_definition(SpecDefinition {

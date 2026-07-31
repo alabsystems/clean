@@ -45,13 +45,16 @@ pub(super) struct C012Consts {
     pub(super) prop: Expr,
     pub(super) eq: Expr,
     pub(super) rat_zero: Expr,
+    #[cfg(test)]
     pub(super) pre_activation: Expr,
+    #[cfg(test)]
     pub(super) activation_pattern: Expr,
     pub(super) stability_radius: Expr,
     pub(super) perturbation_ball: Expr,
     pub(super) crown_relaxation_gap: Expr,
     pub(super) pattern_stable: Expr,
     pub(super) single_lp_form: Expr,
+    #[cfg(test)]
     pub(super) crown_exact_under_stable_core: Expr,
 }
 
@@ -68,7 +71,9 @@ impl C012Consts {
             prop: Expr::sort(Level::zero()),
             eq: Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
             rat_zero: Expr::const_(Name::from_string("Rat.zero"), vec![]),
+            #[cfg(test)]
             pre_activation: Expr::const_(Name::from_string("NNVerify.C012.pre_activation"), vec![]),
+            #[cfg(test)]
             activation_pattern: Expr::const_(
                 Name::from_string("NNVerify.C012.activation_pattern"),
                 vec![],
@@ -87,6 +92,7 @@ impl C012Consts {
             ),
             pattern_stable: Expr::const_(Name::from_string("NNVerify.C012.pattern_stable"), vec![]),
             single_lp_form: Expr::const_(Name::from_string("NNVerify.C012.single_lp_form"), vec![]),
+            #[cfg(test)]
             crown_exact_under_stable_core: Expr::const_(
                 Name::from_string("NNVerify.C012.crown_exact_under_stable_core"),
                 vec![],
@@ -117,6 +123,7 @@ impl C012Consts {
     }
 
     /// Build `NNVerify.C012.pre_activation n net x`.
+    #[cfg(test)]
     pub(super) fn pre_activation_app(&self, n: &Expr, net: &Expr, x: &Expr) -> Expr {
         Expr::apps(
             self.pre_activation.clone(),
@@ -125,6 +132,7 @@ impl C012Consts {
     }
 
     /// Build `NNVerify.C012.activation_pattern n z`.
+    #[cfg(test)]
     pub(super) fn activation_pattern_app(&self, n: &Expr, z: &Expr) -> Expr {
         Expr::apps(self.activation_pattern.clone(), [n.clone(), z.clone()])
     }
@@ -391,6 +399,7 @@ pub(super) fn build_lp_reduction_type(c: &C012Consts) -> Expr {
 ///     (h : pattern_stable n net x0 eps) =>
 ///   crown_exact_under_stable_core n net x0 eps h
 /// ```
+#[cfg(test)]
 pub(super) fn build_crown_exact_under_stable_proof(c: &C012Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());

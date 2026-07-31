@@ -9,8 +9,6 @@
 //! That makes it easy to share proof identities between clean, ay, and
 //! gamma-crown without embedding Lean-specific proof certificate internals.
 
-use std::fmt::Write as _;
-
 use crate::env::Environment;
 use crate::expr::Expr;
 use crate::name::Name;

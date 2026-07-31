@@ -59,6 +59,7 @@ use crate::name::Name;
 
 /// Shared constants for the decode↔extend bridges.
 struct ExtendBridgeConsts {
+    #[cfg(test)]
     l0: Level,
     l1: Level,
     nat: Expr,
@@ -97,6 +98,7 @@ impl ExtendBridgeConsts {
         let one = Expr::app(nat_succ.clone(), nat_zero);
         let two = Expr::app(nat_succ.clone(), one);
         Self {
+            #[cfg(test)]
             l0: l0.clone(),
             l1: l1.clone(),
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -251,6 +253,7 @@ impl Environment {
     }
 
     /// Whether the decode↔extend bridges have been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_noise_extend_bridge(&self) -> bool {
         self.boolean_analysis_noise_extend_bridge_init
     }

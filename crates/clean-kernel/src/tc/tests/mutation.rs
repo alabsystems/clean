@@ -672,10 +672,10 @@ fn test_convert_fvar_cert_depth_arithmetic() {
     // Start at depth=2 to catch + -> -/* mutations
     let converted = convert_fvar_cert_to_bvar(lam_cert, fvar_id, 2);
 
-    match converted {
-        ProofCert::Lam { body_cert, .. } => match *body_cert {
+    match &converted {
+        ProofCert::Lam { body_cert, .. } => match body_cert.as_ref() {
             ProofCert::BVar { idx, .. } => assert_eq!(
-                idx, 3,
+                *idx, 3,
                 "Body should be converted to BVar(depth+1)=3 when starting at depth 2"
             ),
             other => panic!("Expected BVar in body cert, found {other:?}"),
@@ -713,10 +713,10 @@ fn test_convert_fvar_cert_let_depth_arithmetic() {
     // Start at depth=2 to distinguish + from * (2+1=3, 2*1=2)
     let converted = convert_fvar_cert_to_bvar(let_cert, fvar_id, 2);
 
-    match converted {
-        ProofCert::Let { body_cert, .. } => match *body_cert {
+    match &converted {
+        ProofCert::Let { body_cert, .. } => match body_cert.as_ref() {
             ProofCert::BVar { idx, .. } => assert_eq!(
-                idx, 3,
+                *idx, 3,
                 "Let body should be converted to BVar(depth+1)=3 when starting at depth 2, not depth*1=2"
             ),
             other => panic!("Expected BVar in Let body cert, found {other:?}"),

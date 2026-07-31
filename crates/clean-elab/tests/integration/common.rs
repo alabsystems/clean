@@ -60,7 +60,7 @@ fn register_opaque_decl(
     }
 }
 
-fn ensure_type_infers(tc: &TypeChecker, expr: &Expr, context: &str) -> Result<(), String> {
+fn ensure_type_infers(tc: &TypeChecker<'_>, expr: &Expr, context: &str) -> Result<(), String> {
     let _ = tc.infer_type(expr).map_err(|e| format!("{context}: {e}"))?;
     Ok(())
 }

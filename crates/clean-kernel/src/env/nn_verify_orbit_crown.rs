@@ -38,6 +38,7 @@ pub(super) struct OrbitCrownConsts {
     pub(super) inst_le_nat: Expr,
     pub(super) eq: Expr,
     pub(super) exists_: Expr,
+    #[cfg(test)]
     pub(super) nat_div: Expr,
     pub(super) symmetry_group: Expr,
     pub(super) equivariant: Expr,
@@ -67,6 +68,7 @@ impl OrbitCrownConsts {
                 Name::from_string("Exists"),
                 vec![Level::succ(Level::zero())],
             ),
+            #[cfg(test)]
             nat_div: Expr::const_(Name::from_string("Nat.div"), vec![]),
             symmetry_group: Expr::const_(
                 Name::from_string("NNVerify.OrbitCROWN.SymmetryGroup"),
@@ -192,6 +194,7 @@ impl OrbitCrownConsts {
         Expr::apps(self.ib_subset.clone(), [d.clone(), lhs, rhs])
     }
 
+    #[cfg(test)]
     pub(super) fn div_nat(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(Expr::app(self.nat_div.clone(), lhs), rhs)
     }

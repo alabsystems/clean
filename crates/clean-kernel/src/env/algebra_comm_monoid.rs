@@ -304,6 +304,7 @@ impl Environment {
     }
 
     /// Check if CommMonoid typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_comm_monoid(&self) -> bool {
         self.comm_monoid_init
     }
@@ -321,6 +322,7 @@ impl Environment {
     }
 
     /// Check if AddCommMonoid typeclass has been initialized
+    #[cfg(test)]
     pub(crate) fn has_add_comm_monoid(&self) -> bool {
         self.add_comm_monoid_init
     }

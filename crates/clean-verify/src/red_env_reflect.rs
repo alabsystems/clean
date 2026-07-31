@@ -5,7 +5,7 @@
 //! Front #1 Stage 2 (the_red_env discharge program): the REFLECTION GENERATOR.
 //!
 //! Mechanically reflects the FOUNDATION CORE of the real kernel environment —
-//! the environment `Specification::new()` actually builds — into a `RedEnv`
+//! the same allowlisted declarations `Specification::new()` builds — into a `RedEnv`
 //! `value_src` literal (`kernel_core_red_env`), so the metatheory's reduction
 //! environment contains the very inductives/definitions the metatheory itself
 //! is written in (maximal self-reference). The same code path is the FIDELITY
@@ -24,11 +24,12 @@
 //!    `name_eqb` verdict over the reflected env agree with real-name equality:
 //!    equal strings map to the same tag, distinct strings to distinct tags.
 //!    Guarded by `interning_injective` + the emitted-table fidelity test.
-//! 2. **Level erasure**. Spec `KExpr.sort` carries a `Nat` and spec `Level`
-//!    has no `param` constructor, so the reflection is LEVEL-ERASED:
-//!    - `Sort l` erases to `KExpr.sort <nat>` via [`erase_level_to_nat`]
+//! 2. **Level erasure**. Spec `KExpr.sort` carries a `Level`, including
+//!    `param`, but the current reflection deliberately collapses levels:
+//!    - `Sort l` is collapsed to a numeric height by [`erase_level_to_nat`]
 //!      (`zero`→0, `succ`→+1, `max`/`imax`→max of the erasures — `imax`'s
-//!      "0 if right is 0" collapse is dropped, `param`→0);
+//!      "0 if right is 0" collapse is dropped, `param`→0), then rendered as
+//!      `KExpr.sort (Level.succ^height Level.zero)`;
 //!    - `const` universe arguments erase structurally to spec `Level` terms
 //!      via [`erase_level_to_spec`] (`param`→`Level.zero`).
 //!    This is REDUCTION-FAITHFUL for the modeled fragment: `iota_reduct` /
@@ -39,8 +40,9 @@
 //!    silently weakened: Quot rules, K-like reduction (`is_k` recursors are
 //!    reflected for their SYNTACTIC rules, with the unmodeled K-extension
 //!    recorded), structural eta, native reducers, literals, and any
-//!    `Expr` node with no `KExpr` image (`let`/`proj`/`lit`/`mdata`-opaque
-//!    payloads, fvars, mode extensions). A recursor/definition containing an
+//!    `Expr` node with no reflected `KExpr` image (projections, literals,
+//!    fvars, mode extensions). `Let` is represented directly and `MData` is
+//!    transparently erased. A recursor/definition containing an
 //!    unrepresentable node is skipped whole.
 //!
 //! ## What is reflected
@@ -66,6 +68,14 @@
 //! value-ful definitions (census-neutral), and the kernel's whnf delta-unfolds
 //! them on demand during checker-fold evaluation.
 //!
+//! The emitter builds an artifact-independent seed containing exactly the
+//! allowlisted source declarations, validates every rendered line against a
+//! second fresh seed, then builds the complete `Specification` with the fresh
+//! script injected in memory and checks all three rendered artifacts against
+//! that complete live environment. Only then does it publish. This breaks the
+//! otherwise circular dependency on successfully loading the old artifact
+//! without weakening the final full-spec fidelity check.
+//!
 //! Consumed by the `red_env_reflect` bin (emits the generated artifacts under
 //! `spec/core_spec/generated/`) and by the fidelity-gate tests
 //! (`tests/kernel_core_red_env_fidelity.rs`).
@@ -74,6 +84,116 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use clean_kernel::{Environment, Expr, ExprKind, Level, Name, RecursorArgOrder, RecursorVal};
+
+/// Committed generated foundation-core definition script.
+pub const COMMITTED_DEF_SCRIPT: &str =
+    include_str!("spec/core_spec/generated/kernel_core_red_env.defs.txt");
+/// Committed semantic-name ↔ generated-tag table.
+pub const COMMITTED_INTERNING_TSV: &str =
+    include_str!("spec/core_spec/generated/kernel_core_red_env.interning.tsv");
+/// Committed ledger of production constructs outside the reflected image.
+pub const COMMITTED_SKIP_LEDGER: &str =
+    include_str!("spec/core_spec/generated/kernel_core_red_env.skips.md");
+
+/// Validation error for a generated semantic-name interning table.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InterningTableError {
+    /// The table is malformed or violates its injective contiguous-tag format.
+    #[error("invalid kernel_core_red_env interning table: {0}")]
+    Invalid(String),
+    /// A semantic consumer requested a real name absent from the table.
+    #[error("kernel_core_red_env interning table has no entry for {0}")]
+    MissingName(String),
+}
+
+/// Parse and validate a generated interning TSV.
+///
+/// Validation is deliberately whole-table, not just lookup-local: every row
+/// must have exactly two columns, tags must be canonical decimal `u64`s,
+/// names and tags must both be unique, and tags must be contiguous from zero.
+/// Semantic consumers therefore cannot silently agree on one usable row while
+/// the rest of the committed trust-edge table is malformed.
+///
+/// # Errors
+/// Returns [`InterningTableError`] on the first malformed row, duplicate,
+/// non-canonical tag, gap, or empty table.
+pub fn parse_interning_tsv(tsv: &str) -> Result<BTreeMap<String, u64>, InterningTableError> {
+    let mut by_name = BTreeMap::new();
+    let mut tags = std::collections::BTreeSet::new();
+
+    for (line_index, line) in tsv.lines().enumerate() {
+        let line_number = line_index + 1;
+        let mut columns = line.split('\t');
+        let Some(tag_text) = columns.next() else {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} has no tag column"
+            )));
+        };
+        let Some(real_name) = columns.next() else {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} has fewer than two columns: {line:?}"
+            )));
+        };
+        if columns.next().is_some() {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} has more than two columns: {line:?}"
+            )));
+        }
+        if real_name.is_empty() {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} has an empty real-name column"
+            )));
+        }
+        let tag = tag_text.parse::<u64>().map_err(|e| {
+            InterningTableError::Invalid(format!(
+                "line {line_number} has non-u64 tag {tag_text:?}: {e}"
+            ))
+        })?;
+        if tag.to_string() != tag_text {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} has non-canonical tag {tag_text:?}"
+            )));
+        }
+        if !tags.insert(tag) {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} duplicates tag {tag}"
+            )));
+        }
+        if by_name.insert(real_name.to_string(), tag).is_some() {
+            return Err(InterningTableError::Invalid(format!(
+                "line {line_number} duplicates real name {real_name:?}"
+            )));
+        }
+    }
+
+    if by_name.is_empty() {
+        return Err(InterningTableError::Invalid("table is empty".to_string()));
+    }
+    let mut expected = 0_u64;
+    for tag in tags {
+        if tag != expected {
+            return Err(InterningTableError::Invalid(format!(
+                "tags are not contiguous from zero: expected {expected}, found {tag}"
+            )));
+        }
+        expected += 1;
+    }
+    Ok(by_name)
+}
+
+/// Resolve a real kernel name to its committed generated `kcre_name_<tag>`
+/// atom after validating the entire interning table.
+///
+/// # Errors
+/// Returns [`InterningTableError`] if the committed table is malformed or does
+/// not contain `real_name`.
+pub fn committed_name_atom(real_name: &str) -> Result<String, InterningTableError> {
+    let by_name = parse_interning_tsv(COMMITTED_INTERNING_TSV)?;
+    by_name
+        .get(real_name)
+        .map(|tag| format!("kcre_name_{tag}"))
+        .ok_or_else(|| InterningTableError::MissingName(real_name.to_string()))
+}
 
 /// Foundation-core INDUCTIVE allowlist: the `<T>.rec` recursors reflected into
 /// the `RecEnv` leg. These are exactly the types the modeled fragment itself
@@ -173,6 +293,13 @@ pub const REFLECT_DEFS: &[&str] = &[
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ReflectError {
+    /// The in-memory reflection cannot safely be emitted.
+    #[error("invalid foundation-core reflection: {detail}")]
+    InvalidReflection {
+        /// The missing witness, malformed interning property, or uncovered
+        /// semantic name.
+        detail: String,
+    },
     /// The rendered/committed artifacts differ (fidelity-gate drift).
     #[error("fidelity drift in {artifact}: {detail}")]
     Drift {
@@ -189,7 +316,8 @@ pub enum ReflectError {
 /// reflection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpecExpr {
-    /// `KExpr.sort <nat>` (level-erased image of `Sort l`).
+    /// Collapsed numeric height later rendered as
+    /// `KExpr.sort (Level.succ^height Level.zero)`.
     Sort(u64),
     /// `KExpr.bvar <nat>`.
     BVar(u32),
@@ -202,7 +330,7 @@ pub enum SpecExpr {
     /// `KExpr.const <interned name> <level-erased universe args>`.
     Const(String, Vec<SpecLevel>),
     /// `KExpr.let_ ty val body` (binder name/info and the non-dependent flag
-    /// dropped; the genuine let constructor of the promoted 7-ctor fragment).
+    /// dropped; the seventh constructor in the live nine-constructor model).
     Let_(Box<SpecExpr>, Box<SpecExpr>, Box<SpecExpr>),
 }
 
@@ -290,8 +418,10 @@ pub struct Reflection {
     pub skips: Vec<SkipEntry>,
 }
 
-/// Erase a kernel [`Level`] to the `Nat` payload of `KExpr.sort`
-/// (trust edge 2): `zero`→0, `succ`→+1, `max`/`imax`→max, `param`→0.
+/// Collapse a kernel [`Level`] to a numeric height for the reflected
+/// `KExpr.sort` payload (trust edge 2): `zero`→0, `succ`→+1,
+/// `max`/`imax`→max, `param`→0. Rendering re-encodes the height as a spec
+/// `Level.succ^n Level.zero`.
 #[must_use]
 pub fn erase_level_to_nat(l: &Level) -> u64 {
     match l {
@@ -642,6 +772,78 @@ pub fn render_level_of_nat(n: u64) -> String {
 }
 
 impl Reflection {
+    fn validate_for_emission(&self) -> Result<(), ReflectError> {
+        if !self.interning_injective() {
+            return Err(ReflectError::InvalidReflection {
+                detail: "interning table is not injective".to_string(),
+            });
+        }
+        let mut tags = self
+            .interning
+            .iter()
+            .map(|(_, tag)| *tag)
+            .collect::<Vec<_>>();
+        tags.sort_unstable();
+        for (expected, actual) in (0_u64..).zip(tags) {
+            if expected != actual {
+                return Err(ReflectError::InvalidReflection {
+                    detail: format!(
+                        "interning tags are not contiguous from zero: expected {expected}, found {actual}"
+                    ),
+                });
+            }
+        }
+
+        let mut required_names = std::collections::BTreeSet::new();
+        for rec in &self.recs {
+            required_names.insert(rec.name.clone());
+            for rule in &rec.rules {
+                required_names.insert(rule.ctor.clone());
+                let mut referenced = BTreeMap::new();
+                count_consts(&rule.rhs, &mut referenced);
+                required_names.extend(referenced.into_keys());
+            }
+        }
+        for def in &self.defs {
+            required_names.insert(def.name.clone());
+            let mut referenced = BTreeMap::new();
+            count_consts(&def.value, &mut referenced);
+            required_names.extend(referenced.into_keys());
+        }
+        for name in required_names {
+            if self.tag_of(&name).is_none() {
+                return Err(ReflectError::InvalidReflection {
+                    detail: format!("semantic name {name:?} has no interning entry"),
+                });
+            }
+        }
+
+        let nat_rec = self
+            .recs
+            .iter()
+            .find(|rec| rec.name == "Nat.rec")
+            .ok_or_else(|| ReflectError::InvalidReflection {
+                detail: "required non-vacuity witness recursor Nat.rec was not reflected"
+                    .to_string(),
+            })?;
+        if !nat_rec.rules.iter().any(|rule| rule.ctor == "Nat.zero") {
+            return Err(ReflectError::InvalidReflection {
+                detail: "required Nat.rec/Nat.zero non-vacuity rule was not reflected".to_string(),
+            });
+        }
+        if !self
+            .defs
+            .iter()
+            .any(|def| def.name == "def_env_lift_closed_b")
+        {
+            return Err(ReflectError::InvalidReflection {
+                detail: "required delta witness definition def_env_lift_closed_b was not reflected"
+                    .to_string(),
+            });
+        }
+        Ok(())
+    }
+
     /// Interning-table lookup (real name -> tag). All names occurring in the
     /// reflection are present by construction.
     fn tag_of(&self, name: &str) -> Option<u64> {
@@ -654,10 +856,13 @@ impl Reflection {
     /// Spec `Name` atom for a real name (trust edge 1): `kcre_name_<tag>`,
     /// backed by the helper definition
     /// `def kcre_name_<tag> : Name := Name.str Name.anonymous kcre_nat_<tag>`.
-    #[must_use]
-    pub fn render_name(&self, name: &str) -> String {
-        let tag = self.tag_of(name).unwrap_or(u64::MAX);
-        format!("kcre_name_{tag}")
+    fn render_name(&self, name: &str) -> Result<String, ReflectError> {
+        let tag = self
+            .tag_of(name)
+            .ok_or_else(|| ReflectError::InvalidReflection {
+                detail: format!("semantic name {name:?} has no interning entry"),
+            })?;
+        Ok(format!("kcre_name_{tag}"))
     }
 
     /// Largest Nat needed by any leaf of the reflection (interning tags,
@@ -711,7 +916,7 @@ impl Reflection {
         out
     }
 
-    fn render_expr(&self, e: &SpecExpr, out: &mut String) {
+    fn render_expr(&self, e: &SpecExpr, out: &mut String) -> Result<(), ReflectError> {
         match e {
             SpecExpr::Sort(n) => {
                 let _ = write!(out, "(KExpr.sort {})", render_level_of_nat(*n));
@@ -723,58 +928,129 @@ impl Reflection {
                 let _ = write!(
                     out,
                     "(KExpr.const {} {})",
-                    self.render_name(n),
+                    self.render_name(n)?,
                     self.render_levels(ls)
                 );
             }
             SpecExpr::App(f, a) => {
                 out.push_str("(KExpr.app ");
-                self.render_expr(f, out);
+                self.render_expr(f, out)?;
                 out.push(' ');
-                self.render_expr(a, out);
+                self.render_expr(a, out)?;
                 out.push(')');
             }
             SpecExpr::Lam(t, b) => {
                 out.push_str("(KExpr.lam ");
-                self.render_expr(t, out);
+                self.render_expr(t, out)?;
                 out.push(' ');
-                self.render_expr(b, out);
+                self.render_expr(b, out)?;
                 out.push(')');
             }
             SpecExpr::Pi(t, b) => {
                 out.push_str("(KExpr.pi ");
-                self.render_expr(t, out);
+                self.render_expr(t, out)?;
                 out.push(' ');
-                self.render_expr(b, out);
+                self.render_expr(b, out)?;
                 out.push(')');
             }
             SpecExpr::Let_(t, v, b) => {
                 out.push_str("(KExpr.let_ ");
-                self.render_expr(t, out);
+                self.render_expr(t, out)?;
                 out.push(' ');
-                self.render_expr(v, out);
+                self.render_expr(v, out)?;
                 out.push(' ');
-                self.render_expr(b, out);
+                self.render_expr(b, out)?;
                 out.push(')');
             }
         }
+        Ok(())
+    }
+
+    fn apply_expr_spine(head: SpecExpr, args: impl IntoIterator<Item = SpecExpr>) -> SpecExpr {
+        args.into_iter().fold(head, |function, argument| {
+            SpecExpr::App(Box::new(function), Box::new(argument))
+        })
+    }
+
+    /// Construct a complete, closed Nat.zero iota redex and its expected
+    /// reduct from the reflected `Nat.rec` metadata and rule.
+    ///
+    /// The consumers use only the two generated constants, so changes to
+    /// parameter/motive/minor/index counts or rule RHS shape cannot leave a
+    /// hand-written witness spine behind.
+    fn nat_zero_witness(&self) -> Result<(SpecExpr, SpecExpr), ReflectError> {
+        let nat_rec = self
+            .recs
+            .iter()
+            .find(|rec| rec.name == "Nat.rec")
+            .ok_or_else(|| ReflectError::InvalidReflection {
+                detail: "validated Nat.rec witness disappeared".to_string(),
+            })?;
+        if !nat_rec.major_after_minors {
+            return Err(ReflectError::InvalidReflection {
+                detail: "Nat.rec is not in the modeled MajorAfterMinors layout".to_string(),
+            });
+        }
+        let nat_zero_rule = nat_rec
+            .rules
+            .iter()
+            .find(|rule| rule.ctor == "Nat.zero")
+            .ok_or_else(|| ReflectError::InvalidReflection {
+                detail: "validated Nat.zero witness rule disappeared".to_string(),
+            })?;
+        if nat_zero_rule.num_fields != 0 {
+            return Err(ReflectError::InvalidReflection {
+                detail: format!(
+                    "Nat.zero witness requires a nullary constructor, reflected num_fields={}",
+                    nat_zero_rule.num_fields
+                ),
+            });
+        }
+        let prefix_count = nat_rec
+            .num_params
+            .checked_add(nat_rec.num_motives)
+            .and_then(|n| n.checked_add(nat_rec.num_minors))
+            .ok_or_else(|| ReflectError::InvalidReflection {
+                detail: "Nat.rec witness prefix count overflowed u32".to_string(),
+            })?;
+
+        // Closed Sort 0 placeholders are sufficient because iota_reduct only
+        // performs name-keyed spine surgery; it does not inspect their types.
+        let prefix = (0..prefix_count)
+            .map(|_| SpecExpr::Sort(0))
+            .collect::<Vec<_>>();
+        let indices = (0..nat_rec.num_indices)
+            .map(|_| SpecExpr::Sort(0))
+            .collect::<Vec<_>>();
+        let mut redex_args = prefix.clone();
+        redex_args.extend(indices);
+        redex_args.push(SpecExpr::Const("Nat.zero".to_string(), Vec::new()));
+        let redex = Self::apply_expr_spine(
+            SpecExpr::Const("Nat.rec".to_string(), Vec::new()),
+            redex_args,
+        );
+
+        // Nat.zero contributes no constructor fields and this canonical
+        // witness has no over-application, so the modeled reduct is precisely
+        // the reflected rule RHS applied to the metadata-derived prefix.
+        let reduct = Self::apply_expr_spine(nat_zero_rule.rhs.clone(), prefix);
+        Ok((redex, reduct))
     }
 
     /// Render the `kernel_core_red_env` value TERM (a single-line Lean-syntax
     /// `RedEnv` term, `the_red_env.rs`-style, with `kcre_nat_*`/`kcre_name_*`
     /// atom leaves so its nesting stays under the parser's
     /// `MAX_EXPR_DEPTH = 128` guard).
-    #[must_use]
-    pub fn value_term(&self) -> String {
+    fn value_term(&self) -> Result<String, ReflectError> {
         let mut rec_env = String::from("RecEnv.empty");
         for rec in &self.recs {
             let mut rules = String::from("RecRules.nil");
             for rule in rec.rules.iter().rev() {
                 let mut rhs = String::new();
-                self.render_expr(&rule.rhs, &mut rhs);
+                self.render_expr(&rule.rhs, &mut rhs)?;
                 rules = format!(
                     "(RecRules.cons (RecRule.mk {} {} {}) {})",
-                    self.render_name(&rule.ctor),
+                    self.render_name(&rule.ctor)?,
                     nat_atom(u64::from(rule.num_fields)),
                     rhs,
                     rules
@@ -795,7 +1071,7 @@ impl Reflection {
             rec_env = format!(
                 "(RecEnv.addRec {} {} {} {})",
                 rec_env,
-                self.render_name(&rec.name),
+                self.render_name(&rec.name)?,
                 meta,
                 rules
             );
@@ -803,29 +1079,43 @@ impl Reflection {
         let mut def_env = String::from("DefEnv.empty");
         for def in &self.defs {
             let mut value = String::new();
-            self.render_expr(&def.value, &mut value);
+            self.render_expr(&def.value, &mut value)?;
             def_env = format!(
                 "(DefEnv.addDef {} {} {})",
                 def_env,
-                self.render_name(&def.name),
+                self.render_name(&def.name)?,
                 value
             );
         }
-        format!("RedEnv.mk {rec_env} {def_env}")
+        Ok(format!("RedEnv.mk {rec_env} {def_env}"))
     }
 
     /// Render the full generated DEF SCRIPT: one Lean-syntax `def` per line —
     /// the `kcre_nat_*` unary pool (depth 2 each), the `kcre_name_*` interned
-    /// name constants (depth 1 each, trust edge 1), then the
-    /// `kernel_core_red_env` term itself. Registration replays the lines in
+    /// name constants (depth 1 each, trust edge 1), generated semantic witness
+    /// helpers for the live Nat-zero iota rule and one real delta entry, then
+    /// the `kernel_core_red_env` term itself. Registration replays the lines in
     /// order; every line is a value-ful `def` (census-neutral).
     ///
     /// This script shape exists because of a MEASURED parser constraint: the
     /// naive fully-inlined literal nests to paren depth 163, past the
     /// parser's `MAX_EXPR_DEPTH = 128` DoS guard; with the helper atoms the
     /// deepest line is paren depth ~64.
-    #[must_use]
-    pub fn def_script(&self) -> String {
+    /// # Errors
+    /// Returns [`ReflectError::InvalidReflection`] unless name interning is
+    /// injective, contiguous, and complete and both generated non-vacuity
+    /// witnesses are present.
+    pub fn def_script(&self) -> Result<String, ReflectError> {
+        self.validate_for_emission()?;
+        let (nat_zero_redex, nat_zero_reduct) = self.nat_zero_witness()?;
+        let delta = self
+            .defs
+            .iter()
+            .find(|def| def.name == "def_env_lift_closed_b")
+            .ok_or_else(|| ReflectError::InvalidReflection {
+                detail: "validated delta witness definition disappeared".to_string(),
+            })?;
+
         let mut out = String::new();
         let max_nat = self.max_nat_used();
         let _ = writeln!(out, "def kcre_nat_0 : Nat := Nat.zero");
@@ -844,12 +1134,26 @@ impl Reflection {
                 "def kcre_name_{tag} : Name := Name.str Name.anonymous kcre_nat_{tag} -- {real}"
             );
         }
+        let mut redex = String::new();
+        self.render_expr(&nat_zero_redex, &mut redex)?;
+        let _ = writeln!(out, "def kcre_witness_nat_zero_redex : KExpr := {redex}");
+        let mut reduct = String::new();
+        self.render_expr(&nat_zero_reduct, &mut reduct)?;
+        let _ = writeln!(out, "def kcre_witness_nat_zero_reduct : KExpr := {reduct}");
+        let mut value = String::new();
+        self.render_expr(&delta.value, &mut value)?;
+        let _ = writeln!(
+            out,
+            "def kcre_witness_delta_head : Name := {}",
+            self.render_name("def_env_lift_closed_b")?
+        );
+        let _ = writeln!(out, "def kcre_witness_delta_value : KExpr := {value}");
         let _ = writeln!(
             out,
             "def kernel_core_red_env : RedEnv := {}",
-            self.value_term()
+            self.value_term()?
         );
-        out
+        Ok(out)
     }
 
     /// Render the interning table (trust edge 1): one `tag<TAB>real-name`
@@ -871,8 +1175,12 @@ impl Reflection {
 
     /// Render the skip ledger + coverage summary (trust edge 3),
     /// lean_export-style: partial-but-honest, never silently weakened.
-    #[must_use]
-    pub fn skip_ledger_md(&self) -> String {
+    /// # Errors
+    /// Returns [`ReflectError::InvalidReflection`] if any rendered semantic
+    /// name is absent from the interning table.
+    pub fn skip_ledger_md(&self) -> Result<String, ReflectError> {
+        self.validate_for_emission()?;
+        let value_term = self.value_term()?;
         let n_rules: usize = self.recs.iter().map(|r| r.rules.len()).sum();
         let mut out = String::new();
         let _ = writeln!(out, "# kernel_core_red_env skip ledger (GENERATED)");
@@ -884,7 +1192,8 @@ impl Reflection {
         let _ = writeln!(
             out,
             "Trust edges: (1) injective Nat-tag name interning; (2) level erasure \
-             (sorts -> Nat depth, const levels -> param-free spec Level); (3) this \
+             (sort levels -> collapsed Level.succ^n Level.zero height, const levels -> \
+             param-free spec Level); (3) this \
              skip ledger. See `clean_verify::red_env_reflect` module docs."
         );
         let _ = writeln!(out);
@@ -902,7 +1211,7 @@ impl Reflection {
             "Depth budget (measured): the env term nests to paren depth {} with \
              kcre_nat_*/kcre_name_* atom leaves ({} nat helpers, {} name helpers); the \
              naive fully-inlined literal exceeds the parser MAX_EXPR_DEPTH=128 guard.",
-            max_paren_depth(&self.value_term()),
+            max_paren_depth(&value_term),
             self.max_nat_used() + 1,
             self.interning.len()
         );
@@ -938,7 +1247,7 @@ impl Reflection {
         for skip in &self.skips {
             let _ = writeln!(out, "- `{}`: {}", skip.item, skip.reason);
         }
-        out
+        Ok(out)
     }
 
     /// Build the kernel `Expr` of the spec `KExpr` TERM for `e` — the same
@@ -947,8 +1256,12 @@ impl Reflection {
     /// whnf-force full per-element checker work (`nat_eqb (bvar_ceiling rhs)
     /// 0` traverses the whole rhs), which the Bool.and short-circuit of the
     /// env-level fold otherwise hides.
-    pub fn kexpr_term(&self, e: &SpecExpr) -> Expr {
-        match e {
+    ///
+    /// # Errors
+    /// Returns [`ReflectError::InvalidReflection`] if `e` references a semantic
+    /// name absent from this reflection's interning table.
+    pub fn kexpr_term(&self, e: &SpecExpr) -> Result<Expr, ReflectError> {
+        Ok(match e {
             SpecExpr::Sort(n) => {
                 // Nat-shaped spec-`Level` literal `Level.succ^n Level.zero`
                 // (levels-promotion B2: `KExpr.sort : Level`).
@@ -964,25 +1277,32 @@ impl Reflection {
             ),
             SpecExpr::Const(n, ls) => Expr::apps(
                 Expr::const_str("KExpr.const"),
-                [Expr::const_str(&self.render_name(n)), Self::levels_term(ls)],
+                [
+                    Expr::const_str(&self.render_name(n)?),
+                    Self::levels_term(ls),
+                ],
             ),
             SpecExpr::App(f, a) => Expr::apps(
                 Expr::const_str("KExpr.app"),
-                [self.kexpr_term(f), self.kexpr_term(a)],
+                [self.kexpr_term(f)?, self.kexpr_term(a)?],
             ),
             SpecExpr::Lam(t, b) => Expr::apps(
                 Expr::const_str("KExpr.lam"),
-                [self.kexpr_term(t), self.kexpr_term(b)],
+                [self.kexpr_term(t)?, self.kexpr_term(b)?],
             ),
             SpecExpr::Pi(t, b) => Expr::apps(
                 Expr::const_str("KExpr.pi"),
-                [self.kexpr_term(t), self.kexpr_term(b)],
+                [self.kexpr_term(t)?, self.kexpr_term(b)?],
             ),
             SpecExpr::Let_(t, v, b) => Expr::apps(
                 Expr::const_str("KExpr.let_"),
-                [self.kexpr_term(t), self.kexpr_term(v), self.kexpr_term(b)],
+                [
+                    self.kexpr_term(t)?,
+                    self.kexpr_term(v)?,
+                    self.kexpr_term(b)?,
+                ],
             ),
-        }
+        })
     }
 
     fn level_term(l: &SpecLevel) -> Expr {
@@ -1027,8 +1347,9 @@ impl Reflection {
 /// and compare the three artifacts 1:1 against the committed generated files.
 ///
 /// # Errors
-/// Returns [`ReflectError::Drift`] naming the first drifted artifact and the
-/// first divergent line/region.
+/// Returns [`ReflectError::InvalidReflection`] if the live reflection cannot
+/// safely be emitted, or [`ReflectError::Drift`] naming the first drifted
+/// artifact and divergent byte region.
 pub fn fidelity_check(
     env: &Environment,
     committed_script: &str,
@@ -1036,13 +1357,14 @@ pub fn fidelity_check(
     committed_skips: &str,
 ) -> Result<Reflection, ReflectError> {
     let fresh = reflect_foundation_core(env);
-    compare_artifact("def script", &fresh.def_script(), committed_script)?;
+    let fresh_script = fresh.def_script()?;
+    compare_artifact("def script", &fresh_script, committed_script)?;
     compare_artifact(
         "interning table",
         &fresh.interning_tsv(),
         committed_interning,
     )?;
-    compare_artifact("skip ledger", &fresh.skip_ledger_md(), committed_skips)?;
+    compare_artifact("skip ledger", &fresh.skip_ledger_md()?, committed_skips)?;
     Ok(fresh)
 }
 
@@ -1051,29 +1373,27 @@ fn compare_artifact(
     fresh: &str,
     committed: &str,
 ) -> Result<(), ReflectError> {
-    let fresh_t = fresh.trim();
-    let committed_t = committed.trim();
-    if fresh_t == committed_t {
+    if fresh == committed {
         return Ok(());
     }
     // Locate the first divergent byte for an actionable message.
-    let pos = fresh_t
+    let pos = fresh
         .bytes()
-        .zip(committed_t.bytes())
+        .zip(committed.bytes())
         .position(|(a, b)| a != b)
-        .unwrap_or_else(|| fresh_t.len().min(committed_t.len()));
+        .unwrap_or_else(|| fresh.len().min(committed.len()));
     let lo = pos.saturating_sub(60);
-    let f_end = (pos + 60).min(fresh_t.len());
-    let c_end = (pos + 60).min(committed_t.len());
+    let f_end = (pos + 60).min(fresh.len());
+    let c_end = (pos + 60).min(committed.len());
     Err(ReflectError::Drift {
         artifact,
         detail: format!(
             "first divergence at byte {pos}: regenerated ...{}... vs committed ...{}... \
              (lengths {} vs {}); re-run the red_env_reflect bin and review",
-            fresh_t.get(lo..f_end).unwrap_or(""),
-            committed_t.get(lo..c_end).unwrap_or(""),
-            fresh_t.len(),
-            committed_t.len()
+            fresh.get(lo..f_end).unwrap_or(""),
+            committed.get(lo..c_end).unwrap_or(""),
+            fresh.len(),
+            committed.len()
         ),
     })
 }
@@ -1084,12 +1404,11 @@ mod tests {
 
     #[test]
     fn test_erase_level_to_nat_collapses_param_and_imax() {
-        use std::sync::Arc;
         let p = Level::Param(Name::from_string("u"));
         assert_eq!(erase_level_to_nat(&p), 0, "param erases to 0");
-        let s = Level::Succ(Arc::new(Level::Zero));
+        let s = Level::succ(Level::Zero);
         assert_eq!(erase_level_to_nat(&s), 1, "succ adds 1");
-        let m = Level::IMax(Arc::new(s.clone()), Arc::new(Level::Zero));
+        let m = Level::imax(s.clone(), Level::Zero);
         assert_eq!(erase_level_to_nat(&m), 1, "imax erases to max");
     }
 
@@ -1131,5 +1450,104 @@ mod tests {
             skips: vec![],
         };
         assert!(r.interning_injective(), "interning must be injective");
+        assert!(
+            matches!(r.def_script(), Err(ReflectError::InvalidReflection { .. })),
+            "artifact emission must fail closed when required live witnesses are absent"
+        );
+    }
+
+    #[test]
+    fn test_nat_zero_witness_spine_is_derived_from_reflected_metadata() {
+        let recs = vec![ReflectedRec {
+            name: "Nat.rec".to_string(),
+            num_params: 1,
+            num_motives: 1,
+            num_minors: 0,
+            num_indices: 1,
+            major_after_minors: true,
+            is_k: false,
+            rules: vec![ReflectedRule {
+                ctor: "Nat.zero".to_string(),
+                num_fields: 0,
+                rhs: SpecExpr::Const("Witness.rhs".to_string(), vec![]),
+            }],
+        }];
+        let defs = vec![ReflectedDef {
+            name: "def_env_lift_closed_b".to_string(),
+            is_reducible: true,
+            value: SpecExpr::Const("Witness.delta".to_string(), vec![]),
+        }];
+        let reflection = Reflection {
+            interning: build_interning(&recs, &defs),
+            recs,
+            defs,
+            skips: vec![],
+        };
+        let (redex, reduct) = reflection
+            .nat_zero_witness()
+            .expect("synthetic metadata should produce a witness");
+
+        fn spine(mut expression: &SpecExpr) -> (&SpecExpr, Vec<&SpecExpr>) {
+            let mut reversed = Vec::new();
+            while let SpecExpr::App(function, argument) = expression {
+                reversed.push(argument.as_ref());
+                expression = function.as_ref();
+            }
+            reversed.reverse();
+            (expression, reversed)
+        }
+
+        let (redex_head, redex_args) = spine(&redex);
+        assert_eq!(redex_head, &SpecExpr::Const("Nat.rec".to_string(), vec![]));
+        assert_eq!(
+            redex_args.len(),
+            4,
+            "params + motives + minors + indices + major"
+        );
+        assert_eq!(
+            redex_args.last().copied(),
+            Some(&SpecExpr::Const("Nat.zero".to_string(), vec![]))
+        );
+
+        let (reduct_head, reduct_args) = spine(&reduct);
+        assert_eq!(
+            reduct_head,
+            &SpecExpr::Const("Witness.rhs".to_string(), vec![])
+        );
+        assert_eq!(
+            reduct_args.len(),
+            2,
+            "rule RHS receives params + motives + minors only"
+        );
+    }
+
+    #[test]
+    fn test_parse_interning_tsv_accepts_canonical_contiguous_table() {
+        let parsed = parse_interning_tsv("0\tNat\n1\tNat.zero\n2\tNat.succ\n")
+            .expect("canonical table should parse");
+        assert_eq!(parsed.get("Nat.zero"), Some(&1));
+    }
+
+    #[test]
+    fn test_parse_interning_tsv_rejects_every_ambiguous_shape() {
+        for (label, table) in [
+            ("duplicate tag", "0\tNat\n0\tNat.zero\n"),
+            ("duplicate name", "0\tNat\n1\tNat\n"),
+            ("tag gap", "0\tNat\n2\tNat.zero\n"),
+            ("extra column", "0\tNat\textra\n"),
+            ("noncanonical tag", "00\tNat\n"),
+        ] {
+            assert!(
+                parse_interning_tsv(table).is_err(),
+                "{label} must fail whole-table validation"
+            );
+        }
+    }
+
+    #[test]
+    fn test_committed_name_atom_rejects_missing_semantic_name() {
+        let error = committed_name_atom("__definitely_not_a_kernel_name__")
+            .expect_err("missing semantic name must fail");
+        assert!(matches!(error, InterningTableError::MissingName(_)));
     }
 }

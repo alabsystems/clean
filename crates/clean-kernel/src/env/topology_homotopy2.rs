@@ -129,6 +129,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_homotopy_equivalence_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_homotopy_equivalence(&mut self) -> Result<(), EnvError> {
         if self.topology_homotopy_equivalence_init {
             return Ok(());
@@ -211,6 +212,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_retract_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_retract(&mut self) -> Result<(), EnvError> {
         if self.topology_retract_init {
             return Ok(());
@@ -241,6 +243,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_retract_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_retract(&self) -> bool {
         self.topology_retract_init
     }

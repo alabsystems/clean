@@ -75,6 +75,7 @@ use crate::name::Name;
 /// only. Transcendentals (`exp`, `log`, …) are explicitly OUT of scope and use
 /// the `FExp` error model instead. Carried as a doc constant so the scoping is
 /// discoverable in code, not only in prose.
+#[cfg(test)]
 pub(crate) const ROUNDING_SCOPE: &str = "correctly-rounded IEEE-754 ops only (+,-,*,/,sqrt,fma); \
      transcendentals (exp/log) use the FExp transcendental error model";
 

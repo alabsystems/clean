@@ -295,6 +295,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.ordering_init == true`
+    #[cfg(test)]
     pub(crate) fn has_ordering(&self) -> bool {
         self.ordering_init
     }
@@ -738,6 +739,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_cmp_init == true`
+    #[cfg(test)]
     pub(crate) fn has_nat_cmp(&self) -> bool {
         self.nat_cmp_init
     }

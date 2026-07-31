@@ -9,9 +9,8 @@
 //! - data_types_int_lemmas.rs: Int lemmas + Int/Nat conversion lemmas
 //! - data_types_nat_lemmas.rs: Nat arithmetic lemmas (this file)
 
-use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::env::{EnvError, Environment};
+use crate::expr::Expr;
 use crate::level::Level;
 use crate::name::Name;
 
@@ -66,8 +65,8 @@ impl Environment {
         self.init_eq()?; // Provides Eq
 
         let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
-        let nat_add = Expr::const_(Name::from_string("Nat.add"), vec![]);
-        let nat_mul = Expr::const_(Name::from_string("Nat.mul"), vec![]);
+        let _nat_add = Expr::const_(Name::from_string("Nat.add"), vec![]);
+        let _nat_mul = Expr::const_(Name::from_string("Nat.mul"), vec![]);
         let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
         let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
         let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
@@ -79,7 +78,7 @@ impl Environment {
         let _nat_one = Expr::app(nat_succ.clone(), nat_zero.clone());
 
         // Helper: build Eq Nat lhs rhs
-        let mk_nat_eq =
+        let _mk_nat_eq =
             |lhs: Expr, rhs: Expr| Expr::apps(eq_const.clone(), [nat_const.clone(), lhs, rhs]);
 
         // All Nat arithmetic lemmas built with EnvDeclBuilder (#1444)

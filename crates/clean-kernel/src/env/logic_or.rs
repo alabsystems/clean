@@ -102,6 +102,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `true` iff `init_or()` has been called successfully
     /// ENSURES: Pure function - no side effects
+    #[cfg(test)]
     pub(crate) fn has_or(&self) -> bool {
         self.or_init
     }

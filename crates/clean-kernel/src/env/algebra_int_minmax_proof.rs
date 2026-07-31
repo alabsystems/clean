@@ -45,6 +45,7 @@ struct MinMaxConsts {
     int_rec_1: Expr,
     bool_rec_1: Expr,
     nonneg_rec_0: Expr,
+    #[cfg(test)]
     int_of_nat: Expr,
     int_sub: Expr,
     int_le: Expr,
@@ -74,6 +75,7 @@ impl MinMaxConsts {
             bool_rec_1: Expr::const_(Name::from_string("Bool.rec"), vec![t1.clone()]),
             // NonNeg : Prop, eliminate into a Prop motive.
             nonneg_rec_0: Expr::const_(Name::from_string("Int.NonNeg.rec"), vec![]),
+            #[cfg(test)]
             int_of_nat: Expr::const_(Name::from_string("Int.ofNat"), vec![]),
             int_sub: Expr::const_(Name::from_string("Int.sub"), vec![]),
             int_le: Expr::const_(Name::from_string("Int.le"), vec![]),

@@ -56,6 +56,7 @@ fn witness_type(witness_name: &str, nv: Expr, node: Expr) -> Expr {
 }
 
 /// Helper: build a witness constructor `Ctor nv clause_idx`.
+#[cfg(test)]
 fn witness_base_ctor(ctor_name: &str, nv: Expr, clause_idx: Expr) -> Expr {
     Expr::apps(
         Expr::const_(Name::from_string(ctor_name), vec![]),
@@ -65,6 +66,7 @@ fn witness_base_ctor(ctor_name: &str, nv: Expr, clause_idx: Expr) -> Expr {
 
 /// Helper: build a witness resolve constructor
 /// `Ctor nv pivot left right ih_left ih_right`.
+#[cfg(test)]
 fn witness_resolve_ctor(
     ctor_name: &str,
     nv: Expr,

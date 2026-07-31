@@ -18243,53 +18243,6 @@ mod tests {
         );
     }
 
-    /// MEASUREMENT probe (run manually): re-validate the importer against
-    /// the real stdlib dumps produced by `mathverse_coq_dump`
-    /// (`data/corpora/coq-sexp/stdlib/<module>.sexp`) and print per-module
-    /// translated / axiomatized / value-drop counts plus the value-drop
-    /// reason histogram.
-    ///
-    /// ```text
-    /// cargo test --locked --lib -p clean-mathverse \
-    ///   coq::alpha::tests::measure_real_stdlib_dump_translation -- \
-    ///   --ignored --nocapture
-    /// ```
-    #[test]
-    #[ignore = "measurement probe over local corpus dumps; run manually with --ignored"]
-    fn measure_real_stdlib_dump_translation() {
-        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../data/corpora/coq-sexp/stdlib");
-        for module in ["Coq.Init.Logic", "Coq.Init.Datatypes", "Coq.Init.Peano"] {
-            let path = base.join(format!("{module}.sexp"));
-            let data = match std::fs::read_to_string(&path) {
-                Ok(d) => d,
-                Err(e) => {
-                    println!("== {module}: dump not available ({e}) — skipped");
-                    continue;
-                }
-            };
-            let mut w = ShardWriter::new();
-            let stats = CoqImporter.import_sexp(&data, &mut w).expect("import");
-            println!(
-                "== {module}: total={} translated={} axiomatized={} \
-                 value_translation_failed={} skipped={}",
-                stats.total,
-                stats.translated,
-                stats.axiomatized,
-                stats.value_translation_failed,
-                stats.skipped
-            );
-            let mut histo: std::collections::BTreeMap<&str, u32> = Default::default();
-            for (_, reason) in &stats.value_failure_reasons {
-                let key = reason.split(':').next().unwrap_or(reason);
-                *histo.entry(key).or_default() += 1;
-            }
-            for (reason, count) in histo {
-                println!("   drop[{count:>3}] {reason}");
-            }
-        }
-    }
-
     // -- Nested-match split (`div2` / `even` two-level recursion) ------------
 
     /// The raw SerAPI `nat` inductive head used inside `Fix` values.

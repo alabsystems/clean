@@ -71,6 +71,7 @@ struct SignBiConsts {
     pow_two_succ: Expr,
     eq_symm_nat: Expr,
     eq_ndrec_fin: Expr,
+    #[cfg(test)]
     bool_rec1: Expr,
     congr_arg_br: Expr,
     congr_arg_hr: Expr,
@@ -94,6 +95,7 @@ struct SignBiConsts {
     eq1: Expr,
     eq_trans1: Expr,
     eq_symm1: Expr,
+    #[cfg(test)]
     eq_refl1: Expr,
     congr_arg_rr: Expr,
     rat_mul_comm: Expr,
@@ -135,6 +137,7 @@ impl SignBiConsts {
             pow_two_succ: Expr::const_(Name::from_string("Nat.pow_two_succ"), vec![]),
             eq_symm_nat: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_ndrec_fin: Expr::const_(Name::from_string("Eq.ndrec"), vec![l1.clone(), l1.clone()]),
+            #[cfg(test)]
             bool_rec1: Expr::const_(Name::from_string("Bool.rec"), vec![l1.clone()]),
             congr_arg_br: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
             congr_arg_hr: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
@@ -182,6 +185,7 @@ impl SignBiConsts {
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
             eq_trans1: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             congr_arg_rr: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1]),
             rat_mul_comm: Expr::const_(Name::from_string("Rat.mul_comm"), vec![]),

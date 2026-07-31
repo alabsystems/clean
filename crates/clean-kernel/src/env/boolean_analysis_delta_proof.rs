@@ -61,6 +61,7 @@ struct DeltaConsts {
     pm: Expr,
     bool_rec1: Expr,
     eq1: Expr,
+    #[cfg(test)]
     eq_refl1: Expr,
 }
 
@@ -92,6 +93,7 @@ impl DeltaConsts {
             pm: Expr::const_(Name::from_string("BoolAnalysis.pm"), vec![]),
             bool_rec1: Expr::const_(Name::from_string("Bool.rec"), vec![type1.clone()]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![type1.clone()]),
+            #[cfg(test)]
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![type1]),
         }
     }
@@ -105,6 +107,7 @@ impl DeltaConsts {
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn refl_rat(&self, e: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), e])
     }
@@ -828,6 +831,7 @@ struct CombineConsts {
     nat_succ: Expr,
     btrue: Expr,
     bfalse: Expr,
+    #[cfg(test)]
     bool_rec1: Expr,
     congr_arg_br: Expr, // congrArg Bool→Rat
     congr_arg_hr: Expr, // congrArg HCPoint→Rat (level 2,2)
@@ -868,6 +872,7 @@ impl CombineConsts {
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
             btrue: Expr::const_(Name::from_string("Bool.true"), vec![]),
             bfalse: Expr::const_(Name::from_string("Bool.false"), vec![]),
+            #[cfg(test)]
             bool_rec1: Expr::const_(Name::from_string("Bool.rec"), vec![l1.clone()]),
             congr_arg_br: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
             congr_arg_hr: Expr::const_(Name::from_string("congrArg"), vec![l1.clone(), l1.clone()]),
@@ -1952,6 +1957,7 @@ struct SumSwapConsts {
     sum_zero_fn: Expr,
     rat_add: Expr,
     eq1: Expr,
+    #[cfg(test)]
     eq_refl1: Expr,
     eq_trans1: Expr,
     eq_symm1: Expr,
@@ -1976,6 +1982,7 @@ impl SumSwapConsts {
             sum_zero_fn: Expr::const_(Name::from_string("Fin.sum_zero_fn"), vec![]),
             rat_add: Expr::const_(Name::from_string("Rat.add"), vec![]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             eq_trans1: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),

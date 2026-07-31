@@ -90,6 +90,7 @@ fn test_ext_config_custom() {
     };
     assert_eq!(c.max_inline_size, 5);
     assert!(!c.enable_partial_inline);
+    assert!((c.max_growth_factor - 1.0).abs() < f64::EPSILON);
 }
 
 // ===== InlineCostModel tests =====
@@ -337,8 +338,10 @@ fn test_find_partial_candidates_small_fast_path() {
     let d = make_decl("f", vec![(var(0), IRType::UInt64)], body);
     let cands = find_partial_inline_candidates(&[d], 2);
     assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].name, name("f"));
     assert_eq!(cands[0].fast_alt_idx, 0);
     assert_eq!(cands[0].fast_path_size, 1);
+    assert!(cands[0].total_size > cands[0].fast_path_size);
 }
 
 #[test]
@@ -624,6 +627,7 @@ fn test_extended_stats_default() {
     assert_eq!(s.inlined_calls, 0);
     assert_eq!(s.code_size_before, 0);
     assert_eq!(s.code_size_after, 0);
+    assert_eq!(s.partial_inlines, 0);
     assert_eq!(s.skipped_by_cost, 0);
     assert_eq!(s.skipped_noinline, 0);
     assert_eq!(s.skipped_recursive, 0);

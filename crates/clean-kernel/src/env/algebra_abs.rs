@@ -12,10 +12,16 @@
 //! Int functions are in `algebra_abs_int.rs`.
 //! Nat functions are in `algebra_abs_nat.rs`.
 
+#[cfg(any(test, feature = "math-overlays"))]
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::Environment;
+#[cfg(any(test, feature = "math-overlays"))]
+use crate::env::{Declaration, EnvError};
+#[cfg(any(test, feature = "math-overlays"))]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(any(test, feature = "math-overlays"))]
 use crate::level::Level;
+#[cfg(any(test, feature = "math-overlays"))]
 use crate::name::Name;
 
 impl Environment {
@@ -35,6 +41,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_decidable_ord_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_rat_decidable_ord(&mut self) -> Result<(), EnvError> {
         if self.rat_decidable_ord_init {
             return Ok(());
@@ -124,6 +131,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_decidable_ord_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_decidable_ord(&self) -> bool {
         self.rat_decidable_ord_init
     }
@@ -328,7 +336,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_minmax_init == true`
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn has_rat_minmax(&self) -> bool {
         self.rat_minmax_init
     }
@@ -380,6 +388,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_abs_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(crate) fn init_rat_abs(&mut self) -> Result<(), EnvError> {
         if self.rat_abs_init {
             return Ok(());
@@ -807,6 +816,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.rat_abs_init == true`
+    #[cfg(test)]
     pub(crate) fn has_rat_abs(&self) -> bool {
         self.rat_abs_init
     }

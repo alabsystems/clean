@@ -38,16 +38,6 @@ fn mk_ctor(tag: u32) -> CtorInfo {
     }
 }
 
-fn mk_ctor_n(tag: u32, n_objs: u32) -> CtorInfo {
-    CtorInfo {
-        name: name("Ctor"),
-        tag,
-        num_scalars: 0,
-        num_objects: n_objs,
-        field_types: vec![IRType::Object; n_objs as usize],
-    }
-}
-
 /// Build a simple function: one object param, body returns param directly.
 fn identity_decl(fname: &str, param_var: u32) -> IRDecl {
     IRDecl {

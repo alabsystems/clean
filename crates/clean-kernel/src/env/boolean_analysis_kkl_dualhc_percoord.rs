@@ -106,6 +106,7 @@ struct PerCoordConsts {
     ne_zero_of_pos: Expr,
     mul_pos: Expr,
     pow_pos: Expr,
+    #[cfg(test)]
     pow_mul_base: Expr,
     le_cancel: Expr,
     // measure-identity leaves (eR / h_meas discharge).
@@ -165,6 +166,7 @@ impl PerCoordConsts {
             ne_zero_of_pos: k("Rat.ne_zero_of_pos"),
             mul_pos: k("Rat.mul_pos"),
             pow_pos: k("Rat.powNat_pos"),
+            #[cfg(test)]
             pow_mul_base: k("Rat.powNat_mul_base"),
             le_cancel: k("Rat.le_of_mul_le_mul_left_pos"),
             m_pow2_inf: k("BoolAnalysis.dualhc_m_pow2_eq_4pow_influence"),
@@ -299,6 +301,7 @@ impl PerCoordConsts {
     fn one_mul_at(&self, a: Expr) -> Expr {
         Expr::app(self.one_mul.clone(), a)
     }
+    #[cfg(test)]
     fn pow_mul_base_at(&self, a: Expr, b: Expr, n: &Expr) -> Expr {
         Expr::apps(self.pow_mul_base.clone(), [a, b, n.clone()])
     }

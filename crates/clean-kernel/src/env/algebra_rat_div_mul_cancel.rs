@@ -60,8 +60,10 @@ pub(crate) struct DivMulConsts {
     and_right: Expr,
     not_c: Expr,
     iff_mp: Expr,
+    #[cfg(test)]
     false_c: Expr,
     eq_c: Expr,
+    #[cfg(test)]
     eq_symm: Expr,
     eq_trans: Expr,
     eq_subst: Expr,
@@ -92,8 +94,10 @@ impl DivMulConsts {
             and_right: k("And.right"),
             not_c: k("Not"),
             iff_mp: k("Iff.mp"),
+            #[cfg(test)]
             false_c: k("False"),
             eq_c: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
+            #[cfg(test)]
             eq_symm: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1.clone()]),
@@ -141,6 +145,7 @@ impl DivMulConsts {
     fn le_refl(&self, a: Expr) -> Expr {
         Expr::app(self.le_refl.clone(), a)
     }
+    #[cfg(test)]
     fn eq_symm(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), a, b, h])
     }

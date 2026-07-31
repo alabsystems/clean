@@ -24,13 +24,19 @@
 //!
 //! Part of #3153.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Extended McCormick constants (reuses base Rat/le infrastructure).
+#[cfg(test)]
 struct McExtConsts {
     rat: Expr,
     prop: Expr,
@@ -48,7 +54,9 @@ struct McExtConsts {
     nn_vec_l1_norm: Expr,
 }
 
+#[cfg(test)]
 impl McExtConsts {
+    #[cfg(test)]
     fn new() -> Self {
         Self {
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
@@ -68,6 +76,7 @@ impl McExtConsts {
         }
     }
 
+    #[cfg(test)]
     fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -81,18 +90,22 @@ impl McExtConsts {
         )
     }
 
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn sub(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_sub.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn and_prop(&self, p: Expr, q: Expr) -> Expr {
         Expr::app(Expr::app(self.and.clone(), p), q)
     }
 
+    #[cfg(test)]
     fn rat_eq(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(Expr::app(self.eq.clone(), self.rat.clone()), lhs),
@@ -100,34 +113,40 @@ impl McExtConsts {
         )
     }
 
+    #[cfg(test)]
     fn ib_of(&self, d: &Expr) -> Expr {
         Expr::app(self.ib.clone(), d.clone())
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn gap_app(&self, xl: Expr, xu: Expr, yl: Expr, yu: Expr) -> Expr {
         Expr::apps(self.gap.clone(), [xl, xu, yl, yu])
     }
 
+    #[cfg(test)]
     fn l1_norm(&self, n: &Expr, v: &Expr) -> Expr {
         Expr::app(Expr::app(self.nn_vec_l1_norm.clone(), n.clone()), v.clone())
     }
 
+    #[cfg(test)]
     fn ib_width_app(&self, d: &Expr, b: &Expr) -> Expr {
         Expr::app(Expr::app(self.ib_width.clone(), d.clone()), b.clone())
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize extended McCormick declarations (T50-T52, Phase 3).
     ///
     /// Depends on:
     /// - `init_nn_verify_mccormick()` for base envelope definitions
     /// - `init_nn_verify_foundation_types()` for l1_norm, width
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_mccormick_ext(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string(
@@ -160,7 +179,7 @@ impl Environment {
     ///       (And (x*y <= xl*y + x*yu - xl*yu)
     ///            (x*y <= xu*y + x*yl - xu*yl))
     /// ```
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t50_mccormick_bilinear_sound(&mut self, c: &McExtConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.McCormick.mccormick_bilinear_sound");
         if self.get_const(&name).is_some() {
@@ -234,7 +253,7 @@ impl Environment {
     /// ```
     /// (This is the standard gap bound; the shared-input version is at least
     /// as tight.)
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t51_mccormick_shared_input(&mut self, c: &McExtConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.McCormick.mccormick_shared_input");
         if self.get_const(&name).is_some() {
@@ -286,7 +305,7 @@ impl Environment {
     ///     -- bounds the total gap across all dimensions
     /// ```
     /// (Vectorized: the total gap is bounded by product of widths.)
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t52_mccormick_linear_growth(&mut self, c: &McExtConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.McCormick.mccormick_linear_growth");
         if self.get_const(&name).is_some() {
@@ -328,7 +347,7 @@ impl Environment {
     /// `(n : Nat) -> IntervalBounds n -> IntervalBounds n -> Rat`
     ///
     /// Accumulated McCormick gap across all n dimensions.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_mccormick_total_gap(&mut self, c: &McExtConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.McCormick.total_gap");
         if self.get_const(&name).is_some() {

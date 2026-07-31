@@ -291,6 +291,7 @@ impl SubAddConsts {
 }
 
 /// `a·p = a·q` from `h : p = q` (congruence in the right factor).
+#[cfg(test)]
 fn congr_mul_right(
     c: &SubAddConsts,
     parent: &EnvDeclBuilder,

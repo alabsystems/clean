@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 use num_bigint::BigUint;
 
+use crate::expr::stack_safe;
+
 /// Minimal literal type for the micro-checker.
 ///
 /// `Nat` carries an arbitrary-precision [`num_bigint::BigUint`] so the
@@ -35,7 +37,6 @@ impl MicroLiteral {
 
 /// Minimal expression type for the micro-checker.
 /// This is a simplified version of the main kernel's Expr.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MicroExpr {
     /// Bound variable (de Bruijn index)
     BVar(u32),
@@ -86,7 +87,6 @@ pub enum MicroResult {
 }
 
 /// Minimal universe level for the micro-checker.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MicroLevel {
     /// Level 0 (Prop)
     Zero,
@@ -98,8 +98,226 @@ pub enum MicroLevel {
     IMax(Arc<MicroLevel>, Arc<MicroLevel>),
 }
 
+impl Clone for MicroExpr {
+    fn clone(&self) -> Self {
+        stack_safe(|| match self {
+            Self::BVar(idx) => Self::BVar(*idx),
+            Self::Sort(level) => Self::Sort(level.clone()),
+            Self::App(func, arg) => Self::App(func.clone(), arg.clone()),
+            Self::Lam(ty, body) => Self::Lam(ty.clone(), body.clone()),
+            Self::Pi(ty, body) => Self::Pi(ty.clone(), body.clone()),
+            Self::Let(ty, value, body) => Self::Let(ty.clone(), value.clone(), body.clone()),
+            Self::Opaque(ty) => Self::Opaque(ty.clone()),
+            Self::Lit(lit) => Self::Lit(lit.clone()),
+            Self::Proj(idx, expr) => Self::Proj(*idx, expr.clone()),
+            Self::Const(name) => Self::Const(name.clone()),
+        })
+    }
+}
+
+impl PartialEq for MicroExpr {
+    fn eq(&self, other: &Self) -> bool {
+        stack_safe(|| match (self, other) {
+            (Self::BVar(left), Self::BVar(right)) => left == right,
+            (Self::Sort(left), Self::Sort(right)) => left == right,
+            (Self::App(lf, la), Self::App(rf, ra))
+            | (Self::Lam(lf, la), Self::Lam(rf, ra))
+            | (Self::Pi(lf, la), Self::Pi(rf, ra)) => lf == rf && la == ra,
+            (Self::Let(lt, lv, lb), Self::Let(rt, rv, rb)) => lt == rt && lv == rv && lb == rb,
+            (Self::Opaque(left), Self::Opaque(right)) => left == right,
+            (Self::Lit(left), Self::Lit(right)) => left == right,
+            (Self::Proj(li, le), Self::Proj(ri, re)) => li == ri && le == re,
+            (Self::Const(left), Self::Const(right)) => left == right,
+            _ => false,
+        })
+    }
+}
+
+impl Eq for MicroExpr {}
+
+// Diagnostics are deliberately bounded. Error formatting is itself reachable
+// on adversarial rejection paths, so recursively printing the entire term
+// would reintroduce an unguarded stack and output-amplification surface.
+impl std::fmt::Debug for MicroExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BVar(idx) => f.debug_tuple("BVar").field(idx).finish(),
+            Self::Sort(level) => f.debug_tuple("Sort").field(level).finish(),
+            Self::App(func, arg) => f
+                .debug_tuple("App")
+                .field(&MicroExprRule(func))
+                .field(&MicroExprRule(arg))
+                .finish(),
+            Self::Lam(ty, body) => f
+                .debug_tuple("Lam")
+                .field(&MicroExprRule(ty))
+                .field(&MicroExprRule(body))
+                .finish(),
+            Self::Pi(ty, body) => f
+                .debug_tuple("Pi")
+                .field(&MicroExprRule(ty))
+                .field(&MicroExprRule(body))
+                .finish(),
+            Self::Let(ty, value, body) => f
+                .debug_tuple("Let")
+                .field(&MicroExprRule(ty))
+                .field(&MicroExprRule(value))
+                .field(&MicroExprRule(body))
+                .finish(),
+            Self::Opaque(ty) => f.debug_tuple("Opaque").field(&MicroExprRule(ty)).finish(),
+            Self::Lit(lit) => f
+                .debug_tuple("Lit")
+                .field(&MicroLiteralSummary(lit))
+                .finish(),
+            Self::Proj(idx, expr) => f
+                .debug_tuple("Proj")
+                .field(idx)
+                .field(&MicroExprRule(expr))
+                .finish(),
+            Self::Const(name) => f
+                .debug_struct("Const")
+                .field("len", &name.len())
+                .field("prefix", &MicroBoundedStr(name))
+                .finish(),
+        }
+    }
+}
+
+impl Drop for MicroExpr {
+    fn drop(&mut self) {
+        if !matches!(
+            self,
+            Self::Sort(_)
+                | Self::App(_, _)
+                | Self::Lam(_, _)
+                | Self::Pi(_, _)
+                | Self::Let(_, _, _)
+                | Self::Opaque(_)
+                | Self::Proj(_, _)
+        ) || !micro_recursive_drop_needs_segment()
+        {
+            return;
+        }
+
+        let mut expr_children = Vec::with_capacity(3);
+        let mut level_child = None;
+        match self {
+            Self::Sort(level) => {
+                level_child = Some(std::mem::replace(level, MicroLevel::Zero));
+            }
+            Self::App(func, arg) | Self::Lam(func, arg) | Self::Pi(func, arg) => {
+                expr_children.push(std::mem::replace(func, micro_expr_drop_leaf()));
+                expr_children.push(std::mem::replace(arg, micro_expr_drop_leaf()));
+            }
+            Self::Let(ty, value, body) => {
+                expr_children.push(std::mem::replace(ty, micro_expr_drop_leaf()));
+                expr_children.push(std::mem::replace(value, micro_expr_drop_leaf()));
+                expr_children.push(std::mem::replace(body, micro_expr_drop_leaf()));
+            }
+            Self::Opaque(ty) => {
+                expr_children.push(std::mem::replace(ty, micro_expr_drop_leaf()));
+            }
+            Self::Proj(_, expr) => {
+                expr_children.push(std::mem::replace(expr, micro_expr_drop_leaf()));
+            }
+            Self::BVar(_) | Self::Lit(_) | Self::Const(_) => {}
+        }
+        stack_safe(move || {
+            drop(expr_children);
+            drop(level_child);
+        });
+    }
+}
+
+impl Clone for MicroLevel {
+    fn clone(&self) -> Self {
+        stack_safe(|| match self {
+            Self::Zero => Self::Zero,
+            Self::Succ(level) => Self::Succ(level.clone()),
+            Self::Max(left, right) => Self::Max(left.clone(), right.clone()),
+            Self::IMax(left, right) => Self::IMax(left.clone(), right.clone()),
+        })
+    }
+}
+
+impl PartialEq for MicroLevel {
+    fn eq(&self, other: &Self) -> bool {
+        stack_safe(|| match (self, other) {
+            (Self::Zero, Self::Zero) => true,
+            (Self::Succ(left), Self::Succ(right)) => left == right,
+            (Self::Max(ll, lr), Self::Max(rl, rr)) | (Self::IMax(ll, lr), Self::IMax(rl, rr)) => {
+                ll == rl && lr == rr
+            }
+            _ => false,
+        })
+    }
+}
+
+impl Eq for MicroLevel {}
+
+impl std::fmt::Debug for MicroLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Zero => f.write_str("Zero"),
+            Self::Succ(child) => f.debug_tuple("Succ").field(&MicroLevelRule(child)).finish(),
+            Self::Max(left, right) => f
+                .debug_tuple("Max")
+                .field(&MicroLevelRule(left))
+                .field(&MicroLevelRule(right))
+                .finish(),
+            Self::IMax(left, right) => f
+                .debug_tuple("IMax")
+                .field(&MicroLevelRule(left))
+                .field(&MicroLevelRule(right))
+                .finish(),
+        }
+    }
+}
+
+impl Drop for MicroLevel {
+    fn drop(&mut self) {
+        if matches!(self, Self::Zero) || !micro_recursive_drop_needs_segment() {
+            return;
+        }
+
+        let mut children = Vec::with_capacity(2);
+        match self {
+            Self::Succ(level) => {
+                children.push(std::mem::replace(level, micro_level_drop_leaf()));
+            }
+            Self::Max(left, right) | Self::IMax(left, right) => {
+                children.push(std::mem::replace(left, micro_level_drop_leaf()));
+                children.push(std::mem::replace(right, micro_level_drop_leaf()));
+            }
+            Self::Zero => {}
+        }
+        stack_safe(move || drop(children));
+    }
+}
+
+fn micro_expr_drop_leaf() -> Arc<MicroExpr> {
+    static LEAF: std::sync::OnceLock<Arc<MicroExpr>> = std::sync::OnceLock::new();
+    LEAF.get_or_init(|| Arc::new(MicroExpr::BVar(0))).clone()
+}
+
+fn micro_level_drop_leaf() -> Arc<MicroLevel> {
+    static LEAF: std::sync::OnceLock<Arc<MicroLevel>> = std::sync::OnceLock::new();
+    LEAF.get_or_init(|| Arc::new(MicroLevel::Zero)).clone()
+}
+
+fn micro_recursive_drop_needs_segment() -> bool {
+    #[cfg(kani)]
+    {
+        false
+    }
+    #[cfg(not(kani))]
+    {
+        const DROP_RED_ZONE: usize = 256 * 1024;
+        stacker::remaining_stack().is_none_or(|remaining| remaining < DROP_RED_ZONE)
+    }
+}
+
 /// Minimal proof certificate for the micro-checker.
-#[derive(Debug, Clone, PartialEq)]
 pub enum MicroCert {
     /// Sort(l) : Sort(succ(l))
     Sort {
@@ -195,6 +413,404 @@ pub enum MicroCert {
         /// Type of the projected field (provided externally)
         field_ty: Box<MicroExpr>,
     },
+}
+
+impl Clone for MicroCert {
+    fn clone(&self) -> Self {
+        stack_safe(|| match self {
+            Self::Sort { level } => Self::Sort {
+                level: level.clone(),
+            },
+            Self::BVar { idx, ty } => Self::BVar {
+                idx: *idx,
+                ty: ty.clone(),
+            },
+            Self::Opaque { ty } => Self::Opaque { ty: ty.clone() },
+            Self::Const { name, ty } => Self::Const {
+                name: name.clone(),
+                ty: ty.clone(),
+            },
+            Self::App {
+                fn_cert,
+                arg_cert,
+                result_ty,
+            } => Self::App {
+                fn_cert: fn_cert.clone(),
+                arg_cert: arg_cert.clone(),
+                result_ty: result_ty.clone(),
+            },
+            Self::Lam {
+                arg_ty_cert,
+                body_cert,
+                result_ty,
+            } => Self::Lam {
+                arg_ty_cert: arg_ty_cert.clone(),
+                body_cert: body_cert.clone(),
+                result_ty: result_ty.clone(),
+            },
+            Self::Pi {
+                arg_ty_cert,
+                arg_level,
+                body_ty_cert,
+                body_level,
+            } => Self::Pi {
+                arg_ty_cert: arg_ty_cert.clone(),
+                arg_level: arg_level.clone(),
+                body_ty_cert: body_ty_cert.clone(),
+                body_level: body_level.clone(),
+            },
+            Self::Let {
+                ty_cert,
+                val_cert,
+                body_cert,
+                result_ty,
+            } => Self::Let {
+                ty_cert: ty_cert.clone(),
+                val_cert: val_cert.clone(),
+                body_cert: body_cert.clone(),
+                result_ty: result_ty.clone(),
+            },
+            Self::Lit { lit, ty } => Self::Lit {
+                lit: lit.clone(),
+                ty: ty.clone(),
+            },
+            Self::Proj {
+                idx,
+                expr_cert,
+                field_ty,
+            } => Self::Proj {
+                idx: *idx,
+                expr_cert: expr_cert.clone(),
+                field_ty: field_ty.clone(),
+            },
+        })
+    }
+}
+
+impl PartialEq for MicroCert {
+    fn eq(&self, other: &Self) -> bool {
+        stack_safe(|| match (self, other) {
+            (Self::Sort { level: left }, Self::Sort { level: right }) => left == right,
+            (Self::BVar { idx: li, ty: lt }, Self::BVar { idx: ri, ty: rt }) => {
+                li == ri && lt == rt
+            }
+            (Self::Opaque { ty: left }, Self::Opaque { ty: right }) => left == right,
+            (Self::Const { name: ln, ty: lt }, Self::Const { name: rn, ty: rt }) => {
+                ln == rn && lt == rt
+            }
+            (
+                Self::App {
+                    fn_cert: lf,
+                    arg_cert: la,
+                    result_ty: lr,
+                },
+                Self::App {
+                    fn_cert: rf,
+                    arg_cert: ra,
+                    result_ty: rr,
+                },
+            ) => lf == rf && la == ra && lr == rr,
+            (
+                Self::Lam {
+                    arg_ty_cert: la,
+                    body_cert: lb,
+                    result_ty: lr,
+                },
+                Self::Lam {
+                    arg_ty_cert: ra,
+                    body_cert: rb,
+                    result_ty: rr,
+                },
+            ) => la == ra && lb == rb && lr == rr,
+            (
+                Self::Pi {
+                    arg_ty_cert: lac,
+                    arg_level: lal,
+                    body_ty_cert: lbc,
+                    body_level: lbl,
+                },
+                Self::Pi {
+                    arg_ty_cert: rac,
+                    arg_level: ral,
+                    body_ty_cert: rbc,
+                    body_level: rbl,
+                },
+            ) => lac == rac && lal == ral && lbc == rbc && lbl == rbl,
+            (
+                Self::Let {
+                    ty_cert: lt,
+                    val_cert: lv,
+                    body_cert: lb,
+                    result_ty: lr,
+                },
+                Self::Let {
+                    ty_cert: rt,
+                    val_cert: rv,
+                    body_cert: rb,
+                    result_ty: rr,
+                },
+            ) => lt == rt && lv == rv && lb == rb && lr == rr,
+            (Self::Lit { lit: ll, ty: lt }, Self::Lit { lit: rl, ty: rt }) => ll == rl && lt == rt,
+            (
+                Self::Proj {
+                    idx: li,
+                    expr_cert: le,
+                    field_ty: lf,
+                },
+                Self::Proj {
+                    idx: ri,
+                    expr_cert: re,
+                    field_ty: rf,
+                },
+            ) => li == ri && le == re && lf == rf,
+            _ => false,
+        })
+    }
+}
+
+impl std::fmt::Debug for MicroCert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Sort { level } => f.debug_struct("Sort").field("level", level).finish(),
+            Self::BVar { idx, ty } => f
+                .debug_struct("BVar")
+                .field("idx", idx)
+                .field("ty", &MicroExprRule(ty))
+                .finish(),
+            Self::Opaque { ty } => f
+                .debug_struct("Opaque")
+                .field("ty", &MicroExprRule(ty))
+                .finish(),
+            Self::Const { name, ty } => f
+                .debug_struct("Const")
+                .field("name_len", &name.len())
+                .field("name_prefix", &MicroBoundedStr(name))
+                .field("ty", &MicroExprRule(ty))
+                .finish(),
+            Self::App {
+                fn_cert,
+                arg_cert,
+                result_ty,
+            } => f
+                .debug_struct("App")
+                .field("fn_cert", &MicroCertRule(fn_cert))
+                .field("arg_cert", &MicroCertRule(arg_cert))
+                .field("result_ty", &MicroExprRule(result_ty))
+                .finish(),
+            Self::Lam {
+                arg_ty_cert,
+                body_cert,
+                result_ty,
+            } => f
+                .debug_struct("Lam")
+                .field("arg_ty_cert", &MicroCertRule(arg_ty_cert))
+                .field("body_cert", &MicroCertRule(body_cert))
+                .field("result_ty", &MicroExprRule(result_ty))
+                .finish(),
+            Self::Pi {
+                arg_ty_cert,
+                arg_level,
+                body_ty_cert,
+                body_level,
+            } => f
+                .debug_struct("Pi")
+                .field("arg_ty_cert", &MicroCertRule(arg_ty_cert))
+                .field("arg_level", arg_level)
+                .field("body_ty_cert", &MicroCertRule(body_ty_cert))
+                .field("body_level", body_level)
+                .finish(),
+            Self::Let {
+                ty_cert,
+                val_cert,
+                body_cert,
+                result_ty,
+            } => f
+                .debug_struct("Let")
+                .field("ty_cert", &MicroCertRule(ty_cert))
+                .field("val_cert", &MicroCertRule(val_cert))
+                .field("body_cert", &MicroCertRule(body_cert))
+                .field("result_ty", &MicroExprRule(result_ty))
+                .finish(),
+            Self::Lit { lit, ty } => f
+                .debug_struct("Lit")
+                .field("lit", &MicroLiteralSummary(lit))
+                .field("ty", &MicroExprRule(ty))
+                .finish(),
+            Self::Proj {
+                idx,
+                expr_cert,
+                field_ty,
+            } => f
+                .debug_struct("Proj")
+                .field("idx", idx)
+                .field("expr_cert", &MicroCertRule(expr_cert))
+                .field("field_ty", &MicroExprRule(field_ty))
+                .finish(),
+        }
+    }
+}
+
+struct MicroExprRule<'a>(&'a MicroExpr);
+
+impl std::fmt::Debug for MicroExprRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self.0 {
+            MicroExpr::BVar(_) => "BVar",
+            MicroExpr::Sort(_) => "Sort",
+            MicroExpr::App(_, _) => "App",
+            MicroExpr::Lam(_, _) => "Lam",
+            MicroExpr::Pi(_, _) => "Pi",
+            MicroExpr::Let(_, _, _) => "Let",
+            MicroExpr::Opaque(_) => "Opaque",
+            MicroExpr::Lit(_) => "Lit",
+            MicroExpr::Proj(_, _) => "Proj",
+            MicroExpr::Const(_) => "Const",
+        })
+    }
+}
+
+struct MicroLevelRule<'a>(&'a MicroLevel);
+
+impl std::fmt::Debug for MicroLevelRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self.0 {
+            MicroLevel::Zero => "Zero",
+            MicroLevel::Succ(_) => "Succ",
+            MicroLevel::Max(_, _) => "Max",
+            MicroLevel::IMax(_, _) => "IMax",
+        })
+    }
+}
+
+struct MicroCertRule<'a>(&'a MicroCert);
+
+impl std::fmt::Debug for MicroCertRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self.0 {
+            MicroCert::Sort { .. } => "Sort",
+            MicroCert::BVar { .. } => "BVar",
+            MicroCert::Opaque { .. } => "Opaque",
+            MicroCert::Const { .. } => "Const",
+            MicroCert::App { .. } => "App",
+            MicroCert::Lam { .. } => "Lam",
+            MicroCert::Pi { .. } => "Pi",
+            MicroCert::Let { .. } => "Let",
+            MicroCert::Lit { .. } => "Lit",
+            MicroCert::Proj { .. } => "Proj",
+        })
+    }
+}
+
+struct MicroLiteralSummary<'a>(&'a MicroLiteral);
+
+impl std::fmt::Debug for MicroLiteralSummary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            MicroLiteral::Nat(value) => {
+                let bits = value.bits();
+                let mut digits = value.iter_u64_digits();
+                let low = digits.next().unwrap_or(0);
+                if bits <= 64 {
+                    f.debug_tuple("Nat").field(&low).finish()
+                } else {
+                    let low_digits = [low, digits.next().unwrap_or(0)];
+                    f.debug_struct("Nat")
+                        .field("bits", &bits)
+                        .field("low_u64_digits", &low_digits)
+                        .finish()
+                }
+            }
+            MicroLiteral::String(value) => f
+                .debug_struct("String")
+                .field("len", &value.len())
+                .field("prefix", &MicroBoundedStr(value))
+                .finish(),
+        }
+    }
+}
+
+struct MicroBoundedStr<'a>(&'a str);
+
+impl std::fmt::Debug for MicroBoundedStr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const MAX_CHARS: usize = 32;
+        let end = self
+            .0
+            .char_indices()
+            .nth(MAX_CHARS)
+            .map_or(self.0.len(), |(index, _)| index);
+        std::fmt::Debug::fmt(&&self.0[..end], f)?;
+        if end != self.0.len() {
+            f.write_str("…")?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for MicroCert {
+    fn drop(&mut self) {
+        if matches!(
+            self,
+            Self::Sort { .. }
+                | Self::BVar { .. }
+                | Self::Opaque { .. }
+                | Self::Const { .. }
+                | Self::Lit { .. }
+        ) || !micro_recursive_drop_needs_segment()
+        {
+            return;
+        }
+
+        let cert_leaf = || {
+            Box::new(MicroCert::Sort {
+                level: MicroLevel::Zero,
+            })
+        };
+        let mut cert_children = Vec::with_capacity(3);
+        match self {
+            Self::App {
+                fn_cert, arg_cert, ..
+            } => {
+                cert_children.push(std::mem::replace(fn_cert, cert_leaf()));
+                cert_children.push(std::mem::replace(arg_cert, cert_leaf()));
+            }
+            Self::Lam {
+                arg_ty_cert,
+                body_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(arg_ty_cert, cert_leaf()));
+                cert_children.push(std::mem::replace(body_cert, cert_leaf()));
+            }
+            Self::Pi {
+                arg_ty_cert,
+                body_ty_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(arg_ty_cert, cert_leaf()));
+                cert_children.push(std::mem::replace(body_ty_cert, cert_leaf()));
+            }
+            Self::Let {
+                ty_cert,
+                val_cert,
+                body_cert,
+                ..
+            } => {
+                cert_children.push(std::mem::replace(ty_cert, cert_leaf()));
+                cert_children.push(std::mem::replace(val_cert, cert_leaf()));
+                cert_children.push(std::mem::replace(body_cert, cert_leaf()));
+            }
+            Self::Proj { expr_cert, .. } => {
+                cert_children.push(std::mem::replace(expr_cert, cert_leaf()));
+            }
+            Self::Sort { .. }
+            | Self::BVar { .. }
+            | Self::Opaque { .. }
+            | Self::Const { .. }
+            | Self::Lit { .. } => {}
+        }
+        stack_safe(move || drop(cert_children));
+    }
 }
 
 /// Verification error
@@ -330,7 +946,12 @@ impl MicroExpr {
     #[must_use]
     pub fn lift(&self, cutoff: u32, amount: u32) -> MicroExpr {
         let mut memo = MicroFoldMemo::default();
-        self.lift_memo(cutoff, amount, &mut memo)
+        self.lift_recurse(cutoff, amount, &mut memo)
+    }
+
+    #[inline(always)]
+    fn lift_recurse(&self, cutoff: u32, amount: u32, memo: &mut MicroFoldMemo) -> MicroExpr {
+        stack_safe(|| self.lift_memo(cutoff, amount, memo))
     }
 
     /// Pointer-identity-memoized worker for [`Self::lift`]. See
@@ -350,40 +971,40 @@ impl MicroExpr {
             }
             MicroExpr::Sort(l) => MicroExpr::Sort(l.clone()),
             MicroExpr::App(f, a) => MicroExpr::App(
-                Arc::new(f.lift_memo(cutoff, amount, memo)),
-                Arc::new(a.lift_memo(cutoff, amount, memo)),
+                Arc::new(f.lift_recurse(cutoff, amount, memo)),
+                Arc::new(a.lift_recurse(cutoff, amount, memo)),
             ),
             MicroExpr::Lam(ty, body) => MicroExpr::Lam(
-                Arc::new(ty.lift_memo(cutoff, amount, memo)),
-                Arc::new(body.lift_memo(
+                Arc::new(ty.lift_recurse(cutoff, amount, memo)),
+                Arc::new(body.lift_recurse(
                     checked_add_u32(cutoff, 1, "lift lam cutoff"),
                     amount,
                     memo,
                 )),
             ),
             MicroExpr::Pi(ty, body) => MicroExpr::Pi(
-                Arc::new(ty.lift_memo(cutoff, amount, memo)),
-                Arc::new(body.lift_memo(
+                Arc::new(ty.lift_recurse(cutoff, amount, memo)),
+                Arc::new(body.lift_recurse(
                     checked_add_u32(cutoff, 1, "lift pi cutoff"),
                     amount,
                     memo,
                 )),
             ),
             MicroExpr::Let(ty, val, body) => MicroExpr::Let(
-                Arc::new(ty.lift_memo(cutoff, amount, memo)),
-                Arc::new(val.lift_memo(cutoff, amount, memo)),
-                Arc::new(body.lift_memo(
+                Arc::new(ty.lift_recurse(cutoff, amount, memo)),
+                Arc::new(val.lift_recurse(cutoff, amount, memo)),
+                Arc::new(body.lift_recurse(
                     checked_add_u32(cutoff, 1, "lift let cutoff"),
                     amount,
                     memo,
                 )),
             ),
             MicroExpr::Opaque(ty) => {
-                MicroExpr::Opaque(Arc::new(ty.lift_memo(cutoff, amount, memo)))
+                MicroExpr::Opaque(Arc::new(ty.lift_recurse(cutoff, amount, memo)))
             }
             MicroExpr::Lit(_) => self.clone(),
             MicroExpr::Proj(idx, e) => {
-                MicroExpr::Proj(*idx, Arc::new(e.lift_memo(cutoff, amount, memo)))
+                MicroExpr::Proj(*idx, Arc::new(e.lift_recurse(cutoff, amount, memo)))
             }
             // Constants are closed (no free BVars), so lifting is a no-op.
             MicroExpr::Const(_) => self.clone(),
@@ -409,7 +1030,12 @@ impl MicroExpr {
     /// Substitute `val` for BVar(depth), adjusting indices
     pub(crate) fn subst(&self, depth: u32, val: &MicroExpr) -> MicroExpr {
         let mut memo = MicroFoldMemo::default();
-        self.subst_memo(depth, val, &mut memo)
+        self.subst_recurse(depth, val, &mut memo)
+    }
+
+    #[inline(always)]
+    fn subst_recurse(&self, depth: u32, val: &MicroExpr, memo: &mut MicroFoldMemo) -> MicroExpr {
+        stack_safe(|| self.subst_memo(depth, val, memo))
     }
 
     /// Pointer-identity-memoized worker for [`Self::subst`]. See
@@ -434,26 +1060,40 @@ impl MicroExpr {
             }
             MicroExpr::Sort(l) => MicroExpr::Sort(l.clone()),
             MicroExpr::App(f, a) => MicroExpr::App(
-                Arc::new(f.subst_memo(depth, val, memo)),
-                Arc::new(a.subst_memo(depth, val, memo)),
+                Arc::new(f.subst_recurse(depth, val, memo)),
+                Arc::new(a.subst_recurse(depth, val, memo)),
             ),
             MicroExpr::Lam(ty, body) => MicroExpr::Lam(
-                Arc::new(ty.subst_memo(depth, val, memo)),
-                Arc::new(body.subst_memo(checked_add_u32(depth, 1, "subst lam depth"), val, memo)),
+                Arc::new(ty.subst_recurse(depth, val, memo)),
+                Arc::new(body.subst_recurse(
+                    checked_add_u32(depth, 1, "subst lam depth"),
+                    val,
+                    memo,
+                )),
             ),
             MicroExpr::Pi(ty, body) => MicroExpr::Pi(
-                Arc::new(ty.subst_memo(depth, val, memo)),
-                Arc::new(body.subst_memo(checked_add_u32(depth, 1, "subst pi depth"), val, memo)),
+                Arc::new(ty.subst_recurse(depth, val, memo)),
+                Arc::new(body.subst_recurse(
+                    checked_add_u32(depth, 1, "subst pi depth"),
+                    val,
+                    memo,
+                )),
             ),
             MicroExpr::Let(ty, v, body) => MicroExpr::Let(
-                Arc::new(ty.subst_memo(depth, val, memo)),
-                Arc::new(v.subst_memo(depth, val, memo)),
-                Arc::new(body.subst_memo(checked_add_u32(depth, 1, "subst let depth"), val, memo)),
+                Arc::new(ty.subst_recurse(depth, val, memo)),
+                Arc::new(v.subst_recurse(depth, val, memo)),
+                Arc::new(body.subst_recurse(
+                    checked_add_u32(depth, 1, "subst let depth"),
+                    val,
+                    memo,
+                )),
             ),
-            MicroExpr::Opaque(ty) => MicroExpr::Opaque(Arc::new(ty.subst_memo(depth, val, memo))),
+            MicroExpr::Opaque(ty) => {
+                MicroExpr::Opaque(Arc::new(ty.subst_recurse(depth, val, memo)))
+            }
             MicroExpr::Lit(_) => self.clone(),
             MicroExpr::Proj(idx, e) => {
-                MicroExpr::Proj(*idx, Arc::new(e.subst_memo(depth, val, memo)))
+                MicroExpr::Proj(*idx, Arc::new(e.subst_recurse(depth, val, memo)))
             }
             // Constants are closed: substitution is a no-op.
             MicroExpr::Const(_) => self.clone(),
@@ -517,6 +1157,10 @@ impl MicroLevel {
 
     /// Core is_geq on already-normalized levels.
     fn is_geq_core(l1: &MicroLevel, l2: &MicroLevel) -> bool {
+        stack_safe(|| Self::is_geq_core_impl(l1, l2))
+    }
+
+    fn is_geq_core_impl(l1: &MicroLevel, l2: &MicroLevel) -> bool {
         // Same level
         if l1 == l2 {
             return true;
@@ -580,6 +1224,10 @@ impl MicroLevel {
     /// (no nested Max on either side) with deduplicated, sorted arguments.
     /// Analogous to Level::normalize_impl in level.rs.
     pub(crate) fn normalize(&self) -> MicroLevel {
+        stack_safe(|| self.normalize_impl())
+    }
+
+    fn normalize_impl(&self) -> MicroLevel {
         let (base, outer_offset) = MicroLevel::get_offset(self);
 
         match base {
@@ -654,6 +1302,10 @@ impl MicroLevel {
 
     /// Flatten a Max tree into its leaf arguments.
     fn push_max_args(l: &MicroLevel, buf: &mut Vec<MicroLevel>) {
+        stack_safe(|| Self::push_max_args_impl(l, buf));
+    }
+
+    fn push_max_args_impl(l: &MicroLevel, buf: &mut Vec<MicroLevel>) {
         match l {
             MicroLevel::Max(a, b) => {
                 Self::push_max_args(a, buf);
@@ -698,10 +1350,42 @@ impl MicroLevel {
         }
         // Same kind: compare structurally, then by offset
         if base_a != base_b {
-            // Use debug repr as tiebreaker for structural ordering
-            return format!("{:?}", base_a).cmp(&format!("{:?}", base_b));
+            return Self::structural_cmp(base_a, base_b);
         }
         off_a.cmp(&off_b)
+    }
+
+    /// Total, allocation-free structural ordering used by normalization.
+    ///
+    /// Keep this iterative: formatting a deeply nested level merely to obtain
+    /// a tiebreaker reintroduced an unguarded recursive walk.
+    fn structural_cmp(left: &MicroLevel, right: &MicroLevel) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        let mut pending = vec![(left, right)];
+        while let Some((lhs, rhs)) = pending.pop() {
+            let tag = |level: &MicroLevel| match level {
+                MicroLevel::Zero => 0_u8,
+                MicroLevel::Succ(_) => 1,
+                MicroLevel::IMax(_, _) => 2,
+                MicroLevel::Max(_, _) => 3,
+            };
+            let tag_cmp = tag(lhs).cmp(&tag(rhs));
+            if tag_cmp != Ordering::Equal {
+                return tag_cmp;
+            }
+            match (lhs, rhs) {
+                (MicroLevel::Zero, MicroLevel::Zero) => {}
+                (MicroLevel::Succ(l), MicroLevel::Succ(r)) => pending.push((l, r)),
+                (MicroLevel::Max(ll, lr), MicroLevel::Max(rl, rr))
+                | (MicroLevel::IMax(ll, lr), MicroLevel::IMax(rl, rr)) => {
+                    pending.push((lr, rr));
+                    pending.push((ll, rl));
+                }
+                _ => unreachable!("equal level tags must have equal variants"),
+            }
+        }
+        Ordering::Equal
     }
 
     /// Kind ordering for normalized level sorting.
@@ -716,6 +1400,10 @@ impl MicroLevel {
 
     /// Get the base level and offset (number of Succ applications)
     pub(crate) fn get_offset(l: &MicroLevel) -> (&MicroLevel, u32) {
+        stack_safe(|| Self::get_offset_impl(l))
+    }
+
+    fn get_offset_impl(l: &MicroLevel) -> (&MicroLevel, u32) {
         match l {
             MicroLevel::Succ(inner) => {
                 let (base, offset) = MicroLevel::get_offset(inner);

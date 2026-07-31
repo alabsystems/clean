@@ -50,7 +50,7 @@ use clean_parser::{DoElem, InterpolationPart, SurfaceArg, SurfaceExpr};
 /// variable names (in pattern order) and the body surface expression to
 /// substitute into and elaborate.
 #[derive(Debug, Clone)]
-pub(super) struct UserTermElab {
+pub(crate) struct UserTermElab {
     /// Bound pattern variable names, in left-to-right order (e.g. `["e"]` for
     /// `elab "mywrap" e:term : term => ...`). Empty for a nullary keyword.
     pub(super) bound_vars: Vec<String>,

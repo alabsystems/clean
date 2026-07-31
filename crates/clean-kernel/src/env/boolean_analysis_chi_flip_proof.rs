@@ -92,6 +92,7 @@ impl Environment {
     /// `BoolAnalysis.pm_not : ∀ (b : Bool), pm (Bool.not b) = Rat.neg (pm b)`.
     /// `Bool.rec` on `b`, both leaves close by `Eq.refl` (ground Rat numerals:
     /// `pm (¬false)=pm true=-1=Rat.neg 1`, `pm (¬true)=pm false=1=Rat.neg(-1)`).
+    #[cfg(test)]
     pub(crate) fn register_pm_not(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pm_not");
         if self.get_const(&name).is_some() {
@@ -475,7 +476,7 @@ impl Environment {
             };
             // For a concrete sv: split on x, Eq.refl leaves.
             let inner = |sv: Expr, parent: &EnvDeclBuilder| {
-                let mut d = EnvDeclBuilder::child_of(parent);
+                let d = EnvDeclBuilder::child_of(parent);
                 let motive_x = {
                     let mut e = EnvDeclBuilder::child_of(&d);
                     let (xp_id, xp) = e.fresh_local(bool_c.clone());
@@ -580,12 +581,12 @@ impl Environment {
         let bool_not = Expr::const_(Name::from_string("Bool.not"), vec![]);
         let inst_dec = Expr::const_(Name::from_string("instDecidableEqFin"), vec![]);
         let ite = Expr::const_(Name::from_string("ite"), vec![one.clone()]);
-        let if_pos = Expr::const_(Name::from_string("if_pos"), vec![one.clone()]);
-        let if_neg = Expr::const_(Name::from_string("if_neg"), vec![one.clone()]);
+        let _if_pos = Expr::const_(Name::from_string("if_pos"), vec![one.clone()]);
+        let _if_neg = Expr::const_(Name::from_string("if_neg"), vec![one.clone()]);
         let dec = Expr::const_(Name::from_string("Decidable"), vec![]);
         let dec_rec = Expr::const_(Name::from_string("Decidable.rec"), vec![l0.clone()]);
         let eq1 = Expr::const_(Name::from_string("Eq"), vec![one.clone()]);
-        let eq_refl = Expr::const_(Name::from_string("Eq.refl"), vec![one.clone()]);
+        let _eq_refl = Expr::const_(Name::from_string("Eq.refl"), vec![one.clone()]);
         let eq_symm = Expr::const_(Name::from_string("Eq.symm"), vec![one.clone()]);
         let eq_trans = Expr::const_(Name::from_string("Eq.trans"), vec![one.clone()]);
         let eq_ndrec = Expr::const_(Name::from_string("Eq.ndrec"), vec![l0.clone(), one.clone()]);
@@ -610,7 +611,7 @@ impl Environment {
         let val = |n: &Expr, j: &Expr| Expr::apps(fin_val.clone(), [n.clone(), j.clone()]);
         let beq = |a: Expr, b: Expr| Expr::apps(nat_beq.clone(), [a, b]);
         let eq_rat = |l: Expr, r: Expr| Expr::apps(eq1.clone(), [rat.clone(), l, r]);
-        let eq_bool = |l: Expr, r: Expr| Expr::apps(eq1.clone(), [bool_c.clone(), l, r]);
+        let _eq_bool = |l: Expr, r: Expr| Expr::apps(eq1.clone(), [bool_c.clone(), l, r]);
         let eq_fin = |n: &Expr, l: Expr, r: Expr| Expr::apps(eq1.clone(), [fin_n(n), l, r]);
         let eq_nat = |l: Expr, r: Expr| Expr::apps(eq1.clone(), [nat.clone(), l, r]);
         let mul = |a: Expr, b: Expr| Expr::apps(rat_mul.clone(), [a, b]);
@@ -1039,7 +1040,7 @@ impl Environment {
         let bool_to_rat = || Expr::lam(BinderInfo::Default, bool_c.clone(), rat.clone());
         let fin_n = |n: &Expr| Expr::app(fin.clone(), n.clone());
         let hcp = |n: &Expr| Expr::app(hcpoint.clone(), n.clone());
-        let val = |n: &Expr, j: &Expr| Expr::apps(fin_val.clone(), [n.clone(), j.clone()]);
+        let _val = |n: &Expr, j: &Expr| Expr::apps(fin_val.clone(), [n.clone(), j.clone()]);
         let mul = |a: Expr, b: Expr| Expr::apps(rat_mul.clone(), [a, b]);
         let prod = |n: &Expr, g: Expr| Expr::apps(fin_prod.clone(), [n.clone(), g]);
         let eq_rat = |l: Expr, r: Expr| Expr::apps(eq1.clone(), [rat.clone(), l, r]);

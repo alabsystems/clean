@@ -66,6 +66,7 @@ struct ZeroAddConsts {
     eq1: Expr,
     eq_symm1: Expr,
     eq_subst1: Expr,
+    #[cfg(test)]
     quot_mk: Expr,
     quot_sound: Expr,
     quot_ind: Expr,
@@ -100,6 +101,7 @@ impl ZeroAddConsts {
             eq1: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![lvl1.clone()]),
             eq_subst1: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1.clone()]),
+            #[cfg(test)]
             quot_mk: Expr::const_(Name::from_string("Quot.mk"), vec![lvl1.clone()]),
             quot_sound: Expr::const_(Name::from_string("Quot.sound"), vec![lvl1.clone()]),
             quot_ind: Expr::const_(Name::from_string("Quot.ind"), vec![lvl1]),

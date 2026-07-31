@@ -291,7 +291,8 @@ pub struct RpcSessionManager {
 }
 
 /// RPC procedure type - function that handles an RPC call
-type RpcProcedure = Box<dyn Fn(&RpcCallContext, Value) -> Result<Value, RpcError> + Send + Sync>;
+type RpcProcedure =
+    Box<dyn Fn(&RpcCallContext<'_>, Value) -> Result<Value, RpcError> + Send + Sync>;
 
 /// Context passed to RPC procedures
 ///

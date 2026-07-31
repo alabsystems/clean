@@ -69,13 +69,19 @@
 //! domain-axiom closure of each registered lemma is empty and
 //! `proof_quality == ProofQuality::Constructive`.
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[cfg(test)]
 struct IntAbsCondConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -97,7 +103,9 @@ struct IntAbsCondConsts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl IntAbsCondConsts {
+    #[cfg(test)]
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         Self {
@@ -124,52 +132,64 @@ impl IntAbsCondConsts {
         }
     }
 
+    #[cfg(test)]
     fn abs(&self, x: Expr) -> Expr {
         Expr::app(self.int_abs.clone(), x)
     }
 
+    #[cfg(test)]
     fn neg(&self, x: Expr) -> Expr {
         Expr::app(self.int_neg.clone(), x)
     }
 
+    #[cfg(test)]
     fn add(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_add.clone(), x), y)
     }
 
+    #[cfg(test)]
     fn sub(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_sub.clone(), x), y)
     }
 
+    #[cfg(test)]
     fn dist(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_dist.clone(), x), y)
     }
 
+    #[cfg(test)]
     fn of_nat(&self, n: Expr) -> Expr {
         Expr::app(self.int_of_nat.clone(), n)
     }
 
+    #[cfg(test)]
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }
 
+    #[cfg(test)]
     fn eq_int(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::apps(self.eq_const.clone(), [self.int_type.clone(), lhs, rhs])
     }
 
+    #[cfg(test)]
     fn refl_int(&self, t: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [self.int_type.clone(), t])
     }
 
     /// `@Eq.symm.{1} Int a b h : Eq Int b a` from `h : Eq Int a b`.
+    #[cfg(test)]
     fn symm_int(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.int_type.clone(), a, b, h])
     }
 
     /// `@Eq.trans.{1} Int a b c h1 h2 : Eq Int a c`.
+    #[cfg(test)]
     fn trans_int(&self, a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(
             self.eq_trans.clone(),
@@ -179,6 +199,7 @@ impl IntAbsCondConsts {
 
     /// `@congrArg.{1,1} Int Int x y f h : Eq Int (f x) (f y)` from
     /// `h : Eq Int x y` and `f : Int → Int`.
+    #[cfg(test)]
     fn congr_int_int(&self, x: Expr, y: Expr, f: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -192,6 +213,7 @@ impl IntAbsCondConsts {
 // ---------------------------------------------------------------------------
 
 /// Build `∀ a : Int, Eq Int (Int.abs (Int.neg a)) (Int.abs a)`.
+#[cfg(test)]
 fn build_abs_neg_type(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -209,6 +231,7 @@ fn build_abs_neg_type(c: &IntAbsCondConsts) -> Expr {
 ///       (@Eq.refl Int (abs (ofNat 0)))
 ///       (λ (m : Nat) (_ih) => @Eq.refl Int (abs (ofNat (succ m)))) n`,
 /// `negSucc_case := λ (n : Nat) => @Eq.refl Int (abs (negSucc n))`.
+#[cfg(test)]
 fn build_abs_neg_value(c: &IntAbsCondConsts) -> Expr {
     let mut vb = EnvDeclBuilder::new();
     let (a_id, a) = vb.fresh_local(c.int_type.clone());
@@ -281,6 +304,7 @@ fn build_abs_neg_value(c: &IntAbsCondConsts) -> Expr {
 // ---------------------------------------------------------------------------
 
 /// Build `∀ a b : Int, Eq Int (Int.neg (Int.sub a b)) (Int.sub b a)`.
+#[cfg(test)]
 fn build_neg_sub_type(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -310,6 +334,7 @@ fn build_neg_sub_type(c: &IntAbsCondConsts) -> Expr {
 ///        (congrArg (fun y => add (neg a) y) (Int.neg_neg b)))
 ///     (Int.add_comm (neg a) b)
 /// ```
+#[cfg(test)]
 fn build_neg_sub_value(c: &IntAbsCondConsts) -> Expr {
     let int_neg_add = Expr::const_(Name::from_string("Int.neg_add"), vec![]);
     let int_neg_neg = Expr::const_(Name::from_string("Int.neg_neg"), vec![]);
@@ -366,6 +391,7 @@ fn build_neg_sub_value(c: &IntAbsCondConsts) -> Expr {
 // ---------------------------------------------------------------------------
 
 /// Build `∀ a b : Int, Eq Int (Int.dist a b) (Int.dist b a)`.
+#[cfg(test)]
 fn build_dist_comm_type(c: &IntAbsCondConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.int_type.clone());
@@ -388,6 +414,7 @@ fn build_dist_comm_type(c: &IntAbsCondConsts) -> Expr {
 ///        (Int.abs_neg (sub a b)))
 ///     (congrArg Int.abs (Int.neg_sub a b))
 /// ```
+#[cfg(test)]
 fn build_dist_comm_value(c: &IntAbsCondConsts) -> Expr {
     let int_abs_neg = Expr::const_(Name::from_string("Int.abs_neg"), vec![]);
     let int_neg_sub = Expr::const_(Name::from_string("Int.neg_sub"), vec![]);
@@ -427,6 +454,7 @@ fn build_dist_comm_value(c: &IntAbsCondConsts) -> Expr {
     vb.finish(val)
 }
 
+#[cfg(test)]
 impl Environment {
     /// Register `Int.dist` as a reducible `Declaration::Definition`
     /// `λ a b => Int.abs (Int.sub a b)`, so that this proof module is
@@ -434,6 +462,7 @@ impl Environment {
     /// register the opaque `Int.dist_comm` axiom).
     ///
     /// Idempotent — no-op if `Int.dist` is already present.
+    #[cfg(test)]
     fn ensure_int_dist_def(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Int.dist");
         if self.get_const(&name).is_some() {
@@ -478,6 +507,7 @@ impl Environment {
     /// REQUIRES: `self.init_eq()` has registered `Eq`, `Eq.refl`.
     /// ENSURES: On success, `Int.abs_neg` is a `Declaration::Theorem` with
     ///          `proof_quality == Constructive`. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_int_abs_neg_local(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int
@@ -531,6 +561,7 @@ impl Environment {
     ///           Theorems are registered.
     /// ENSURES: On success, `Int.neg_sub` is a `Declaration::Theorem` with
     ///          `proof_quality == Constructive`. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_int_neg_sub_proof(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int
@@ -584,6 +615,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Int.dist_comm` is already registered with any
     ///          declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_int_dist_comm(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`): Int-cluster content —
         // states/proves properties of the import-suppressed Clean-native Int

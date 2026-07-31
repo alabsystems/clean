@@ -2028,7 +2028,9 @@ struct DeltaIndRhoConsts {
     fin: Expr,
     nat_pow: Expr,
     fin_sum: Expr,
+    #[cfg(test)]
     fin_prod: Expr,
+    #[cfg(test)]
     subset_sum: Expr,
     cast_add: Expr,
     add_nat: Expr,
@@ -2058,7 +2060,9 @@ impl DeltaIndRhoConsts {
             fin: Expr::const_(Name::from_string("Fin"), vec![]),
             nat_pow: Expr::const_(Name::from_string("Nat.pow"), vec![]),
             fin_sum: Expr::const_(Name::from_string("Fin.sum"), vec![]),
+            #[cfg(test)]
             fin_prod: Expr::const_(Name::from_string("Fin.prod"), vec![]),
+            #[cfg(test)]
             subset_sum: Expr::const_(Name::from_string("BoolAnalysis.subsetSum"), vec![]),
             cast_add: Expr::const_(Name::from_string("Fin.castAdd"), vec![]),
             add_nat: Expr::const_(Name::from_string("Fin.addNat"), vec![]),

@@ -453,6 +453,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topological_space_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topological_space(&self) -> bool {
         self.topological_space_init
     }

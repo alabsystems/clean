@@ -11,8 +11,6 @@
 //! Builds on [`super::diamond_resolution::DiamondDetector`] to provide richer
 //! analysis and multiple resolution strategies for typeclass diamond inheritance.
 
-#![allow(dead_code)] // Reserved for instance-coherence integration.
-
 use crate::diamond_resolution::{Diamond, DiamondDetector, DiamondError, InstanceEntry};
 use clean_kernel::expr::Expr;
 use std::collections::{HashMap, HashSet};

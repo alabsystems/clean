@@ -154,8 +154,11 @@ impl ParsedQuotKind {
     }
 }
 
-/// Reducibility hints from DefinitionVal
-/// Reference: Lean 4 `src/kernel/declaration.h:15-18`
+/// Reducibility hints from `DefinitionVal`.
+///
+/// Lean represents the nullary `opaque`/`abbrev` constructors as tagged
+/// scalars and `regular` as a heap object carrying an unboxed `UInt32`.
+/// Reference: Lean 4 `src/kernel/declaration.h:15-18`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReducibilityHintsData {
     /// opaque (tag 0) — never unfold
@@ -170,7 +173,7 @@ pub enum ReducibilityHintsData {
 ///
 /// Mirrors Lean 4's `DefinitionSafety` enum
 /// (`src/Lean/Declaration.lean`). The numeric discriminants match the
-/// `safety` scalar written in `DefinitionVal`: `safe = 0`, `unsafe = 1`,
+/// `safety` scalar written in `DefinitionVal`: `unsafe = 0`, `safe = 1`,
 /// `partial = 2`.
 ///
 /// # Forward Compatibility
@@ -181,9 +184,9 @@ pub enum ReducibilityHintsData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum DefinitionSafety {
-    /// `safe` (tag 0) — fully checked by the kernel (the common case).
+    /// `safe` (tag 1) — fully checked by the kernel (the common case).
     Safe,
-    /// `unsafe` (tag 1) — bypasses termination/positivity checking.
+    /// `unsafe` (tag 0) — bypasses termination/positivity checking.
     Unsafe,
     /// `partial` (tag 2) — a `partial def`; not reduced by the kernel.
     Partial,
@@ -197,8 +200,8 @@ impl DefinitionSafety {
     /// fabricating one.
     pub fn from_tag(tag: u64) -> Option<Self> {
         match tag {
-            0 => Some(DefinitionSafety::Safe),
-            1 => Some(DefinitionSafety::Unsafe),
+            0 => Some(DefinitionSafety::Unsafe),
+            1 => Some(DefinitionSafety::Safe),
             2 => Some(DefinitionSafety::Partial),
             _ => None,
         }
@@ -211,8 +214,8 @@ impl DefinitionSafety {
     #[must_use]
     pub fn to_tag(self) -> u64 {
         match self {
-            DefinitionSafety::Safe => 0,
-            DefinitionSafety::Unsafe => 1,
+            DefinitionSafety::Safe => 1,
+            DefinitionSafety::Unsafe => 0,
             DefinitionSafety::Partial => 2,
         }
     }

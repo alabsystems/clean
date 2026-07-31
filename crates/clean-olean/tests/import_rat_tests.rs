@@ -16,15 +16,13 @@
 //!
 //! Requires Lean 4 v4.27+ via elan (Rat was moved to Init in v4.27).
 
-use clean_olean::default_search_paths;
 use clean_olean::module::ParsedModule;
+use clean_olean::pinned_lean_lib_path;
 use std::path::PathBuf;
 
 /// Get the first search path that contains a v4.27+ Init with Rat support.
 fn get_v4_27_plus_lib_path() -> Option<PathBuf> {
-    default_search_paths()
-        .into_iter()
-        .find(|p| p.join("Init/Data/Rat/Basic.olean").exists())
+    pinned_lean_lib_path().filter(|path| path.join("Init/Data/Rat/Basic.olean").exists())
 }
 
 /// Count extension entries across all extensions in a parsed module.

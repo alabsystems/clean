@@ -21,6 +21,7 @@ pub(crate) fn alloc_ctor_uninit(tag: u8, num_objs: u8, scalar_size: u8) -> LeanO
 }
 
 /// Allocate a constructor and initialize its object-pointer fields.
+#[cfg(any(test, kani))]
 pub(crate) fn alloc_ctor(tag: u8, fields: &[LeanObjPtr]) -> LeanObjPtr {
     expect(
         fields.len() <= u8::MAX as usize,

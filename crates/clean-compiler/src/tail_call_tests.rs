@@ -51,16 +51,6 @@ fn closure_apply_expr(closure: IRArg, args: Vec<IRArg>) -> IRExpr {
     IRExpr::ClosureApply { closure, args }
 }
 
-fn simple_ctor() -> CtorInfo {
-    CtorInfo {
-        name: name("Unit.unit"),
-        tag: 0,
-        num_scalars: 0,
-        num_objects: 0,
-        field_types: vec![],
-    }
-}
-
 fn bool_ctor(tag: u32, ctor_name: &str) -> CtorInfo {
     CtorInfo {
         name: name(ctor_name),

@@ -51,6 +51,7 @@ pub(crate) struct MulAlgConsts {
     rat_add_zero: Expr,
     rat_add_lt_add_left: Expr,
     nat_le: Expr,
+    #[cfg(test)]
     nnrat: Expr,
     nnrat_val: Expr,
     nnrat_of_rat: Expr,
@@ -62,6 +63,7 @@ pub(crate) struct MulAlgConsts {
     // logic / Eq.{1}.
     and_c: Expr,
     and_intro: Expr,
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     eq1: Expr,
@@ -92,6 +94,7 @@ impl MulAlgConsts {
             rat_add_zero: k("Rat.add_zero"),
             rat_add_lt_add_left: k("Rat.add_lt_add_left"),
             nat_le: k("Nat.le"),
+            #[cfg(test)]
             nnrat: k("NNRat"),
             nnrat_val: k("NNRat.val"),
             nnrat_of_rat: k("NNRat.ofRat"),
@@ -102,6 +105,7 @@ impl MulAlgConsts {
             causeq_const: k("NNReal.CauSeq.const"),
             and_c: k("And"),
             and_intro: k("And.intro"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
@@ -159,6 +163,7 @@ impl MulAlgConsts {
     fn eq_nnreal(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nnreal(), a, b])
     }
+    #[cfg(test)]
     fn eq_rat_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }

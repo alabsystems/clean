@@ -154,6 +154,13 @@ pub struct GraduateArgs {
     /// Mandatory residual-risk honesty field (may be `none-known`).
     #[arg(long, default_value = "unreviewed")]
     pub residual_risk: String,
+    /// Pin the graduation decision time (epoch seconds) instead of reading the
+    /// wall clock. The decision timestamp is the only wall-clock value that
+    /// reaches the shard bytes; pinning it makes the shard reproducible
+    /// byte-for-byte for verify-by-digest and attestation replay. Omit for
+    /// normal runs.
+    #[arg(long)]
+    pub decided_at: Option<u64>,
     /// Project source root holding the `.lean` files for the declared
     /// `--olean-module`s (e.g. `crown-proofs/lean`). When given, Cake checks that
     /// each declared module's `.olean` is content-fresh vs its source (the
@@ -884,7 +891,7 @@ fn build_request(args: &GraduateArgs) -> Result<GraduationRequest, MathverseCliE
         residual_risk: args.residual_risk.clone(),
         clean_commit,
         shard_filename: None,
-        decided_at_epoch_s: None,
+        decided_at_epoch_s: args.decided_at,
         // Populated in `cmd_graduate_on_thread` once the environment + freshness
         // check have run (only when `--olean-source-root` is given).
         env_provenance: None,

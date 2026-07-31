@@ -78,7 +78,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify ty : I -> Sort(l)
-        let ty_type = self.verify_impl(ty_cert, ty)?;
+        let ty_type = self.verify_recurse(ty_cert, ty)?;
         let ty_type_whnf = self.whnf_impl(&ty_type);
         let ExprKind::Pi(_, arg_ty, body_ty) = &ty_type_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -106,7 +106,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify left : ty 0
-        let left_ty = self.verify_impl(left_cert, left)?;
+        let left_ty = self.verify_recurse(left_cert, left)?;
         let expected_left_ty = Expr::from_kind(ExprKind::App(
             ty.clone(),
             Arc::new(Expr::from_kind(ExprKind::CubicalI0)),
@@ -120,7 +120,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify right : ty 1
-        let right_ty = self.verify_impl(right_cert, right)?;
+        let right_ty = self.verify_recurse(right_cert, right)?;
         let expected_right_ty = Expr::from_kind(ExprKind::App(
             ty.clone(),
             Arc::new(Expr::from_kind(ExprKind::CubicalI1)),
@@ -155,8 +155,9 @@ impl<'env> CertVerifier<'env> {
         // Extend context with interval variable and verify body
         self.context
             .push(Expr::from_kind(ExprKind::CubicalInterval));
-        let _body_ty = self.verify_impl(body_cert, body)?;
+        let body_ty = self.verify_recurse(body_cert, body);
         self.context.pop();
+        let _body_ty = body_ty?;
 
         // Result should be a Path type
         let result_whnf = self.whnf_impl(result_type);
@@ -187,7 +188,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify path has Path type
-        let path_ty = self.verify_impl(path_cert, path)?;
+        let path_ty = self.verify_recurse(path_cert, path)?;
         let path_ty_whnf = self.whnf_impl(&path_ty);
         let ExprKind::CubicalPath { ty, .. } = &path_ty_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -196,7 +197,7 @@ impl<'env> CertVerifier<'env> {
         };
 
         // Verify arg : I
-        let arg_ty = self.verify_impl(arg_cert, arg)?;
+        let arg_ty = self.verify_recurse(arg_cert, arg)?;
         if !matches!(self.whnf_impl(&arg_ty).kind, ExprKind::CubicalInterval) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(Expr::from_kind(ExprKind::CubicalInterval)),
@@ -241,7 +242,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify ty is a type
-        let ty_sort = self.verify_impl(ty_cert, ty)?;
+        let ty_sort = self.verify_recurse(ty_cert, ty)?;
         if !matches!(self.whnf_impl(&ty_sort).kind, ExprKind::Sort(_)) {
             return Err(CertError::InvalidCert(
                 "CubicalHComp type is not a type".to_string(),
@@ -253,7 +254,7 @@ impl<'env> CertVerifier<'env> {
         let i1 = Expr::from_kind(ExprKind::CubicalI1);
 
         // Verify phi : I
-        let phi_ty = self.verify_impl(phi_cert, phi)?;
+        let phi_ty = self.verify_recurse(phi_cert, phi)?;
         if !matches!(self.whnf_impl(&phi_ty).kind, ExprKind::CubicalInterval) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(interval.clone()),
@@ -263,7 +264,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify u : (i : I) -> ty
-        let u_ty = self.verify_impl(u_cert, u)?;
+        let u_ty = self.verify_recurse(u_cert, u)?;
         let u_ty_whnf = self.whnf_impl(&u_ty);
         let ExprKind::Pi(_, domain, codomain) = &u_ty_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -295,7 +296,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify base : ty
-        let base_ty = self.verify_impl(base_cert, base)?;
+        let base_ty = self.verify_recurse(base_cert, base)?;
         if !self.def_eq_impl(&base_ty, ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(ty.as_ref().clone()),
@@ -366,7 +367,7 @@ impl<'env> CertVerifier<'env> {
         let i1 = Arc::new(Expr::from_kind(ExprKind::CubicalI1));
 
         // Verify ty : I -> Sort u
-        let ty_ty = self.verify_impl(ty_cert, ty)?;
+        let ty_ty = self.verify_recurse(ty_cert, ty)?;
         let ty_ty_whnf = self.whnf_impl(&ty_ty);
         let ExprKind::Pi(_, domain, codomain_sort) = &ty_ty_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -388,7 +389,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify phi : I
-        let phi_ty = self.verify_impl(phi_cert, phi)?;
+        let phi_ty = self.verify_recurse(phi_cert, phi)?;
         if !matches!(self.whnf_impl(&phi_ty).kind, ExprKind::CubicalInterval) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(interval),
@@ -399,7 +400,7 @@ impl<'env> CertVerifier<'env> {
 
         // Verify base : ty i0
         let expected_base_ty = Expr::from_kind(ExprKind::App(ty.clone(), i0.clone()));
-        let base_ty = self.verify_impl(base_cert, base)?;
+        let base_ty = self.verify_recurse(base_cert, base)?;
         if !self.def_eq_impl(&base_ty, &expected_base_ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_base_ty),
@@ -447,7 +448,7 @@ impl<'env> CertVerifier<'env> {
         let interval = Expr::from_kind(ExprKind::CubicalInterval);
 
         // Verify ty : I -> Sort u
-        let ty_ty = self.verify_impl(ty_cert, ty)?;
+        let ty_ty = self.verify_recurse(ty_cert, ty)?;
         let ty_ty_whnf = self.whnf_impl(&ty_ty);
         let ExprKind::Pi(_, domain, codomain_sort) = &ty_ty_whnf.kind else {
             return Err(CertError::InvalidCert(
@@ -469,7 +470,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Verify r : I
-        let r_ty = self.verify_impl(r_cert, r)?;
+        let r_ty = self.verify_recurse(r_cert, r)?;
         if !matches!(self.whnf_impl(&r_ty).kind, ExprKind::CubicalInterval) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(interval.clone()),
@@ -478,7 +479,7 @@ impl<'env> CertVerifier<'env> {
             });
         }
         // Verify s : I
-        let s_ty = self.verify_impl(s_cert, s)?;
+        let s_ty = self.verify_recurse(s_cert, s)?;
         if !matches!(self.whnf_impl(&s_ty).kind, ExprKind::CubicalInterval) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(interval),
@@ -489,7 +490,7 @@ impl<'env> CertVerifier<'env> {
 
         // Verify base : ty r
         let expected_base_ty = Expr::from_kind(ExprKind::App(ty.clone(), r.clone()));
-        let base_ty = self.verify_impl(base_cert, base)?;
+        let base_ty = self.verify_recurse(base_cert, base)?;
         if !self.def_eq_impl(&base_ty, &expected_base_ty) {
             return Err(CertError::TypeMismatch {
                 expected: Box::new(expected_base_ty),

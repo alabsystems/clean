@@ -10,7 +10,7 @@ repository-code: "https://github.com/alabsystems/clean"
 url: "https://github.com/alabsystems/clean"
 license: "Apache-2.0"
 version: 1.2.0
-abstract: "Rust implementation of a Lean 4-compatible proof kernel, with verification, automation, TLA+ support, and the Mathverse Library."
+abstract: "Rust reimplementation of Lean 4 with kernel verification, automation, TLA+ support, and the Mathverse Library."
 keywords:
   - theorem prover
   - Lean

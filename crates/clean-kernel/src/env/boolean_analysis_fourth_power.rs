@@ -193,6 +193,7 @@ impl Environment {
     }
 
     /// Check if the B5 fourth-power even-pair layer has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_boolean_analysis_fourth_power(&self) -> bool {
         self.boolean_analysis_fourth_power_init
     }

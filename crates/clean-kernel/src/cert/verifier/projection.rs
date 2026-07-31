@@ -45,7 +45,7 @@ impl<'env> CertVerifier<'env> {
         }
 
         // Recursively verify the inner expression certificate
-        let inferred_expr_type = self.verify_impl(expr_cert, proj_expr)?;
+        let inferred_expr_type = self.verify_recurse(expr_cert, proj_expr)?;
 
         // Verify the inner expression's type matches what the cert claims
         if !self.def_eq_impl(&inferred_expr_type, expr_type) {

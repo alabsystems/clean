@@ -9,10 +9,18 @@
 //! this fixture pins the **byte-exact** (whitespace-collapsed) rendering of the
 //! Path-B harness-expansion mappings (`∈`/`⊆`/`⊂`/`∣`/`<+:`/`<:+`/`Set.image`/
 //! `Set.InjOn`/`Set.BijOn`/`insert`/`.Finite`/`.Nodup`/`List.zip`/`::`/`max`/
-//! `min`/`.toNat`/`True`/`False`). Each `lean_statement` was hand-verified as a
-//! faithful transcription of its Isabelle `prop` (the spot-check gate), so any
-//! drift in a renderer — a flipped argument, a wrong Mathlib name — fails here
-//! loudly. The props are the actual main_v3 corpus statements (serials recorded).
+//! `min`/`.toNat`/`True`/`False`) plus, from the **binder round**, the six
+//! quantifier / comprehension shapes (`∀ x, …`/`∃ x, …`/`∃! x, …`/`∀ x ∈ S, …`/
+//! `∃ x ∈ S, …`/`{x | …}`, including nested and concrete-typed binders and the
+//! capture-safe de Bruijn opening) plus, from **coverage-round 3**, the nine
+//! post-binder shapes (`List.list.set` → `{x | x ∈ xs}`, `List.sorted_wrt` →
+//! `List.Pairwise`, `bot`/`top` on `Set` → `∅`/`Set.univ`, `Sup`/`Inf` on a set
+//! of sets → `sSup`/`sInf`, `Finite_Set.card` → `.ncard`, `gcd`/`lcm` on `ℕ` →
+//! `Nat.gcd`/`Nat.lcm`). Each `lean_statement` was hand-verified as a faithful
+//! transcription of its Isabelle `prop` (the spot-check gate), so any drift in a
+//! renderer — a flipped argument, a wrong Mathlib name, a mis-opened binder —
+//! fails here loudly. The props are the actual main_v3 corpus statements
+//! (serials recorded).
 
 use super::super::isabelle_pure::IsaTerm;
 use super::translate_prop;
@@ -51,7 +59,11 @@ fn collapse_ws(s: &str) -> String {
 #[test]
 fn expansion_golden_reproduces_faithful_statements_exactly() {
     let pairs = load();
-    assert_eq!(pairs.len(), 28, "expected 28 expansion golden pairs");
+    assert_eq!(
+        pairs.len(),
+        55,
+        "expected 55 expansion golden pairs (28 fragment-expansion + 12 binder + 15 round-3)"
+    );
     let mut failures = Vec::new();
     for p in &pairs {
         match translate_prop(&p.prop, &p.lean) {

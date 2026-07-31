@@ -272,7 +272,7 @@ fn build_symmdiff_imp_val_eq() -> (Expr, Expr) {
     let nat_lt = Expr::const_(Name::from_string("Nat.lt"), vec![]);
     let hc_decode = Expr::const_(Name::from_string("BoolAnalysis.hcDecode"), vec![]);
     let set_size_nat = Expr::const_(Name::from_string("BoolAnalysis.setSizeNat"), vec![]);
-    let fin_sum_nat = Expr::const_(Name::from_string("Fin.sumNat"), vec![]);
+    let _fin_sum_nat = Expr::const_(Name::from_string("Fin.sumNat"), vec![]);
     let fin_sum_nat_eq_zero = Expr::const_(Name::from_string("Fin.sumNat_eq_zero"), vec![]);
     let indnat_eq_zero = Expr::const_(Name::from_string("BoolAnalysis.indNat_eq_zero"), vec![]);
     let eq_of_xor = Expr::const_(Name::from_string("Bool.eq_of_xor_eq_false"), vec![]);
@@ -413,7 +413,7 @@ fn build_symmdiff_imp_val_eq() -> (Expr, Expr) {
                     [two_nat.clone(), n.clone(), j.clone(), one_le_two, hle],
                 );
                 // false-bit for a given index k with value vk: testBit_lt_pow j vk lt_vk
-                let false_bit = |vk: &Expr, k: &Expr, m: &EnvDeclBuilder| -> Expr {
+                let false_bit = |vk: &Expr, k: &Expr, _m: &EnvDeclBuilder| -> Expr {
                     let islt = Expr::apps(fin_islt.clone(), [pow2(&n), k.clone()]);
                     let lt_vk = Expr::apps(
                         lt_of_lt_of_le.clone(),

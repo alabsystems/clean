@@ -114,6 +114,10 @@ pub mod proof_translation_contract;
 
 // Ay SMT backend (enabled via ay-smt feature)
 // Provider-internal: downstream consumers use `ay_contract` instead. Part of #2774.
+// AY decommission debt: f009f618d/b13a73e98 retired the external consumers
+// (clean-server's ay_contract_ratchet forbids new references), leaving interior
+// items uncalled. Scoped allow until the AY lane deletes or rewires them.
+#[allow(dead_code)]
 #[cfg(feature = "ay-smt")]
 pub(crate) mod ay_backend;
 
@@ -154,6 +158,8 @@ mod prop_under_assumption;
 mod prove;
 mod prove_implication;
 pub(crate) mod quantifier;
+// AY decommission debt: see the ay_backend note above.
+#[allow(dead_code)]
 #[cfg(feature = "ay-smt")]
 pub(crate) mod rat_smt;
 mod result;

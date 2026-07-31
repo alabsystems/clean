@@ -8,9 +8,7 @@
 //! Part of #3084 - IO/FFI/Native epic.
 
 use super::tail_call_ext::*;
-use crate::ir::{
-    CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
-};
+use crate::ir::{CtorInfo, FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId, VarId};
 use clean_kernel::Name;
 
 // -----------------------------------------------------------------------

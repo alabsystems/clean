@@ -18,11 +18,16 @@
 //! - Verify fairness constraints via counterfactual definitions
 //! - Provide axioms for causal discovery and identifiability proofs
 
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::Expr;
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Causal Inference module
     ///
@@ -39,6 +44,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.causal_inference_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_causal_inference(&mut self) -> Result<(), EnvError> {
         if self.causal_inference_init {
             return Ok(());

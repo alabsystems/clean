@@ -49,13 +49,19 @@
 
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared atoms for the `pow4` spectral expansion bricks.
+#[cfg(test)]
 struct Pow4Consts {
     nat: Expr,
     rat: Expr,
@@ -70,7 +76,9 @@ struct Pow4Consts {
     congr_arg: Expr,
 }
 
+#[cfg(test)]
 impl Pow4Consts {
+    #[cfg(test)]
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         Self {
@@ -88,28 +96,36 @@ impl Pow4Consts {
         }
     }
 
+    #[cfg(test)]
     fn fin_of(&self, n: &Expr) -> Expr {
         Expr::app(self.fin.clone(), n.clone())
     }
+    #[cfg(test)]
     fn fin_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.fin_of(n), self.rat.clone())
     }
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     fn sum(&self, n: &Expr, f: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [n.clone(), f])
     }
+    #[cfg(test)]
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
+    #[cfg(test)]
     fn symm(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), a, b, h])
     }
     /// `congrArg (β:=Rat) (α:=Rat) a b g h` : `g a = g b` from `h : a = b`.
+    #[cfg(test)]
     fn congr(&self, a: Expr, b: Expr, g: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -117,6 +133,7 @@ impl Pow4Consts {
         )
     }
     /// `Fin.sum_mul_sum m n F G` : `(Σ_m F)·(Σ_n G) = Σ_m (fun i => Σ_n (fun j => F i·G j))`.
+    #[cfg(test)]
     fn sum_mul_sum(&self, n: &Expr, f: &Expr, g: &Expr) -> Expr {
         Expr::apps(
             self.fin_sum_mul_sum.clone(),
@@ -124,6 +141,7 @@ impl Pow4Consts {
         )
     }
     /// `Fin.sum_congr n f g h` : `Σ_n f = Σ_n g` from `h : ∀ i, f i = g i`.
+    #[cfg(test)]
     fn sum_congr(&self, n: &Expr, f: &Expr, g: &Expr, h: Expr) -> Expr {
         Expr::apps(
             self.fin_sum_congr.clone(),
@@ -135,6 +153,7 @@ impl Pow4Consts {
 
     /// `fun (j2 : Fin n) => Rat.mul (f a) (f j2)` — the inner pair integrand at
     /// fixed left index value `fa := f a`.
+    #[cfg(test)]
     fn pair_fn(&self, parent: &EnvDeclBuilder, n: &Expr, fa: &Expr, f: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -145,6 +164,7 @@ impl Pow4Consts {
 
     /// `h := fun (j1 : Fin n) => Fin.sum n (fun j2 => f j1·f j2)` — the double-sum
     /// integrand `D = Fin.sum n h` (the `Fin.sum_mul_sum n n f f` RHS).
+    #[cfg(test)]
     fn h_fn(&self, parent: &EnvDeclBuilder, n: &Expr, f: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let fin_n = self.fin_of(n);
@@ -157,6 +177,7 @@ impl Pow4Consts {
     /// `fun (j4 : Fin n) => Rat.mul (Rat.mul (f j1) (f j2)) (Rat.mul (f j3) (f j4))`
     /// — the innermost quartic integrand at fixed `j1,j2,j3` (values supplied as
     /// `f j1·f j2 =: left`, `f j3 =: fj3`).
+    #[cfg(test)]
     fn quartic_inner_fn(
         &self,
         parent: &EnvDeclBuilder,
@@ -178,12 +199,14 @@ include!("boolean_analysis_pow4_spectral_build.rs");
 include!("boolean_analysis_pow4_noisefn_build.rs");
 include!("boolean_analysis_pow4_noisefn_spectral_build.rs");
 
+#[cfg(test)]
 impl Environment {
     /// Register `Fin.sum_pow4` — the generic 4-fold-product expansion
     /// `pow4(Σ f) = Σ_{j1}Σ_{j3}Σ_{j2}Σ_{j4} (f j1·f j2)·(f j3·f j4)` (rung 1 of
     /// the `pow4_noisefn_spectral` chain). Three `Fin.sum_mul_sum` applications
     /// glued by `Fin.sum_congr`. CHECKED `Constructive` (empty closure).
     /// Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_fin_sum_pow4_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Fin.sum_pow4");
         if self.get_const(&name).is_some() {
@@ -214,6 +237,7 @@ impl Environment {
     /// `pow4(Fin.sum (2^n) (gx jx))` is def-eq to `pow4(noiseFn ρ n F jx)` because
     /// `noiseFn` δ-unfolds to that sum). CHECKED `Constructive` (empty closure).
     /// Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_fourfold_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_fourfold");
         if self.get_const(&name).is_some() {
@@ -249,6 +273,7 @@ impl Environment {
     /// single mmmc): two block-rewrites under `congrArg` + one top-level mmmc,
     /// glued by `Eq.trans`. Tier 1 of the `pow4_noisefn_spectral` build.
     /// CHECKED `Constructive` (empty closure). Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_rat_mul8_regroup_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.mul8_regroup");
         if self.get_const(&name).is_some() {
@@ -281,6 +306,7 @@ impl Environment {
     /// the carrier converse of `Fin.sum_pow4` (its `f1=f2=f3=f4` case). Three
     /// `Fin.sum_mul_sum` glued by `Fin.sum_congr`. CHECKED `Constructive` (empty
     /// closure). Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_fin_sum_prod4_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Fin.sum_prod4");
         if self.get_const(&name).is_some() {
@@ -307,6 +333,7 @@ impl Environment {
     /// Derived from `Fin.sum_prod4 (2^n) (Pk∘decode)…` (def-eq decode bridge, the
     /// `subsetSum_swap` pattern). CHECKED `Constructive` (empty closure).
     /// Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_subset_sum_prod4_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.subsetSum_prod4");
         if self.get_const(&name).is_some() {
@@ -337,6 +364,7 @@ impl Environment {
     /// F(decode jy)·noiseDensityW ρ n x (decode jy)`. `Eq.trans` of
     /// `pow4_noisefn_fourfold` with the reducible `subsetSum`↔`Fin.sum` def-eq.
     /// CHECKED `Constructive` (empty closure). Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_subsetsum_x_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_subsetsum_x");
         if self.get_const(&name).is_some() {
@@ -373,6 +401,7 @@ impl Environment {
     ///   (gxu x j1·gxu x j2)·(gxu x j3·gxu x j4))`. Proven directly by L1 (def-eq
     /// RHS, `noiseDensityW` reducible). CHECKED `Constructive` (empty closure).
     /// Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_density_unfold_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_density_unfold");
         if self.get_const(&name).is_some() {
@@ -393,6 +422,7 @@ impl Environment {
 
     /// Register `BoolAnalysis.pow4_noisefn_fold_probe` — fold-leg probe
     /// `∀ ρ n F x, quad_rhs(gxu x) = pow4(subsetSum n (l_int x))`.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_fold_probe_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_fold_probe");
         if self.get_const(&name).is_some() {
@@ -420,6 +450,7 @@ impl Environment {
     ///   (T1·T2)·(T3·T4))`, `Tk = (ρ^|Sk|·χ_Sk x)·A F Sk`. L5 then `subsetSum_congr`
     /// over x of `subsetSum_prod4 n (m_fn x)⁴` (expands `pow4(M x)`). CHECKED
     /// `Constructive` (empty closure). Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_spectral_e1_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_spectral_e1");
         if self.get_const(&name).is_some() {
@@ -445,6 +476,7 @@ impl Environment {
     /// recursive `subsetSum_swap`/`subsetSum_congr` pull:
     /// `Σ_jx pow4(noiseFn) = subsetSum n (S1 => … S4 => subsetSum n (x =>
     ///   (T1·T2)·(T3·T4)))`. CHECKED `Constructive` (empty closure). Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_spectral_e2_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_spectral_e2");
         if self.get_const(&name).is_some() {
@@ -474,6 +506,7 @@ impl Environment {
     /// `‖T_ρ F‖₄⁴` spectral expansion: E2 (Fubini) then `ss_congr`-4-deep of the
     /// per-quad regroup (two `Rat.mul8_regroup` + `subsetSum_smul` pull-out).
     /// CHECKED `Constructive` (empty closure). Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_spectral_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_spectral");
         if self.get_const(&name).is_some() {
@@ -501,6 +534,7 @@ impl Environment {
 
     /// Register `BoolAnalysis.pow4_noisefn_gsum_eq_l` — def-eq probe
     /// `∀ ρ n F x, Fin.sum (2^n)(gxu x) = subsetSum n (l_int x)` by `Eq.refl`.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_gsum_eq_l_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_gsum_eq_l");
         if self.get_const(&name).is_some() {
@@ -524,6 +558,7 @@ impl Environment {
 
     /// Register `BoolAnalysis.pow4_noisefn_l_eq_m` — the per-x bridge probe
     /// `∀ ρ n F x, L x = M x` (harness for `l_eq_m`). CHECKED `Constructive`.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_l_eq_m_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_l_eq_m");
         if self.get_const(&name).is_some() {
@@ -566,6 +601,7 @@ impl Environment {
     /// `congrArg pow4` of the per-x `L x = M x` bridge (5-leg `subsetSum`
     /// smul/swap/regroup chain)]. CHECKED `Constructive` (empty closure).
     /// Idempotent. No axiom added/removed.
+    #[cfg(test)]
     pub(crate) fn register_pow4_noisefn_m_form_theorem(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.pow4_noisefn_M_form");
         if self.get_const(&name).is_some() {

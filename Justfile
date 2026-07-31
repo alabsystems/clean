@@ -48,6 +48,15 @@ test:
 test-fast:
     cargo test --locked
 
+# Authority-bearing .olean library lane. The build must resolve the exact
+# repository pin, and Prelude integration tests are opted in explicitly so a
+# missing Lean installation cannot be reported as a passing skipped test.
+# The AC1 cases each materialize a large Init/Std environment; running several
+# harness cases concurrently can exceed host memory and kill the evidence
+# process before it reports a verdict. Keep this authority lane serial.
+test-olean-pinned:
+    CLEAN_OLEAN_REQUIRE_PINNED_LEAN=1 CLEAN_OLEAN_PRELUDE_INTEGRATION=1 CLEAN_OLEAN_INTEGRATION=1 CLEAN_AC1_FULL_VALIDATION=1 cargo test --locked -p clean-olean -- --test-threads=1
+
 # Sorry-bypass lint gate (clean-kernel integration test).
 lint-sorry:
     cargo test --locked -p clean-kernel --test lint_sorry_bypass
@@ -56,6 +65,18 @@ lint-sorry:
 # Pass `--update` via ARGS to write a new baseline if the count decreased.
 sorry-census ARGS='':
     cargo run --locked -p clean-cli --quiet -- sorry-census {{ARGS}}
+
+# Aristotle model-guide corpus gate. Static checks are fast and belong in `just
+# ci`; the elaboration sweep needs an elan Lean toolchain (pinned v4.30.0-rc2 —
+# the corpus does NOT elaborate under the elan default), so it is separate.
+# Catches what the manual landing gate cannot see: vacuous `Classical.propDecidable`
+# inhabitants of `Decidable`, and undischarged hypotheses (0 axioms != 0 assumptions).
+corpus-gate ARGS='--fast':
+    python3 scripts/aristotle_corpus_gate.py {{ARGS}}
+
+# Full corpus re-elaboration under the pinned toolchain (heavy; not in `just ci`).
+corpus-gate-full:
+    python3 scripts/aristotle_corpus_gate.py --jobs 6
 
 # Axiom-audit release-check gate (clean-cli subcommand, Wave 87).
 # Runs the two non-mutating lanes (aggregate consistency + live row
@@ -123,6 +144,10 @@ machete:
 # Out-of-date dependency report (advisory, not a gate).
 outdated:
     cargo outdated
+
+# Check whether the pinned ay dependency has new upstream commits.
+update-ay:
+    python3 scripts/check_ay_updates.py
 
 # ── Composite ──────────────────────────────────────────────────────────────
 

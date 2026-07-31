@@ -379,6 +379,7 @@ struct MulZeroConsts {
     nat_zero: Expr,
     rat: Expr,
     rat_zero: Expr,
+    #[cfg(test)]
     rat_le: Expr,
     rat_lt: Expr,
     rat_add: Expr,
@@ -397,6 +398,7 @@ struct MulZeroConsts {
     causeq_mul: Expr,
     causeq_const: Expr,
     nat_le: Expr,
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     and_c: Expr,
@@ -405,6 +407,7 @@ struct MulZeroConsts {
     eq_symm1: Expr,
     eq_subst1: Expr,
     congr_arg: Expr,
+    #[cfg(test)]
     quot_mk: Expr,
     quot_sound: Expr,
     quot_ind: Expr,
@@ -419,6 +422,7 @@ impl MulZeroConsts {
             nat_zero: k("Nat.zero"),
             rat: k("Rat"),
             rat_zero: k("Rat.zero"),
+            #[cfg(test)]
             rat_le: k("Rat.le"),
             rat_lt: k("Rat.lt"),
             rat_add: k("Rat.add"),
@@ -437,6 +441,7 @@ impl MulZeroConsts {
             causeq_mul: k("NNReal.CauSeq.mul"),
             causeq_const: k("NNReal.CauSeq.const"),
             nat_le: k("Nat.le"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![lvl1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![lvl1.clone()]),
             and_c: k("And"),
@@ -448,6 +453,7 @@ impl MulZeroConsts {
                 Name::from_string("congrArg"),
                 vec![lvl1.clone(), lvl1.clone()],
             ),
+            #[cfg(test)]
             quot_mk: Expr::const_(Name::from_string("Quot.mk"), vec![lvl1.clone()]),
             quot_sound: Expr::const_(Name::from_string("Quot.sound"), vec![lvl1.clone()]),
             quot_ind: Expr::const_(Name::from_string("Quot.ind"), vec![lvl1]),
@@ -499,9 +505,11 @@ impl MulZeroConsts {
         );
         Expr::app(self.causeq_const.clone(), zero_nn)
     }
+    #[cfg(test)]
     fn equiv(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.causeq_equiv.clone(), [a, b])
     }
+    #[cfg(test)]
     fn quot_mk(&self, l: Expr) -> Expr {
         Expr::apps(
             self.quot_mk.clone(),
@@ -514,6 +522,7 @@ impl MulZeroConsts {
             [self.causeq.clone(), self.causeq_equiv.clone(), a, b, h],
         )
     }
+    #[cfg(test)]
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }

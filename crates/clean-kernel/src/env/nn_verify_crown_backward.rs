@@ -34,11 +34,17 @@
 //!
 //! Part of #3153, #3366, #3507.
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
+#[cfg(test)]
 use crate::sorry::create_sorry_term;
 
 // T41 proof-term builder removed (#3507, 2026-04-19): the former
@@ -57,6 +63,7 @@ use crate::sorry::create_sorry_term;
 /// ```text
 /// fun (params...) => <canonical synthetic sorry for proposition>
 /// ```
+#[cfg(test)]
 fn build_sorry_value_for_t40(env: &Environment, c: &CrownBackwardConsts) -> Expr {
     let ib_subset = Expr::const_(Name::from_string("NNVerify.IntervalBounds.subset"), vec![]);
 
@@ -99,6 +106,7 @@ fn build_sorry_value_for_t40(env: &Environment, c: &CrownBackwardConsts) -> Expr
 }
 
 /// Build sorry-based opaque value for T42 (ratio = 1).
+#[cfg(test)]
 fn build_sorry_value_for_t42(env: &Environment, c: &CrownBackwardConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -144,6 +152,7 @@ fn build_sorry_value_for_t42(env: &Environment, c: &CrownBackwardConsts) -> Expr
 }
 
 /// Shared constants for CROWN backward theorem construction.
+#[cfg(test)]
 struct CrownBackwardConsts {
     nat: Expr,
     rat: Expr,
@@ -166,7 +175,9 @@ struct CrownBackwardConsts {
     rat_div: Expr,
 }
 
+#[cfg(test)]
 impl CrownBackwardConsts {
+    #[cfg(test)]
     fn new() -> Self {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
@@ -197,22 +208,27 @@ impl CrownBackwardConsts {
         }
     }
 
+    #[cfg(test)]
     fn vec_of(&self, n: &Expr) -> Expr {
         Expr::app(self.nn_vec.clone(), n.clone())
     }
 
+    #[cfg(test)]
     fn mat_of(&self, m: &Expr, n: &Expr) -> Expr {
         Expr::app(Expr::app(self.nn_mat.clone(), m.clone()), n.clone())
     }
 
+    #[cfg(test)]
     fn ib_of(&self, d: &Expr) -> Expr {
         Expr::app(self.ib.clone(), d.clone())
     }
 
+    #[cfg(test)]
     fn affine_of(&self, m: &Expr, n: &Expr) -> Expr {
         Expr::app(Expr::app(self.affine_expr.clone(), m.clone()), n.clone())
     }
 
+    #[cfg(test)]
     fn rat_le(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(
@@ -226,35 +242,43 @@ impl CrownBackwardConsts {
         )
     }
 
+    #[cfg(test)]
     fn eq_of(&self, alpha: Expr, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(Expr::app(Expr::app(self.eq.clone(), alpha), lhs), rhs)
     }
 
+    #[cfg(test)]
     fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn add(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_add.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn div(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_div.clone(), a), b)
     }
 
+    #[cfg(test)]
     fn l1_norm(&self, n: &Expr, v: &Expr) -> Expr {
         Expr::app(Expr::app(self.nn_vec_l1_norm.clone(), n.clone()), v.clone())
     }
 
+    #[cfg(test)]
     fn ib_width_app(&self, d: &Expr, b: &Expr) -> Expr {
         Expr::app(Expr::app(self.ib_width.clone(), d.clone()), b.clone())
     }
 
+    #[cfg(test)]
     fn ib_eq(&self, d: &Expr, lhs: Expr, rhs: Expr) -> Expr {
         self.eq_of(self.ib_of(d), lhs, rhs)
     }
 }
 
+#[cfg(test)]
 impl Environment {
     /// Initialize CROWN backward propagation declarations (T40-T42).
     ///
@@ -264,7 +288,7 @@ impl Environment {
     /// - `init_nn_verify_types()` for NNVec, NNMat, IntervalBounds
     /// - `init_rat_arith()` for Rat arithmetic
     /// - `init_eq()` for Eq
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     pub(crate) fn init_nn_verify_crown_backward(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("NNVerify.CROWN.AffineExpr"))
@@ -292,7 +316,7 @@ impl Environment {
     ///
     /// Backward-propagated affine expression: matrix A (m x n) and bias
     /// vectors d_l, d_u such that output_i in [A_i . x + d_l_i, A_i . x + d_u_i].
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_affine_expr_type(&mut self, c: &CrownBackwardConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.CROWN.AffineExpr");
         if self.get_const(&name).is_some() {
@@ -317,7 +341,7 @@ impl Environment {
     /// `(m n : Nat) -> AffineExpr m n -> NNVec n -> IntervalBounds m`
     ///
     /// Evaluate an affine expression at a concrete input to get interval bounds.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_affine_expr_eval(&mut self, c: &CrownBackwardConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.CROWN.AffineExpr.eval");
         if self.get_const(&name).is_some() {
@@ -350,7 +374,7 @@ impl Environment {
     ///
     /// Predicate: W = W_pos - W_neg where W_pos_ij = max(W_ij, 0)
     /// and W_neg_ij = max(-W_ij, 0).
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_w_pos_neg_decomp(&mut self, c: &CrownBackwardConsts) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.CROWN.w_pos_neg_decomp");
         if self.get_const(&name).is_some() {
@@ -389,7 +413,7 @@ impl Environment {
     ///   IntervalBounds.subset m (crown_backward_result ...) (ibp_result ...)
     /// ```
     /// Soundness: CROWN backward linear bounds are contained in IBP bounds.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t40_crown_backward_linear(
         &mut self,
         c: &CrownBackwardConsts,
@@ -466,7 +490,7 @@ impl Environment {
     /// Branch B (faithful CROWN / IBP / LayerNorm carriers that force the
     /// equivalence by LayerNorm Jacobian semantics, not by alias-collapse)
     /// and is tracked with #3488 / #3500. Part of #3153, #3366, #3507.
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t41_crown_backward_layernorm(
         &mut self,
         c: &CrownBackwardConsts,
@@ -523,7 +547,7 @@ impl Environment {
     ///     = Rat.one
     /// ```
     /// (provided IBP width is nonzero)
-    #[cfg(any(test, feature = "math-overlays"))]
+    #[cfg(test)]
     fn register_t42_crown_ibp_ratio_one(
         &mut self,
         c: &CrownBackwardConsts,

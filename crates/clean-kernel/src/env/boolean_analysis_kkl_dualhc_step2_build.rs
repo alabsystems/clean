@@ -138,7 +138,7 @@ fn build_step2_value(
     n: &Expr,
     f: &Expr,
     i: &Expr,
-    w: &Expr,
+    _w: &Expr,
     half: &Expr,
     n_pow: &Expr,
     e_fn: &Expr,

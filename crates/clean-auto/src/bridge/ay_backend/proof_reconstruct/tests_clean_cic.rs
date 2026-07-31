@@ -4,60 +4,39 @@
 
 //! Tests for the `CertifiedPayload` → `CleanCic` converter.
 
-use super::super::certified_proof::{certify_reconstruction, CertifiedPayload};
-use super::super::theory_lemma_bv::reconstruct_bv_bitblast;
-use super::super::ReconstructionResult;
-use super::super::ReconstructionStats;
+use super::super::certified_proof::{certify_kernel_term, false_expr, CertifiedPayload};
 use super::{to_clean_cic, CleanCicLineage};
-use ay_proof::bv_blast_export::{export_bv_blast_proof, BvOp, SliceObligation};
 use clean_kernel::bitvec_slice;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr, FVarId, LocalContext};
+use clean_kernel::{BinderInfo, Environment, Expr, FVarId, LocalContext};
 
-fn slice_env() -> Environment {
+/// Mint a genuinely authority-audited payload without smuggling the old
+/// domain-axiom-based BV fixture through the certification gate.
+///
+/// The converter test is about byte preservation, so a bound local assumption
+/// is the smallest honest source payload: the context-closing audit turns this
+/// into `False -> False`, whose proof is foundational. The BV reconstruction
+/// and kernel-reflection paths have their own dedicated tests.
+fn certify_bound_false() -> (CertifiedPayload, Expr) {
     let mut env = Environment::new();
-    env.init_bv_slice().expect("init_bv_slice");
-    env.init_classical().expect("init_classical");
-    let bv = Expr::const_str(bitvec_slice::names::BV);
-    for n in ["a", "b"] {
-        env.add_decl(Declaration::Axiom {
-            name: Name::from_string(n),
-            level_params: vec![],
-            type_: bv.clone(),
-        })
-        .expect("operand");
-    }
-    env
-}
-
-fn certify_sub() -> (CertifiedPayload, Expr) {
-    let env = slice_env();
-    let proof = export_bv_blast_proof(SliceObligation::identical(BvOp::Sub)).unwrap();
-    let neg = FVarId::new(700);
-    let rec = reconstruct_bv_bitblast(&proof, neg).expect("reconstruct");
+    env.init_true_false().expect("init_true_false");
+    let goal = false_expr();
+    let hypothesis = FVarId::new(700);
     let mut ctx = LocalContext::new();
     ctx.push_with_id(
-        neg,
-        Name::from_string("h_neg"),
-        rec.negated_goal.clone(),
+        hypothesis,
+        Name::from_string("h_false"),
+        goal.clone(),
         BinderInfo::Default,
     );
-    let result = ReconstructionResult {
-        proof_term: Some(rec.proof_term),
-        negated_goal_fvar: Some(neg),
-        compound_witness_fvars: Vec::new(),
-        derives_empty_clause: true,
-        trust_subterm_count: 0,
-        residual: crate::bridge::ay_backend::reconstruction_quality::ResidualTrustSummary::empty(),
-        stats: ReconstructionStats::default(),
-    };
-    let payload = certify_reconstruction(&result, &env, &ctx).expect("certify");
-    (payload, rec.negated_goal)
+    let payload = certify_kernel_term(&Expr::fvar(hypothesis), &goal, &env, &ctx)
+        .expect("bound foundational judgment certifies");
+    (payload, goal)
 }
 
 #[test]
 fn test_to_clean_cic_carries_certified_bytes() {
-    let (payload, goal) = certify_sub();
+    let (payload, goal) = certify_bound_false();
     let lineage = CleanCicLineage::stable(
         "clean.bv.slice.v1",
         &bincode::serde::encode_to_vec(&goal, bincode::config::standard()).expect("ser goal"),

@@ -12,7 +12,7 @@ use tree_sitter::Node;
 
 impl CParser {
     /// Extract ACSL spec attached to a function (block or line comment)
-    pub(super) fn extract_func_spec(&self, node: Node, source: &str) -> Option<FuncSpec> {
+    pub(super) fn extract_func_spec(&self, node: Node<'_>, source: &str) -> Option<FuncSpec> {
         let start_byte = node.start_byte();
         let nearest_comment = find_nearest_acsl_comment(source, start_byte)?;
         parse_acsl_spec(&nearest_comment)

@@ -104,6 +104,56 @@ pub(crate) fn sha256_repo_artifact(path: &'static str) -> Result<String, Replace
         .collect::<String>())
 }
 
+/// Digest every non-test `.rs` file under `dir`, so the trust-core evidence is
+/// pinned to the gate logic that produced it.
+///
+/// `TRUST_CORE_RUST_SOURCE_PATH` alone pins only `cmd_replacement.rs`, which is
+/// just `mod`/`use` declarations: the gate's actual behaviour lives in the
+/// submodules, so a change there would leave a stale artifact reading as fresh.
+///
+/// The `tests/` subtree is excluded deliberately. It cannot change what the
+/// gate does at runtime, and including it would invalidate a genuinely current
+/// artifact on every unrelated test edit.
+pub(crate) fn sha256_repo_module_tree(dir: &'static str) -> Result<String, ReplacementError> {
+    let root = repo_artifact_path(dir);
+    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
+    for entry in WalkDir::new(&root).into_iter().filter_map(Result::ok) {
+        if !entry.file_type().is_file()
+            || entry.path().extension().and_then(|ext| ext.to_str()) != Some("rs")
+        {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(&root)
+            .unwrap_or(entry.path())
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative.starts_with("tests/") {
+            continue;
+        }
+        let bytes = fs::read(entry.path())
+            .map_err(|source| ReplacementError::ReadArtifact { path: dir, source })?;
+        entries.push((relative, bytes));
+    }
+    // WalkDir order is filesystem-dependent; sort so the digest is stable.
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let mut hasher = Sha256::new();
+    for (relative, bytes) in entries {
+        // Length-delimit so no rename/content shuffle can collide.
+        hasher.update(relative.as_bytes());
+        hasher.update([0u8]);
+        hasher.update(bytes.len().to_le_bytes());
+        hasher.update(&bytes);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>())
+}
+
 pub(crate) fn parse_repo_json<T: for<'de> Deserialize<'de>>(
     path: &'static str,
 ) -> Result<T, ReplacementError> {

@@ -92,9 +92,9 @@ pub fn to_clean_cic(payload: &CertifiedPayload, lineage: CleanCicLineage) -> Cle
     }
 }
 
-// Gated with the BV bit-blast lane: this test module imports
-// `ay_proof::bv_blast_export` and `theory_lemma_bv::reconstruct_bv_bitblast`.
-// The `clean_cic` production code above does not depend on that lane.
-#[cfg(all(test, feature = "ay-bv-blast"))]
+// The byte-preservation test uses only a foundational, context-closed kernel
+// judgment, so it runs in every test build and does not inherit a BV feature
+// dependency.
+#[cfg(test)]
 #[path = "tests_clean_cic.rs"]
 mod tests_clean_cic;

@@ -110,6 +110,7 @@ impl Environment {
     }
 
     /// Check if `ForInStep` has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_for_in_step(&self) -> bool {
         self.for_in_step_init
     }
@@ -329,6 +330,7 @@ impl Environment {
     }
 
     /// Check if the `ForIn` class has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_for_in(&self) -> bool {
         self.for_in_init
     }
@@ -686,6 +688,7 @@ impl Environment {
     }
 
     /// Check if the `List` `ForIn` instance has been initialized.
+    #[cfg(test)]
     pub(crate) fn has_list_for_in_inst(&self) -> bool {
         self.list_for_in_inst_init
     }

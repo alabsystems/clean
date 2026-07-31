@@ -31,6 +31,7 @@ pub(crate) mod names {
     }
 
     name!(pub(crate) DECIDABLE_IS_TRUE = "Decidable.isTrue");
+    #[cfg(test)]
     name!(pub(crate) DECIDABLE_IS_FALSE = "Decidable.isFalse");
     name!(pub(crate) EQ_REFL = "Eq.refl");
 
@@ -38,7 +39,6 @@ pub(crate) mod names {
     name!(pub(crate) UINT16 = "UInt16");
     name!(pub(crate) UINT32 = "UInt32");
     name!(pub(crate) UINT64 = "UInt64");
-    name!(pub(crate) USIZE = "USize");
 
     // UInt8 operations
     name!(pub(crate) UINT8_ADD = "UInt8.add");
@@ -116,23 +116,40 @@ pub(crate) mod names {
     name!(pub(crate) UINT64_COMPLEMENT = "UInt64.complement");
     name!(pub(crate) UINT64_TO_NAT = "UInt64.toNat");
 
-    // USize operations
+    // USize native computation is intentionally absent while the carrier width
+    // is platform-abstract. Tests keep the names to assert that no reducer is
+    // registered for any of these operations.
+    #[cfg(test)]
     name!(pub(crate) USIZE_ADD = "USize.add");
+    #[cfg(test)]
     name!(pub(crate) USIZE_SUB = "USize.sub");
+    #[cfg(test)]
     name!(pub(crate) USIZE_MUL = "USize.mul");
+    #[cfg(test)]
     name!(pub(crate) USIZE_DIV = "USize.div");
+    #[cfg(test)]
     name!(pub(crate) USIZE_MOD = "USize.mod");
+    #[cfg(test)]
     name!(pub(crate) USIZE_BEQ = "USize.beq");
+    #[cfg(test)]
     name!(pub(crate) USIZE_BLT = "USize.blt");
+    #[cfg(test)]
     name!(pub(crate) USIZE_BLE = "USize.ble");
+    #[cfg(test)]
     name!(pub(crate) USIZE_DEC_EQ = "USize.decEq");
-    name!(pub(crate) USIZE_DEC_LT = "USize.decLt");
+    #[cfg(test)]
     name!(pub(crate) USIZE_LAND = "USize.land");
+    #[cfg(test)]
     name!(pub(crate) USIZE_LOR = "USize.lor");
+    #[cfg(test)]
     name!(pub(crate) USIZE_XOR = "USize.xor");
+    #[cfg(test)]
     name!(pub(crate) USIZE_SHIFT_LEFT = "USize.shiftLeft");
+    #[cfg(test)]
     name!(pub(crate) USIZE_SHIFT_RIGHT = "USize.shiftRight");
+    #[cfg(test)]
     name!(pub(crate) USIZE_COMPLEMENT = "USize.complement");
+    #[cfg(test)]
     name!(pub(crate) USIZE_TO_NAT = "USize.toNat");
 }
 

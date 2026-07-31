@@ -150,7 +150,7 @@ fn build_diag_extract_scaled() -> (Expr, Expr) {
     let l1 = Level::succ(Level::zero());
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let rat = Expr::const_(Name::from_string("Rat"), vec![]);
-    let bool_ = Expr::const_(Name::from_string("Bool"), vec![]);
+    let _bool_ = Expr::const_(Name::from_string("Bool"), vec![]);
     let bool_xor = Expr::const_(Name::from_string("Bool.xor"), vec![]);
     let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
     let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -444,7 +444,7 @@ fn build_diag_extract() -> (Expr, Expr) {
     let beq0 = |m: Expr| Expr::apps(nat_beq.clone(), [m, nat_zero.clone()]);
     let ss_nat = |n: &Expr, s: Expr| Expr::apps(set_size_nat.clone(), [n.clone(), s]);
     let decode = |n: &Expr, j: Expr| Expr::apps(hc_decode.clone(), [n.clone(), j]);
-    let decode_at = |n: &Expr, k: &Expr, i: Expr| Expr::app(decode(n, k.clone()), i);
+    let _decode_at = |n: &Expr, k: &Expr, i: Expr| Expr::app(decode(n, k.clone()), i);
     let val_at = |n: &Expr, k: &Expr| Expr::apps(fin_val.clone(), [n.clone(), k.clone()]);
     let xor = |a: Expr, b: Expr| Expr::apps(bool_xor.clone(), [a, b]);
     let eq_fin = |n: &Expr, a: Expr, b: Expr| {

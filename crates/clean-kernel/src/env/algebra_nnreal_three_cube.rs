@@ -68,6 +68,7 @@ struct ThreeCubeConsts {
     causeq_mul: Expr,
     and_c: Expr,
     and_intro: Expr,
+    #[cfg(test)]
     exists_c: Expr,
     exists_intro: Expr,
     nat_le: Expr,
@@ -104,6 +105,7 @@ impl ThreeCubeConsts {
             causeq_mul: k("NNReal.CauSeq.mul"),
             and_c: k("And"),
             and_intro: k("And.intro"),
+            #[cfg(test)]
             exists_c: Expr::const_(Name::from_string("Exists"), vec![l1.clone()]),
             exists_intro: Expr::const_(Name::from_string("Exists.intro"), vec![l1.clone()]),
             nat_le: k("Nat.le"),
@@ -228,6 +230,7 @@ impl ThreeCubeConsts {
     fn and_intro(&self, p: &Expr, q: &Expr, hp: Expr, hq: Expr) -> Expr {
         Expr::apps(self.and_intro.clone(), [p.clone(), q.clone(), hp, hq])
     }
+    #[cfg(test)]
     fn equiv(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.causeq_equiv.clone(), [a.clone(), b.clone()])
     }

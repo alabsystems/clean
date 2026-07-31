@@ -96,6 +96,7 @@ struct FourierNormConsts {
     mul_one: Expr,
     // Eq.{1}.
     eq1: Expr,
+    #[cfg(test)]
     eq_refl1: Expr,
     eq_symm1: Expr,
     eq_trans1: Expr,
@@ -131,6 +132,7 @@ impl FourierNormConsts {
             mul_comm: k("Rat.mul_comm"),
             mul_one: k("Rat.mul_one"),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_refl1: Expr::const_(Name::from_string("Eq.refl"), vec![l1.clone()]),
             eq_symm1: Expr::const_(Name::from_string("Eq.symm"), vec![l1.clone()]),
             eq_trans1: Expr::const_(Name::from_string("Eq.trans"), vec![l1.clone()]),

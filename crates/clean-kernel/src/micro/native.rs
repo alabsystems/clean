@@ -26,6 +26,8 @@
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
 
+use crate::expr::stack_safe;
+
 use super::types::{MicroExpr, MicroLiteral};
 
 /// Names of the closed-Nat binary ops the micro-checker models natively.
@@ -65,6 +67,10 @@ pub(super) const BOOL_BINOPS: &[&str] = &["Bool.beq"];
 /// of a literal is handled by the caller's whnf before this is reached for
 /// the corpus, but we also accept `Nat.succ <lit>` here for robustness.)
 pub(super) fn as_nat(e: &MicroExpr) -> Option<BigUint> {
+    stack_safe(|| as_nat_impl(e))
+}
+
+fn as_nat_impl(e: &MicroExpr) -> Option<BigUint> {
     match e {
         MicroExpr::Lit(MicroLiteral::Nat(n)) => Some(n.clone()),
         MicroExpr::Const(name) if &**name == "Nat.zero" => Some(BigUint::ZERO),

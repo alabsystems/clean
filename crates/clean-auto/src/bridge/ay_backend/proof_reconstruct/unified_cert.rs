@@ -290,7 +290,7 @@ pub fn axiom_deps_subset_foundational(
     let allowed: BTreeSet<&str> = allowed_params.iter().copied().collect();
     let mut offending: Vec<String> = domain
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .filter(|n| !allowed.contains(n.as_str()))
         .collect();
     if offending.is_empty() {

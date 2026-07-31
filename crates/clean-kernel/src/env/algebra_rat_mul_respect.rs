@@ -52,6 +52,7 @@ pub(crate) struct MulRespectConsts {
     mul_close: Expr,
     and_c: Expr,
     and_intro: Expr,
+    #[cfg(test)]
     eq_rat: Expr,
     eq_subst: Expr,
 }
@@ -75,6 +76,7 @@ impl MulRespectConsts {
             mul_close: k("Rat.mul_close_of_close"),
             and_c: k("And"),
             and_intro: k("And.intro"),
+            #[cfg(test)]
             eq_rat: Expr::const_(Name::from_string("Eq"), vec![lvl1.clone()]),
             eq_subst: Expr::const_(Name::from_string("Eq.subst"), vec![lvl1]),
         }

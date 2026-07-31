@@ -87,7 +87,7 @@ impl CParser {
     }
 
     /// Parse binary expression
-    pub(super) fn parse_binary_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    pub(super) fn parse_binary_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut left = None;
         let mut op = None;
         let mut right = None;
@@ -148,7 +148,7 @@ impl CParser {
     }
 
     /// Parse unary expression
-    pub(super) fn parse_unary_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    pub(super) fn parse_unary_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut op = None;
         let mut operand = None;
 
@@ -189,7 +189,7 @@ impl CParser {
     }
 
     /// Parse update expression (++x, --x, x++, x--)
-    pub(super) fn parse_update_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    pub(super) fn parse_update_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut op = None;
         let mut operand = None;
 
@@ -233,7 +233,7 @@ impl CParser {
     }
 
     /// Parse assignment expression
-    pub(super) fn parse_assignment_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    pub(super) fn parse_assignment_expr(&self, node: Node<'_>, source: &str) -> ParseResult<CExpr> {
         let mut left = None;
         let mut op = None;
         let mut right = None;
@@ -286,7 +286,11 @@ impl CParser {
     }
 
     /// Parse conditional expression (ternary)
-    pub(super) fn parse_conditional_expr(&self, node: Node, source: &str) -> ParseResult<CExpr> {
+    pub(super) fn parse_conditional_expr(
+        &self,
+        node: Node<'_>,
+        source: &str,
+    ) -> ParseResult<CExpr> {
         let mut cond = None;
         let mut then_expr = None;
         let mut else_expr = None;

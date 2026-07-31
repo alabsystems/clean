@@ -11,7 +11,7 @@
 //! sum ready for the additive normalizer.
 
 use super::combine::TermPub;
-use super::{Monomial, RatPolyProver};
+use super::RatPolyProver;
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::expr::Expr;
 

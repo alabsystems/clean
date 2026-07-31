@@ -33,3 +33,9 @@ cli = ["dep:clap", "dep:clean-features", "dep:tracing"]
 clean-runtime = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
+
+[[example]]
+name = "linkrun_census"
+path = "examples/linkrun_census.rs"
+required-features = ["round-trip-compile"]
+test = false

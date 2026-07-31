@@ -69,13 +69,19 @@
 
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
 /// Shared Rat ring atoms for the convolution scalar engine.
+#[cfg(test)]
 pub(crate) struct ConvConsts {
     pub(crate) rat: Expr,
     pub(crate) rat_one: Expr,
@@ -109,7 +115,9 @@ pub(crate) struct ConvConsts {
     pub(crate) btrue: Expr,
 }
 
+#[cfg(test)]
 impl ConvConsts {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         let l1 = Level::succ(Level::zero());
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
@@ -145,28 +153,36 @@ impl ConvConsts {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
+    #[cfg(test)]
     pub(crate) fn add(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_add.clone(), [a, b])
     }
+    #[cfg(test)]
     pub(crate) fn neg(&self, a: Expr) -> Expr {
         Expr::app(self.rat_neg.clone(), a)
     }
+    #[cfg(test)]
     pub(crate) fn one(&self) -> Expr {
         self.rat_one.clone()
     }
+    #[cfg(test)]
     pub(crate) fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     pub(crate) fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
+    #[cfg(test)]
     pub(crate) fn symm(&self, l: Expr, r: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), l, r, h])
     }
     /// `congrArg.{1,1} Rat Rat from to motive h : motive from = motive to`.
+    #[cfg(test)]
     pub(crate) fn congr(&self, from: Expr, to: Expr, motive: Expr, h: Expr) -> Expr {
         Expr::apps(
             self.congr_arg.clone(),
@@ -174,6 +190,7 @@ impl ConvConsts {
         )
     }
     /// `fun (z : Rat) => Rat.add z r` — congruence on the LEFT summand.
+    #[cfg(test)]
     pub(crate) fn add_left_motive(&self, parent: &EnvDeclBuilder, r: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = d.fresh_local(self.rat.clone());
@@ -181,6 +198,7 @@ impl ConvConsts {
         d.finish_child(d.mk_lam(z_id, BinderInfo::Default, self.rat.clone(), body))
     }
     /// `fun (z : Rat) => Rat.add l z` — congruence on the RIGHT summand.
+    #[cfg(test)]
     pub(crate) fn add_right_motive(&self, parent: &EnvDeclBuilder, l: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = d.fresh_local(self.rat.clone());
@@ -190,6 +208,7 @@ impl ConvConsts {
 
     // ── named lemma applications ────────────────────────────────────────────
     /// `Rat.right_distrib a b c : (a+b)·c = a·c + b·c`.
+    #[cfg(test)]
     pub(crate) fn h_right_distrib(&self, a: &Expr, b: &Expr, cc: &Expr) -> Expr {
         Expr::apps(
             self.right_distrib.clone(),
@@ -197,6 +216,7 @@ impl ConvConsts {
         )
     }
     /// `Rat.left_distrib a b c : a·(b+c) = a·b + a·c`.
+    #[cfg(test)]
     pub(crate) fn h_left_distrib(&self, a: &Expr, b: &Expr, cc: &Expr) -> Expr {
         Expr::apps(
             self.left_distrib.clone(),
@@ -204,40 +224,49 @@ impl ConvConsts {
         )
     }
     /// `Rat.one_mul a : 1·a = a`.
+    #[cfg(test)]
     pub(crate) fn h_one_mul(&self, a: &Expr) -> Expr {
         Expr::app(self.one_mul.clone(), a.clone())
     }
     /// `Rat.add_assoc a b c : (a+b)+c = a+(b+c)`.
+    #[cfg(test)]
     pub(crate) fn h_add_assoc(&self, a: &Expr, b: &Expr, cc: &Expr) -> Expr {
         Expr::apps(self.add_assoc.clone(), [a.clone(), b.clone(), cc.clone()])
     }
     /// `Rat.add_comm a b : a+b = b+a`.
+    #[cfg(test)]
     pub(crate) fn h_add_comm(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.add_comm.clone(), [a.clone(), b.clone()])
     }
     /// `Rat.add_neg_self a : a + (−a) = 0`.
+    #[cfg(test)]
     pub(crate) fn h_add_neg_self(&self, a: &Expr) -> Expr {
         Expr::app(self.add_neg_self.clone(), a.clone())
     }
     /// `Rat.add_zero a : a + 0 = a`.
+    #[cfg(test)]
     pub(crate) fn h_add_zero(&self, a: &Expr) -> Expr {
         Expr::app(self.add_zero.clone(), a.clone())
     }
     /// `Rat.zero_add a : 0 + a = a`.
+    #[cfg(test)]
     pub(crate) fn h_zero_add(&self, a: &Expr) -> Expr {
         Expr::app(self.zero_add.clone(), a.clone())
     }
     /// `Rat.neg_mul_neg a b : (−a)·(−b) = a·b`.
+    #[cfg(test)]
     pub(crate) fn h_neg_mul_neg(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.neg_mul_neg.clone(), [a.clone(), b.clone()])
     }
 
     // ── factor-level helpers ────────────────────────────────────────────────
     /// `BoolAnalysis.pm b`.
+    #[cfg(test)]
     pub(crate) fn pm(&self, b: &Expr) -> Expr {
         Expr::app(self.pm.clone(), b.clone())
     }
     /// The per-coordinate noise factor `w(ρ,a,b) := 1 + ρ·(pm a · pm b)`.
+    #[cfg(test)]
     pub(crate) fn factor(&self, rho: &Expr, a: &Expr, b: &Expr) -> Expr {
         self.add(
             self.one(),
@@ -245,18 +274,22 @@ impl ConvConsts {
         )
     }
     /// `Rat.mul_one a : a·1 = a`.
+    #[cfg(test)]
     pub(crate) fn h_mul_one(&self, a: &Expr) -> Expr {
         Expr::app(self.mul_one.clone(), a.clone())
     }
     /// `Rat.mul_neg a b : a·(−b) = −(a·b)`.
+    #[cfg(test)]
     pub(crate) fn h_mul_neg(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.mul_neg.clone(), [a.clone(), b.clone()])
     }
     /// `Rat.mul_comm a b : a·b = b·a`.
+    #[cfg(test)]
     pub(crate) fn h_mul_comm(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.mul_comm.clone(), [a.clone(), b.clone()])
     }
     /// `Rat.mul_mul_mul_comm a b c d : (a·b)·(c·d) = (a·c)·(b·d)`.
+    #[cfg(test)]
     pub(crate) fn h_mmmc(&self, a: &Expr, b: &Expr, cc: &Expr, d: &Expr) -> Expr {
         Expr::apps(
             self.mmmc.clone(),
@@ -264,6 +297,7 @@ impl ConvConsts {
         )
     }
     /// `fun (z : Rat) => Rat.mul l z` — congruence on the RIGHT mul factor.
+    #[cfg(test)]
     pub(crate) fn mul_right_motive(&self, parent: &EnvDeclBuilder, l: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = d.fresh_local(self.rat.clone());
@@ -271,6 +305,7 @@ impl ConvConsts {
         d.finish_child(d.mk_lam(z_id, BinderInfo::Default, self.rat.clone(), body))
     }
     /// `fun (z : Rat) => Rat.mul z r` — congruence on the LEFT mul factor.
+    #[cfg(test)]
     pub(crate) fn mul_left_motive(&self, parent: &EnvDeclBuilder, r: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let (z_id, z) = d.fresh_local(self.rat.clone());
@@ -278,10 +313,12 @@ impl ConvConsts {
         d.finish_child(d.mk_lam(z_id, BinderInfo::Default, self.rat.clone(), body))
     }
     /// `BoolAnalysis.pm_not b : pm (Bool.not b) = Rat.neg (pm b)`.
+    #[cfg(test)]
     pub(crate) fn h_pm_not(&self, b: &Expr) -> Expr {
         Expr::app(self.pm_not.clone(), b.clone())
     }
     /// `BoolAnalysis.pm_mul_self b : pm b · pm b = 1`.
+    #[cfg(test)]
     pub(crate) fn h_pm_mul_self(&self, b: &Expr) -> Expr {
         Expr::app(self.pm_mul_self.clone(), b.clone())
     }
@@ -296,11 +333,13 @@ impl ConvConsts {
 // then chain `LHS = N = RHS` (the second leg reversed by Eq.symm).
 // ===========================================================================
 
+#[cfg(test)]
 impl Environment {
     /// Register `BoolAnalysis.noise_conv_scalar` — the pure-rational ring
     /// identity `(1+a)(1+b) + (1−a)(1−b) = 2·(1+ab)`, the scalar engine of the
     /// per-coordinate noise convolution. Kernel-checked, `Constructive`, EMPTY
     /// domain-axiom closure. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_noise_conv_scalar(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.noise_conv_scalar");
         if self.get_const(&name).is_some() {
@@ -325,6 +364,7 @@ impl Environment {
     }
 }
 
+#[cfg(test)]
 fn build_conv_scalar_type(c: &ConvConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.rat.clone());
@@ -336,6 +376,7 @@ fn build_conv_scalar_type(c: &ConvConsts) -> Expr {
 }
 
 /// `(1+a)·(1+b) + (1+(−a))·(1+(−b))`.
+#[cfg(test)]
 fn conv_lhs(c: &ConvConsts, a: &Expr, bv: &Expr) -> Expr {
     let p = c.mul(c.add(c.one(), a.clone()), c.add(c.one(), bv.clone()));
     let q = c.mul(
@@ -346,6 +387,7 @@ fn conv_lhs(c: &ConvConsts, a: &Expr, bv: &Expr) -> Expr {
 }
 
 /// `(1+1)·(1 + a·b)`.
+#[cfg(test)]
 fn conv_rhs(c: &ConvConsts, a: &Expr, bv: &Expr) -> Expr {
     c.mul(
         c.add(c.one(), c.one()),
@@ -354,11 +396,13 @@ fn conv_rhs(c: &ConvConsts, a: &Expr, bv: &Expr) -> Expr {
 }
 
 /// The shared normal form `N := (1 + a·b) + (1 + a·b)`.
+#[cfg(test)]
 fn conv_nf(c: &ConvConsts, a: &Expr, bv: &Expr) -> Expr {
     let blk = c.add(c.one(), c.mul(a.clone(), bv.clone()));
     c.add(blk.clone(), blk)
 }
 
+#[cfg(test)]
 fn build_conv_scalar_value(c: &ConvConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (a_id, a) = b.fresh_local(c.rat.clone());
@@ -386,6 +430,7 @@ fn build_conv_scalar_value(c: &ConvConsts) -> Expr {
 ///   step1 `right_distrib 1 1 (1+ab)` : (1+1)·blk = 1·blk + 1·blk
 ///   step2 congr-left (one_mul blk) : 1·blk + 1·blk = blk + 1·blk
 ///   step3 congr-right (one_mul blk) : blk + 1·blk = blk + blk = nf
+#[cfg(test)]
 fn prove_rhs_eq_nf(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let blk = c.add(one.clone(), c.mul(a.clone(), bv.clone()));
@@ -422,6 +467,7 @@ fn prove_rhs_eq_nf(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr)
 ///   P  := (1+a)·(1+b)              ; PD := (1 + b) + (a + a·b)
 ///   Q  := (1+(−a))·(1+(−b))        ; QD := (1 + (−b)) + ((−a) + a·b)
 /// `lhs = P + Q`. We prove `P = PD`, `Q = QD`, then `PD + QD = nf`.
+#[cfg(test)]
 fn prove_lhs_eq_nf(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -569,6 +615,7 @@ fn prove_lhs_eq_nf(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr)
 /// We transport each PD/QD into the form `(1 + ab) + (b + a)` resp.
 /// `(1 + ab) + ((−b) + (−a))` first (pure add_assoc/add_comm), then add and
 /// cancel `(b+a) + ((−b)+(−a)) = 0`.
+#[cfg(test)]
 fn prove_pdqd_eq_nf(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -619,6 +666,7 @@ fn prove_pdqd_eq_nf(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr
 /// form and compare. Concretely we prove BOTH `PD` and `(1+ab)+(b+a)` equal the
 /// right-nested normal form `1 + (b + (a + ab))` up to add_comm of the (a,ab)
 /// and (b,a)+ab reshuffles, chaining add_assoc/add_comm.
+#[cfg(test)]
 fn prove_pd_regroup(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -638,6 +686,7 @@ fn prove_pd_regroup(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr
 }
 
 /// QD = (1+(−b))+((−a)+ab)  ⟶  (1+ab)+((−b)+(−a)).
+#[cfg(test)]
 fn prove_qd_regroup(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -666,6 +715,7 @@ fn prove_qd_regroup(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr
 /// `(x + p) + (q + r) = x + (p + (q + r))`  — but here we need
 /// `(1 + s) + (t + u) → 1 + (s + (t + u))` then reshuffle `s,t,u`.
 /// This helper proves `(1+b)+(a+ab) = 1 + (ab + (b + a))`.
+#[cfg(test)]
 fn prove_pd_to_nf1(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -687,6 +737,7 @@ fn prove_pd_to_nf1(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr)
 }
 
 /// `(1+(−b))+((−a)+ab) = 1 + (ab + ((−b)+(−a)))`.
+#[cfg(test)]
 fn prove_qd_to_nf1(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -712,6 +763,7 @@ fn prove_qd_to_nf1(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr)
 
 /// `(x + ab) + (y + z)`-form helper. Proves `(1 + ab) + (s + t) = 1 + (ab + (s + t))`
 /// via a single `add_assoc 1 ab (s+t)`.
+#[cfg(test)]
 fn prove_pair_to_nf1(
     c: &ConvConsts,
     _parent: &EnvDeclBuilder,
@@ -731,6 +783,7 @@ fn prove_pair_to_nf1(
 ///     →[add_comm b (ab+a)]           (ab + a) + b
 ///     →[add_assoc ab a b]            ab + (a + b)
 ///     →[congr-right add_comm a b]    ab + (b + a)
+#[cfg(test)]
 fn prove_b_a_ab_reshuffle(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let ab = c.mul(a.clone(), bv.clone());
     let from = c.add(bv.clone(), c.add(a.clone(), ab.clone())); // b + (a+ab)
@@ -777,6 +830,7 @@ fn prove_b_a_ab_reshuffle(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv:
 ///     →[add_comm s (w+u)]           (w + u) + s
 ///     →[add_assoc w u s]            w + (u + s)
 ///     →[congr-right add_comm u s]   w + (s + u)
+#[cfg(test)]
 fn prove_reshuffle_general(
     c: &ConvConsts,
     parent: &EnvDeclBuilder,
@@ -824,6 +878,7 @@ fn prove_reshuffle_general(
 /// Set `P := b+a`, `M := (−b)+(−a)`. Then `P + M = 0` (since `b+(−b)=0`,
 /// `a+(−a)=0`; we prove `(b+a)+((−b)+(−a)) = 0`). The shape
 /// `(B+P) + (B+M) = (B+B) + (P+M) = (B+B)+0 = B+B`.
+#[cfg(test)]
 fn prove_blocks_cancel(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let one = c.one();
     let ab = c.mul(a.clone(), bv.clone());
@@ -928,6 +983,7 @@ fn prove_blocks_cancel(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &E
 ///     →[congr-right: a+((−b)+(−a)) → (−b)+(a+(−a)) ] ...
 /// Simpler: prove via `(b+a)+((−b)+(−a)) = (b+(−b)) + (a+(−a))` with a generic
 /// 4-term swap, then collapse.
+#[cfg(test)]
 fn prove_pm_zero(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -> Expr {
     let neg_a = c.neg(a.clone());
     let neg_b = c.neg(bv.clone());
@@ -970,6 +1026,7 @@ fn prove_pm_zero(c: &ConvConsts, parent: &EnvDeclBuilder, a: &Expr, bv: &Expr) -
 ///     →[add_assoc w x (y+z)]            w + (x + (y+z))
 ///     →[congr-right: x+(y+z) → y+(x+z)] w + (y + (x+z))     (reshuffle_general x y z gives x+(y+z)=z+(x+y); not quite)
 /// We instead reshuffle `x + (y+z) = y + (x+z)` directly.
+#[cfg(test)]
 fn prove_four_swap(
     c: &ConvConsts,
     parent: &EnvDeclBuilder,
@@ -1014,6 +1071,7 @@ fn prove_four_swap(
 ///     →[Eq.symm add_assoc x y z]   (x+y) + z
 ///     →[congr-left add_comm x y]   (y+x) + z
 ///     →[add_assoc y x z]           y + (x+z)
+#[cfg(test)]
 fn prove_mid_swap(c: &ConvConsts, parent: &EnvDeclBuilder, x: &Expr, y: &Expr, z: &Expr) -> Expr {
     let from = c.add(x.clone(), c.add(y.clone(), z.clone()));
     // step1 symm add_assoc x y z : x+(y+z) = (x+y)+z
@@ -1044,6 +1102,7 @@ fn prove_mid_swap(c: &ConvConsts, parent: &EnvDeclBuilder, x: &Expr, y: &Expr, z
 // ── small helpers ──────────────────────────────────────────────────────────
 
 /// `Rat.mul_one a : a·1 = a`.
+#[cfg(test)]
 fn mul_one(c: &ConvConsts, a: &Expr) -> Expr {
     let _ = c;
     Expr::app(

@@ -15,6 +15,7 @@ use crate::name::Name;
 pub(crate) const NAMESPACE: &str = "Topology.CoveringSpace";
 pub(crate) const DECL_COUNT: usize = 18;
 
+#[cfg(test)]
 pub(crate) const DECL_NAMES: [&str; DECL_COUNT] = [
     "Topology.Fiber",
     "Topology.fiber_def",

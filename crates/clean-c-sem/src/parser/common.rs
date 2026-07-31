@@ -8,7 +8,7 @@ use crate::stmt::StorageClass;
 use tree_sitter::Node;
 
 /// Get the source text of a tree-sitter node.
-pub(super) fn node_text(node: Node, source: &str) -> String {
+pub(super) fn node_text(node: Node<'_>, source: &str) -> String {
     source[node.start_byte()..node.end_byte()].to_string()
 }
 
@@ -21,7 +21,7 @@ pub(super) fn node_text(node: Node, source: &str) -> String {
 /// - `find_nested_identifier(node, source, &["identifier"])` for declarators
 /// - `find_nested_identifier(node, source, &["field_identifier"])` for field declarators
 pub(super) fn find_nested_identifier(
-    node: Node,
+    node: Node<'_>,
     source: &str,
     target_kinds: &[&str],
 ) -> Option<String> {
@@ -56,7 +56,7 @@ pub(super) struct PointerQualifiers {
 ///
 /// Recognizes the C99 keyword `restrict` and the common GNU spellings
 /// `__restrict` / `__restrict__`, plus `const` and `volatile`.
-pub(super) fn pointer_qualifiers(node: Node, source: &str) -> PointerQualifiers {
+pub(super) fn pointer_qualifiers(node: Node<'_>, source: &str) -> PointerQualifiers {
     let mut quals = PointerQualifiers::default();
     for i in 0..node.child_count() {
         if let Some(child) = node.child(i as u32) {

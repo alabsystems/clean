@@ -93,7 +93,9 @@ struct MergeConsts {
     nnreal_add_cube: Expr,
     nnreal_mul_add: Expr,
     nnreal_add_mul: Expr,
+    #[cfg(test)]
     nnreal_mul_comm: Expr,
+    #[cfg(test)]
     nnreal_mul_assoc: Expr,
     nnreal_add_comm: Expr,
     nnreal_add_assoc: Expr,
@@ -116,7 +118,9 @@ impl MergeConsts {
             nnreal_add_cube: k("NNReal.add_cube"),
             nnreal_mul_add: k("NNReal.mul_add"),
             nnreal_add_mul: k("NNReal.add_mul"),
+            #[cfg(test)]
             nnreal_mul_comm: k("NNReal.mul_comm"),
+            #[cfg(test)]
             nnreal_mul_assoc: k("NNReal.mul_assoc"),
             nnreal_add_comm: k("NNReal.add_comm"),
             nnreal_add_assoc: k("NNReal.add_assoc"),
@@ -152,6 +156,7 @@ impl MergeConsts {
     fn two_plus(&self, p: &Expr, q: &Expr) -> Expr {
         self.add(&self.add(p, p), q)
     }
+    #[cfg(test)]
     fn eq(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
@@ -187,10 +192,12 @@ impl MergeConsts {
         )
     }
     /// `NNReal.mul_comm a b : a·b = b·a`.
+    #[cfg(test)]
     fn mul_comm(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.nnreal_mul_comm.clone(), [a.clone(), b.clone()])
     }
     /// `NNReal.mul_assoc a b c : a·(b·c) = (a·b)·c`.
+    #[cfg(test)]
     fn mul_assoc(&self, a: &Expr, b: &Expr, cc: &Expr) -> Expr {
         Expr::apps(
             self.nnreal_mul_assoc.clone(),

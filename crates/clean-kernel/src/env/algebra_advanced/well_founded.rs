@@ -483,6 +483,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.well_founded_init == true`
+    #[cfg(test)]
     pub(crate) fn has_well_founded(&self) -> bool {
         self.well_founded_init
     }

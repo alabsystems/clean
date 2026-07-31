@@ -31,28 +31,42 @@ use crate::name::Name;
 struct XSideConsts {
     nat: Expr,
     rat: Expr,
+    #[cfg(test)]
     nat_succ: Expr,
+    #[cfg(test)]
     nat_zero: Expr,
+    #[cfg(test)]
     nat_pow: Expr,
+    #[cfg(test)]
     int_of_nat: Expr,
+    #[cfg(test)]
     rat_mk: Expr,
     rat_mul: Expr,
+    #[cfg(test)]
     rat_one: Expr,
     hcpoint: Expr,
     chi: Expr,
     subset_sum: Expr,
     subset_sum_congr: Expr,
+    #[cfg(test)]
     chi_mul_self: Expr,
     chi_mul_chi_symm_diff: Expr,
     bool_xor: Expr,
+    #[cfg(test)]
     bool_c: Expr,
+    #[cfg(test)]
     btrue: Expr,
     fin: Expr,
+    #[cfg(test)]
     fin_last: Expr,
+    #[cfg(test)]
     rat_zero: Expr,
+    #[cfg(test)]
     chi_offdiag_numerator_zero: Expr,
+    #[cfg(test)]
     fin_sum_const_one: Expr,
     eq1: Expr,
+    #[cfg(test)]
     eq_trans: Expr,
 }
 
@@ -62,12 +76,18 @@ impl XSideConsts {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             nat_succ: Expr::const_(Name::from_string("Nat.succ"), vec![]),
+            #[cfg(test)]
             nat_zero: Expr::const_(Name::from_string("Nat.zero"), vec![]),
+            #[cfg(test)]
             nat_pow: Expr::const_(Name::from_string("Nat.pow"), vec![]),
+            #[cfg(test)]
             int_of_nat: Expr::const_(Name::from_string("Int.ofNat"), vec![]),
+            #[cfg(test)]
             rat_mk: Expr::const_(Name::from_string("Rat.mk"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
+            #[cfg(test)]
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
             hcpoint: Expr::const_(Name::from_string("BoolAnalysis.HCPoint"), vec![]),
             chi: Expr::const_(Name::from_string("BoolAnalysis.chi"), vec![]),
@@ -76,37 +96,49 @@ impl XSideConsts {
                 Name::from_string("BoolAnalysis.subsetSum_congr"),
                 vec![],
             ),
+            #[cfg(test)]
             chi_mul_self: Expr::const_(Name::from_string("BoolAnalysis.chi_mul_self"), vec![]),
             chi_mul_chi_symm_diff: Expr::const_(
                 Name::from_string("BoolAnalysis.chi_mul_chi_symmDiff"),
                 vec![],
             ),
             bool_xor: Expr::const_(Name::from_string("Bool.xor"), vec![]),
+            #[cfg(test)]
             bool_c: Expr::const_(Name::from_string("Bool"), vec![]),
+            #[cfg(test)]
             btrue: Expr::const_(Name::from_string("Bool.true"), vec![]),
             fin: Expr::const_(Name::from_string("Fin"), vec![]),
+            #[cfg(test)]
             fin_last: Expr::const_(Name::from_string("Fin.last"), vec![]),
+            #[cfg(test)]
             rat_zero: Expr::const_(Name::from_string("Rat.zero"), vec![]),
+            #[cfg(test)]
             chi_offdiag_numerator_zero: Expr::const_(
                 Name::from_string("BoolAnalysis.chi_offdiag_numerator_zero"),
                 vec![],
             ),
+            #[cfg(test)]
             fin_sum_const_one: Expr::const_(Name::from_string("Fin.sum_const_one"), vec![]),
             eq1: Expr::const_(Name::from_string("Eq"), vec![l1.clone()]),
+            #[cfg(test)]
             eq_trans: Expr::const_(Name::from_string("Eq.trans"), vec![l1]),
         }
     }
 
+    #[cfg(test)]
     fn one(&self) -> Expr {
         Expr::app(self.nat_succ.clone(), self.nat_zero.clone())
     }
+    #[cfg(test)]
     fn two(&self) -> Expr {
         Expr::app(self.nat_succ.clone(), self.one())
     }
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two(), n.clone()])
     }
     /// `Rat.mk (Int.ofNat (2^n)) 1` — the rational `2^n`.
+    #[cfg(test)]
     fn cube(&self, n: &Expr) -> Expr {
         let ofnat = Expr::app(self.int_of_nat.clone(), self.pow2(n));
         Expr::apps(self.rat_mk.clone(), [ofnat, self.one()])
@@ -126,11 +158,13 @@ impl XSideConsts {
     fn eq_rat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
+    #[cfg(test)]
     fn trans(&self, a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.eq_trans.clone(), [self.rat.clone(), a, b, cc, h1, h2])
     }
 
     /// `fun (x : HCPoint n) => χ_S(x)·χ_S(x)` — the diagonal integrand.
+    #[cfg(test)]
     fn chi_sq_fn(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -140,6 +174,7 @@ impl XSideConsts {
         b.finish_child(b.mk_lam(x_id, BinderInfo::Default, hcp, body))
     }
     /// `fun (_ : HCPoint n) => Rat.one` — the constant-1 integrand.
+    #[cfg(test)]
     fn const_one_fn(&self, parent: &EnvDeclBuilder, n: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);
@@ -179,19 +214,23 @@ impl XSideConsts {
         let body = self.chi_(n, u, &x);
         b.finish_child(b.mk_lam(x_id, BinderInfo::Default, hcp, body))
     }
+    #[cfg(test)]
     fn succ(&self, n: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n.clone())
     }
+    #[cfg(test)]
     fn last(&self, n: &Expr) -> Expr {
         Expr::app(self.fin_last.clone(), n.clone())
     }
     /// `@Eq Bool a b`.
+    #[cfg(test)]
     fn eq_bool(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.bool_c.clone(), a, b])
     }
 }
 
 /// `∀ (n : Nat) (S : HCPoint n), subsetSum n (fun x => χ_S(x)·χ_S(x)) = 2^n`.
+#[cfg(test)]
 fn diag_type(c: &XSideConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -204,6 +243,7 @@ fn diag_type(c: &XSideConsts) -> Expr {
     b.finish(r)
 }
 
+#[cfg(test)]
 fn diag_value(c: &XSideConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -253,6 +293,7 @@ impl Environment {
     /// to which the constant-1 `subsetSum` is def-equal (reducible unfold + β).
     /// Both legs are constructive with empty admitted-axiom closure, so the
     /// result is `ProofQuality::Constructive`. Idempotent.
+    #[cfg(test)]
     pub(crate) fn register_chi_self_subset_sum_eq_cube(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_self_subsetSum_eq_cube");
         if self.get_const(&name).is_some() {
@@ -385,6 +426,7 @@ impl Environment {
 
 /// `∀ (n : Nat) (U : HCPoint (n+1)),
 ///   U (Fin.last n) = true → subsetSum (n+1) (fun x => χ_U(x)) = 0`.
+#[cfg(test)]
 fn single_top_type(c: &XSideConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -403,6 +445,7 @@ fn single_top_type(c: &XSideConsts) -> Expr {
     b.finish(r)
 }
 
+#[cfg(test)]
 fn single_top_value(c: &XSideConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());
@@ -445,6 +488,7 @@ impl Environment {
     /// arbitrary distinct decoded subsets) needs a coordinate-agnostic vanishing
     /// lemma — a general-coordinate cube split or a χ coordinate-permutation
     /// symmetry — which is genuinely new machinery not yet assembled.
+    #[cfg(test)]
     pub(crate) fn register_chi_single_subset_sum_top_zero(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("BoolAnalysis.chi_single_subsetSum_top_zero");
         if self.get_const(&name).is_some() {
@@ -482,6 +526,7 @@ impl Environment {
 struct GenConsts {
     nat: Expr,
     rat: Expr,
+    #[cfg(test)]
     bool_: Expr,
     rat_one: Expr,
     rat_mul: Expr,
@@ -512,6 +557,7 @@ impl GenConsts {
         Self {
             nat: Expr::const_(Name::from_string("Nat"), vec![]),
             rat: Expr::const_(Name::from_string("Rat"), vec![]),
+            #[cfg(test)]
             bool_: Expr::const_(Name::from_string("Bool"), vec![]),
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),

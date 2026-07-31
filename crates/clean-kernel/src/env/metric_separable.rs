@@ -9,17 +9,24 @@
 //! - Axioms: separable_of_totally_bounded, separable_of_compact,
 //!   separable_spec, separable_of_dense_exists
 
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::env::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr, ExprKind};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Metric.Separable and related axioms.
     ///
     /// Adds: Metric.Dense, Metric.Separable, separable_of_totally_bounded,
     ///       separable_of_compact, separable_spec, separable_of_dense_exists
+    #[cfg(test)]
     pub(crate) fn init_metric_separable(&mut self) -> Result<(), EnvError> {
         if self.metric_separable_init {
             return Ok(());
@@ -38,10 +45,12 @@ impl Environment {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn has_metric_separable(&self) -> bool {
         self.metric_separable_init
     }
 
+    #[cfg(test)]
     fn add_metric_dense_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -65,6 +74,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_separable_type(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -86,6 +96,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_separable_of_tb(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -117,6 +128,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_separable_of_compact(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -146,6 +158,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_separable_spec(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -194,6 +207,7 @@ impl Environment {
         })
     }
 
+    #[cfg(test)]
     fn add_metric_separable_of_dense_exists(&mut self) -> Result<(), EnvError> {
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
@@ -244,6 +258,7 @@ impl Environment {
 }
 
 /// Build: ∀ x : α, ∀ ε : Rat, 0 < ε → ∃ d : α, Dense d ∧ dist x d < ε
+#[cfg(test)]
 fn build_dense_exists_prop(
     b: &mut EnvDeclBuilder,
     alpha: &Expr,

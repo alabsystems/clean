@@ -84,6 +84,7 @@ struct LevelSplitConsts {
     rat_one: Expr,
     rat_mul: Expr,
     pow_nat: Expr,
+    #[cfg(test)]
     fin_prod: Expr,
     level_wt: Expr,
     set_size_nat: Expr,
@@ -106,6 +107,7 @@ impl LevelSplitConsts {
             rat_one: Expr::const_(Name::from_string("Rat.one"), vec![]),
             rat_mul: Expr::const_(Name::from_string("Rat.mul"), vec![]),
             pow_nat: Expr::const_(Name::from_string("Rat.powNat"), vec![]),
+            #[cfg(test)]
             fin_prod: Expr::const_(Name::from_string("Fin.prod"), vec![]),
             level_wt: Expr::const_(Name::from_string("BoolAnalysis.levelWt"), vec![]),
             set_size_nat: Expr::const_(Name::from_string("BoolAnalysis.setSizeNat"), vec![]),

@@ -16,6 +16,7 @@ struct PercoordConsts {
     rat: Expr,
     nat_succ: Expr,
     nat_zero: Expr,
+    #[cfg(test)]
     nat_pow: Expr,
     int_of_nat: Expr,
     rat_mk: Expr,
@@ -56,6 +57,7 @@ impl PercoordConsts {
             rat: k("Rat"),
             nat_succ: k("Nat.succ"),
             nat_zero: k("Nat.zero"),
+            #[cfg(test)]
             nat_pow: k("Nat.pow"),
             int_of_nat: k("Int.ofNat"),
             rat_mk: k("Rat.mk"),
@@ -110,11 +112,13 @@ impl PercoordConsts {
         }
         e
     }
+    #[cfg(test)]
     fn pow2(&self, n: &Expr) -> Expr {
         Expr::apps(self.nat_pow.clone(), [self.two_nat(), n.clone()])
     }
     /// `D := Rat.mk (Int.ofNat (Nat.pow 2 n)) 1 ≡ 2^n` (the `ofNat(2^n)` cast,
     /// byte-identical to `NormInflConsts::denom`).
+    #[cfg(test)]
     fn dcap(&self, n: &Expr) -> Expr {
         let ofnat = Expr::app(self.int_of_nat.clone(), self.pow2(n));
         Expr::apps(self.rat_mk.clone(), [ofnat, self.one_nat()])

@@ -14,7 +14,11 @@ use clean_kernel::Name;
 
 use super::boxed_version::requires_boxed_version;
 
-pub(crate) fn try_correct_vdecl_type(ty: &IRType, value: &IRExpr, ctx: &BoxingContext) -> IRType {
+pub(crate) fn try_correct_vdecl_type(
+    ty: &IRType,
+    value: &IRExpr,
+    ctx: &BoxingContext<'_>,
+) -> IRType {
     match value {
         IRExpr::Apply { fn_id, .. } => ctx
             .get_decl(fn_id)
@@ -43,7 +47,7 @@ pub(crate) fn try_correct_vdecl_type(ty: &IRType, value: &IRExpr, ctx: &BoxingCo
 pub(crate) fn expensive_constant_boxing(
     var: VarId,
     var_type: &IRType,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> Option<IRExpr> {
     // Skip cheap types - small integers fit in tagged pointers
     match var_type {
@@ -92,7 +96,7 @@ pub(crate) fn expensive_constant_boxing(
 }
 
 /// Check if function needs boxed version for partial application.
-pub(crate) fn requires_boxed_version_for_pap(fn_id: &FnId, ctx: &BoxingContext) -> bool {
+pub(crate) fn requires_boxed_version_for_pap(fn_id: &FnId, ctx: &BoxingContext<'_>) -> bool {
     ctx.get_decl(fn_id)
         .map(requires_boxed_version)
         .unwrap_or(false)
@@ -111,7 +115,7 @@ pub(crate) fn expected_case_scrutinee_type(alts: &[IRAlt]) -> IRType {
     }
 }
 
-pub(crate) fn visit_body(body: &IRBody, ctx: &mut BoxingContext) -> IRBody {
+pub(crate) fn visit_body(body: &IRBody, ctx: &mut BoxingContext<'_>) -> IRBody {
     match body {
         IRBody::VDecl {
             var,
@@ -193,7 +197,7 @@ fn visit_body_case(
     scrutinee: VarId,
     alts: &[IRAlt],
     default: &Option<Box<IRBody>>,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     let alts: Vec<_> = alts
         .iter()
@@ -211,7 +215,7 @@ fn visit_body_case(
     })
 }
 
-fn visit_body_jmp(jp: JoinPointId, args: &[IRArg], ctx: &mut BoxingContext) -> IRBody {
+fn visit_body_jmp(jp: JoinPointId, args: &[IRArg], ctx: &mut BoxingContext<'_>) -> IRBody {
     let params = ctx.get_jp_params(jp);
     let (cast_args_vec, prefix) = cast_args(args, &params, ctx);
     wrap_with_prefix(
@@ -228,7 +232,7 @@ fn visit_vdecl_expr(
     ty: &IRType,
     value: &IRExpr,
     rest: IRBody,
-    ctx: &mut BoxingContext,
+    ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
     match value {
         IRExpr::Ctor { info, args } => {

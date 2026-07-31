@@ -38,7 +38,7 @@ use super::record::{AttemptResult, CacheOutcome, SolverAttemptRecord};
 
 /// Errors writing a dataset file.
 #[derive(Debug, Error)]
-pub(crate) enum DatasetError {
+pub enum DatasetError {
     /// An I/O error writing the output file.
     #[error("write dataset {path}: {source}")]
     Io {
@@ -255,6 +255,8 @@ pub(crate) fn export_jsonl(
 }
 
 /// The PAR-2 budget the exporter falls back to when none is supplied.
+// AY decommission debt: exporter caller retired; see ay_backend note in bridge/mod.rs.
+#[allow(dead_code)]
 pub(crate) fn default_budget_ms() -> u64 {
     DEFAULT_TIMEOUT_BUDGET_MS
 }

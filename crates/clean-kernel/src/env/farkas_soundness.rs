@@ -1148,7 +1148,7 @@ impl Environment {
             .get_const(&Name::from_string(names::ROWS_HOLD))
             .is_none()
         {
-            let u1 = Level::succ(Level::zero());
+            let _u1 = Level::succ(Level::zero());
             let bs_to_prop = Expr::arrow(list_int(), Expr::prop());
             let val = {
                 let mut b = EnvDeclBuilder::new();

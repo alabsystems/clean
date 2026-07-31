@@ -81,12 +81,16 @@
 //!   (`register_rat_{zero_add, add_zero, one_mul, mul_one}_proof`).
 //!   Split out to satisfy the 500-line per-file budget (#3581).
 
+#[cfg(any(test, feature = "math-overlays"))]
 use super::decl_builder::EnvDeclBuilder;
 use super::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr, FVarId};
+use crate::expr::Expr;
+#[cfg(any(test, feature = "math-overlays"))]
+use crate::expr::{BinderInfo, FVarId};
 use crate::level::Level;
 use crate::name::Name;
 
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) mod add_mul;
 
 #[cfg(test)]
@@ -94,6 +98,7 @@ mod tests;
 
 /// Reusable expression handles threaded through the Tranche B proof
 /// helpers.  Built once per `register_*_proof` entry point.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) struct TrancheBSymbols {
     pub(super) rat_type: Expr,
     pub(super) int_type: Expr,
@@ -118,6 +123,7 @@ pub(super) struct TrancheBSymbols {
     pub(super) int_zero_mul: Expr,
     #[allow(dead_code)]
     pub(super) int_mul_zero: Expr,
+    #[cfg(test)]
     pub(super) int_one_mul: Expr,
     pub(super) int_mul_one: Expr,
     pub(super) nat_one_mul: Expr,
@@ -134,7 +140,9 @@ pub(super) struct TrancheBSymbols {
     pub(super) congr_arg: Expr,
 }
 
+#[cfg(any(test, feature = "math-overlays"))]
 impl TrancheBSymbols {
+    #[cfg(any(test, feature = "math-overlays"))]
     pub(super) fn new() -> Self {
         let type1 = Level::succ(Level::zero());
         let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -161,6 +169,7 @@ impl TrancheBSymbols {
             int_add_zero: Expr::const_(Name::from_string("Int.add_zero"), vec![]),
             int_zero_mul: Expr::const_(Name::from_string("Int.zero_mul"), vec![]),
             int_mul_zero: Expr::const_(Name::from_string("Int.mul_zero"), vec![]),
+            #[cfg(test)]
             int_one_mul: Expr::const_(Name::from_string("Int.one_mul"), vec![]),
             int_mul_one: Expr::const_(Name::from_string("Int.mul_one"), vec![]),
             nat_one_mul: Expr::const_(Name::from_string("Nat.one_mul"), vec![]),
@@ -176,6 +185,7 @@ impl TrancheBSymbols {
 
 /// Build a `congrArg` specialized at `(α, β)` where both live at
 /// `Sort (succ zero)` (Int/Nat/Rat).  All three required uses fit.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) fn mk_congr_arg(
     sym: &TrancheBSymbols,
     dom_ty: &Expr,
@@ -193,6 +203,7 @@ pub(super) fn mk_congr_arg(
 
 /// Build an `Eq.trans` specialized at `α = Sort (succ zero)` (Rat etc.).
 /// The caller supplies the shared type `alpha` (Rat, Int, or Nat).
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) fn mk_eq_trans(
     sym: &TrancheBSymbols,
     alpha: &Expr,
@@ -208,6 +219,7 @@ pub(super) fn mk_eq_trans(
 /// Build the theorem type `∀ a : Rat, Eq Rat LHS RHS` where `build_lhs`
 /// and `build_rhs` receive the outer Rat local and produce the two sides
 /// of the equality.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) fn build_unary_rat_eq_type(
     sym: &TrancheBSymbols,
     build_lhs: impl FnOnce(&Expr) -> Expr,
@@ -224,6 +236,7 @@ pub(super) fn build_unary_rat_eq_type(
 }
 
 /// Build the `Rat.mk n LHS_den` motive `fun n : Int => Rat.mk n den`.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) fn build_rat_mk_num_motive(
     sym: &TrancheBSymbols,
     b: &EnvDeclBuilder,
@@ -237,6 +250,7 @@ pub(super) fn build_rat_mk_num_motive(
 }
 
 /// Build the `Rat.mk num d` motive `fun d : Nat => Rat.mk num d`.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) fn build_rat_mk_den_motive(
     sym: &TrancheBSymbols,
     b: &EnvDeclBuilder,
@@ -253,6 +267,7 @@ pub(super) fn build_rat_mk_den_motive(
 /// and denominator-equality, plus the explicit endpoint `Rat.mk` terms.
 ///
 /// Returns a proof of `Rat.mk lhs_num lhs_den = Rat.mk rhs_num rhs_den`.
+#[cfg(any(test, feature = "math-overlays"))]
 pub(super) fn combine_num_den(
     sym: &TrancheBSymbols,
     b: &EnvDeclBuilder,

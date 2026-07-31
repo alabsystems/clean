@@ -107,7 +107,7 @@ fn close_cprefix(pre: &CPrefix, body: Expr, pi: bool) -> Expr {
 //      σ (castSucc p) = σ (σ (last k)) = last k.
 // ===========================================================================
 fn partner_type(c: &SigmaComplementConsts) -> Expr {
-    let mut pre = make_cprefix(c);
+    let pre = make_cprefix(c);
     let succ_k = c.succ(&pre.k);
     let lhs = Expr::app(pre.sigma.clone(), c.cast_succ(&pre.k, &pre.p));
     let concl = c.eq_fin(&succ_k, lhs, c.last(&pre.k));

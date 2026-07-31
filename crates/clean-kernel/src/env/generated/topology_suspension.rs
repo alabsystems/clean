@@ -13,6 +13,7 @@ use crate::name::Name;
 pub(crate) const NAMESPACE: &str = "Topology.Suspension";
 pub(crate) const DECL_COUNT: usize = 22;
 
+#[cfg(test)]
 pub(crate) const DECL_NAMES: [&str; DECL_COUNT] = [
     "Topology.Suspension",
     "Topology.Suspension.north",
@@ -44,6 +45,7 @@ struct SuspCtx {
     w: Name,
     u_level: Level,
     v_level: Level,
+    #[cfg(test)]
     w_level: Level,
     type_u: Expr,
     type_v: Expr,
@@ -69,6 +71,7 @@ impl SuspCtx {
             w,
             u_level,
             v_level,
+            #[cfg(test)]
             w_level,
         }
     }

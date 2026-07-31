@@ -4,8 +4,6 @@
 
 //! Runtime interpreter for MData-tagged isDefEq expressions.
 
-#![allow(dead_code)] // Module reserved for Qq Phase 4 runtime matching (#23); dead after pub(crate) narrowing
-
 use super::MetaCtx;
 use crate::stack_safe;
 use crate::unify::MetaState;

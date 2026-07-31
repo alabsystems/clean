@@ -18,8 +18,10 @@
 //! - Cobordism
 //! - Characteristic classes
 
+#[cfg(test)]
 use crate::env::{EnvError, Environment};
 
+#[cfg(test)]
 impl Environment {
     /// Initialize Topology.CW for CW-complex theory.
     ///
@@ -45,6 +47,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_cw_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_cw(&mut self) -> Result<(), EnvError> {
         if self.topology_cw_init {
             return Ok(());
@@ -78,6 +81,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_cw_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_cw(&self) -> bool {
         self.topology_cw_init
     }
@@ -107,6 +111,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_simplicial_complex_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_simplicial_complex(&mut self) -> Result<(), EnvError> {
         if self.topology_simplicial_complex_init {
             return Ok(());
@@ -140,6 +145,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_simplicial_complex_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_simplicial_complex(&self) -> bool {
         self.topology_simplicial_complex_init
     }
@@ -179,6 +185,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_homology_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_homology(&mut self) -> Result<(), EnvError> {
         if self.topology_homology_init {
             return Ok(());
@@ -214,6 +221,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_homology_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_homology(&self) -> bool {
         self.topology_homology_init
     }
@@ -240,6 +248,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_derham_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_derham(&mut self) -> Result<(), EnvError> {
         if self.topology_derham_init {
             return Ok(());
@@ -275,6 +284,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_derham_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_derham(&self) -> bool {
         self.topology_derham_init
     }
@@ -289,6 +299,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_morse_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_morse(&mut self) -> Result<(), EnvError> {
         if self.topology_morse_init {
             return Ok(());
@@ -324,6 +335,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_morse_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_morse(&self) -> bool {
         self.topology_morse_init
     }
@@ -345,6 +357,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_ktheory_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_ktheory(&mut self) -> Result<(), EnvError> {
         if self.topology_ktheory_init {
             return Ok(());
@@ -383,6 +396,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_ktheory_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_ktheory(&self) -> bool {
         self.topology_ktheory_init
     }
@@ -397,6 +411,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.topology_filtration_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(test)]
     pub(crate) fn init_topology_filtration(&mut self) -> Result<(), EnvError> {
         if self.topology_filtration_init {
             return Ok(());
@@ -431,6 +446,7 @@ impl Environment {
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.topology_filtration_init == true`
+    #[cfg(test)]
     pub(crate) fn has_topology_filtration(&self) -> bool {
         self.topology_filtration_init
     }

@@ -9,8 +9,11 @@
 //!
 //! Part of #3257.
 
+#[cfg(test)]
 use super::nn_verify_certified_training::CertTrainConsts;
+#[cfg(test)]
 use crate::env::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
 
 // =============================================================================
@@ -18,6 +21,7 @@ use crate::expr::{BinderInfo, Expr};
 // =============================================================================
 
 /// `(n_out : Nat) -> NNVec n_out -> NNVec n_out -> Rat`
+#[cfg(test)]
 pub(super) fn build_standard_loss_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_out_id, n_out) = b.fresh_local(c.nat.clone());
@@ -33,6 +37,7 @@ pub(super) fn build_standard_loss_type(c: &CertTrainConsts) -> Expr {
 /// `(n_in n_out : Nat) -> (NNVec n_in -> NNVec n_out) ->
 ///  (NNVec n_out -> NNVec n_out -> Rat) ->
 ///  NNVec n_out -> NNVec n_in -> Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_worst_case_loss_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -57,6 +62,7 @@ pub(super) fn build_worst_case_loss_type(c: &CertTrainConsts) -> Expr {
 }
 
 /// `(n_w : Nat) -> (NNVec n_w -> Rat) -> Prop`
+#[cfg(test)]
 pub(super) fn build_is_differentiable_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_w_id, n_w) = b.fresh_local(c.nat.clone());
@@ -69,6 +75,7 @@ pub(super) fn build_is_differentiable_type(c: &CertTrainConsts) -> Expr {
 
 /// `(n_in n_out : Nat) -> (NNVec n_in -> NNVec n_out) ->
 ///  IntervalBounds n_in -> IntervalBounds n_out`
+#[cfg(test)]
 pub(super) fn build_ibp_bounds_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -90,11 +97,13 @@ pub(super) fn build_ibp_bounds_type(c: &CertTrainConsts) -> Expr {
 // =============================================================================
 
 /// Same signature as worst_case_loss.
+#[cfg(test)]
 pub(super) fn build_ibp_loss_type(c: &CertTrainConsts) -> Expr {
     build_worst_case_loss_type(c)
 }
 
 /// `(n_in n_out : Nat) -> (NNVec n_in -> NNVec n_out) -> NNVec n_in -> Rat`
+#[cfg(test)]
 pub(super) fn build_certified_radius_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -111,6 +120,7 @@ pub(super) fn build_certified_radius_type(c: &CertTrainConsts) -> Expr {
 }
 
 /// `(n_in n_out : Nat) -> ... -> Rat -> NNVec n_out -> NNVec n_in -> Rat -> Rat`
+#[cfg(test)]
 pub(super) fn build_training_objective_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -137,6 +147,7 @@ pub(super) fn build_training_objective_type(c: &CertTrainConsts) -> Expr {
 }
 
 /// Same signature as worst_case_loss.
+#[cfg(test)]
 pub(super) fn build_bound_tightness_type(c: &CertTrainConsts) -> Expr {
     build_worst_case_loss_type(c)
 }
@@ -146,6 +157,7 @@ pub(super) fn build_bound_tightness_type(c: &CertTrainConsts) -> Expr {
 // =============================================================================
 
 /// IBP loss upper bounds worst-case loss.
+#[cfg(test)]
 pub(super) fn build_ibp_loss_upper_bound_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -187,6 +199,7 @@ pub(super) fn build_ibp_loss_upper_bound_type(c: &CertTrainConsts) -> Expr {
 
 /// certified_radius >= eps and 0 < eps =>
 /// worst_case_loss <= ibp_loss (soundness: radius implies bound).
+#[cfg(test)]
 pub(super) fn build_certified_radius_sound_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -230,6 +243,7 @@ pub(super) fn build_certified_radius_sound_type(c: &CertTrainConsts) -> Expr {
 }
 
 /// bound_tightness >= 0 (nonneg, from ibp_loss >= worst_case_loss).
+#[cfg(test)]
 pub(super) fn build_training_convergence_bound_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -271,6 +285,7 @@ pub(super) fn build_training_convergence_bound_type(c: &CertTrainConsts) -> Expr
 ///   (y : NNVec n_out) (x : NNVec n_in) (eps : Rat),
 ///   0 < eps ->
 ///   is_differentiable n_w (fun w => ibp_loss n_in n_out (make_net w) loss y x eps)`
+#[cfg(test)]
 pub(super) fn build_ibp_loss_differentiable_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());
@@ -318,6 +333,7 @@ pub(super) fn build_ibp_loss_differentiable_type(c: &CertTrainConsts) -> Expr {
 }
 
 /// Certified training produces verified networks.
+#[cfg(test)]
 pub(super) fn build_certified_training_sound_type(c: &CertTrainConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_in_id, n_in) = b.fresh_local(c.nat.clone());

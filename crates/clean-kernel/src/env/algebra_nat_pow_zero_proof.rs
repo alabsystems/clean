@@ -44,12 +44,18 @@
 //! - `algebra_nat_sub_zero_proof.rs` (#3604, pure `Eq.refl` — same shape).
 //! - `algebra_nat_pow_one_proof.rs` (#3604, via `Nat.one_mul`).
 
+#[cfg(test)]
 use super::decl_builder::EnvDeclBuilder;
+#[cfg(test)]
 use super::{Declaration, EnvError, Environment};
+#[cfg(test)]
 use crate::expr::{BinderInfo, Expr};
+#[cfg(test)]
 use crate::level::Level;
+#[cfg(test)]
 use crate::name::Name;
 
+#[cfg(test)]
 impl Environment {
     /// Register `Nat.pow_zero` as a kernel-checked `Declaration::Theorem`.
     ///
@@ -68,6 +74,7 @@ impl Environment {
     /// ENSURES: Idempotent — if `Nat.pow_zero` is already registered with
     ///          any declaration kind, this call returns `Ok(())` without
     ///          modification.
+    #[cfg(test)]
     pub(crate) fn register_nat_pow_zero_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.pow_zero");
         if self.get_const(&name).is_some() {

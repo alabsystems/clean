@@ -46,9 +46,11 @@ struct LtCrossConsts {
     int_le_of_lt: Expr,
     int_lt_trichotomy: Expr,
     int_mul_le_mul_left: Expr,
+    #[cfg(test)]
     int_mul_le_mul_right: Expr,
     int_mul_le_mul_of_nonneg_right: Expr,
     int_ofnat_zero_le: Expr,
+    #[cfg(test)]
     int_mul_assoc: Expr,
     int_mul_comm: Expr,
     int_mul_rearrange: Expr,
@@ -81,6 +83,7 @@ impl LtCrossConsts {
                 Name::from_string("Int.mul_le_mul_of_nonneg_left"),
                 vec![],
             ),
+            #[cfg(test)]
             int_mul_le_mul_right: Expr::const_(
                 Name::from_string("Int.mul_le_mul_of_nonneg_right"),
                 vec![],
@@ -90,6 +93,7 @@ impl LtCrossConsts {
                 vec![],
             ),
             int_ofnat_zero_le: Expr::const_(Name::from_string("Int.ofNat_zero_le"), vec![]),
+            #[cfg(test)]
             int_mul_assoc: Expr::const_(Name::from_string("Int.mul_assoc"), vec![]),
             int_mul_comm: Expr::const_(Name::from_string("Int.mul_comm"), vec![]),
             int_mul_rearrange: Expr::const_(Name::from_string("Int.mul_rearrange"), vec![]),
@@ -168,6 +172,7 @@ impl LtCrossConsts {
         mb.finish_child(lam)
     }
     /// `fun (w : Int) => Int.le w r`.
+    #[cfg(test)]
     fn le_right_fn(&self, parent: &EnvDeclBuilder, r: Expr) -> Expr {
         let mut mb = EnvDeclBuilder::child_of(parent);
         let (w_id, w) = mb.fresh_local(self.int.clone());

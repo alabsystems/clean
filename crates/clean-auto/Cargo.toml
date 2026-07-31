@@ -136,3 +136,9 @@ required-features = ["oracle-http"]
 [[bin]]
 name = "solver_serve"
 path = "src/bin/solver_serve/main.rs"
+
+[[bin]]
+name = "ay_linked_provenance"
+path = "src/bin/ay_linked_provenance.rs"
+required-features = ["ay-smt"]
+doc = false

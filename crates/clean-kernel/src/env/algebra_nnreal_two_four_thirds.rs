@@ -51,6 +51,7 @@ use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the `2^{4/3}` keystone.
 pub(crate) struct TwoFourThirdsConsts {
+    #[cfg(test)]
     nat: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
@@ -64,6 +65,7 @@ pub(crate) struct TwoFourThirdsConsts {
     rat_le: Expr,
     rat_mul_comm: Expr,
     rat_mul_assoc: Expr,
+    #[cfg(test)]
     rat_ofnat_mul: Expr,
     rat_le_of_ble: Expr,
     bool_true: Expr,
@@ -100,6 +102,7 @@ impl TwoFourThirdsConsts {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);
         let kl = |s: &str| Expr::const_(Name::from_string(s), vec![l1.clone()]);
         Self {
+            #[cfg(test)]
             nat: k("Nat"),
             nat_zero: k("Nat.zero"),
             nat_succ: k("Nat.succ"),
@@ -113,6 +116,7 @@ impl TwoFourThirdsConsts {
             rat_le: k("Rat.le"),
             rat_mul_comm: k("Rat.mul_comm"),
             rat_mul_assoc: k("Rat.mul_assoc"),
+            #[cfg(test)]
             rat_ofnat_mul: k("Rat.ofNat_mul"),
             rat_le_of_ble: k("Rat.le_of_ble_eq_true"),
             bool_true: k("Bool.true"),
@@ -238,6 +242,7 @@ impl TwoFourThirdsConsts {
     fn congr(&self, t: &Expr, a: Expr, b: Expr, f: Expr, h: Expr) -> Expr {
         Expr::apps(self.congr_arg1.clone(), [t.clone(), t.clone(), a, b, f, h])
     }
+    #[cfg(test)]
     fn rat_eq(&self, a: Expr, b: Expr) -> Expr {
         self.eq_ty(&self.rat.clone(), a, b)
     }
@@ -533,7 +538,7 @@ fn build_rat_64_quarter_bridge(c: &TwoFourThirdsConsts, parent: &EnvDeclBuilder)
 
 /// The full `(2^{4/3})³ = ofRat 16` proof term.
 fn build_two_four_thirds_cubed_value(c: &TwoFourThirdsConsts, s16: &Expr, h16: &Expr) -> Expr {
-    let mut bd = EnvDeclBuilder::new();
+    let bd = EnvDeclBuilder::new();
 
     let four = c.ofnat_lit(4);
     let h4 = c.ofnat_nonneg(4);

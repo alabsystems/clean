@@ -167,6 +167,9 @@ data/omega-shards/
 
 # Runtime diagnostic artifacts in reports/ subdirs (logs, not source)
 reports/tc_diagnostic/
+# AY consumer smoke writes timestamped local evidence here.  The command is a
+# release gate, but its bulky machine-local transcript is not source material.
+reports/integration/
 
 # Lean / Lake build artifacts
 .lake/

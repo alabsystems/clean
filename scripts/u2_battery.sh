@@ -80,6 +80,7 @@ pass_probe p24_prelude_fidelity.lean 23
 pass_probe p25_nat_homogeneous_instances.lean 7
 pass_probe p26_rfl_match_pattern.lean 3
 pass_probe p27_quotient_setoid.lean 8
+pass_probe p28_bare_ctor_expected_type.lean 4
 
 echo "[u2-battery] pinned failures (the solver gap + defaults + gates):"
 fail_probe p06_rigid_refusal_MUST_FAIL.lean 'TypeMismatch { expected: "Sort u", actual: "Type" }'
@@ -97,7 +98,7 @@ report = {
     "clean_binary_sha256": sha256(bin_path),
     "fixtures": {os.path.basename(p): sha256(p) for p in sorted(glob.glob(f"{fix}/*.lean"))},
     "split": {
-        "pass": ["p01", "p02", "p03", "p04", "p05", "p07", "p08", "p09", "p10", "p11", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23", "p24", "p25", "p26", "p27"],
+        "pass": ["p01", "p02", "p03", "p04", "p05", "p07", "p08", "p09", "p10", "p11", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23", "p24", "p25", "p26", "p27", "p28"],
         "fail_pinned": ["p06", "p12"],
     },
     "note": "P6 is a SOUND loud reject (rigid refusal) and stays a FAIL pin "

@@ -31,7 +31,7 @@ use super::intake::collect_shard_paths;
 use super::record::expr_canonical_digest;
 use crate::error::{MathverseError, MathverseResult};
 use crate::shard::ShardReader;
-use crate::shard_reconstruct::reconstruct_expr_table_prefix;
+use crate::shard_reconstruct::reconstruct_expr_table;
 
 /// Summary of a corpus lineage build.
 #[derive(Debug, Clone)]
@@ -76,7 +76,7 @@ pub fn build_corpus_lineage(input: &Path) -> MathverseResult<(LineageGraph, Line
     for shard_path in &shard_paths {
         let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;
         let reader = ShardReader::from_bytes(&bytes)?;
-        let table = reconstruct_expr_table_prefix(
+        let table = reconstruct_expr_table(
             &reader.exprs,
             &reader.levels,
             &reader.strings,
@@ -84,7 +84,8 @@ pub fn build_corpus_lineage(input: &Path) -> MathverseResult<(LineageGraph, Line
         );
         for header in &reader.constants {
             constants += 1;
-            let Some(type_) = table.get(header.type_idx as usize) else {
+            // `table[i]` is `Option<Expr>`: `None` = unreconstructable expr; skip it.
+            let Some(type_) = table.get(header.type_idx as usize).and_then(|s| s.as_ref()) else {
                 continue;
             };
             let Ok(stmt) = expr_canonical_digest(type_) else {

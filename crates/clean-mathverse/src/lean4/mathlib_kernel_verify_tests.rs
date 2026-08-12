@@ -449,29 +449,5 @@ fn test_summary_counts_sum_to_total() {
     );
 }
 
-/// Edge case: mixing found and not-found names in one batch returns the
-/// correct per-entry status, and the summary tallies agree with per-entry
-/// inspection.
-#[test]
-fn test_mixed_found_and_not_found_names() {
-    let Some(result) = load_gamma_crown_environment() else {
-        eprintln!("Skipping: Lean 4 toolchain not found");
-        return;
-    };
-
-    let names = &[
-        "Nat.add_comm",
-        "Nat.mul_comm",
-        "definitely.not.a.real.constant.xyz",
-        "propext",
-        "another.fake.name",
-    ];
-    let summary = verify_mathlib_lemmas_kernel(&result.env, names);
-    assert_eq!(summary.reports.len(), names.len());
-    assert_eq!(summary.num_not_found(), 2);
-    // At least one real lemma must be found. (propext is an axiom; the two
-    // Nat lemmas are theorems with proofs in Init.Data.Nat.Lemmas.)
-    assert!(summary.num_found() >= 3);
-    // No failures — if Init loaded them they must re-check.
-    assert_eq!(summary.num_failed(), 0);
-}
+#[path = "mathlib_kernel_verify_corpus_tests.rs"]
+mod corpus_tests;

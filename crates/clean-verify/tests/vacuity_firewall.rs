@@ -31,6 +31,14 @@
 //! silently disappearing, or a `PREMISE-ONLY` finding turning `STRICT` — that
 //! last one being exactly how the conflated rule would re-enter.
 //!
+//! One band is pinned here by its **self-label rather than by a walker verdict**:
+//! the vacuous-by-construction `micro_*` family at
+//! `src/spec/core_spec/micro_soundness.rs:6-24`. The walker cannot see it (its
+//! inductive names no denied name, so `audit_relation` returns pristine), so
+//! [`the_micro_band_keeps_its_vacuity_self_label`] pins the label text, the
+//! member list and the per-declaration label count as source text instead. That
+//! is crystal job **C2+**; see the doc comment on [`MICRO_BAND_PROVENANCE`].
+//!
 //! ## The one thing this file proves that no existing check does
 //!
 //! [`kernel_infer_accepts_findings_and_the_edge_control`] runs the same walk
@@ -63,6 +71,7 @@
 //! So the expensive build happens twice in this file, not eight times.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 use clean_verify::test_utils::{build_eval_ir_spec_with_stack, build_spec_with_stack};
 use clean_verify::vacuity_firewall::{
@@ -152,6 +161,97 @@ const PINNED_FINDINGS: &[(&str, &str, Class, usize)] = &[
     ("KernelInferAccepts.lam", "Typing", Class::Strict, 2),
     ("KernelInferAccepts.pi", "Typing", Class::Strict, 2),
 ];
+
+/// Crystal job **C2+**: the vacuous-by-construction `micro_*` band, pinned by its
+/// own self-label because the walker structurally cannot reach it.
+///
+/// **Why this is not a `MUST_PASS_PREFIXES` entry.** `micro_has_type` is a
+/// single-constructor inductive whose constructor mentions only
+/// `Nat` / `MicroExpr` / `MicroCert` / `Eq` / `micro_verify`
+/// (`micro_soundness.rs:67-68`). None of those is in `DENIED_EXACT`
+/// (`Typing`, `has_type`) or under `DENIED_PREFIX` (`TypingCtx`), so
+/// `audit_relation(&spec, "micro_has_type")` returns **pristine** on a relation
+/// that IS vacuous — it is total, `forall e U, micro_has_type e U`. Adding
+/// `"micro"` to [`MUST_PASS_PREFIXES`] would therefore record a green the walker
+/// never earned, which is the exact failure mode this whole file exists to rule
+/// out. **Do not do it**, and do not add the band to [`PINNED_FINDINGS`] either:
+/// it produces no finding.
+///
+/// **What is pinned instead.** The band is honestly *labeled* — the module header
+/// says in full that the predicate is degenerate and that the drain carries zero
+/// trust content. Until Brick 6 replaces it with a faithful family, that label is
+/// the only thing standing between a reader and the false impression that
+/// micro-checker soundness is proved. Before this pin the label was protected by
+/// nothing: `grep -ni micro` over this file and over
+/// `src/vacuity_firewall.rs` both returned no match, and the in-tree tripwire
+/// (`micro_soundness.rs`, `brick1_tripwire`) checks the band's VACUITY, never its
+/// header — deleting the header left it green. So the pin is source text: the
+/// provenance path, the label span, its markers, the member list, and the
+/// per-declaration label count.
+const MICRO_BAND_PROVENANCE: &str = "src/spec/core_spec/micro_soundness.rs";
+
+/// The module-header span carrying the band's self-label, as `(first, last)`
+/// 1-based lines. Line 25 is bare `//!` and line 26 opens a different section.
+const MICRO_BAND_SELF_LABEL_LINES: (usize, usize) = (6, 24);
+
+/// Phrases that must survive inside [`MICRO_BAND_SELF_LABEL_LINES`]. Checked
+/// against the span joined into ONE string, because the "does NOT prove" clause
+/// wraps across `micro_soundness.rs:17-18` and a per-line `contains` would miss
+/// it.
+const MICRO_BAND_SELF_LABEL_MARKERS: &[&str] = &[
+    "# VACUITY EXPOSURE (Brick 1 of the micro-band drain)",
+    "**TOTAL (degenerate) predicate**: EVERY expression has EVERY type",
+    "it does NOT prove micro-checker soundness",
+    "future work (Brick 6), NOT this session",
+];
+
+/// The band's 17 `add_definition` registrations — the totality witness plus the
+/// 16 members that reach it (15 return `micro_has_type_total` outright; the two
+/// in [`MICRO_BAND_UNLABELLED_TAIL`] chain into it one hop). Measured, not
+/// predicted.
+///
+/// The inductive `micro_has_type` itself is registered from surface syntax by
+/// `add_inductive` (`micro_soundness.rs:67`) and so carries no `name:` field to
+/// match on; it is covered by the marker check above, which quotes it.
+///
+/// A member disappearing means the drain progressed — a deliberate diff, not a
+/// silent one.
+const MICRO_BAND_MEMBERS: &[&str] = &[
+    "micro_has_type_total",
+    "micro_verify_sound_sort",
+    "micro_verify_sound_bvar",
+    "micro_verify_sound_opaque",
+    "micro_verify_sound_app",
+    "micro_verify_sound_lam",
+    "micro_verify_sound_pi",
+    "micro_verify_sound_let",
+    "micro_verify_sound",
+    "micro_sort_typing",
+    "micro_pi_formation",
+    "micro_lam_typing",
+    "micro_app_typing",
+    "micro_def_eq_preserves_typing",
+    "micro_type_preservation",
+    "kernel_to_micro_typing",
+    "translation_preserves_typing",
+];
+
+/// The two members that chain into `micro_has_type_total` carrying **no**
+/// per-declaration vacuity label: `micro_type_preservation`
+/// (`micro_soundness.rs:401-413`, description "Micro-checker type
+/// preservation: …") and `translation_preserves_typing` (`:775-787`,
+/// description "Translation preserves typing judgments."). Named so that
+/// [`MICRO_BAND_PER_DECL_LABELS`] cannot be "fixed" by labelling them without a
+/// deliberate edit here. A second unlabelled copy of the same two proof terms
+/// lives at `src/proofs/library_subst_micro_env.rs:455-478`.
+const MICRO_BAND_UNLABELLED_TAIL: &[&str] =
+    &["micro_type_preservation", "translation_preserves_typing"];
+
+/// Occurrences of the per-declaration `VACUITY-DRAINED` marker in the band's
+/// source. 14 of the 17 members carry it; the other three are the totality
+/// witness itself (whose description says "TOTALITY WITNESS" and "total") and
+/// the two in [`MICRO_BAND_UNLABELLED_TAIL`].
+const MICRO_BAND_PER_DECL_LABELS: usize = 14;
 
 /// `(ctor, denied) -> (class, depth)` for the measured report.
 fn measured(report: &FirewallReport) -> BTreeMap<(String, String), (Class, usize)> {
@@ -552,4 +652,97 @@ fn an_unknown_relation_is_reported_unresolved_not_clean() {
         "the unknown name must be reported as unresolved"
     );
     assert_eq!(report.visited, 0, "nothing should have been walked");
+}
+
+/// GATE CLAUSE 3 (crystal **C2+**): the vacuous `micro_*` band keeps its
+/// self-label.
+///
+/// This is the one band the walker cannot adjudicate — see
+/// [`MICRO_BAND_PROVENANCE`] for why a `MUST_PASS_PREFIXES` entry here would
+/// manufacture a green rather than earn one. So the gate is a source-text pin:
+/// the provenance path must resolve, the header label must still say what it
+/// says, the members must still be registered, and the per-declaration labels
+/// must still be there in the measured number.
+///
+/// Builds no spec, so it costs the suite nothing.
+#[test]
+fn the_micro_band_keeps_its_vacuity_self_label() {
+    // (a) Provenance. Fails closed if the band is moved or renamed, which is
+    // exactly the edit that would otherwise drop the label without a diff here.
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MICRO_BAND_PROVENANCE);
+    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "the micro_* band's provenance path must resolve: {} ({e}).\nIf the band moved, update \
+             MICRO_BAND_PROVENANCE deliberately and say so in the commit — this band is vacuous by \
+             construction and its label is the only thing recording that.",
+            path.display()
+        )
+    });
+    let lines: Vec<&str> = src.lines().collect();
+
+    // (b) The header self-label, checked over the joined span.
+    let (lo, hi) = MICRO_BAND_SELF_LABEL_LINES;
+    assert!(
+        lines.len() >= hi,
+        "{} has {} line(s); the self-label span {lo}-{hi} does not exist",
+        path.display(),
+        lines.len()
+    );
+    let label: String = lines[lo - 1..=hi - 1]
+        .iter()
+        .map(|l| l.trim_start().trim_start_matches("//!").trim())
+        .collect::<Vec<_>>()
+        .join(" ");
+    for marker in MICRO_BAND_SELF_LABEL_MARKERS {
+        assert!(
+            label.contains(marker),
+            "the micro_* band's self-label moved or was WEAKENED: {}:{lo}-{hi} no longer contains \
+             {marker:?}.\nThe band is vacuous by construction (`micro_has_type` is total), the \
+             firewall walker cannot see that, and this header is the record. Re-anchor \
+             MICRO_BAND_SELF_LABEL_LINES deliberately and say so in the commit; do NOT delete the \
+             marker.\nMeasured span: {label:?}",
+            path.display()
+        );
+    }
+
+    // (c) Membership. A member disappearing means the drain progressed — which is
+    // good news, but it must arrive as a deliberate diff.
+    for name in MICRO_BAND_MEMBERS {
+        assert!(
+            src.contains(&format!("name: \"{name}\".to_string()")),
+            "band member `{name}` is no longer registered in {}. If the drain progressed, remove \
+             it from MICRO_BAND_MEMBERS and say so in the commit.",
+            path.display()
+        );
+    }
+    for name in MICRO_BAND_UNLABELLED_TAIL {
+        assert!(
+            MICRO_BAND_MEMBERS.contains(name),
+            "MICRO_BAND_UNLABELLED_TAIL names `{name}`, which is not in MICRO_BAND_MEMBERS — the \
+             two lists have drifted apart, so the label-count reasoning below no longer refers to \
+             a member of the band"
+        );
+    }
+
+    // (d) The per-declaration half of the label.
+    let per_decl = src.matches("VACUITY-DRAINED").count();
+    assert_eq!(
+        per_decl,
+        MICRO_BAND_PER_DECL_LABELS,
+        "per-declaration `VACUITY-DRAINED` labels in {}: measured {per_decl}, pinned {}.\nA DROP \
+         means a declaration lost its label — restore it. A RISE most likely means the unlabelled \
+         tail {MICRO_BAND_UNLABELLED_TAIL:?} was labelled, which is good: update \
+         MICRO_BAND_PER_DECL_LABELS and say so in the commit.",
+        path.display(),
+        MICRO_BAND_PER_DECL_LABELS
+    );
+
+    // Printed under `--nocapture` so the pin is a recorded measurement.
+    println!(
+        "FIREWALL micro_* band: {} member(s), {per_decl} per-decl label(s), header {}:{lo}-{hi} \
+         intact ({} unlabelled tail member(s))",
+        MICRO_BAND_MEMBERS.len(),
+        MICRO_BAND_PROVENANCE,
+        MICRO_BAND_UNLABELLED_TAIL.len()
+    );
 }

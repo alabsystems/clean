@@ -19,7 +19,7 @@ use clean_mathverse::coq::alpha::Sexp;
 // ---------------------------------------------------------------------------
 
 /// Look up `key` in a list of `(key value ...)` pairs, returning the value.
-pub fn assoc<'a>(fields: &'a [Sexp], key: &str) -> Option<&'a Sexp> {
+pub(crate) fn assoc<'a>(fields: &'a [Sexp], key: &str) -> Option<&'a Sexp> {
     fields.iter().find_map(|f| match f {
         Sexp::List(kv) if kv.len() >= 2 => match &kv[0] {
             Sexp::Atom(k) if k == key => Some(&kv[1]),
@@ -49,7 +49,7 @@ fn id_of(s: &Sexp) -> Option<String> {
 }
 
 /// Find the first `(KerName ...)` node anywhere inside `s`.
-pub fn find_kername(s: &Sexp) -> Option<&Sexp> {
+pub(crate) fn find_kername(s: &Sexp) -> Option<&Sexp> {
     if let Sexp::List(items) = s {
         if matches!(items.first(), Some(Sexp::Atom(h)) if h == "KerName") {
             return Some(s);
@@ -60,7 +60,7 @@ pub fn find_kername(s: &Sexp) -> Option<&Sexp> {
 }
 
 /// `(KerName <modpath> (Id x))` → `"<qualified-modpath>.x"`.
-pub fn kername_to_qualified(s: &Sexp) -> Option<String> {
+pub(crate) fn kername_to_qualified(s: &Sexp) -> Option<String> {
     let Sexp::List(items) = s else {
         return None;
     };
@@ -108,7 +108,7 @@ fn modpath_to_qualified(s: &Sexp) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// One inductive block of a mutual inductive.
-pub struct MindPacket {
+pub(crate) struct MindPacket {
     pub typename: String,
     /// Full arity (params included) as a raw SerAPI Constr sexp plus whether
     /// a `TemplateArity` conclusion was collapsed to the shared single-level
@@ -127,7 +127,7 @@ pub struct MindPacket {
 }
 
 /// Parsed summary of a `CoqMInd` answer payload.
-pub struct MindInfo {
+pub(crate) struct MindInfo {
     /// Qualified name of the mutual block's kernel name (what `(Ind ...)`
     /// references in terms resolve against).
     pub base: Option<String>,
@@ -145,7 +145,7 @@ fn parse_u32(s: Option<&Sexp>) -> Option<u32> {
 
 /// Parse the objects of a `(CoqMInd <mutind> <mind-body>)` answer (everything
 /// after the `CoqMInd` head).
-pub fn parse_mind(objs: &[Sexp]) -> Result<MindInfo, String> {
+pub(crate) fn parse_mind(objs: &[Sexp]) -> Result<MindInfo, String> {
     let base = objs
         .first()
         .and_then(find_kername)
@@ -392,7 +392,7 @@ pub(crate) fn ctor_conclusion_has_inductive_head(ctor_ty: &Sexp) -> bool {
 // ---------------------------------------------------------------------------
 
 /// `(CoqConstant "<name>" <type> <value>)` — one line, newline-terminated.
-pub fn render_constant(name: &str, ty: &Sexp, value: &Sexp) -> String {
+pub(crate) fn render_constant(name: &str, ty: &Sexp, value: &Sexp) -> String {
     let form = Sexp::List(vec![
         Sexp::Atom("CoqConstant".to_string()),
         Sexp::Atom(name.to_string()),
@@ -424,7 +424,7 @@ pub fn render_constant(name: &str, ty: &Sexp, value: &Sexp) -> String {
 /// keep using [`render_constant`]: their values are ordinary, not
 /// functor-generated, and marking them speculative would needlessly withhold
 /// them from KV under a masked-taint dependency.
-pub fn render_constant_speculative(name: &str, ty: &Sexp, value: &Sexp) -> String {
+pub(crate) fn render_constant_speculative(name: &str, ty: &Sexp, value: &Sexp) -> String {
     let form = Sexp::List(vec![
         Sexp::Atom("CoqConstant".to_string()),
         Sexp::Atom(name.to_string()),
@@ -438,7 +438,7 @@ pub fn render_constant_speculative(name: &str, ty: &Sexp, value: &Sexp) -> Strin
 }
 
 /// `(CoqAxiom "<name>" <type>)` — one line, newline-terminated.
-pub fn render_axiom(name: &str, ty: &Sexp) -> String {
+pub(crate) fn render_axiom(name: &str, ty: &Sexp) -> String {
     let form = Sexp::List(vec![
         Sexp::Atom("CoqAxiom".to_string()),
         Sexp::Atom(name.to_string()),
@@ -462,7 +462,7 @@ pub fn render_axiom(name: &str, ty: &Sexp) -> String {
 /// readers. Genuine Coq `Axiom`/`Parameter` declarations must keep using
 /// [`render_axiom`] — they are value-less in Coq too, so a conversion blocked
 /// at them is NOT a reconstruction gap.
-pub fn render_axiom_standin(name: &str, ty: &Sexp) -> String {
+pub(crate) fn render_axiom_standin(name: &str, ty: &Sexp) -> String {
     let form = Sexp::List(vec![
         Sexp::Atom("CoqAxiom".to_string()),
         Sexp::Atom(name.to_string()),
@@ -476,7 +476,7 @@ pub fn render_axiom_standin(name: &str, ty: &Sexp) -> String {
 
 /// `(CoqInductive "<base>" <block> <arity> (NumParams k) (Ctor "<cname>"
 /// <ctype>)...)` — one line, newline-terminated.
-pub fn render_inductive(
+pub(crate) fn render_inductive(
     base: &str,
     block: u32,
     arity: &Sexp,

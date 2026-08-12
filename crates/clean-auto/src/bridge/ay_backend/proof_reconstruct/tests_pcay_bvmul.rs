@@ -8,7 +8,7 @@
 //! the fail-closed negative controls.
 
 use super::*;
-use ay_proof::bv_blast_solver::BvExpr;
+use ay_proof::bv_blast_solver::{BvExpr, BvExprExportError};
 
 /// The width the mul obligations bit-blast at. Width 8 = the gate leaf width the
 /// existing mul-headline re-check uses; keeps the native kernel re-check tractable
@@ -62,6 +62,15 @@ fn bvmul_certified_term_passes_rooted_authority() {
 
     let term = super::super::certified_proof::deserialize_term(&certified.payload.term_bytes)
         .expect("deserialize certified Unsat term");
+    let term_debug = format!("{term:?}");
+    assert!(
+        term_debug.contains("checkRefutes3_sound"),
+        "serialized bvmul certificate must retain the proved trie-backed soundness bridge"
+    );
+    assert!(
+        !term_debug.contains("checkRefutes_sound"),
+        "serialized bvmul certificate must not regress to the legacy quadratic bridge"
+    );
     let goal = clean_kernel::TypeChecker::new(&env)
         .infer_type(&term)
         .expect("infer serialized certificate goal");
@@ -84,6 +93,83 @@ fn bvmul_by_zero_identity_is_kernel_certified() {
     let certified = certify_bvmul_unsat(&env, &lhs, &rhs)
         .expect("mul-by-zero identity is UNSAT and must kernel-certify");
     assert_eq!(certified.payload.trust_count, 0);
+    assert!(
+        certified.num_resolution_steps <= MAX_REFLECTION_STEPS,
+        "certified trace must be within the enforced resource cap"
+    );
+}
+
+/// The public AY budget is constructed afresh per call and uses the exact
+/// resource envelope Clean documents for this lane.
+#[test]
+fn bounded_producer_policy_matches_reflection_ceiling() {
+    let budget = bounded_producer_budget().expect("constant bounded-producer policy must be valid");
+    assert_eq!(budget.timeout(), PRODUCER_TIMEOUT);
+    assert_eq!(budget.max_resolution_steps(), MAX_REFLECTION_STEPS);
+}
+
+/// Preserve AY's structured resource evidence instead of collapsing producer
+/// exhaustion into a malformed-expression or generic undecided verdict.
+#[test]
+fn producer_resource_limit_mapping_is_typed_and_lossless() {
+    let error = map_export_error(BvExprExportError::ResourceLimit {
+        resource: "test resource",
+        limit: 4,
+        actual: 5,
+    });
+    assert_eq!(
+        error,
+        BvMulCertifyError::ProducerResourceExhausted {
+            resource: "test resource",
+            limit: 4,
+            actual: 5,
+        }
+    );
+}
+
+/// The post-export operational bound is checked independently of AY's bounded
+/// producer contract and fails closed before any kernel reflection work begins.
+#[test]
+fn reflection_step_cap_declines_before_kernel_recheck() {
+    let steps = MAX_REFLECTION_STEPS + 1;
+    assert_eq!(
+        enforce_reflection_step_cap(steps),
+        Err(BvMulCertifyError::RefutationTooLarge {
+            steps,
+            cap: MAX_REFLECTION_STEPS,
+        })
+    );
+}
+
+/// Exercise the producer bound through the complete public certification path.
+/// Unlike the live gate's fused readout, width-4 multiplication commutativity
+/// produces a genuine non-fusing trace above Clean's 4,096-step policy. AY must
+/// decline it while producing the proof, before Clean enters kernel reflection.
+#[test]
+fn non_fusing_bvmul_commutativity_is_bounded_before_kernel_recheck() {
+    let env = bvmul_certify_env().expect("env");
+    let a = BvExpr::leaf("A0", 4);
+    let b = BvExpr::leaf("B0", 4);
+    let lhs = BvExpr::Mul(Box::new(a.clone()), Box::new(b.clone()));
+    let rhs = BvExpr::Mul(Box::new(b), Box::new(a));
+
+    let outcome = certify_bvmul_unsat(&env, &lhs, &rhs);
+    match outcome {
+        Err(BvMulCertifyError::ProducerResourceExhausted {
+            resource,
+            limit,
+            actual,
+        }) => {
+            assert!(!resource.is_empty(), "producer resource name must be retained");
+            assert!(
+                actual > limit,
+                "typed producer exhaustion must carry an over-limit amount"
+            );
+        }
+        other => panic!(
+            "non-fusing width-4 bvmul commutativity must be bounded in AY before kernel reflection; got {other:?}"
+        ),
+    }
 }
 
 /// FAIL-CLOSED negative control (never false-PROVE): a SATISFIABLE bvmul

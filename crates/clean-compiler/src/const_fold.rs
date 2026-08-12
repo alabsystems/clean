@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 /// Configuration for the L5IR constant folding pass.
 #[derive(Debug, Clone)]
-pub struct ConstFoldConfig {
+pub(crate) struct ConstFoldConfig {
     /// Fold arithmetic operations on integer literals.
     pub fold_arithmetic: bool,
     /// Fold boolean logic operations.
@@ -41,7 +41,7 @@ impl Default for ConstFoldConfig {
 
 /// Statistics collected during constant folding.
 #[derive(Debug, Clone, Default)]
-pub struct ConstFoldStats {
+pub(crate) struct ConstFoldStats {
     /// Number of arithmetic operations folded.
     pub folded_arithmetic: usize,
     /// Number of boolean operations folded.
@@ -465,7 +465,10 @@ pub(crate) fn fold_decl(
 /// Run the L5IR constant folding pass over a set of declarations.
 ///
 /// Returns the folded declarations and statistics about what was folded.
-pub fn run_const_fold(decls: &[IRDecl], config: &ConstFoldConfig) -> (Vec<IRDecl>, ConstFoldStats) {
+pub(crate) fn run_const_fold(
+    decls: &[IRDecl],
+    config: &ConstFoldConfig,
+) -> (Vec<IRDecl>, ConstFoldStats) {
     let mut stats = ConstFoldStats::default();
     let folded = decls
         .iter()
@@ -475,7 +478,7 @@ pub fn run_const_fold(decls: &[IRDecl], config: &ConstFoldConfig) -> (Vec<IRDecl
 }
 
 /// Run the L5IR constant folding pass with default configuration.
-pub fn run_const_fold_default(decls: &[IRDecl]) -> (Vec<IRDecl>, ConstFoldStats) {
+pub(crate) fn run_const_fold_default(decls: &[IRDecl]) -> (Vec<IRDecl>, ConstFoldStats) {
     run_const_fold(decls, &ConstFoldConfig::default())
 }
 

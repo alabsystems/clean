@@ -24,7 +24,7 @@ pub use super::ay_backend::{
 #[cfg(feature = "ay-bv-blast")]
 pub use super::ay_backend::{
     bvmul_certify_env, bvmul_widening_no_overflow_obligation, certify_bvmul_unsat, BvExpr,
-    BvMulCertified, BvMulCertifyError,
+    BvMulCertified, BvMulCertifyError, BVMUL_MAX_REFLECTION_STEPS,
 };
 
 // Proof-carrying ay, MILESTONE 3 (BV shift): the NATIVE bvshl/bvlshr/bvashr UNSAT

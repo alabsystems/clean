@@ -54,7 +54,7 @@ pub(crate) use specialize_transform::{
 
 /// Configuration for the IR specialization pass.
 #[derive(Debug, Clone)]
-pub struct SpecializeConfig {
+pub(crate) struct SpecializeConfig {
     /// Maximum number of specializations per function (prevents blow-up).
     pub max_specializations_per_fn: usize,
     /// Maximum total specializations across the entire module.
@@ -106,7 +106,7 @@ impl std::hash::Hash for SpecKey {
 
 /// Statistics from the specialization pass.
 #[derive(Debug, Clone, Default)]
-pub struct SpecStats {
+pub(crate) struct SpecStats {
     /// Number of candidate functions found.
     pub candidates_found: usize,
     /// Number of call sites analyzed.
@@ -166,7 +166,10 @@ pub(crate) fn resolve_arg_type(arg: &IRArg, env: &TypeEnv) -> Option<IRType> {
 ///
 /// Returns the (potentially modified) declarations plus any generated
 /// specialized declarations, and statistics.
-pub fn specialize_ir(decls: &[IRDecl], config: &SpecializeConfig) -> (Vec<IRDecl>, SpecStats) {
+pub(crate) fn specialize_ir(
+    decls: &[IRDecl],
+    config: &SpecializeConfig,
+) -> (Vec<IRDecl>, SpecStats) {
     let mut stats = SpecStats::default();
 
     // Phase 1: Find candidate functions
@@ -276,7 +279,7 @@ pub fn specialize_ir(decls: &[IRDecl], config: &SpecializeConfig) -> (Vec<IRDecl
 
 /// Convenience wrapper with default configuration.
 #[must_use]
-pub fn specialize_ir_default(decls: &[IRDecl]) -> Vec<IRDecl> {
+pub(crate) fn specialize_ir_default(decls: &[IRDecl]) -> Vec<IRDecl> {
     let (result, _) = specialize_ir(decls, &SpecializeConfig::default());
     result
 }

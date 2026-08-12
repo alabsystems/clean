@@ -6,7 +6,7 @@
 //!
 //! When the unweighted additive sum is not contradictory but the certificate-
 //! weighted sum IS, this module scales each bound by its positive Farkas
-//! coefficient via repeated addition, then combines the scaled bounds.
+//! coefficient via a binary addition chain, then combines the scaled bounds.
 //!
 //! After building the weighted accumulator, reconstruction first tries a direct
 //! concrete contradiction on integer endpoints. If that fails, the weighted

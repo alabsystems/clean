@@ -510,7 +510,18 @@ pub mod __test_support {
             // handler in `clean-cli/src/cmd_run.rs` reuses the `compile` emit-C
             // bridge and links against `clean-runtime`, so it lives here rather
             // than in any single domain crate.
-            allowed_roots: &["repl", "sorry-trace", "sorry-census", "export-cert", "run"],
+            // `extract` is the companion width-1 differential-checked C
+            // pipeline. Its handler likewise composes the clean-cli compile
+            // closure, native build glue, and kernel-side evaluation, so the
+            // orchestration belongs to clean-cli rather than one domain crate.
+            allowed_roots: &[
+                "repl",
+                "sorry-trace",
+                "sorry-census",
+                "export-cert",
+                "run",
+                "extract",
+            ],
         },
         FeatureSource {
             name: "clean_cli::cli::bench::FEATURES",

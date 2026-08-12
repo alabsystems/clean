@@ -157,6 +157,7 @@ pub(crate) mod emit_trust_ir_runtime;
 #[cfg(feature = "trust-ir-backend")]
 pub mod emit_trust_ir_tv;
 pub mod error;
+pub mod extraction_ir;
 pub mod ffi_bridge;
 #[cfg(test)]
 pub(crate) mod ffi_bridge_ext;

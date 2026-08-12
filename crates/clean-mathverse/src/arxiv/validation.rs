@@ -76,8 +76,11 @@ pub struct CounterExampleCheck {
 /// Result of structural validation.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructuralCheck {
-    /// Whether the quantifier structure matches expectations.
-    pub quantifier_match: bool,
+    /// Quantifier-structure comparison against the original statement.
+    /// Currently ALWAYS `Skipped`: quantifier analysis is not implemented
+    /// (it needs the original statement, which `check_structural` is not
+    /// given), and an unperformed check must never read as a pass.
+    pub quantifier_match: CheckOutcome,
     /// Whether the type signature matches the domain.
     pub type_domain_match: bool,
     /// Specific issues found.
@@ -219,7 +222,16 @@ pub fn check_structural(lean_code: &str, kind: &str) -> StructuralCheck {
         ));
     }
 
-    let quantifier_match = true; // TODO: implement quantifier analysis
+    // Quantifier analysis (comparing the ∀/∃ structure of the formalization
+    // against the original statement) is not implemented, and cannot be from
+    // this signature alone — the original statement is not passed in. Report
+    // an explicit Skipped, never a silent pass, so no consumer can mistake
+    // "not analyzed" for "verified to match".
+    let quantifier_match = CheckOutcome::Skipped(
+        "quantifier analysis not implemented — quantifier structure was NOT \
+         compared against the original statement"
+            .to_string(),
+    );
     let type_domain_match = issues.is_empty();
 
     let outcome = if issues.is_empty() {
@@ -343,6 +355,21 @@ mod tests {
     }
 
     #[test]
+    fn test_quantifier_lane_is_explicit_skip_never_pass() {
+        // Quantifier analysis is unimplemented; the lane must report Skipped
+        // (loudly, with a reason), and must never read as a pass — even on a
+        // formalization whose other structural checks all pass.
+        let code = "def MyGroup (α : Type*) := Group α";
+        let result = check_structural(code, "definition");
+        assert!(result.outcome.is_pass());
+        assert!(
+            matches!(result.quantifier_match, CheckOutcome::Skipped(_)),
+            "unimplemented quantifier analysis must be an explicit Skipped"
+        );
+        assert!(!result.quantifier_match.is_pass());
+    }
+
+    #[test]
     fn test_validate_no_llm() {
         let code = "def PrimeSet : Set Nat := {p | Nat.Prime p}";
         let report = validate(code, "the set of prime numbers", "definition", true, false);
@@ -385,7 +412,7 @@ mod tests {
             outcome: CheckOutcome::Pass,
         });
         let st = Some(StructuralCheck {
-            quantifier_match: true,
+            quantifier_match: CheckOutcome::Skipped("not analyzed".to_string()),
             type_domain_match: true,
             issues: vec![],
             outcome: CheckOutcome::Pass,
@@ -402,7 +429,7 @@ mod tests {
             outcome: CheckOutcome::Fail("low similarity".to_string()),
         });
         let st = Some(StructuralCheck {
-            quantifier_match: true,
+            quantifier_match: CheckOutcome::Skipped("not analyzed".to_string()),
             type_domain_match: true,
             issues: vec![],
             outcome: CheckOutcome::Pass,

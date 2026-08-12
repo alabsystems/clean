@@ -12,7 +12,7 @@
 //! | census stays 11 | no declaration is a kernel `ConstantKind::Axiom` |
 //! | every relation is inhabited | `WITNESSES` present, `DerivedProved`, empty `axiom_deps` |
 //! | the bridge is not identity-on-syntax | `CtxRep` and `ExprRep` are real inductives with the expected constructors |
-//! | coverage stated as a fraction | exactly the four bridged rules exist, and the five blocked ones do NOT |
+//! | coverage stated as a fraction | exactly the eight bridged rules exist, the ninth is REFUTED, and the name `impl_bridge_lit` is never minted |
 
 use clean_kernel::env::ConstantKind;
 use clean_kernel::Name;
@@ -44,12 +44,27 @@ const EXPECTED_NAMES: &[&str] = &[
     "impl_bridge_sort",
     "impl_bridge_mdata",
     "impl_bridge_const",
+    "impl_bridge_app",
+    "impl_bridge_lam",
+    "impl_bridge_pi",
+    "impl_bridge_let_core",
+    "impl_bridge_let",
+    // the ninth rule, refuted rather than bridged
+    "KNotLit",
+    "kernelinfers_lit_rejects",
+    "impl_bridge_lit_refuted",
+    "impl_bridge_lit_unprovable",
     // the closed-level fact
     "ctx_rep_nil_lookup_empty",
 ];
 
 /// Non-vacuity witnesses: every relation and every bridge lemma fired on a
 /// concrete instance.
+///
+/// `impl_bridge_app_witness` is deliberately NOT here: firing the app arm needs
+/// proofs of its three `forall`-premises, which are M4's own theorems, so that
+/// witness lives in `add_kinfers_bridge_arms` and is gated by
+/// `impl_infer_sound_tests`. Every other arm fires in-stage.
 const WITNESSES: &[&str] = &[
     "expr_rep_sort_witness",
     "ctx_rep_nil_witness",
@@ -58,28 +73,39 @@ const WITNESSES: &[&str] = &[
     "impl_bridge_sort_witness",
     "impl_bridge_mdata_witness",
     "impl_bridge_const_witness",
+    "impl_bridge_lam_witness",
+    "impl_bridge_pi_witness",
+    "impl_bridge_let_witness",
 ];
 
-/// The four `ImplInfer` rules this lane bridges — stated as a fraction of nine,
-/// never rounded up.
+/// The eight `ImplInfer` rules this lane bridges into `KernelInfers` — stated as
+/// a fraction of nine, never rounded up.
 const BRIDGED_RULES: &[&str] = &[
     "impl_bridge_sort",
     "impl_bridge_fvar",
     "impl_bridge_const",
     "impl_bridge_mdata",
-];
-
-/// The five rules that are NOT bridged. Asserting their ABSENCE is what keeps
-/// the coverage fraction honest: a future edit that adds one of these names
-/// without a proof, or that quietly renames a blocked rule into a bridged one,
-/// fails here.
-const BLOCKED_RULES: &[&str] = &[
+    "impl_bridge_app",
     "impl_bridge_lam",
     "impl_bridge_pi",
     "impl_bridge_let",
-    "impl_bridge_app",
-    "impl_bridge_lit",
 ];
+
+/// The ninth rule is REFUTED, not bridged. These three must exist and be real
+/// proofs; `impl_bridge_lit_unprovable` is the decisive one — it takes the
+/// would-be type of the rule and returns `Empty`.
+const REFUTATION: &[&str] = &[
+    "kernelinfers_lit_rejects",
+    "impl_bridge_lit_refuted",
+    "impl_bridge_lit_unprovable",
+];
+
+/// The name that must NEVER be minted. Asserting its absence is what keeps the
+/// fraction honest: `impl_bridge_lit_unprovable` proves that registering a
+/// declaration with that statement would make the specification inconsistent,
+/// so a future edit that adds the name — with or without a value — is a defect,
+/// not progress.
+const NEVER_MINTED: &[&str] = &["impl_bridge_lit"];
 
 #[test]
 fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
@@ -170,7 +196,7 @@ fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
         fvar_bridge.type_src
     );
 
-    // ── coverage as a fraction: four of nine, and the other five are ABSENT ─
+    // ── coverage as a fraction: EIGHT of nine bridged ───────────────────────
     for name in BRIDGED_RULES {
         let def = defs
             .get(*name)
@@ -179,19 +205,107 @@ fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
             def.value_src.is_some() && def.axiom_deps.is_empty(),
             "bridged rule `{name}` must be a valued, axiom-free proof"
         );
+        assert!(
+            def.type_src.contains("KernelInfers"),
+            "bridged rule `{name}` must land in the KernelInfers codomain — that is the \
+             codomain that PINS the returned type, which TypingCtxConv does not; got: {}",
+            def.type_src
+        );
     }
     assert_eq!(
         BRIDGED_RULES.len(),
-        4,
-        "C4 bridges FOUR of ImplInfer's nine rules; the fraction is 4/9 and must not be \
-         rounded up"
+        8,
+        "C4 bridges EIGHT of ImplInfer's nine rules; the fraction is 8/9 with the ninth \
+         REFUTED, and must not be rounded up to 9"
     );
-    for name in BLOCKED_RULES {
+
+    // ── the three binder rules are representation-sensitive AT the binder ───
+    // Each must translate its body under the EXTENDED renaming `cons Nat x rho`
+    // and its layer-2 context extended by the translated domain. A rule that
+    // used the un-extended renaming under the binder would be the cofinite-free
+    // discipline silently dropped.
+    for name in ["impl_bridge_lam", "impl_bridge_pi", "impl_bridge_let_core"] {
+        let def = defs.get(name).unwrap_or_else(|| panic!("`{name}` missing"));
+        assert!(
+            def.type_src.contains("ListType.cons Nat x rho")
+                && def.type_src.contains("impl_open b x"),
+            "binder rule `{name}` must run its body IH at the EXTENDED renaming on the \
+             OPENED body — that is the freshness discipline; got: {}",
+            def.type_src
+        );
+    }
+    // The lam and let_ arms abstract the body type back; pi does not, because a
+    // Pi's result is a sort. Asserting the asymmetry keeps it from drifting.
+    for name in ["impl_bridge_lam", "impl_bridge_let_core"] {
+        let def = defs.get(name).unwrap_or_else(|| panic!("`{name}` missing"));
+        assert!(
+            def.type_src.contains("impl_abstract_fvar bt x"),
+            "`{name}` must carry the abstract commutation for its body TYPE"
+        );
+    }
+    assert!(
+        !defs
+            .get("impl_bridge_pi")
+            .expect("impl_bridge_pi missing")
+            .type_src
+            .contains("impl_abstract_fvar"),
+        "impl_bridge_pi must NOT carry an abstract commutation — a Pi's result is a sort, \
+         so there is nothing to abstract back"
+    );
+    // The app arm matches KernelInfers.app premise for premise: both operational
+    // premises are copied verbatim from ImplInfer.app, not restated in layer-2
+    // form.
+    let app_bridge = defs
+        .get("impl_bridge_app")
+        .expect("impl_bridge_app missing");
+    assert!(
+        app_bridge
+            .type_src
+            .contains("ImplWhnfTo F (ImplExpr.pi bd A B)")
+            && app_bridge.type_src.contains("ImplIsLe A2 A"),
+        "the app bridge must carry ImplInfer.app's operational premises VERBATIM and \
+         convert them inside the proof; got: {}",
+        app_bridge.type_src
+    );
+
+    // ── the ninth rule: REFUTED, and the name never minted ──────────────────
+    for name in REFUTATION {
+        let def = defs
+            .get(*name)
+            .unwrap_or_else(|| panic!("refutation declaration `{name}` is missing"));
+        assert!(
+            def.value_src.is_some() && !def.is_axiom && def.axiom_deps.is_empty(),
+            "`{name}` must be a valued, axiom-free proof — a value-less refutation would \
+             be an axiom asserting the very impossibility it claims to prove"
+        );
+        assert!(
+            def.type_src.contains("Empty"),
+            "`{name}` must CONCLUDE at Empty; got: {}",
+            def.type_src
+        );
+    }
+    // The decisive one takes the would-be statement of the rule — ImplInfer.lit
+    // has zero premises and concludes at `impl_lit_type lt`, so the rule's type
+    // is exactly that forall-closure — and returns Empty.
+    let unprovable = defs
+        .get("impl_bridge_lit_unprovable")
+        .expect("impl_bridge_lit_unprovable is the decisive statement");
+    assert!(
+        unprovable.type_src.contains(
+            "KernelInfers tenv G (to_kexpr (ImplExpr.lit lt) rho) \
+                      (to_kexpr (impl_lit_type lt) rho)"
+        ),
+        "impl_bridge_lit_unprovable must assume EXACTLY the type impl_bridge_lit would \
+         have had — otherwise it refutes something else; got: {}",
+        unprovable.type_src
+    );
+    for name in NEVER_MINTED {
         assert!(
             !defs.contains_key(*name),
-            "`{name}` exists, but the module header records that rule as BLOCKED. Either the \
-             blocker was cleared (update the header, the coverage fraction and this list) or a \
-             name was minted without a proof"
+            "`{name}` exists, but impl_bridge_lit_unprovable proves that statement yields \
+             Empty — registering it would make the specification inconsistent. Either a \
+             literal rule was added to KernelInfers (in which case update the refutation, \
+             the header and this gate) or a name was minted without a proof"
         );
     }
 }

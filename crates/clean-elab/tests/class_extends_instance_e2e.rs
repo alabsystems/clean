@@ -268,20 +268,33 @@ fn b24_wrong_value_pin_rejects() {
 /// NOT assembled — it fails LOUDLY (unknown/missing field), never silently
 /// wrong. The direct-parent field still assembles.
 #[test]
-fn b24_multilevel_grandparent_field_descoped_loud() {
-    // `gp` is A's field, reachable on B (B.gp derived), but NOT on C — C only
-    // re-exposes B's direct field table [toA, mid], not the transitively
-    // inherited `gp`. Providing `gp` flat in the C instance is a loud reject.
+fn b24_multilevel_grandparent_field_flattens() {
+    // HISTORY: this was `b24_multilevel_grandparent_field_descoped_loud`, and
+    // pinned the opposite verdict. When B24 landed, C re-exposed only B's
+    // DIRECT field table `[toA, mid]`, so providing the transitively inherited
+    // `gp` flat in a C instance was a loud reject — the right-reason descope.
+    //
+    // That descope has since been closed (the capability landed elsewhere in
+    // the 495 clean-elab commits after this file was written; the pin simply
+    // went stale and started failing as an `expect_fail` that no longer
+    // failed). Lean 4 flattens grandparent fields in instance-`where` blocks,
+    // so ACCEPTING this is the Lean-faithful verdict.
+    //
+    // The pin is therefore inverted rather than deleted, and — this is the
+    // part that matters — it asserts the assembly is CORRECT, not merely that
+    // it is accepted. Each field must project back to the value it was given,
+    // `gp` through TWO subobject hops (C → B → A). A stale descope pin flipped
+    // green on "it stopped failing" would prove nothing; these `rfl`s are
+    // re-checked by the real kernel.
     let src = "class A where\n  gp : Nat\n\n\
                class B extends A where\n  mid : Nat\n\n\
                class C extends B where\n  lo : Nat\n\n\
-               instance : C where\n  gp := 1\n  mid := 2\n  lo := 3\n";
-    let err = expect_fail(src);
-    assert!(
-        err.to_lowercase().contains("gp")
-            || err.to_lowercase().contains("unknown")
-            || err.to_lowercase().contains("missing")
-            || err.to_lowercase().contains("field"),
-        "grandparent field `gp` on C must fail loudly (multi-level descope), got: {err}"
-    );
+               instance : C where\n  gp := 1\n  mid := 2\n  lo := 3\n\n\
+               theorem p_lo : C.lo = 3 := rfl\n\
+               theorem p_mid : B.mid = 2 := rfl\n\
+               theorem p_gp : A.gp = 1 := rfl\n";
+    let env = expect_pass(src);
+    for t in ["p_lo", "p_mid", "p_gp"] {
+        assert_empty_axiom_closure(&env, t);
+    }
 }

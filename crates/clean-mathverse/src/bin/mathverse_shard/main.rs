@@ -108,6 +108,17 @@ fn main() {
             }
             coq_import_command::cmd_coq_import(&args[2..]);
         }
+        "lint-levels" => {
+            if args.len() < 3 {
+                eprintln!("Usage: mathverse_shard lint-levels <shard-dir> [--strict]");
+                std::process::exit(1);
+            }
+            let strict = args.iter().any(|a| a == "--strict");
+            std::process::exit(verify_commands::cmd_lint_levels(
+                Path::new(&args[2]),
+                strict,
+            ));
+        }
         "stamp" => {
             if args.len() < 3 {
                 eprintln!(
@@ -227,6 +238,7 @@ fn cmd_build(args: &[String]) {
         shard_size_limit: opts.shard_size,
         max_file_size: opts.max_file_size,
         verbose: opts.verbose,
+        ..BuildConfig::default()
     };
 
     let start = Instant::now();

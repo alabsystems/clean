@@ -23,7 +23,7 @@ use clean_kernel::Name;
 /// Calling convention for an FFI function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum AbiKind {
+pub(crate) enum AbiKind {
     /// Standard C calling convention.
     C,
     /// `__cdecl` (caller cleans stack, default on most x86 compilers).
@@ -39,7 +39,7 @@ pub enum AbiKind {
 /// FFI type — the set of types expressible at the Lean/native boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum FfiType {
+pub(crate) enum FfiType {
     /// Lean heap object (`clean_obj*`).
     LeanObj,
     /// Lean `Nat` (arbitrary precision, boxed).
@@ -74,7 +74,7 @@ pub enum FfiType {
 
 /// A single FFI function parameter.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FfiParam {
+pub(crate) struct FfiParam {
     /// Parameter name.
     pub name: String,
     /// Parameter FFI type.
@@ -85,7 +85,7 @@ pub struct FfiParam {
 
 /// An FFI function declaration with full type and ABI information.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FfiFunction {
+pub(crate) struct FfiFunction {
     /// The Lean-side declaration name.
     pub lean_name: Name,
     /// The external symbol name.
@@ -102,7 +102,7 @@ pub struct FfiFunction {
 
 /// Configuration for extended FFI bridge operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FfiBridgeExtConfig {
+pub(crate) struct FfiBridgeExtConfig {
     /// Whether to generate wrapper IR declarations.
     pub generate_wrappers: bool,
     /// Whether to check ABI compatibility.
@@ -127,7 +127,7 @@ impl Default for FfiBridgeExtConfig {
 /// Severity of an ABI mismatch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum MismatchSeverity {
+pub(crate) enum MismatchSeverity {
     /// Hard error: the call would be undefined behaviour.
     Error,
     /// Warning: the call may work but is not guaranteed.
@@ -138,7 +138,7 @@ pub enum MismatchSeverity {
 
 /// A single ABI mismatch between an `FfiFunction` and an `IRDecl`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AbiMismatch {
+pub(crate) struct AbiMismatch {
     /// Parameter index (None for return type mismatches).
     pub param_index: Option<usize>,
     /// Description of the expected type/convention.
@@ -153,7 +153,7 @@ pub struct AbiMismatch {
 /// boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum MarshalingStep {
+pub(crate) enum MarshalingStep {
     /// Box a Lean object pointer into a heap-managed value.
     BoxToPtr,
     /// Unbox a heap-managed pointer back to a Lean object.
@@ -176,7 +176,7 @@ pub enum MarshalingStep {
 
 /// Map an IR type to the corresponding FFI type.
 #[must_use]
-pub fn ir_type_to_ffi(ir_type: &IRType) -> FfiType {
+pub(crate) fn ir_type_to_ffi(ir_type: &IRType) -> FfiType {
     match ir_type {
         IRType::Bool => FfiType::Bool,
         IRType::UInt8 => FfiType::UInt8,
@@ -194,7 +194,7 @@ pub fn ir_type_to_ffi(ir_type: &IRType) -> FfiType {
 
 /// Map an FFI type to its C type declaration string.
 #[must_use]
-pub fn ffi_type_to_c(ffi_type: &FfiType) -> String {
+pub(crate) fn ffi_type_to_c(ffi_type: &FfiType) -> String {
     match ffi_type {
         FfiType::LeanObj => "clean_obj*".into(),
         FfiType::Nat => "clean_obj*".into(),
@@ -216,7 +216,7 @@ pub fn ffi_type_to_c(ffi_type: &FfiType) -> String {
 
 /// Map an FFI type to its Rust type declaration string.
 #[must_use]
-pub fn ffi_type_to_rust(ffi_type: &FfiType) -> String {
+pub(crate) fn ffi_type_to_rust(ffi_type: &FfiType) -> String {
     match ffi_type {
         FfiType::LeanObj => "*mut clean_obj".into(),
         FfiType::Nat => "*mut clean_obj".into(),
@@ -265,7 +265,7 @@ pub(crate) fn marshaling_step_for(ffi_type: &FfiType) -> MarshalingStep {
 
 /// Generate the full list of marshaling steps for an `FfiFunction`.
 #[must_use]
-pub fn generate_marshaling_code(func: &FfiFunction) -> Vec<MarshalingStep> {
+pub(crate) fn generate_marshaling_code(func: &FfiFunction) -> Vec<MarshalingStep> {
     func.params
         .iter()
         .map(|p| marshaling_step_for(&p.ffi_type))
@@ -280,7 +280,7 @@ pub fn generate_marshaling_code(func: &FfiFunction) -> Vec<MarshalingStep> {
 ///
 /// Returns `Ok(())` when the declaration is compatible, or a list of
 /// mismatches describing every discrepancy found.
-pub fn check_abi_compatibility(
+pub(crate) fn check_abi_compatibility(
     func: &FfiFunction,
     ir_decl: &IRDecl,
 ) -> Result<(), Vec<AbiMismatch>> {
@@ -357,7 +357,10 @@ fn ffi_types_compatible(a: &FfiType, b: &FfiType) -> bool {
 /// additional null-pointer guard logic is emitted (as `Unreachable`
 /// fallback for now — a future pass can lower this to runtime checks).
 #[must_use]
-pub fn generate_ffi_wrappers(funcs: &[FfiFunction], config: &FfiBridgeExtConfig) -> Vec<IRDecl> {
+pub(crate) fn generate_ffi_wrappers(
+    funcs: &[FfiFunction],
+    config: &FfiBridgeExtConfig,
+) -> Vec<IRDecl> {
     if !config.generate_wrappers {
         return Vec::new();
     }

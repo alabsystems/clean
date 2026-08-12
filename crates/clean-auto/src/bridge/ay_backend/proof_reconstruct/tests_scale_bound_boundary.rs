@@ -29,10 +29,9 @@ fn mk_int_ofnat_expr(n: u64) -> Expr {
 
 #[test]
 fn test_scale_bound_coefficient_1000_completes_within_resource_limits() {
-    // Boundary test: coefficient 1000 produces a proof term with ~1000 nested
-    // additions. This verifies the loop terminates in reasonable time and
-    // doesn't OOM. In practice, ay Farkas coefficients after LCM
-    // rationalization are almost always < 100, but the code path has no cap.
+    // Boundary test: coefficient 1000 exercises the uncapped binary addition
+    // chain. In practice, ay Farkas coefficients after LCM rationalization are
+    // almost always < 100, but larger inputs must remain logarithmic in depth.
     let lhs = mk_int_ofnat_expr(1);
     let rhs = mk_int_ofnat_expr(2);
     let hyp = mk_var_expr("h");
@@ -67,8 +66,7 @@ fn test_scale_bound_coefficient_2_boundary() {
 
 #[test]
 fn test_scale_bound_coefficient_3_extends_base() {
-    // Boundary: coefficient 3 is the first value that enters the for-loop
-    // (the loop range is 2..coeff, so k=3 runs 1 iteration).
+    // Boundary: coefficient 3 combines the unit and doubled accumulators.
     let lhs = mk_int_ofnat_expr(1);
     let rhs = mk_int_ofnat_expr(2);
     let hyp = mk_var_expr("h");

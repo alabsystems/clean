@@ -357,6 +357,273 @@ impl Specification {
 
         self.add_binder_arms()?;
         self.add_scoping()?;
+        self.add_kinfers_bridge_arms()?;
+        Ok(())
+    }
+
+    /// The C4 bridge arms that could not be STATED at the C4 stage, and the C4
+    /// app witness that could not be FIRED there.
+    ///
+    /// `add_ctx_rep` runs before `add_impl_infer_sound` (`bundles.rs`), and M4
+    /// consumes C4's `to_kexpr_at` / `rho_index` / `CtxRep`, so the order cannot
+    /// be swapped. Every lemma that converts a layer-1 operational premise
+    /// (`impl_whnf_to_whnf_to`, `impl_is_le_defeq`) or discharges a translation
+    /// equation (`to_kexpr_open`, `to_kexpr_abstract`, `to_kexpr_at_instantiate`)
+    /// is registered HERE, so the `ctx_rep.rs` arms carry those facts as explicit
+    /// premises and this function supplies them.
+    ///
+    /// Registered last in `add_sound_arms` on purpose: `to_kexpr_open` comes from
+    /// `add_scoping`, `to_kexpr_abstract` from `add_abstract_commutation` and
+    /// `ImplLC` from `add_impl_lift_lc`, all of which run inside that call. A
+    /// scratchpad run cannot see any of this — it builds the whole spec and only
+    /// then appends candidates — which is precisely the trap `bundles.rs` records
+    /// two lost cycles to.
+    fn add_kinfers_bridge_arms(&mut self) -> Result<(), SpecError> {
+        // The lam arm C4 could not state faithfully, restated here.
+        //
+        // ctx_rep.rs impl_bridge_lam carries its whnf premise in already-
+        // converted layer-2 form because impl_whnf_to_whnf_to is registered by
+        // THIS stage, which runs after add_ctx_rep (bundles.rs). Everything
+        // below is the same rule with the layer-1 premises put back.
+        self.add_definition(SpecDefinition {
+            name: "impl_kinfers_lam".to_string(),
+            type_src: concat!(
+                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
+                "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
+                ": ImplExpr) (l : Level) (bt : ImplExpr), KernelInfers tenv G (to_kexpr A ",
+                "rho) (to_kexpr S rho) -> ImplWhnfTo S (ImplExpr.sort l) -> KernelInfers ",
+                "tenv (ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr (impl_open b x) ",
+                "(ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat x rho)) -> Eq ",
+                "KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr_at b ",
+                "rho (Nat.succ Nat.zero)) -> Eq KExpr (to_kexpr bt (ListType.cons Nat x ",
+                "rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) -> ",
+                "KernelInfers tenv G (to_kexpr (ImplExpr.lam bd A b) rho) (to_kexpr ",
+                "(ImplExpr.pi bd A (impl_abstract_fvar bt x)) rho)",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
+                    "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
+                    "ImplExpr) (l : Level) (bt : ImplExpr) (ihA : KernelInfers tenv G (to_kexpr ",
+                    "A rho) (to_kexpr S rho)) (hs : ImplWhnfTo S (ImplExpr.sort l)) (ihb : ",
+                    "KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
+                    "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat ",
+                    "x rho))) (hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x ",
+                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : Eq KExpr (to_kexpr ",
+                    "bt (ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                    "(Nat.succ Nat.zero))) => impl_bridge_lam tenv G rho x bd A b S l bt ihA ",
+                    "(impl_whnf_to_whnf_to rho S (ImplExpr.sort l) hs (is_whnf.sort l)) ihb ",
+                    "hopen habs",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "C4 impl_bridge_lam with its whnf premise restored to the FAITHFUL layer-1 ",
+                "form: ImplWhnfTo S (ImplExpr.sort l), copied verbatim from ImplInfer.lam ",
+                "and converted inside the proof by impl_whnf_to_whnf_to. It has to live here ",
+                "rather than in ctx_rep.rs for one reason and it is stage order: add_ctx_rep ",
+                "runs BEFORE add_impl_infer_sound (bundles.rs), so that lemma is not in ",
+                "scope there. impl_whnf_to_whnf_to is_whnf obligation is free at this use ",
+                "site — the reduct is literally a sort, so is_whnf.sort applies, the same ",
+                "way the app arm gets is_whnf.pi for free. Zero axiom_deps.",
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "impl_bridge_lam".to_string(),
+                "impl_whnf_to_whnf_to".to_string(),
+                "is_whnf.sort".to_string(),
+                "ImplWhnfTo".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "impl_kinfers_lam_scoped".to_string(),
+            type_src: concat!(
+                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
+                "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
+                ": ImplExpr) (l : Level) (bt : ImplExpr), ImplScoped x b Nat.zero -> ImplLC ",
+                "bt Nat.zero -> KernelInfers tenv G (to_kexpr A rho) (to_kexpr S rho) -> ",
+                "ImplWhnfTo S (ImplExpr.sort l) -> KernelInfers tenv (ListType.cons KExpr ",
+                "(to_kexpr A rho) G) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (ListType.cons Nat x rho)) -> KernelInfers tenv G (to_kexpr ",
+                "(ImplExpr.lam bd A b) rho) (to_kexpr (ImplExpr.pi bd A (impl_abstract_fvar ",
+                "bt x)) rho)",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
+                    "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
+                    "ImplExpr) (l : Level) (bt : ImplExpr) (hsc : ImplScoped x b Nat.zero) (hlc ",
+                    ": ImplLC bt Nat.zero) (ihA : KernelInfers tenv G (to_kexpr A rho) (to_kexpr ",
+                    "S rho)) (hs : ImplWhnfTo S (ImplExpr.sort l)) (ihb : KernelInfers tenv ",
+                    "(ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr (impl_open b x) ",
+                    "(ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat x rho))) => ",
+                    "impl_kinfers_lam tenv G rho x bd A b S l bt ihA hs ihb (to_kexpr_open rho x ",
+                    "b Nat.zero hsc) (to_kexpr_abstract rho x bt Nat.zero hlc)",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "The lam arm with ZERO equational premises — the KernelInfers-codomain ",
+                "analogue of impl_sound_lam_scoped. Both syntactic equations are discharged, ",
+                "hopen by to_kexpr_open from ImplScoped x b 0 and habs by to_kexpr_abstract ",
+                "from ImplLC bt 0, so what remains is SCOPING: genuine invariants of the ",
+                "deployed checker (next_id is incremented on every push and never rewound, ",
+                "tc/local_context.rs), not unproved equations. The depth-0 instantiation is ",
+                "definitional on both sides: impl_open b x IS impl_instantiate_at b (fvar x) ",
+                "0 and impl_abstract_fvar bt x IS impl_abstract_at bt x 0. Zero axiom_deps.",
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "impl_kinfers_lam".to_string(),
+                "to_kexpr_open".to_string(),
+                "to_kexpr_abstract".to_string(),
+                "ImplScoped".to_string(),
+                "ImplLC".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "impl_bridge_pi_scoped".to_string(),
+            type_src: concat!(
+                "forall (tenv : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 ",
+                ": ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ImplScoped x b ",
+                "Nat.zero -> ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplWhnfTo S2 ",
+                "(ImplExpr.sort l2) -> KernelInfers tenv Gk (to_kexpr A rho) (to_kexpr S1 ",
+                "rho) -> KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr S2 ",
+                "(ListType.cons Nat x rho)) -> KernelInfers tenv Gk (to_kexpr (ImplExpr.pi ",
+                "bd A b) rho) (to_kexpr (ImplExpr.sort (Level.imax l1 l2)) rho)",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (tenv : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ListType ",
+                    "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 : ",
+                    "ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) (hsc : ImplScoped x b ",
+                    "Nat.zero) (hs1 : ImplWhnfTo S1 (ImplExpr.sort l1)) (hs2 : ImplWhnfTo S2 ",
+                    "(ImplExpr.sort l2)) (ihA : KernelInfers tenv Gk (to_kexpr A rho) (to_kexpr ",
+                    "S1 rho)) (ihb : KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr S2 ",
+                    "(ListType.cons Nat x rho))) => impl_bridge_pi tenv Gk rho x bd A b S1 S2 l1 ",
+                    "l2 ihA (impl_whnf_to_whnf_to rho S1 (ImplExpr.sort l1) hs1 (is_whnf.sort ",
+                    "l1)) ihb (impl_whnf_to_whnf_to (ListType.cons Nat x rho) S2 (ImplExpr.sort ",
+                    "l2) hs2 (is_whnf.sort l2)) (to_kexpr_open rho x b Nat.zero hsc)",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "The pi arm with every operational and equational premise discharged — the ",
+                "KernelInfers-codomain analogue of impl_sound_pi_scoped. Both ImplWhnfTo ",
+                "premises are converted by impl_whnf_to_whnf_to with is_whnf.sort for free, ",
+                "and the SECOND runs at the EXTENDED renaming (cons x rho), which is exactly ",
+                "why that lemma is stated for all rho. What remains is one scoping ",
+                "hypothesis, ImplScoped x b 0 — and no ImplLC, because a Pi result type is a ",
+                "sort and there is nothing to abstract back. Zero axiom_deps.",
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "impl_bridge_pi".to_string(),
+                "impl_whnf_to_whnf_to".to_string(),
+                "to_kexpr_open".to_string(),
+                "ImplScoped".to_string(),
+                "ImplWhnfTo".to_string(),
+                "is_whnf.sort".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // The C4 app bridge, fired — and it can only be fired HERE.
+        //
+        // impl_bridge_app three forall-premises are this stage own
+        // impl_whnf_to_whnf_to / impl_is_le_defeq / to_kexpr_at_instantiate.
+        // Supplying them is what turns the C4 rule into a closed derivation, so
+        // the witness cannot sit with the other C4 witnesses.
+        self.add_definition(SpecDefinition {
+            name: "impl_bridge_app_witness".to_string(),
+            type_src: concat!(
+                "KernelInfers (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                "KExpr) (KExpr.app (KExpr.lam (KExpr.sort (Level.succ Level.zero)) ",
+                "(KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort (Level.succ ",
+                "Level.zero))",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "impl_bridge_app (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "KExpr) (ListType.nil Nat) (ImplExpr.lam (BinderData.mk BinderInfo.default ",
+                    "Multiplicity.many) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort ",
+                    "Level.zero)) (ImplExpr.sort Level.zero) (ImplExpr.pi (BinderData.mk ",
+                    "BinderInfo.default Multiplicity.many) (ImplExpr.sort (Level.succ ",
+                    "Level.zero)) (ImplExpr.sort (Level.succ Level.zero))) (BinderData.mk ",
+                    "BinderInfo.default Multiplicity.many) (ImplExpr.sort (Level.succ ",
+                    "Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort ",
+                    "(Level.succ Level.zero)) impl_whnf_to_whnf_to impl_is_le_defeq ",
+                    "to_kexpr_at_instantiate (KernelInfers.lam (fun (nm : Name) => ",
+                    "OptionType.none KExpr) (ListType.nil KExpr) (KExpr.sort (Level.succ ",
+                    "Level.zero)) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero)) ",
+                    "(KExpr.sort (Level.succ (Level.succ Level.zero))) (Level.succ (Level.succ ",
+                    "Level.zero)) (KernelInfers.sort (fun (nm : Name) => OptionType.none KExpr) ",
+                    "(ListType.nil KExpr) (Level.succ Level.zero)) (whnf_to.refl (KExpr.sort ",
+                    "(Level.succ (Level.succ Level.zero))) (is_whnf.sort (Level.succ (Level.succ ",
+                    "Level.zero)))) (KernelInfers.sort (fun (nm : Name) => OptionType.none ",
+                    "KExpr) (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) ",
+                    "(ListType.nil KExpr)) Level.zero)) (ImplWhnfTo.done (ImplExpr.pi ",
+                    "(BinderData.mk BinderInfo.default Multiplicity.many) (ImplExpr.sort ",
+                    "(Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)))) ",
+                    "(KernelInfers.sort (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "KExpr) Level.zero) (ImplIsLe.refl (ImplExpr.sort (Level.succ Level.zero)))",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "C4 app bridge FIRED, and it has to live at this stage rather than in ",
+                "add_ctx_rep_witnesses: firing impl_bridge_app requires proofs of its three ",
+                "universally quantified premises, and those ARE this stage three theorems — ",
+                "they are not constructible earlier. This is the one place the app arm ",
+                "coverage story differs from sort/fvar/const/mdata/lam/pi/let_, which all ",
+                "fire in-stage. The instance is the beta-redex (fun _ : Sort 1 => Sort 0) ",
+                "(Sort 0) in the empty environment and empty context, landing at KExpr.sort ",
+                "(succ 0); every remaining premise is a constructor application, so nothing ",
+                "is assumed. Zero axiom_deps.",
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "impl_bridge_app".to_string(),
+                "impl_whnf_to_whnf_to".to_string(),
+                "impl_is_le_defeq".to_string(),
+                "to_kexpr_at_instantiate".to_string(),
+                "KernelInfers.lam".to_string(),
+                "ImplWhnfTo.done".to_string(),
+                "ImplIsLe.refl".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
         Ok(())
     }
 

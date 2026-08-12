@@ -27,7 +27,12 @@ pub(crate) fn cmd_verify_kernel(args: &[String]) {
     };
 
     if opts.corpus {
-        cmd_verify_corpus(&opts.shard_dir, opts.emit_verified.as_deref());
+        cmd_verify_corpus(
+            &opts.shard_dir,
+            opts.emit_verified.as_deref(),
+            opts.repair_levels,
+            opts.elide_proofs,
+        );
         return;
     }
 
@@ -57,6 +62,8 @@ struct VerifyKernelOpts {
     corpus: bool,
     per_constant: bool,
     emit_verified: Option<PathBuf>,
+    repair_levels: bool,
+    elide_proofs: clean_kernel::env::ProofValueElision,
 }
 
 fn parse_verify_kernel_args(args: &[String]) -> Result<VerifyKernelOpts, String> {
@@ -67,6 +74,8 @@ fn parse_verify_kernel_args(args: &[String]) -> Result<VerifyKernelOpts, String>
     let mut corpus = false;
     let mut per_constant = false;
     let mut emit_verified: Option<PathBuf> = None;
+    let mut repair_levels = false;
+    let mut elide_proofs = clean_kernel::env::ProofValueElision::None;
 
     for arg in args {
         if arg == "--native" {
@@ -75,8 +84,24 @@ fn parse_verify_kernel_args(args: &[String]) -> Result<VerifyKernelOpts, String>
             incremental = true;
         } else if arg == "--corpus" {
             corpus = true;
+        } else if arg == "--repair-levels" {
+            repair_levels = true;
         } else if arg == "--per-constant" {
             per_constant = true;
+        } else if let Some(val) = arg.strip_prefix("--elide-proofs=") {
+            // Bounds resident memory for a whole-corpus pass by dropping
+            // already-verified proof VALUES. `opaque` is statically sound;
+            // `theorem` also drops theorem proofs and must be validated by an
+            // unchanged kernel-verified count vs a non-elided run.
+            elide_proofs = match val {
+                "opaque" => clean_kernel::env::ProofValueElision::OpaqueOnly,
+                "theorem" => clean_kernel::env::ProofValueElision::OpaqueAndTheorem,
+                other => {
+                    return Err(format!(
+                        "Unknown --elide-proofs value '{other}' (expected 'opaque' or 'theorem')"
+                    ))
+                }
+            };
         } else if let Some(val) = arg.strip_prefix("--json=") {
             json_output = Some(PathBuf::from(val));
         } else if let Some(val) = arg.strip_prefix("--emit-verified=") {
@@ -117,6 +142,10 @@ fn parse_verify_kernel_args(args: &[String]) -> Result<VerifyKernelOpts, String>
         return Err("Error: --emit-verified=<path> requires --corpus".to_string());
     }
 
+    if elide_proofs != clean_kernel::env::ProofValueElision::None && !corpus {
+        return Err("Error: --elide-proofs=<opaque|theorem> requires --corpus".to_string());
+    }
+
     Ok(VerifyKernelOpts {
         shard_dir,
         json_output,
@@ -125,6 +154,8 @@ fn parse_verify_kernel_args(args: &[String]) -> Result<VerifyKernelOpts, String>
         corpus,
         per_constant,
         emit_verified,
+        repair_levels,
+        elide_proofs,
     })
 }
 
@@ -296,6 +327,74 @@ fn print_kernel_per_system(report: &clean_mathverse::shard_verify::VerifyReport)
     }
 }
 
+/// Fast, kernel-free release gate: audit every shard's level-parameter windows
+/// for the dedup-contiguity corruption (see [`clean_mathverse::shard_integrity`]).
+/// Returns a process exit code (0 = clean, non-zero = corruption found under
+/// `--strict`, or usage error). This catches — in seconds — the exact defect
+/// that otherwise only surfaces as hundreds of thousands of `UndefinedLevelParam`
+/// kernel-verification failures on a full corpus.
+pub(crate) fn cmd_lint_levels(shard_dir: &Path, strict: bool) -> i32 {
+    use clean_mathverse::shard::ShardReader;
+    use clean_mathverse::shard_integrity::audit_level_param_integrity;
+    use clean_mathverse::shard_verify::discover_mathverse_files;
+
+    println!("=== Mathverse Level-Parameter Integrity Audit ===");
+    println!("  Directory: {}\n", shard_dir.display());
+
+    let mathverse_files = discover_mathverse_files(shard_dir);
+    if mathverse_files.is_empty() {
+        eprintln!("  No .mathverse files found in {}", shard_dir.display());
+        return 1;
+    }
+
+    let mut any_corrupt = false;
+    let (mut tot_with, mut tot_bad) = (0usize, 0usize);
+    for path in &mathverse_files {
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        let reader = match ShardReader::from_file(path) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("  SKIP {name}: {e}");
+                continue;
+            }
+        };
+        let report = audit_level_param_integrity(&reader);
+        tot_with += report.with_params;
+        tot_bad += report.corrupt;
+        println!(
+            "  {name}: {} with level-params, {} corrupt ({:.1}%)",
+            report.with_params,
+            report.corrupt,
+            report.corrupt_rate() * 100.0,
+        );
+        if !report.is_clean() {
+            any_corrupt = true;
+            for c in report.sample.iter().take(5) {
+                println!("      e.g. {} -> {:?}", c.constant, c.params);
+            }
+        }
+    }
+
+    let rate = if tot_with == 0 {
+        0.0
+    } else {
+        tot_bad as f64 / tot_with as f64 * 100.0
+    };
+    println!("\n  Total: {tot_with} with level-params, {tot_bad} corrupt ({rate:.1}%)");
+    if any_corrupt {
+        println!(
+            "  LEVEL-PARAM CORRUPTION DETECTED — this shard set must be rebuilt with a \
+             contiguous level-param writer (add_string_block); see shard_integrity."
+        );
+        if strict {
+            return 2;
+        }
+    } else {
+        println!("  All level-parameter windows are contiguous and well-formed.");
+    }
+    0
+}
+
 pub(crate) fn cmd_verify_incremental(shard_dir: &Path) {
     use clean_mathverse::shard::ShardReader;
     use clean_mathverse::shard_verify::discover_mathverse_files;
@@ -369,124 +468,7 @@ fn print_incremental_summary(
     }
 }
 
-/// Global, dependency-closed corpus verification (`--corpus`).
-///
-/// Loads EVERY discovered `.mathverse` shard into one merged `MathverseLibrary`
-/// and re-verifies the whole corpus in a single prelude-seeded kernel
-/// environment, in global topological order. Unlike `--incremental` (which runs
-/// each shard against its own fresh prelude env), this resolves CROSS-SHARD
-/// references — a constant in one shard whose type or value depends on a
-/// constant defined in another — because the merged library puts every
-/// dependency in one in-arena dependency graph.
-fn cmd_verify_corpus(shard_dir: &Path, emit_verified: Option<&Path>) {
-    use clean_mathverse::library::MathverseLibrary;
-    use clean_mathverse::shard::ShardReader;
-    use clean_mathverse::shard_verify::discover_mathverse_files;
-    use clean_mathverse::trust::policy::TrustPolicy;
-    use clean_mathverse::verify::incremental::verify_corpus_incremental_with_env;
-    use clean_mathverse::verify::kernel_verified_manifest::KernelVerifiedManifest;
+#[path = "verify_corpus_commands.rs"]
+mod corpus;
 
-    println!("=== Mathverse Global Corpus Kernel Verification ===");
-    println!("  Directory: {}\n", shard_dir.display());
-
-    let mathverse_files = discover_mathverse_files(shard_dir);
-    if mathverse_files.is_empty() {
-        eprintln!("  No .mathverse files found in {}", shard_dir.display());
-        std::process::exit(1);
-    }
-    println!("  Found {} shard files\n", mathverse_files.len());
-
-    let start = Instant::now();
-
-    // Merge every shard into one globally-indexed library.
-    let mut library = MathverseLibrary::new(TrustPolicy::permissive());
-    let mut loaded = 0usize;
-    for path in &mathverse_files {
-        let name = path.file_name().unwrap_or_default().to_string_lossy();
-        let reader = match ShardReader::from_file(path) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("  SKIP {name}: {e}");
-                continue;
-            }
-        };
-        match library.load_shard(&reader) {
-            Ok(added) => {
-                loaded += 1;
-                println!("  Loaded {name}: {added} constants");
-            }
-            Err(e) => eprintln!("  SKIP {name}: {e}"),
-        }
-    }
-    println!(
-        "\n  Merged {loaded} shards into {} constants\n",
-        library.constant_count()
-    );
-
-    let prelude = clean_kernel::Environment::try_with_prelude_for_import()
-        .expect("kernel prelude environment");
-    let (env, report) = verify_corpus_incremental_with_env(&library, prelude);
-
-    // BEDROCK = KernelVerified AND `axiom_deps` empty (transitive non-foundational
-    // axiom closure ⊆ {propext, Quot.sound, Classical.choice}). KernelVerified
-    // alone only means the value typechecked — a Definition whose body references
-    // an assumed F* axiom typechecks but is NOT bedrock. This is the honest line:
-    // we count only the constants that genuinely reduce to the 3 axioms.
-    let bedrock: usize = report
-        .kernel_verified_names
-        .iter()
-        .filter(|n| {
-            env.axiom_deps(&clean_kernel::Name::from_string(n))
-                .map(|d| d.is_empty())
-                .unwrap_or(false)
-        })
-        .count();
-
-    print_corpus_summary(&report, start.elapsed());
-    println!(
-        "  └─ of which BEDROCK:  {bedrock} (axiom_deps ⊆ propext / Quot.sound / Classical.choice)"
-    );
-
-    // Optionally record exactly which constants Clean's kernel re-verified, as a
-    // non-destructive sidecar (the shards themselves are not rewritten).
-    if let Some(path) = emit_verified {
-        let manifest =
-            KernelVerifiedManifest::from_report(&shard_dir.display().to_string(), loaded, &report);
-        match manifest.write_to_file(path) {
-            Ok(()) => println!(
-                "\n  Wrote {} kernel-verified constant names to {}",
-                manifest.kernel_verified_names.len(),
-                path.display()
-            ),
-            Err(e) => eprintln!("\n  Warning: failed to write kernel-verified manifest: {e}"),
-        }
-    }
-
-    if report.failed > 0 || report.reconstruct_failed > 0 {
-        std::process::exit(1);
-    }
-}
-
-fn print_corpus_summary(
-    report: &clean_mathverse::verify::incremental::IncrementalVerifyReport,
-    elapsed: std::time::Duration,
-) {
-    println!("=== Global Corpus Verification Summary ===");
-    println!("  Total constants:      {}", report.total);
-    println!("  Kernel verified:      {}", report.kernel_verified);
-    println!("  Axiom-accepted:       {}", report.axiom_accepted);
-    println!(
-        "  Axiom-fallback:       {} (claimed value did NOT typecheck)",
-        report.axiom_fallback
-    );
-    println!("  Failed:               {}", report.failed);
-    println!("  Cycle skipped:        {}", report.cycle_skipped);
-    println!("  Reconstruct failed:   {}", report.reconstruct_failed);
-    println!("  Elapsed:              {:.2}s", elapsed.as_secs_f64());
-    if report.total > 0 {
-        println!(
-            "  Verification rate:    {:.1}%",
-            report.kernel_verified as f64 / report.total as f64 * 100.0
-        );
-    }
-}
+use corpus::cmd_verify_corpus;

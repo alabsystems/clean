@@ -26,6 +26,13 @@ const EXPECTED_NAMES: &[&str] = &[
     // and the first arm bridged into the STRONGER codomain: KernelInfers.app
     // carries whnf_to and DefEq as witnessed premises, which TypingCtxConv does not
     "impl_kinfers_app",
+    // the C4 arms that could not be STATED at the C4 stage (add_ctx_rep runs
+    // before this stage, so nothing registered here is in scope there) and the
+    // C4 app witness that could not be FIRED there
+    "impl_kinfers_lam",
+    "impl_kinfers_lam_scoped",
+    "impl_bridge_pi_scoped",
+    "impl_bridge_app_witness",
     // the ImplInfer rules the retarget discharges
     "impl_sound_app",
     "impl_sound_sort",

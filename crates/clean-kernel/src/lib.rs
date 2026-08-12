@@ -124,6 +124,8 @@ pub use env::{
     CanonicalAmbientAxiomKind,
     CertificationAudit,
     CertificationIssue,
+    CodataLane,
+    CodataOrigin,
     ConstantInfo,
     ConstantKind,
     ConstantOrigin,

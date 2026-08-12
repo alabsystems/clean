@@ -1,0 +1,204 @@
+{
+  "schema": "clean.crystal.a0a6.probe.v1",
+  "job": "crystal A0 (deployment probe) + A6 (digest-bearing flip) — measured, with per-criterion verdicts",
+  "plan": "designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0 rows A0/A-LIN/A6",
+  "measured_utc_date": "2026-08-11",
+  "target_body": "level::Level::is_zero",
+  "headline": "A0 is 4-of-6 and A6 is 3-of-4 on the DEPLOYED body. The crystal target reaches DerivedAgreed under the stage1 (T2d) trustc and its lineage digest is re-pinned, but it DOES NOT FLIP: two independent fail-closed gates refuse it (the -O lifetime-marker gate, markers_exact=false; and the wave-TR thin-reborrow provenance lane). The A-LIN attestation chain itself is measured working end-to-end on 185 OTHER clean_kernel bodies in the same build.",
+  "compiler": {
+    "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+    "binary_sha256": "5cd23255ddd7b6bb0e3ba01d7cf883d4e87bfd6e232644f65cf676cb6735e711",
+    "version_string": "rustc 1.99.0-dev (94147b34f 2026-08-11) (trustc 0.1.0)",
+    "rustc_driver_dylib": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/lib/librustc_driver-700755489a5c5a6a.dylib",
+    "rustc_driver_sha256": "3f99926bde9172d1f29acb0178956c658242058472232faaac71460632e18c8a",
+    "version_stamp_IS_NOT_the_source_identity": "CFG_VER_HASH is git HEAD at build time; this driver was linked 2026-08-11 20:33 from a DIRTY tree that already carried T2d, which was committed 12 minutes later as 34f592159d. Identity is established by measurement, not by the stamp.",
+    "contains_T2d_measured": {
+      "how": "same niche-encoded Level fixture, both compilers, -Ztrust-ir-lower=on -Ztrust-dump=ir:",
+      "stage1": "Level::is_zero_shallow -> agreed (10 canonical lines identical) [SUPERSEDED — see CORRECTION_2026-08-12; body misnamed, does not discriminate]",
+      "stage2 (10f221fbe, A1's compiler)": "Level::is_zero_shallow -> unsupported (shim: Load of a whole aggregate) [SUPERSEDED — see CORRECTION_2026-08-12; the shallow twin agrees here too]",
+      "CORRECTION_2026-08-12": "The two lines below name `Level::is_zero_shallow` as the discriminating body. That is WRONG and was independently re-measured: the shallow twin reaches `agreed` under BOTH compilers (10 canonical lines identical), so it discriminates nothing. The actual discriminator is `Level::is_zero` — stage1 `agreed` (18 canonical lines identical), stage2 `unsupported: shim: Load of a whole aggregate (no congruent MIR operand)`. The CONCLUSION of this block is unchanged and was reproduced: stage1 carries T2d, stage2 does not. Only the cited body was misnamed. Re-measured with the 21-line fixture inlined in designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0.1, at -C opt-level=0 and 3, against both drivers."
+    },
+    "contains_A_LIN_v2_measured": "`strings` on the driver: stage1 carries `trust_thir_lower.body_lineage.v2`; stage2 carries `...v1`"
+  },
+  "driver": {
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "command": "cargo build --locked --offline --release -p clean-kernel",
+    "CARGO_INCREMENTAL": "0",
+    "clean_repo_HEAD": "bba1239ea148260dc2316157978ff403244f54c1",
+    "rustc_wrapper_sha256": "9e5fe29aba17bb0c6b5909ea7207d51b6de0553f5ee7977c60de9862256462a4",
+    "rustc_wrapper_note": "A1's wrapper plus two additions: it also appends -Ztrust-ir-flip=<yes|no> and sets RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info, both ONLY on the clean_kernel unit, so every flip event in the build log provably comes from the subject crate (verified: 185/185 events name clean_kernel).",
+    "target_cpu": "PINNED to apple-m4, not the repo config's `native`. stage1 `trustc --print target-cpus` reports `native - Select the CPU of the current host (currently apple-m4)`, so this is the same CPU spelled explicitly.",
+    "subject_unit_C_flags": "-C opt-level=3 -C panic=abort -C embed-bitcode=no -C codegen-units=16 -C overflow-checks=on -C strip=debuginfo -C target-cpu=apple-m4  (+ appended: -Ztrust-verify=off -Ztrust-ir-lower=on -Cdebuginfo=0 -Ztrust-dump=ir:<dir> -Ztrust-ir-flip=<yes|no>)",
+    "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED infer_type body was compiled (A1's criterion, re-verified here)."
+  },
+  "builds": {
+    "p1": {
+      "flip": "yes",
+      "extra": "",
+      "exit": 0,
+      "flip_events": 185,
+      "flip_events_all_from_clean_kernel": true,
+      "fallbacks_total": 396,
+      "clean_kernel_fallbacks": 17,
+      "clean_kernel_fallback_reasons": {
+        "gate: shim: abi rederive: generic fn signature": 13,
+        "gate: shim: abi rederive: generic closure": 2,
+        "ctfe-gate: const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2
+      },
+      "target_body_appears_in_neither": "DefId(0:17075) occurs 0 times in the log — no event, no fallback: it was never green-recorded"
+    },
+    "neg": {
+      "flip": "no",
+      "extra": "",
+      "exit": 0,
+      "flip_events": 0,
+      "clean_kernel_fallbacks": 0,
+      "other_crate_fallbacks_unchanged": "zerocopy 156 / object 46 / typenum 36 / rayon 36 / syn 12 — identical to p1, because the wrapper sets -Ztrust-ir-flip only on the subject unit",
+      "role": "NEGATIVE CONTROL"
+    },
+    "perturb": {
+      "flip": "yes",
+      "extra": "-Ztrust-sat-perturb=switch-map",
+      "exit": 0,
+      "flip_events": 175,
+      "role": "PERTURBATION"
+    },
+    "all_three": "clean, non-incremental, own CARGO_TARGET_DIR, own dump dir"
+  },
+  "artifact_continuity_with_A1": {
+    "claim": "the A0/A6 build assembles the SAME crate artifact A1 pinned, under a DIFFERENT compiler",
+    "clean_kernel.trust-ir.bin sha256": "8479ef559b340c23499d3d377c393d50781166baad99979c3ea51c299a287388",
+    "identical_to_A1_build_1_and_2": true,
+    "module_stable_digest": "sha256:5a026fb7fa09ebb36aa38813a3918802b4a86b3812271767097501755b673d81",
+    "identical_to_A1_primary_digest": true,
+    "why_it_is_unchanged": "T2d edits `to_mir` (the trust-ir -> MIR shim consumed by the derived-MIR differential and by the flip), NOT the THIR -> trust-ir producer. The artifact is therefore bit-identical; only the derived-MIR verdicts moved.",
+    "also_identical_under": [
+      "p1 (flip=yes)",
+      "neg (flip=no)",
+      "perturb (-Ztrust-sat-perturb=switch-map)"
+    ],
+    "coverage_json_p1_vs_neg": "BYTE-IDENTICAL (sha256:f1bfd71a5d7798060d9e5ead30cd6aa6010e378d298bbfefb1e8b180937edbff) — two independent clean builds reproduce every lineage digest in this file, and the flip flag perturbs the artifact not at all.",
+    "crate_verdict_delta_stage2_to_stage1": {
+      "agreed": "1162 -> 1172",
+      "unsupported": "12600 -> 12590",
+      "mismatch": "5 -> 5",
+      "transitions": "10, all unsupported -> agreed, 0 regressions"
+    }
+  },
+  "A0": {
+    "acceptance": "the probe passes end-to-end: lowered, spliced, ZERO unsupported, bodyful reachable closure, DerivedAgreed, flip event observed",
+    "criteria": {
+      "lowered": {
+        "verdict": "PASS",
+        "measured": true
+      },
+      "spliced": {
+        "verdict": "PASS",
+        "measured": true
+      },
+      "zero_unsupported": {
+        "verdict": "PASS",
+        "measured": []
+      },
+      "DerivedAgreed": {
+        "verdict": "PASS",
+        "measured": "agreed — \"18 canonical line(s) identical\" (was `unsupported: shim: Load of a whole aggregate` under A1's stage2)"
+      },
+      "bodyful_reachable_closure": {
+        "verdict": "FAIL",
+        "measured": "seam: \"reachable callee closure includes an extern/declaration-only callee (no local body to link)\"",
+        "which": "is_zero -> `<level::LevelArc as Deref>::deref` (func 4913, bodyful) -> func 8368 and func 7674, BOTH bodyless declaration-only entries (their func_ids exceed 7570, the highest local-body func_id in the assembled module; 1155 of the module's 8726 entries are declaration-only). By source and by the 34-byte panic string in the IR these are `Option::as_deref` and `Option::expect` — exactly plan item A0(iv).",
+        "behaviour_is_correct": "the plan's warning is honoured: the crate-seam differential DECLINES a closure containing a bodyless declaration with an unknown signature. That decline was preserved, not 'fixed'.",
+        "adjacent_finding": "`deref` itself is still DerivedUnsupported: \"shim: Call(callee return outside the fragment: std::option::Option<&'{erased} level::Level>)\" — a named, separate build item."
+      },
+      "flip_event_observed_for_this_body": {
+        "verdict": "FAIL",
+        "measured": "no flip event and no fallback event for DefId(0:17075); the body was never green-recorded"
+      }
+    },
+    "negative_control": {
+      "verdict": "PASS",
+      "measured": "-Ztrust-ir-flip=no -> 0 flip events crate-wide (vs 185 with the flag on), same artifact bytes"
+    }
+  },
+  "A6": {
+    "acceptance": "the flip fires for this body WITH the A-LIN lineage digest in the event, verified fail-closed, plus the negative control",
+    "criteria": {
+      "flip_fires_for_level_is_zero": {
+        "verdict": "FAIL",
+        "blocked_by": [
+          "gate:markers",
+          "gate:lane:thin_reborrow"
+        ]
+      },
+      "digest_in_event": {
+        "verdict": "PASS (mechanism), on 185 other bodies of the same build, NOT on the target body",
+        "measured": "185/185 flip events carry `lineage=sha256:...` and every one is EQUAL to the `lineage` field of that body's row in the published coverage artifact. 185 distinct digests, 0 mismatches, 0 rows missing. 153 codegen-seam + 32 CTFE-seam."
+      },
+      "fail_closed": {
+        "verdict": "PASS",
+        "see": "fail_closed_evidence"
+      },
+      "negative_control": {
+        "verdict": "PASS",
+        "measured": "0 events under -Ztrust-ir-flip=no"
+      }
+    },
+    "lineage_repin": {
+      "why": "A1's pin carries a `trust_thir_lower.body_lineage.v1` digest with no DefId prefix. The compiler actually run here carries v2, which prefixes the body's DefPathHash. Comparing them would be a category error; A1 said so explicitly.",
+      "domain": "trust_thir_lower.body_lineage.v2",
+      "framing": "sha256_domain(domain, u64be(stable_crate_id) || u64be(local_hash) || mini_module.stable_digest().bytes || u64be(n_callees) || callees...)",
+      "value_for_level_Level_is_zero": "sha256:da22664dc52d2b099a53a01aa106485b26d04ea5a46735407eb8b7a1d7adce3a",
+      "superseded_A1_v1_value": "sha256:e27a286b0ad3a116935104ed15ac4f37a8b9fc180107a211e2cab139c3d563a8",
+      "reproduced": "identical in two independent clean non-incremental builds (p1 and neg produced byte-identical coverage.json)",
+      "domain_check": "all 13139 lineage-bearing rows changed value from the stage2 v1 run; 0 coincided. The change is the framing, not the artifact (which is bit-identical).",
+      "value_for_LevelArc_deref": "sha256:172d4e9f1cd07c89b0377f90fe608d29426d715362d50d5c76365991781b2b0f"
+    },
+    "fail_closed_evidence": {
+      "1_consumer_perturbation_on_the_deployed_crate": {
+        "control": "-Ztrust-sat-perturb=switch-map (the compiler's own burn-in control: rotate the switch value->target map one position AFTER the canonical sort)",
+        "target_body_result": "level::Level::is_zero goes agreed -> MISMATCH, and the comparator names the corruption exactly: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `...[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`. The A0 `agreed` verdict is therefore NOT vacuous.",
+        "crate_result": "185 -> 175 flip events. 22 bodies had the perturbation APPLIED (applications>0); 11 of those flipped unperturbed; 10 of the 11 stop flipping. The 11th (`mode::CleanMode::has_cubical_layer`) still flips and that is CORRECT, not a hole: its switch is `[ 2: bb1  3: bb2 ]` where bb1 and bb2 are both `const bool true; br bb4`, so rotating the target list is the identity. Every lost flip is exactly a body the perturbation reached.",
+        "scope_note": "-Ztrust-sat-perturb perturbs the CONSUMER (the shim), not the artifact, so the lineage digests are unchanged by it (verified: has_cubical_layer's event digest is identical in both builds, sha256:a7acae485be7faba9d538c393e7f5456b2fd3155f76d9f5a5f2c4bd68c40a185). It tests the comparator, not the attestation."
+      },
+      "2_artifact_perturbation_on_the_digest": {
+        "fixture": "scratchpad/a6/probe.rs — two bodies, `wide` (subject) and `untouched` (control); the perturbation is one literal in `wide` (7 -> 8) selected by --cfg perturb; both compilations otherwise byte-identical argv",
+        "wide_control_event": "sha256:4d78a7ecd889cdb452bad176436746a26c53912594e833ea3a5c22a589612cdf",
+        "wide_perturbed_event": "sha256:41e80117900b940d97b415bc03e372144bf839acde20a0bc6d2bfcf9b6e26e1d",
+        "untouched_both_builds": "sha256:2f2dab55bb422baf67690aa6be7617b2a77a0831dbe796ab930ac0a6bb83474a (IDENTICAL)",
+        "cross_check": "the control digest does not appear anywhere in the perturbed build's log, and vice versa; in both builds the event digest equals the coverage row's lineage",
+        "conclusion": "the flip event's digest is bound to the body's own lowered content: a perturbed artifact cannot produce the pinned digest, and a neighbouring untouched body's digest does not move. A flip that fired regardless of the digest is refuted."
+      },
+      "3_source_level_fail_closed_NOT_independently_exercised": {
+        "what": "flip.rs re-derives the lineage from the taken registry payload and refuses on inequality (`lineage digest mismatch: ...`), and flip_registry::green_body refuses to mint a green entry at all when the digest cannot be computed ('no digest, no green')",
+        "status": "read in source and its refusal strings confirmed present in the shipped stage1 driver, but NOT independently triggered — doing so requires tampering inside the compiler process, i.e. a modified trustc, which needs a compiler rebuild this job did not perform."
+      }
+    }
+  },
+  "why_the_target_body_does_not_flip": {
+    "gate_1_markers": {
+      "site": "flip_registry::record_green — `if tcx.sess.emit_lifetime_markers() && !markers_exact { return; }`",
+      "measured": "markers_exact=false for level::Level::is_zero, with the detail `markers differ: line 0: built `mk b8.0:live s0:opaque:Ref{...LevelArc...}` vs derived `<end>``. `emit_lifetime_markers()` is true for any opt-level > 0, so it is active in every release-shaped build."
+    },
+    "gate_2_thin_reborrow": {
+      "site": "flip_registry::thin_reborrow_allows_flip (wave-TR), reached through body_lane_gates_allow_flip",
+      "measured_by_T2d": "an in-compiler probe reported `gate=\"lane:thin_reborrow\"` for DefId(0:17075)",
+      "corroborated_here_without_a_compiler_rebuild": "a standalone Level/LevelArc-shaped probe (scratchpad/a6/lvl.rs: same niche enum, same LevelArc(Option<Arc<Level>>), same as_deref().expect() Deref, same recursive by-ref is_zero) compiled at -Copt-level=0 -Cdebug-assertions=off, where the marker gate is INACTIVE: the sibling body `control` (also markers_exact=false) FLIPS, while `Level::is_zero` (verdict `agreed`, markers_exact=false) does NOT flip and emits no fallback line — so it was refused inside record_green by a gate that is not the marker gate. That is the shape T2d named.",
+      "opening_it": "producer work — ledger the reborrowed pointer. Defeating the gate would be weakening a provenance gate to manufacture a green; not done."
+    },
+    "attempted_and_blocked": "the same isolation directly on the deployed crate (`cargo build --release` with -Copt-level=0 appended to the clean_kernel unit only) could not be run: mid-session another agent's sibling-crate version bump left $USER_HOME inconsistent with its path dependencies, so `--locked` refused, and rewriting a shared lockfile to work around it was declined."
+  },
+  "remaining_to_close_A0_and_A6": [
+    "T2e (producer): ledger the thin shared reborrow so `thin_reborrow_allows_flip` can admit `Level::is_zero` on its own terms.",
+    "Marker fidelity for this body: the derived side emits no `mk`/lifetime-marker line for the `&LevelArc` local, so markers_exact=false at every opt-level > 0. Until it is exact, no release-shaped flip is possible for this body.",
+    "Bodyful closure: `Option::as_deref` and `Option::expect` are declaration-only in the artifact, and `<LevelArc as Deref>::deref` is itself DerivedUnsupported (`Call(callee return outside the fragment: Option<&Level>)`). Both are named build items; the seam's refusal to link a bodyless callee must be preserved.",
+    "Then re-run this exact probe: A0 needs only the closure + the flip event; A6 needs only the flip event (the digest, its reproduction, and its fail-closed binding are already measured here)."
+  ],
+  "evidence_paths": {
+    "note": "scratchpad is session-local and not part of the repo; the values above are the durable record",
+    "build_logs": "<session-scratchpad>",
+    "dumps": "<session-scratchpad>",
+    "digest_perturbation_probe": "<session-scratchpad>",
+    "build_driver": "<session-scratchpad> + trustc-wrap.sh"
+  }
+}

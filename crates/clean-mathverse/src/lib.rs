@@ -174,6 +174,7 @@ pub mod search;
 pub mod self_verify;
 pub mod serve_api;
 pub mod shard;
+pub mod shard_integrity;
 pub mod shard_reconstruct;
 pub mod shard_verify;
 pub mod similar;

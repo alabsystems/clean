@@ -152,3 +152,52 @@ fn test_parse_module_parts_rejects_overlapping_private_fixture() {
         "unexpected error: {err}"
     );
 }
+
+/// Path to the committed Lean 4.30 module-system triple's base `.olean`.
+fn module_system_fixture() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/olean/v4.30.0/module-system/Sigma.olean")
+}
+
+#[test]
+fn test_parse_module_parts_module_system_recovers_private_proof_values() {
+    // Regression: a real Lean `v4.30.0-rc2` module-system triple. The
+    // `.olean.server` and `.olean.private` companions are higher-address
+    // incremental regions that cross-reference the base address space, so both
+    // must be resolved against the base. Before the fix the standalone `.server`
+    // parse failed with `InvalidPointer`, aborting the whole parse.
+    let base = module_system_fixture();
+    let parts = parse_module_parts(&base).expect("parse all module-system parts");
+
+    let levels: Vec<OLeanLevel> = parts.iter().map(|p| p.level).collect();
+    assert_eq!(
+        levels,
+        vec![
+            OLeanLevel::Exported,
+            OLeanLevel::Server,
+            OLeanLevel::Private
+        ],
+        "all three module-system levels must parse"
+    );
+
+    // The public base exposes only value-less, erased stubs.
+    let exported = parts
+        .iter()
+        .find(|p| p.level == OLeanLevel::Exported)
+        .expect("exported part");
+    assert!(
+        exported.module.constants.iter().all(|c| c.value.is_none()),
+        "module-system base .olean stubs must be value-less"
+    );
+
+    // The private companion carries the real proof values.
+    let private = parts
+        .iter()
+        .find(|p| p.level == OLeanLevel::Private)
+        .expect("private part");
+    assert!(
+        !private.module.constants.is_empty()
+            && private.module.constants.iter().any(|c| c.value.is_some()),
+        "private companion must recover proof-carrying values"
+    );
+}

@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Configuration for the DCE pass.
 #[derive(Debug, Clone)]
-pub struct DceConfig {
+pub(crate) struct DceConfig {
     /// Remove unused local let-bindings within function bodies.
     pub eliminate_locals: bool,
     /// Remove unreachable top-level definitions.
@@ -50,7 +50,7 @@ impl Default for DceConfig {
 
 /// Statistics from a DCE pass.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct DceResult {
+pub(crate) struct DceResult {
     /// Number of local VDecl bindings removed.
     pub removed_locals: usize,
     /// Number of top-level definitions removed.
@@ -180,7 +180,7 @@ pub(crate) fn eliminate_dead_globals(decls: &[IRDecl], live_set: &HashSet<Name>)
 /// and global dead-definition removal (across the call graph) according to
 /// `config`.
 #[must_use]
-pub fn run_dce(decls: &[IRDecl], config: &DceConfig) -> (Vec<IRDecl>, DceResult) {
+pub(crate) fn run_dce(decls: &[IRDecl], config: &DceConfig) -> (Vec<IRDecl>, DceResult) {
     let mut result = DceResult::default();
     let mut working = decls.to_vec();
 

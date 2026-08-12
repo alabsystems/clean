@@ -997,3 +997,109 @@ theorem e4 : Stream.head (Stream.tail (Stream.tail (Stream.tail (Stream.tail (th
     );
     elab_all(&src);
 }
+
+// ── rank 7: the width-1 lazy-lowering chain, source side ──
+
+/// The rank-7 width-1 fixture elaborates as a FILE, and its finite-observation
+/// operator holds definitionally.
+///
+/// Every other indexed-codata exercise in this file is a Rust string literal,
+/// which nothing outside the test binary can consume. Rank 7 drives a real
+/// `.lean` file through a CLI verb, so the fixture has to exist on disk and
+/// stay green independently.
+///
+/// `IS2.nth k n s` is the finite observation the rank-7 soundness statement is
+/// ABOUT: the theorem to prove is that `nth k` equals the decode of `k` forced
+/// target layers. Both of its laws being `rfl` is what makes the depth-`k`
+/// induction discharge without propositional reasoning -- if that ever stops
+/// holding, the soundness proof's shape changes, so it is pinned here.
+#[test]
+fn test_rank7_is2_fixture_file_elaborates() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/codata/is2_indexed_stream.lean");
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("rank-7 fixture must exist at {}: {e}", path.display()));
+    let env = elab_all(&src);
+
+    // The indexed carrier, the corecursive value, and the observation operator.
+    for n in ["IS2", "doubler", "IS2.nth"] {
+        assert!(
+            env.get_const(&Name::from_string(n)).is_some(),
+            "rank-7 fixture must register `{n}`"
+        );
+    }
+}
+
+/// `codef` mints a [`CodataOrigin`] hint, and a hand-written definition does not.
+///
+/// The negative control is the point of the test. `C.corec` is a
+/// USER-DERIVABLE name -- nothing stops anyone writing `def Stream.corec` --
+/// so if recognition ever keyed off the name, a hand-written constant would be
+/// indistinguishable from a generated one. The origin exists precisely so
+/// recognition never has to guess, and it must be minted ONLY by the generator.
+///
+/// The hint still authorizes nothing: a consumer must re-resolve `corec` and
+/// structurally replay the canonical body before acting on it.
+#[test]
+fn test_rank7_codef_mints_codata_origin() {
+    let src = r#"
+codata IS2 : (n : Nat) → Type where
+  val : Nat
+  next : IS2 (Nat.succ n)
+
+codef doubler (n : Nat) (acc : Nat) : IS2 n where
+  val := acc
+  next := doubler (Nat.succ n) (acc + acc)
+
+def handwritten (x : Nat) : Nat := x
+"#;
+    let env = elab_all(src);
+
+    let origin = env
+        .get_codata_origin(&Name::from_string("doubler"))
+        .expect("codef must mint a codata origin");
+    assert_eq!(origin.lane, clean_kernel::CodataLane::Indexed);
+    assert_eq!(origin.carrier, Name::from_string("IS2"));
+    assert_eq!(origin.corec, Name::from_string("IS2.corec"));
+    assert!(
+        origin.slot_count() >= 2,
+        "IS2 has two fields (val, next), so the canonical body supplies at \
+         least two slot lambdas; got {:?}",
+        origin.slots
+    );
+
+    // Negative control: an ordinary definition is NOT codata, and must carry
+    // no origin -- absence is what makes a consumer decline.
+    assert!(
+        env.get_codata_origin(&Name::from_string("handwritten"))
+            .is_none(),
+        "a hand-written definition must never mint a codata origin"
+    );
+}
+
+/// A failed `codef` leaves behind no origin.
+///
+/// The origin is minted into the same transactional environment clone that
+/// carries the generated declarations, so a `codef` whose generated body fails
+/// to kernel-check must not leave a dangling hint pointing at a constant that
+/// does not exist.
+#[test]
+fn test_rank7_failed_codef_mints_no_origin() {
+    let src = r#"
+codata IS2 : (n : Nat) → Type where
+  val : Nat
+  next : IS2 (Nat.succ n)
+"#;
+    // Elaborate ONLY the codata; `doubler` never existed.
+    let env = elab_all(src);
+    assert!(
+        env.get_codata_origin(&Name::from_string("doubler"))
+            .is_none(),
+        "no codef ran, so there must be no origin"
+    );
+    assert_eq!(
+        env.codata_origin_count(),
+        0,
+        "a bare `codata` declaration mints no codef origins"
+    );
+}

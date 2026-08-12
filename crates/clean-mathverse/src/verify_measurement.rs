@@ -391,6 +391,7 @@ mod tests {
             shard_size_limit: 5000,
             max_file_size: 2_500_000,
             verbose: true,
+            ..BuildConfig::default()
         };
 
         let build_result = build_lean4_library(&config).expect("build should succeed");
@@ -441,6 +442,7 @@ mod tests {
             shard_size_limit: 10_000,
             max_file_size: 2_500_000,
             verbose: true,
+            ..BuildConfig::default()
         };
 
         let build_result = build_lean4_library(&config).expect("build should succeed");

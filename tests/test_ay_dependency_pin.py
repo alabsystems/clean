@@ -32,8 +32,12 @@ def write_fixture(
 ) -> None:
     root.mkdir(parents=True, exist_ok=True)
     revisions = manifest_revisions or [TEST_REV] * len(checker.AY_MANIFEST_KEYS)
+    assert len(revisions) == len(checker.AY_MANIFEST_KEYS)
     manifest_lines = ["[workspace]", 'members = []', "", "[workspace.dependencies]"]
-    for key, revision in zip(checker.AY_MANIFEST_KEYS, revisions, strict=True):
+    # Keep this gate runnable with the macOS system Python 3.9.  The production
+    # checker deliberately supports pre-3.10 interpreters via its tomli fallback,
+    # so its unit fixture must not require Python 3.10's zip(strict=...).
+    for key, revision in zip(checker.AY_MANIFEST_KEYS, revisions):
         manifest_lines.append(
             f'{key} = {{ package = "{key}", git = "{checker.AY_REPO_URL}", '
             f'rev = "{revision}" }}'

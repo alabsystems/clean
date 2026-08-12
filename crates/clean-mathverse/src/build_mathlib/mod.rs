@@ -16,6 +16,7 @@ use tracing::{info, warn};
 
 use crate::build_library::{build_lean4_library, BuildConfig, BuildResult};
 use crate::error::{MathverseError, MathverseResult};
+use crate::manifest::LibraryLoader;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -256,6 +257,13 @@ pub fn build_mathlib_library(config: &MathlibBuildConfig) -> MathverseResult<Mat
 
     log_discovered_roots(&roots, config.verbose);
 
+    // Initialize the shared library directory + empty manifest ONCE, up front.
+    // Each root then appends its shards (with `reset_manifest: false`), so the
+    // final manifest enumerates every root's shards instead of only the last
+    // root's (the previous behavior silently dropped the toolchain core and all
+    // packages, leaving Mathlib decls with unresolvable dependencies).
+    LibraryLoader::new(config.output_dir.clone()).init()?;
+
     let mut result = MathlibBuildResult::default();
     for (label, root_path) in &roots {
         let root_result = build_single_root(label, root_path, config)?;
@@ -266,6 +274,25 @@ pub fn build_mathlib_library(config: &MathlibBuildConfig) -> MathverseResult<Mat
     result.elapsed_ms = start.elapsed().as_millis() as u64;
     log_final_summary(&result, config.verbose);
     Ok(result)
+}
+
+/// Derive a filesystem-safe shard-name prefix from a root label.
+///
+/// Root labels like `"pkg:batteries"` contain characters (`:`) that are
+/// awkward in shard filenames, and every root must map to a *distinct* prefix
+/// so their `_0000..` shards never collide on disk. Non-alphanumeric characters
+/// become `_`; the result is used as `format!("{prefix}_{idx:04}")`.
+fn shard_prefix_for_label(label: &str) -> String {
+    let sanitized: String = label
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    // Guard against an all-punctuation label collapsing to something empty.
+    if sanitized.trim_matches('_').is_empty() {
+        "root".to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn build_single_root(
@@ -279,6 +306,12 @@ fn build_single_root(
         modules: vec![],
         shard_size_limit: config.shard_size_limit,
         max_file_size: config.max_file_size,
+        // Each root gets a distinct shard-name namespace so its `_0000..` files
+        // do not overwrite earlier roots' shards on disk, and appends to the
+        // shared manifest (initialized once by `build_mathlib_library`) rather
+        // than resetting it.
+        shard_prefix: shard_prefix_for_label(label),
+        reset_manifest: false,
         verbose: config.verbose,
     };
 

@@ -50,7 +50,16 @@ thread_local! {
     /// rebuilds, so distinct readers stay correct (a collision would require all
     /// four independent slices to alias at identical ptr+len, which cannot happen
     /// for two live readers).
-    static RECONSTRUCT_TABLE: RefCell<Option<(ArenaKey, Vec<Expr>)>> = const { RefCell::new(None) };
+    ///
+    /// The table is the FULL arena length: `None` marks an expr that is not
+    /// reconstructable on its own (UNSUPPORTED-flagged, bad tag, or referencing
+    /// a `None` child). A single unreconstructable expr therefore fails only the
+    /// exprs that transitively reference it — NOT every expr that follows it in
+    /// arena order. That distinction is critical for the MERGED corpus arena,
+    /// where one shard's UNSUPPORTED node would otherwise truncate reconstruction
+    /// for every later shard (78% of the corpus in a full-Mathlib measurement).
+    static RECONSTRUCT_TABLE: RefCell<Option<(ArenaKey, Vec<Option<Expr>>)>> =
+        const { RefCell::new(None) };
 }
 
 pub fn reconstruct_from_shard(
@@ -65,8 +74,10 @@ pub fn reconstruct_from_shard(
 /// Reconstruct an expression from shard data, with support for level lists.
 ///
 /// Memoized per-arena (see [`RECONSTRUCT_TABLE`]): the first call for a given
-/// reader builds the whole reconstructable prefix once; subsequent calls index
-/// the cached table.
+/// reader builds the whole expr table once (full arena length, `None` for
+/// unreconstructable entries); subsequent calls index the cached table.
+/// Errors if `expr_idx` is out of bounds or its slot is `None` (the expr, or
+/// something in its sub-DAG, is unreconstructable).
 pub fn reconstruct_from_shard_with_level_lists(
     exprs: &[FlatExpr],
     levels: &[FlatLevel],
@@ -86,33 +97,51 @@ pub fn reconstruct_from_shard_with_level_lists(
     RECONSTRUCT_TABLE.with(|cell| {
         let mut slot = cell.borrow_mut();
         if slot.as_ref().map(|(k, _)| *k != key).unwrap_or(true) {
-            // `reconstruct_expr_table_prefix` calls `reconstruct_single_expr`
-            // directly (not back into this function), so there is no re-entrant
-            // borrow of the thread-local while we hold it here.
-            let table = reconstruct_expr_table_prefix(exprs, levels, strings, level_lists);
+            // `reconstruct_expr_table` calls `reconstruct_single_expr` directly
+            // (not back into this function), so there is no re-entrant borrow of
+            // the thread-local while we hold it here.
+            let table = reconstruct_expr_table(exprs, levels, strings, level_lists);
             *slot = Some((key, table));
         }
         let table = &slot.as_ref().expect("table just populated").1;
-        table.get(idx).cloned().ok_or_else(|| {
-            format!(
-                "failed to reconstruct expression {idx} (beyond reconstructable prefix of len {})",
-                table.len()
-            )
-        })
+        // `idx < exprs.len() == table.len()` (bounds-checked above), so the slot
+        // exists; `None` means this expr (or something in its sub-DAG) is
+        // unreconstructable — an honest per-constant failure, NOT a truncation
+        // artifact of some unrelated earlier UNSUPPORTED expr.
+        table
+            .get(idx)
+            .and_then(|slot| slot.clone())
+            .ok_or_else(|| {
+                format!(
+                    "failed to reconstruct expression {idx} (unsupported or dangling node in its sub-DAG)"
+                )
+            })
     })
 }
 
-/// Reconstruct the longest valid prefix of a shard's expression table in one
-/// pass, sharing the work across every constant of the shard.
+/// Reconstruct a shard's expression table in one pass, sharing the work across
+/// every constant of the shard.
 ///
-/// Returns the reconstructed expressions for indices `0..prefix_len`; the
-/// table is truncated at the first entry that fails to reconstruct (an
-/// unsupported-flagged entry, a bad tag, a dangling reference, …). This
-/// truncation mirrors [`reconstruct_from_shard_with_level_lists`] exactly:
-/// the per-constant path rebuilds `0..=type_idx` in order and errors on the
-/// first bad entry, so a constant's type is reconstructible there **iff**
-/// `type_idx < prefix_len` here. If the level table itself fails to build,
-/// the prefix is empty (every per-constant call would fail too).
+/// Returns a FULL-LENGTH table (`table.len() == exprs.len()`): `table[i]` is
+/// `Some(expr)` when expr `i` reconstructs, or `None` when it is
+/// unreconstructable on its own — UNSUPPORTED-flagged, a bad tag, or referencing
+/// a `None` child (see [`get_expr_ref`], which errors on a `None` slot). Because
+/// the writer emits children at strictly lower indices than their parents, one
+/// in-order pass has every child's slot filled before its parent, so failure
+/// propagates ONLY along dependency edges: an unreconstructable expr fails
+/// exactly the exprs that transitively reference it.
+///
+/// This is the key difference from a truncating prefix build. Over the MERGED
+/// corpus arena (all shards concatenated), a single shard's UNSUPPORTED node
+/// must not sink every later shard's constants; it only sinks the constants
+/// whose own sub-DAG reaches it. A constant's `type_idx`/`value_idx` is
+/// reconstructible here **iff** its sub-DAG is `None`-free — identical to the
+/// reachable-set semantics of [`reconstruct_single_subdag`], but computed once
+/// for the whole arena instead of allocating a `root+1` table per constant
+/// (prohibitive when merged roots index into the tens of millions).
+///
+/// If the level table itself fails to build, every slot is `None` (every
+/// per-constant call would fail too).
 ///
 /// Why this exists: calling the per-constant function for each of a shard's
 /// N constants rebuilds the table from scratch every time — O(N·M) for an
@@ -120,41 +149,44 @@ pub fn reconstruct_from_shard_with_level_lists(
 /// shared pass is O(M) and produces structurally identical expressions: the
 /// loop body is the same code, so digests computed over the results are
 /// byte-identical to the per-constant path.
-pub(crate) fn reconstruct_expr_table_prefix(
+pub(crate) fn reconstruct_expr_table(
     exprs: &[FlatExpr],
     levels: &[FlatLevel],
     strings: &[String],
     level_lists: &[u32],
-) -> Vec<Expr> {
+) -> Vec<Option<Expr>> {
     let Ok(built_levels) = build_levels(levels, strings, levels.len()) else {
-        return Vec::new();
+        return vec![None; exprs.len()];
     };
     // Store each built node as a shared `Arc` so a node referenced by multiple
     // parents is one allocation (F2 — preserves the arena's DAG sharing).
     let mut built_exprs: Vec<Option<Arc<Expr>>> = Vec::with_capacity(exprs.len());
     for (i, flat) in exprs.iter().enumerate() {
-        // Truncate at the first UNSUPPORTED-flagged entry (mode-extension /
-        // unconvertible exprs encoded as Sort(0)+UNSUPPORTED by the writer, see
-        // clean_kernel::flat::convert). NOTE: the flag is bit 4 (0x10); the old
-        // `1 << 0` here tested bit 0, which is the unrelated VERIFIED flag —
-        // letting UNSUPPORTED exprs through to reconstruct as garbage. Matches
-        // the kernel's own `flat::reconstruct` guard.
+        // An UNSUPPORTED-flagged entry (mode-extension / unconvertible exprs
+        // encoded as Sort(0)+UNSUPPORTED by the writer, see
+        // clean_kernel::flat::convert) is unreconstructable — mark it `None` and
+        // continue so unrelated later exprs still reconstruct. The flag is bit 4
+        // (0x10); matches the kernel's own `flat::reconstruct` guard and the
+        // UNSUPPORTED guard in `reconstruct_single_subdag`.
         if flat.flags().contains(FlatFlags::UNSUPPORTED) {
-            break;
+            built_exprs.push(None);
+            continue;
         }
-        let Ok(expr) =
-            reconstruct_single_expr(flat, i, strings, &built_levels, level_lists, &built_exprs)
-        else {
-            break;
-        };
-        built_exprs.push(Some(Arc::new(expr)));
+        // `reconstruct_single_expr` resolves each child through `get_expr_ref`,
+        // which errors on a `None` slot — so an expr transitively depending on an
+        // unreconstructable child becomes `None` here too.
+        match reconstruct_single_expr(flat, i, strings, &built_levels, level_lists, &built_exprs) {
+            Ok(expr) => built_exprs.push(Some(Arc::new(expr))),
+            Err(_) => built_exprs.push(None),
+        }
     }
-    // Deref each prefix root to an owned `Expr` (its children remain the shared
-    // `Arc`s built above — the intra-term DAG sharing that F1 accelerates).
+    // Deref each root to an owned `Expr` (its children remain the shared `Arc`s
+    // built above — the intra-term DAG sharing that F1 accelerates). `None`
+    // slots are PRESERVED rather than dropped: the index must stay aligned with
+    // the arena, or `table[type_idx]` silently refers to the wrong expression.
     built_exprs
         .into_iter()
-        .flatten()
-        .map(|a| (*a).clone())
+        .map(|slot| slot.map(|a| (*a).clone()))
         .collect()
 }
 
@@ -859,6 +891,54 @@ mod subdag_tests {
             byte_identical > 0,
             "validated nothing — empty/garbled shard?"
         );
+    }
+
+    /// Regression for the merged-arena truncation bug: an unreconstructable node
+    /// EARLY in the arena must not sink a later, independent root. Before the
+    /// None-and-continue table this truncated the whole prefix at index 0, so
+    /// every later constant failed with "beyond reconstructable prefix" — 78% of
+    /// a full-Mathlib corpus, because the merged arena concatenates 70 shards and
+    /// one shard's UNSUPPORTED node sat near the front.
+    #[test]
+    fn expr_table_does_not_truncate_at_unrelated_bad_node() {
+        // index 0: dangling (unreconstructable, stands in for UNSUPPORTED without
+        //          needing clean-kernel's private flag bits)
+        // index 1: bvar(0) — independent of index 0
+        // index 2: app(0, 0) — DEPENDS on the bad node 0
+        let exprs = vec![
+            FlatExpr::app(999, 999), // 0: bad
+            FlatExpr::bvar(0),       // 1: clean, independent
+            FlatExpr::app(0, 0),     // 2: depends on bad node 0
+        ];
+        let levels: Vec<FlatLevel> = Vec::new();
+        let strings: Vec<String> = Vec::new();
+        let level_lists: Vec<u32> = Vec::new();
+
+        // The independent later root reconstructs (previously: "beyond prefix").
+        let clean =
+            reconstruct_from_shard_with_level_lists(&exprs, &levels, &strings, &level_lists, 1)
+                .expect("independent root 1 must reconstruct despite an earlier bad node");
+        assert_eq!(clean, Expr::bvar(0));
+
+        // The bad node itself still fails.
+        assert!(
+            reconstruct_from_shard_with_level_lists(&exprs, &levels, &strings, &level_lists, 0)
+                .is_err(),
+            "the unreconstructable node must still fail"
+        );
+
+        // A node that TRANSITIVELY depends on the bad node still fails (failure
+        // propagates along dependency edges via the `None` child).
+        assert!(
+            reconstruct_from_shard_with_level_lists(&exprs, &levels, &strings, &level_lists, 2)
+                .is_err(),
+            "a root whose sub-DAG reaches the bad node must fail"
+        );
+
+        // The table path and the reachable sub-DAG path agree on the clean root.
+        let sub = reconstruct_single_subdag(&exprs, &levels, &strings, &level_lists, 1)
+            .expect("sub-DAG of clean root 1");
+        assert_eq!(clean, sub);
     }
 
     /// A broken node the root never references must not affect the sub-DAG —

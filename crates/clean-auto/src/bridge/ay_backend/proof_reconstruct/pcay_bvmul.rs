@@ -27,17 +27,24 @@
 //! refutation is surfaced from ay's SAT core (a pure resolution DAG — the BV
 //! blast format has NO `:rule trust` escape hatch by construction). The Clean
 //! kernel then re-checks that refutation NATIVELY, by *reflection*:
-//! [`super::bv_blast_reflection::certify_unsat_by_reflection`] encodes the
+//! [`super::bv_blast_reflection::certify_unsat3_by_reflection`] encodes the
 //! clauses + resolution chain as kernel DATA and discharges
-//! `checkRefutes <clauses> <refutation> = Bool.true` by a LINEAR ι-reduction
+//! `checkRefutes3 <clauses> <refutation> = Bool.true` by definitional reduction
 //! (`Eq.refl`), then applies the PROVED bridge theorem
-//! `Clean.Res.checkRefutes_sound` (transitive axiom closure `⊆` FOUNDATIONAL) to
+//! `Clean.Res.checkRefutes3_sound` (transitive axiom closure `⊆` FOUNDATIONAL) to
 //! obtain `Clean.Res.Unsat <clauses>`. Because the clause set IS the bit-blast of
 //! `not(lhs == rhs)` — every `And2` partial product and every `Xor3`/
 //! `FullAdderCarry` adder-tree gate contributing its Tseitin clauses — the kernel
 //! genuinely consumes the multiplier's gate tree. The identity is recovered SOLELY
 //! from the clause set being unsatisfiable; the reconstruction NEVER cites a
 //! `bvMul_comm` (or any BV) axiom, exactly like the `bvadd` reflection lane.
+//!
+//! AY proof production is bounded before this kernel work begins: the public,
+//! opaque producer budget applies a 30-second deadline and the same 4,096-step
+//! ceiling used by Clean's reflection policy. The kernel reduction itself uses
+//! the SUB-QUADRATIC trie checker (`checkRefutes3_sound`). A producer resource
+//! exhaustion and an unexpectedly over-cap returned proof are distinct typed,
+//! fail-closed outcomes; neither is an alternate proof authority.
 //!
 //! # Signed multiplication (the `mul_*` overflow case)
 //!
@@ -53,17 +60,33 @@
 //!
 //! Every step is fail-closed: a satisfiable obligation surfaces
 //! [`ay_proof::bv_blast_solver::BvExprExportError::NoRefutation`] (ay never
-//! fabricates a proof) → [`BvMulCertifyError::NoRefutation`]; a malformed /
+//! fabricates a proof) → [`BvMulCertifyError::NoRefutation`]; an exhausted AY
+//! budget → [`BvMulCertifyError::ProducerResourceExhausted`]; a malformed /
 //! tampered bit-blast fails the producer `validate()` or the kernel `check_type`
 //! → not certified; a residual-trust or non-foundational axiom in the assembled
 //! term is rejected. Only a genuine, kernel-re-checked, foundational-residue
 //! `Unsat` term yields a [`CertifiedPayload`].
 
-use ay_proof::bv_blast_solver::{export_bv_blast_proof_expr, BvExpr, BvExprExportError};
+use std::time::Duration;
+
+use ay_proof::bv_blast_solver::{
+    export_bv_blast_proof_expr_bounded, BvExpr, BvExprExportError, BvExprProofBudget,
+};
 use clean_kernel::{Environment, LocalContext};
 
-use super::bv_blast_reflection::{certify_unsat_by_reflection, ReflectionError};
+use super::bv_blast_reflection::{certify_unsat3_by_reflection, ReflectionError};
 use super::certified_proof::{certify_kernel_term, CertifiedPayload, NotCertified};
+
+/// Wall-clock ceiling for AY proof production. It does not cover the subsequent
+/// Clean-kernel reflection, which is separately bounded by proof size below.
+const PRODUCER_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Operational ceiling for the always-on sub-quadratic trie reflection
+/// (`checkRefutes3_sound`). Proof trace sizes are producer-dependent, so this is
+/// enforced both by AY's opaque producer budget and on the actual returned
+/// trace. This is a ROBUSTNESS cap, NOT a soundness relaxation: an over-cap
+/// refutation is DECLINED (kept `SmtBacked`), never accepted.
+pub const MAX_REFLECTION_STEPS: usize = 4_096;
 
 /// Why a native BV-mul certification attempt did not yield a [`CertifiedPayload`].
 ///
@@ -88,10 +111,77 @@ pub enum BvMulCertifyError {
     #[error("bvmul obligation could not be bit-blasted: {0}")]
     NotBlastable(String),
 
+    /// AY's bounded proof producer exhausted a preflight, construction, SAT,
+    /// proof-surfacing, replay, or deadline resource. The obligation is declined
+    /// before kernel reflection begins.
+    #[error(
+        "bvmul proof producer exhausted resource `{resource}` (limit {limit}, actual {actual}); capped-declined"
+    )]
+    ProducerResourceExhausted {
+        /// Stable producer resource name.
+        resource: &'static str,
+        /// Configured maximum for that resource.
+        limit: usize,
+        /// Observed or conservatively estimated amount.
+        actual: usize,
+    },
+
+    /// The producer returned a refutation larger than
+    /// [`MAX_REFLECTION_STEPS`]. This defense-in-depth check protects the Clean
+    /// reducer independently of the producer's bounded-export contract.
+    #[error("bvmul refutation too large for the always-on reflection ({steps} > {cap} steps); capped-declined")]
+    RefutationTooLarge {
+        /// The refutation's resolution-step count.
+        steps: usize,
+        /// The [`MAX_REFLECTION_STEPS`] cap.
+        cap: usize,
+    },
+
     /// The producer's own bit-blast validation rejected the refutation, or the
     /// Clean kernel rejected the reflection certificate.
     #[error("bvmul refutation failed native kernel re-check: {0}")]
     KernelRejected(String),
+}
+
+fn bounded_producer_budget() -> Result<BvExprProofBudget, BvMulCertifyError> {
+    BvExprProofBudget::conservative(PRODUCER_TIMEOUT, MAX_REFLECTION_STEPS).map_err(|error| {
+        BvMulCertifyError::Undecided(format!(
+            "ay rejected Clean's bounded proof-producer policy: {error}"
+        ))
+    })
+}
+
+fn map_export_error(error: BvExprExportError) -> BvMulCertifyError {
+    match error {
+        BvExprExportError::NoRefutation => BvMulCertifyError::NoRefutation,
+        BvExprExportError::SolverUnknown => {
+            BvMulCertifyError::Undecided("ay returned unknown".to_string())
+        }
+        BvExprExportError::RefutationNotSurfaceable(message) => {
+            BvMulCertifyError::Undecided(message)
+        }
+        BvExprExportError::ResourceLimit {
+            resource,
+            limit,
+            actual,
+        } => BvMulCertifyError::ProducerResourceExhausted {
+            resource,
+            limit,
+            actual,
+        },
+        other => BvMulCertifyError::NotBlastable(other.to_string()),
+    }
+}
+
+fn enforce_reflection_step_cap(steps: usize) -> Result<(), BvMulCertifyError> {
+    if steps > MAX_REFLECTION_STEPS {
+        Err(BvMulCertifyError::RefutationTooLarge {
+            steps,
+            cap: MAX_REFLECTION_STEPS,
+        })
+    } else {
+        Ok(())
+    }
 }
 
 /// A kernel-CERTIFIED bvmul refutation.
@@ -152,7 +242,10 @@ pub fn bvmul_widening_no_overflow_obligation(
 /// initialised (see [`bvmul_certify_env`]).
 ///
 /// Returns [`BvMulCertified`] IFF:
-///   * ay bit-blasts and refutes `not(lhs == rhs)` (a SAT obligation → declined),
+///   * ay bit-blasts and refutes `not(lhs == rhs)` within the finite producer
+///     budget (a SAT or resource-exhausted obligation → declined),
+///   * the returned refutation is within [`MAX_REFLECTION_STEPS`] (else
+///     capped-declined independently of the producer),
 ///   * the Clean kernel re-checks the reflection `Unsat` cert (`check_type`,
 ///     `infer_only = false`), with `trust_count == 0`, AND
 ///   * the kernel's expression-rooted authority audit accepts the exact
@@ -168,27 +261,28 @@ pub fn certify_bvmul_unsat(
     rhs: &BvExpr,
 ) -> Result<BvMulCertified, BvMulCertifyError> {
     // (1) Bit-blast the negated goal `not(lhs == rhs)` into a gate-tree CNF and
-    //     surface ay's REAL resolution refutation. Fail-closed: a SAT obligation
-    //     returns `NoRefutation` — no proof is fabricated.
-    let proof = export_bv_blast_proof_expr(lhs, rhs).map_err(|e| match e {
-        BvExprExportError::NoRefutation => BvMulCertifyError::NoRefutation,
-        BvExprExportError::SolverUnknown => {
-            BvMulCertifyError::Undecided("ay returned unknown".to_string())
-        }
-        BvExprExportError::RefutationNotSurfaceable(m) => BvMulCertifyError::Undecided(m),
-        other => BvMulCertifyError::NotBlastable(other.to_string()),
-    })?;
+    //     surface ay's REAL resolution refutation under a finite, opaque public
+    //     producer budget. Fail-closed: SAT returns `NoRefutation`; resource or
+    //     deadline exhaustion is typed distinctly; neither fabricates a proof.
+    let budget = bounded_producer_budget()?;
+    let proof = export_bv_blast_proof_expr_bounded(lhs, rhs, &budget).map_err(map_export_error)?;
 
     let num_clauses = proof.clauses.len();
     let num_resolution_steps = proof.refutation.steps.len();
 
+    // (1a) Defense in depth: independently enforce Clean's reducer policy on
+    //      the proof actually returned by AY. This remains even though the
+    //      producer is configured with the same step ceiling.
+    enforce_reflection_step_cap(num_resolution_steps)?;
+
     // (2) NATIVE kernel re-check: encode clauses + refutation as kernel data,
-    //     discharge `checkRefutes = true` by reflection (`Eq.refl`), and apply the
-    //     PROVED `checkRefutes_sound` bridge to obtain `Unsat <clauses>`. This
-    //     internally re-runs the producer `validate()` and kernel-`infer_type`s
-    //     the assembled term (so a tampered bit-blast is rejected here).
+    //     discharge `checkRefutes3 = true` by reflection (`Eq.refl`), and apply
+    //     the PROVED `checkRefutes3_sound` bridge to obtain `Unsat <clauses>`.
+    //     This internally re-runs the producer `validate()` and
+    //     kernel-`infer_type`s the assembled term (so a tampered bit-blast is
+    //     rejected here).
     let (unsat_term, unsat_goal) =
-        certify_unsat_by_reflection(env, &proof).map_err(|e| match e {
+        certify_unsat3_by_reflection(env, &proof).map_err(|e| match e {
             ReflectionError::InvalidProof(m) => BvMulCertifyError::KernelRejected(m),
             ReflectionError::CertificateRejected(m) => BvMulCertifyError::KernelRejected(m),
         })?;
@@ -215,7 +309,7 @@ pub fn certify_bvmul_unsat(
 }
 
 /// Build an [`Environment`] ready for [`certify_bvmul_unsat`]: the kernel prelude
-/// plus the resolution-soundness layer (`checkRefutes_sound` and its
+/// plus the resolution-soundness layer (`checkRefutes3_sound` and its
 /// dependencies), which the reflection cert applies.
 ///
 /// # Errors

@@ -79,7 +79,7 @@ pub use proof_reconstruct::certified_proof::{
 #[cfg(feature = "ay-bv-blast")]
 pub use proof_reconstruct::pcay_bvmul::{
     bvmul_certify_env, bvmul_widening_no_overflow_obligation, certify_bvmul_unsat, BvMulCertified,
-    BvMulCertifyError,
+    BvMulCertifyError, MAX_REFLECTION_STEPS as BVMUL_MAX_REFLECTION_STEPS,
 };
 // Proof-carrying ay, MILESTONE 3 (BV shift): the NATIVE bvshl/bvlshr/bvashr UNSAT
 // kernel-certification surface. Reuses the milestone-2 op-agnostic reflection.

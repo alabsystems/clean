@@ -39,7 +39,7 @@ use rules::optimize_vdecl;
 
 /// Configuration for the unboxing optimization pass.
 #[derive(Debug, Clone)]
-pub struct UnboxingConfig {
+pub(crate) struct UnboxingConfig {
     /// Eliminate `unbox(box(x))` and `box(unbox(x))` pairs.
     pub eliminate_box_unbox_pairs: bool,
     /// Replace boxed arithmetic (Nat.add, etc.) with direct operations.
@@ -61,7 +61,7 @@ impl Default for UnboxingConfig {
 impl UnboxingConfig {
     /// All optimizations enabled (recommended default).
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             eliminate_box_unbox_pairs: true,
             unbox_arithmetic: true,
@@ -73,7 +73,7 @@ impl UnboxingConfig {
 
     /// No optimizations (pass-through).
     #[must_use]
-    pub fn disabled() -> Self {
+    pub(crate) fn disabled() -> Self {
         Self {
             eliminate_box_unbox_pairs: false,
             unbox_arithmetic: false,
@@ -86,7 +86,7 @@ impl UnboxingConfig {
 
 /// Statistics collected during unboxing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct UnboxingStats {
+pub(crate) struct UnboxingStats {
     /// Number of box/unbox pairs eliminated.
     pub pairs_eliminated: u32,
     /// Number of arithmetic operations unboxed.
@@ -135,7 +135,10 @@ impl<'a> UnboxingContext<'a> {
 ///
 /// Returns the optimized declarations and statistics.
 #[must_use]
-pub fn unbox_decls(decls: &[IRDecl], config: &UnboxingConfig) -> (Vec<IRDecl>, UnboxingStats) {
+pub(crate) fn unbox_decls(
+    decls: &[IRDecl],
+    config: &UnboxingConfig,
+) -> (Vec<IRDecl>, UnboxingStats) {
     let return_expectations = if config.specialize_returns {
         analyze_return_expectations(decls)
     } else {
@@ -160,7 +163,7 @@ pub fn unbox_decls(decls: &[IRDecl], config: &UnboxingConfig) -> (Vec<IRDecl>, U
 
 /// Apply unboxing optimization to a single declaration.
 #[must_use]
-pub fn unbox_decl(
+pub(crate) fn unbox_decl(
     decl: &IRDecl,
     config: &UnboxingConfig,
     return_expectations: &HashMap<String, IRType>,
@@ -202,19 +205,19 @@ pub fn unbox_decl(
 
 /// Convenience: apply unboxing with default config.
 #[must_use]
-pub fn unbox_decls_default(decls: &[IRDecl]) -> (Vec<IRDecl>, UnboxingStats) {
+pub(crate) fn unbox_decls_default(decls: &[IRDecl]) -> (Vec<IRDecl>, UnboxingStats) {
     unbox_decls(decls, &UnboxingConfig::new())
 }
 
 /// Check if a declaration is an unboxing candidate (has box/unbox operations).
 #[must_use]
-pub fn is_unboxing_candidate(decl: &IRDecl) -> bool {
+pub(crate) fn is_unboxing_candidate(decl: &IRDecl) -> bool {
     body_has_box_unbox(&decl.body)
 }
 
 /// Count the total number of box and unbox operations in a declaration.
 #[must_use]
-pub fn count_box_unbox_ops(decl: &IRDecl) -> (u32, u32) {
+pub(crate) fn count_box_unbox_ops(decl: &IRDecl) -> (u32, u32) {
     let mut boxes = 0u32;
     let mut unboxes = 0u32;
     count_box_unbox_in_body(&decl.body, &mut boxes, &mut unboxes);

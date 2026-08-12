@@ -3,7 +3,7 @@
 > A pure-Rust, Lean-shaped theorem-proving and verification stack built for
 > programs and AI agents.
 
-**Author:** Andrew Yates · **License:** Apache-2.0 · **Version:** 1.2.0
+**Author:** Andrew Yates · **License:** Apache-2.0 · **Version:** 1.4.0
 
 Clean is a from-scratch Rust implementation of a dependent-type-theory kernel,
 Lean 4 surface tooling, proof-producing automation, `.olean` import, native
@@ -90,11 +90,14 @@ There are two checkout shapes:
   to attested Git revisions. It is designed to build as an ordinary clone, but
   the current policy record does not yet claim a successful anonymous-clone
   compile; that remains a promotion gate.
-- This **development workspace** keeps those cross-repository integrations. It
-  requires sibling checkouts at `../trust`, `../trust-ir`, and `../trust-cg`;
-  Cargo validates workspace path dependencies even when a particular backend
-  is optional or test-only. `ay` is pinned as a Git dependency and does not
-  require a sibling checkout.
+- This **development workspace** keeps those cross-repository integrations.
+  `ay` and `trust-ir-contract` are pinned as exact-revision Git dependencies
+  and do not require sibling checkouts; no manifest references `../trust`,
+  `../trust-ir`, or `../trust-cg`. The one sibling checkout it does require
+  is `../ty`: the root `[patch]` table redirects `tla-core` to
+  `../ty/crates/tla-core`, so that checkout must sit at a commit whose
+  `tla-core` version matches this repository's `Cargo.lock`, or every
+  `--locked` cargo command fails at lock resolution before compiling.
 
 From a generated standalone bootstrap candidate:
 

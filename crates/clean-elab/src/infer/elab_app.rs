@@ -1288,6 +1288,38 @@ impl<'a> ElabCtx<'a> {
         found
     }
 
+    /// Is the current expected type a bare, still-UNASSIGNED metavariable?
+    ///
+    /// The pre-arg unification block exists to push a *known* expected result
+    /// inward so open argument slots get pinned before the arguments elaborate.
+    /// A bare unsolved metavariable is precisely the case that carries nothing
+    /// to push: unifying the walked result against it cannot pin anything, it
+    /// merely ASSIGNS the expected metavariable to a half-open result shape
+    /// whose remaining slot metas came from this speculative walk.
+    ///
+    /// That premature assignment is actively harmful under `Eq`, whose `α` is
+    /// still open while its left operand elaborates. `Quotient.mk s 3 = Quot.mk
+    /// r 3` pins `?α := Quot Nat (Setoid.r Nat ?m)` with `?m` unsolved, and the
+    /// right operand's honest `Quot Nat trivRel` can no longer match it — the
+    /// witness being that even two *syntactically identical* operands fail,
+    /// which no defeq question could explain. Binding the literal to a name
+    /// (`def n3 : Nat := 3`) sidesteps it only because the named constant does
+    /// not trip `bare_nat_literal_in_open_slot` in the first place.
+    ///
+    /// Skipping here restores the ordinary path: the arguments elaborate on
+    /// their own and the expected metavariable is solved from the finished
+    /// result afterwards, as it is for every application that never requested
+    /// pre-arg unification.
+    fn expected_is_unassigned_meta(&self) -> bool {
+        let Some(expected) = self.current_expected_type.as_ref() else {
+            return false;
+        };
+        let inst = self.metas.instantiate(expected);
+        matches!(inst.kind(),
+            ExprKind::FVar(id) if MetaState::from_fvar(*id)
+                .is_some_and(|m| self.metas.get_assignment(m).is_none()))
+    }
+
     /// Does `e` transitively contain a bare `by`/`calc` block whose result type
     /// is an argument slot — i.e. a `by`-block that is NOT ascribed and so takes
     /// its goal from the surrounding elaboration (B25)?
@@ -1363,6 +1395,125 @@ impl<'a> ElabCtx<'a> {
         }
         self.metas.pop_scope();
         found
+    }
+
+    /// NARROW re-try of the flex-application-slot gate (see the failed broad
+    /// attempt recorded below).
+    ///
+    /// Fires ONLY for a CONSTRUCTOR head whose own inductive is *syntactically*
+    /// the head constant of the expected type — `Equivalence.mk … : Equivalence
+    /// ?r` against expected `Equivalence trivRel` — AND only when some remaining
+    /// slot type is a flex application (a metavariable in application-HEAD
+    /// position, e.g. the `refl` field `∀ x : ?α, ?r x x`). Such a slot can never
+    /// be solved argument-first: matching against `?r x x` is a Miller-pattern
+    /// problem the unifier rejects as a rigid shape clash, so Lean's
+    /// `propagateExpectedType` (App.lean:414) pins the result type first.
+    ///
+    /// WHY SO NARROW. A previous attempt gated on the flex-slot shape ALONE and
+    /// broke 33 codata tests. Widening this predicate is not merely widening a
+    /// test: it makes the pre-arg-unify BLOCK run on shapes it never ran on, and
+    /// that block ASSIGNS metavariables. Codata's generated M-type machinery is
+    /// built from `isigmaStep A B t X i`, whose slots (`(b : B i a) → X (t i a
+    /// b)`) are flex applications by construction, so the broad form matched the
+    /// whole encoding and pre-pinning wrecked it. The expected type is compared
+    /// WITHOUT whnf precisely so that a generated `Sigma.mk` against an expected
+    /// `isigmaStep …` (head `isigmaStep`, not `Sigma`) does NOT match.
+    fn ctor_flex_slot_needs_expected(
+        &mut self,
+        func: &SurfaceExpr,
+        func_ty: &Expr,
+        args: &[SurfaceArg],
+    ) -> bool {
+        let Some(expected) = self.current_expected_type.clone() else {
+            return false;
+        };
+        // Head must be a constructor, and the expected type's head constant must
+        // be that constructor's own inductive — compared UN-whnf'd (see above).
+        let Some(ctor_name) = self.surface_head_const_name(func) else {
+            return false;
+        };
+        let Some(ind_name) = self
+            .env
+            .get_constructor(&ctor_name)
+            .map(|c| c.inductive_name.clone())
+        else {
+            return false;
+        };
+        let expected_inst = self.metas.instantiate(&expected);
+        let ExprKind::Const(exp_head, _) = expected_inst.get_app_fn().kind() else {
+            return false;
+        };
+        if *exp_head != ind_name {
+            return false;
+        }
+        self.metas.push_scope();
+        let mut cur = self.whnf(&self.metas.instantiate(func_ty));
+        let mut found = false;
+        for _ in args {
+            let ExprKind::Pi(_, dom, body) = cur.kind() else {
+                break;
+            };
+            let dom_inst = self.whnf(&self.metas.instantiate(dom));
+            if Self::contains_flex_application(&self.metas, &dom_inst) {
+                found = true;
+                break;
+            }
+            let meta = self.fresh_meta(dom_inst);
+            cur = self.whnf(&self.metas.instantiate(&body.instantiate(&meta)));
+        }
+        self.metas.pop_scope();
+        found
+    }
+
+    /// Is there an application whose HEAD is an unassigned metavariable anywhere
+    /// in `e` (under binders)? See [`Self::ctor_flex_slot_needs_expected`].
+    fn contains_flex_application(metas: &MetaState, e: &Expr) -> bool {
+        match e.kind() {
+            ExprKind::App(f, a) => {
+                let mut head = f.as_ref();
+                while let ExprKind::App(g, _) = head.kind() {
+                    head = g.as_ref();
+                }
+                let head_is_meta = matches!(head.kind(),
+                    ExprKind::FVar(id) if MetaState::from_fvar(*id)
+                        .is_some_and(|m| metas.get_assignment(m).is_none()));
+                head_is_meta
+                    || Self::contains_flex_application(metas, f)
+                    || Self::contains_flex_application(metas, a)
+            }
+            ExprKind::Pi(_, d, b) | ExprKind::Lam(_, d, b) => {
+                Self::contains_flex_application(metas, d)
+                    || Self::contains_flex_application(metas, b)
+            }
+            _ => false,
+        }
+    }
+
+    /// The head constant name of a surface application head, if it is a plain
+    /// (possibly dotted) identifier naming an environment constant.
+    fn surface_head_const_name(&self, func: &SurfaceExpr) -> Option<Name> {
+        let mut cur = func;
+        loop {
+            match cur {
+                SurfaceExpr::Ident(_, n) => {
+                    let name = Name::from_string(n);
+                    return self.env.get_constructor(&name).map(|_| name);
+                }
+                // `Equivalence.mk` reaches the elaborator as PROJECTION-POSTFIX
+                // (`Proj(Ident("Equivalence"), Named("mk"))`), not as a dotted
+                // identifier — the same parse shape the codata command has to
+                // accept for `C.mk`. Without this arm the gate never fires.
+                SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
+                    let SurfaceExpr::Ident(_, ns) = base.as_ref() else {
+                        return None;
+                    };
+                    let name = Name::from_string(&format!("{ns}.{field}"));
+                    return self.env.get_constructor(&name).map(|_| name);
+                }
+                SurfaceExpr::Explicit(_, inner) | SurfaceExpr::Paren(_, inner) => cur = inner,
+                _ => return None,
+            }
+        }
     }
 
     /// General result-only-implicit propagation gate (mirrors Lean's
@@ -2183,8 +2334,17 @@ impl<'a> ElabCtx<'a> {
                 // for NON-hetero-binop heads — arithmetic keeps its `binop%`
                 // homogenization path untouched.
                 || (!Self::is_hetero_binop_head(func)
-                    && self.typed_value_arg_in_open_slot(&current_type, remaining_args));
-            if needs_pre_arg_unify {
+                    && self.typed_value_arg_in_open_slot(&current_type, remaining_args))
+                // Constructor whose own inductive heads the expected type, with a
+                // flex-application slot the argument can never pin (Lean pins it
+                // via propagateExpectedType). Deliberately narrow — see the
+                // helper's doc for the 33-codata-test regression that a broader
+                // form caused.
+                || self.ctor_flex_slot_needs_expected(func, &current_type, remaining_args);
+            // An expected type that is itself an unsolved metavariable has
+            // nothing to push inward; firing the block would only pin it to a
+            // half-open result. See `expected_is_unassigned_meta`.
+            if needs_pre_arg_unify && !self.expected_is_unassigned_meta() {
                 if let Some(expected) = self.current_expected_type.clone() {
                     let mut ret_ty = self.whnf(&self.metas.instantiate(&current_type));
                     let mut ok = true;

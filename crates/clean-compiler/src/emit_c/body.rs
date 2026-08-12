@@ -12,7 +12,7 @@ use crate::ir_checker::IRError;
 
 impl CEmitter {
     /// Emit an IR function body.
-    pub fn emit_body(&mut self, body: &IRBody) -> Result<(), IRError> {
+    pub(super) fn emit_body(&mut self, body: &IRBody) -> Result<(), IRError> {
         if self.emit_mutation(body)? {
             return Ok(());
         }

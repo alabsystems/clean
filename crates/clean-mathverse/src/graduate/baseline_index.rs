@@ -72,7 +72,7 @@ use super::intake::collect_shard_paths;
 use super::record::expr_canonical_digest;
 use crate::error::{MathverseError, MathverseResult};
 use crate::shard::ShardReader;
-use crate::shard_reconstruct::reconstruct_expr_table_prefix;
+use crate::shard_reconstruct::reconstruct_expr_table;
 
 pub(crate) const MAGIC: &[u8; 8] = b"MVBIDX01";
 /// Current format version the builder writes (semantic table present).
@@ -159,7 +159,7 @@ pub fn build_baseline_index(input: &Path, out: &Path) -> MathverseResult<Baselin
         let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;
         corpus_hasher.update(&bytes);
         let reader = ShardReader::from_bytes(&bytes)?;
-        let table = reconstruct_expr_table_prefix(
+        let table = reconstruct_expr_table(
             &reader.exprs,
             &reader.levels,
             &reader.strings,
@@ -176,7 +176,10 @@ pub fn build_baseline_index(input: &Path, out: &Path) -> MathverseResult<Baselin
                 names.push(name.as_str().into());
                 next_id
             });
-            let Some(type_) = table.get(header.type_idx as usize) else {
+            // `table[i]` is now `Option<Expr>`: `None` = unreconstructable expr
+            // (unsupported / dangling sub-DAG). Skip those, exactly as the old
+            // truncating table skipped indices past its prefix.
+            let Some(type_) = table.get(header.type_idx as usize).and_then(|s| s.as_ref()) else {
                 skipped_hashes += 1;
                 continue;
             };

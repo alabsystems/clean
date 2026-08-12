@@ -36,9 +36,12 @@
 //!   the swap happens only after every declaration lands. A mid-seed
 //!   failure leaves the caller's env byte-identical.
 //! - **Collision-loud**: the `Codata.` namespace is reserved. A foreign
-//!   `Codata.*` constant (sentinel absent) is refused by an explicit
+//!   `Codata.*` constant (seed witnesses absent) is refused by an explicit
 //!   pre-scan — registration's metadata-only tolerance for existing names
 //!   means the kernel's duplicate rejection alone cannot be relied on.
+//!   Idempotence is keyed on ALL of [`SEED_WITNESSES`]: keying it on the
+//!   sentinel alone let a single squatted `def Codata.IMIntl` short-circuit
+//!   the pre-scan and leave the namespace open.
 
 use crate::ElabError;
 use clean_kernel::Environment;
@@ -54,8 +57,23 @@ const MTYPE_INDEXED_SRC: &str = include_str!(concat!(
 /// the graduation source. Everything BEFORE the marker is the seed.
 const CAPSTONE_MARKER: &str = "-- ── R2 capstone A";
 
-/// Sentinel constant: present iff the seed library has been injected.
+/// Sentinel constant: named in diagnostics as the marker of an injected seed.
 const SEED_SENTINEL: &str = "Codata.IMIntl";
+
+/// Constants that must ALL be present for an environment to count as seeded.
+///
+/// The sentinel alone is not sufficient evidence, and treating it as such was a
+/// real hole: `Codata.IMIntl` is an ordinary name a user can define, and the
+/// idempotence check short-circuited on it BEFORE the namespace pre-scan ran.
+/// A single squatted `def Codata.IMIntl` therefore turned seeding into a silent
+/// no-op and left the whole reserved namespace open.
+///
+/// Requiring several witnesses closes that: a partial occupation now falls
+/// through to the pre-scan below, which refuses loudly. It is cheap
+/// defence-in-depth rather than a proof of authenticity — the load-bearing gate
+/// for recognition is carrier provenance (`Environment::is_codata_carrier`),
+/// which only the `codata` command sets.
+const SEED_WITNESSES: &[&str] = &[SEED_SENTINEL, "Codata.ucorec", "Codata.IMcorec"];
 
 /// The `Codata.*`-namespaced seed source (generic core only).
 fn seed_source() -> Result<String, ElabError> {
@@ -72,14 +90,18 @@ fn seed_source() -> Result<String, ElabError> {
 
 /// Inject the `Codata.*` M-type seed library into `env` if absent.
 ///
-/// Idempotent (keyed on [`SEED_SENTINEL`]), transactional (candidate-clone
+/// Idempotent (keyed on ALL of [`SEED_WITNESSES`], not the sentinel alone —
+/// see that constant for why), transactional (candidate-clone
 /// swap), fail-closed (first failing declaration aborts with its error and
 /// leaves `env` untouched). Call this ONLY from codata elaboration paths —
 /// never from the default entry point.
 pub fn ensure_codata_seeds(env: &mut Environment) -> Result<(), ElabError> {
-    if env
-        .get_const(&clean_kernel::Name::from_string(SEED_SENTINEL))
-        .is_some()
+    // Already seeded iff EVERY witness is present. A partial occupation (some
+    // witnesses, or a squatted sentinel alone) deliberately falls through to
+    // the pre-scan, which refuses.
+    if SEED_WITNESSES
+        .iter()
+        .all(|n| env.get_const(&clean_kernel::Name::from_string(n)).is_some())
     {
         return Ok(());
     }
@@ -186,6 +208,35 @@ mod tests {
             env.num_constants(),
             after_first,
             "idempotent re-entry must not change the env"
+        );
+    }
+
+    /// Squatting the SENTINEL is refused, not silently honored.
+    ///
+    /// This is an adversarial review's finding, as its own test. The
+    /// idempotence check used to short-circuit on the sentinel alone, BEFORE
+    /// the namespace pre-scan — and `Codata.IMIntl` is an ordinary
+    /// user-definable name. So a single squatted definition made seeding a
+    /// silent no-op and left the entire reserved namespace open, while every
+    /// existing test stayed green because they all squat a NON-sentinel name.
+    ///
+    /// The idempotence check now requires several witnesses, so a lone sentinel
+    /// falls through to the pre-scan and is refused like any other collision.
+    #[test]
+    fn test_squatting_the_sentinel_alone_is_refused() {
+        let mut env = Environment::with_prelude();
+        let src = format!("def {SEED_SENTINEL} : Nat := Nat.zero");
+        let decls = clean_parser::parse_file(&src).expect("should parse");
+        crate::elaborate_decl_and_register(&mut env, &decls[0]).expect("user def must elaborate");
+        let before = env.num_constants();
+        assert!(
+            ensure_codata_seeds(&mut env).is_err(),
+            "a squatted sentinel must NOT be mistaken for an injected seed"
+        );
+        assert_eq!(
+            env.num_constants(),
+            before,
+            "failed seeding must leave the env byte-identical (transactional)"
         );
     }
 

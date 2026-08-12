@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
 
-"""Fail closed if Clean regains a path dependency on the Trust workspace."""
+"""Fail closed if Clean crosses Trust or floats its TrustIr contract pin."""
 
 from __future__ import annotations
 
@@ -12,14 +12,22 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 and older.
+    import tomli as tomllib
+
 
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_MANIFEST = ROOT / "Cargo.toml"
 AUTOFORM_MANIFEST = ROOT / "crates/clean-autoform/Cargo.toml"
 AUTOFORM_SOURCE = ROOT / "crates/clean-autoform/src"
-CONTRACT_DECLARATION = (
-    'trust-ir-contract = { path = "../trust-ir/crates/trust-ir-contract" }'
+CONTRACT_NAME = "trust-ir-contract"
+CONTRACT_REPOSITORY = "https://github.com/alabsystems/trust-ir.git"
+ANY_CONTRACT_DECLARATION = re.compile(
+    rf"(?m)^[ \t]*{re.escape(CONTRACT_NAME)}[ \t]*="
 )
+EXACT_REVISION = re.compile(r"[0-9a-f]{40}")
 FORBIDDEN_DEPENDENCIES = ("trust-types", "trust-verifier-api")
 FORBIDDEN_CRATE_NAMES = ("trust_types", "trust_verifier_api")
 PATH_DECLARATION = re.compile(r"\bpath\s*=\s*[\"']([^\"']+)[\"']")
@@ -85,6 +93,42 @@ def check_manifest_boundaries(manifests: dict[Path, str], root: Path) -> None:
                 )
 
 
+def check_contract_declaration(root_manifest: str, autoform_present: bool) -> None:
+    """Require one immutable canonical contract pin when clean-autoform exists."""
+
+    declaration_count = len(ANY_CONTRACT_DECLARATION.findall(root_manifest))
+
+    if not autoform_present:
+        if declaration_count:
+            raise BoundaryViolation(
+                "bootstrap projection retained TrustIr after removing clean-autoform"
+            )
+        return
+
+    if declaration_count != 1:
+        raise BoundaryViolation(
+            "workspace must declare trust-ir-contract exactly once"
+        )
+    try:
+        parsed = tomllib.loads(root_manifest)
+        contract = parsed["workspace"]["dependencies"][CONTRACT_NAME]
+    except (KeyError, TypeError, tomllib.TOMLDecodeError) as error:
+        raise BoundaryViolation(
+            "workspace trust-ir-contract declaration is not valid TOML"
+        ) from error
+    if (
+        not isinstance(contract, dict)
+        or set(contract) != {"git", "rev"}
+        or contract.get("git") != CONTRACT_REPOSITORY
+        or not isinstance(contract.get("rev"), str)
+        or EXACT_REVISION.fullmatch(contract["rev"]) is None
+    ):
+        raise BoundaryViolation(
+            "workspace trust-ir-contract must contain only the canonical "
+            f"{CONTRACT_REPOSITORY} URL and an exact lowercase 40-hex rev"
+        )
+
+
 def regression_self_test() -> None:
     fixture_root = Path("/clean-boundary-self-test/clean")
     nested_manifest = fixture_root / "crates/nested/Cargo.toml"
@@ -135,6 +179,61 @@ def regression_self_test() -> None:
         else:
             raise AssertionError(f"{description} regression was not rejected")
 
+    exact_revision = "1" * 40
+    canonical = (
+        "[workspace.dependencies]\n"
+        f'{CONTRACT_NAME} = {{ git = "{CONTRACT_REPOSITORY}", '
+        f'rev = "{exact_revision}" }}\n'
+    )
+    check_contract_declaration(canonical, autoform_present=True)
+    check_contract_declaration(
+        "[workspace.dependencies]\n"
+        f"{CONTRACT_NAME} = {{\n"
+        f'  rev = "{exact_revision}",\n'
+        f'  git = "{CONTRACT_REPOSITORY}",\n'
+        "}\n",
+        autoform_present=True,
+    )
+    check_contract_declaration("[workspace.dependencies]\n", autoform_present=False)
+
+    invalid_contracts = (
+        (
+            canonical.replace(CONTRACT_REPOSITORY, "https://example.invalid/trust-ir.git"),
+            True,
+            "non-canonical contract repository",
+        ),
+        (
+            canonical.replace(
+                f'rev = "{exact_revision}"', 'branch = "main"'
+            ),
+            True,
+            "floating contract branch",
+        ),
+        (
+            canonical.replace(exact_revision, exact_revision[:12]),
+            True,
+            "abbreviated contract revision",
+        ),
+        (
+            canonical.replace(
+                f'rev = "{exact_revision}"',
+                f'rev = "{exact_revision}", features = ["serde"]',
+            ),
+            True,
+            "extra contract dependency field",
+        ),
+        (canonical + canonical, True, "duplicate contract declaration"),
+        ("[workspace.dependencies]\n", True, "missing contract declaration"),
+        (canonical, False, "contract retained in bootstrap projection"),
+    )
+    for manifest, autoform_present, description in invalid_contracts:
+        try:
+            check_contract_declaration(manifest, autoform_present)
+        except BoundaryViolation:
+            pass
+        else:
+            raise AssertionError(f"{description} regression was not rejected")
+
 
 def main() -> int:
     regression_self_test()
@@ -146,11 +245,10 @@ def main() -> int:
         AUTOFORM_MANIFEST.read_text() if AUTOFORM_MANIFEST.is_file() else ""
     )
 
-    if autoform_manifest:
-        if root_manifest.count(CONTRACT_DECLARATION) != 1:
-            fail("workspace must declare the sibling TrustIr contract exactly once")
-    elif CONTRACT_DECLARATION in root_manifest:
-        fail("bootstrap projection retained TrustIr after removing clean-autoform")
+    try:
+        check_contract_declaration(root_manifest, bool(autoform_manifest))
+    except BoundaryViolation as error:
+        fail(str(error))
 
     try:
         check_manifest_boundaries(manifests, ROOT)

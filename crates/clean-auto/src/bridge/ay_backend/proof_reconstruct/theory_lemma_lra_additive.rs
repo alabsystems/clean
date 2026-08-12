@@ -251,8 +251,9 @@ fn mk_3arg(lemma: &str, a: &Expr, b: &Expr, c: &Expr) -> Expr {
 /// Proof of a (possibly scaled) bound: `lhs op rhs`.
 ///
 /// After scaling a hypothesis `a op b` by integer coefficient `k`, this carries
-/// `(k*a, k*b, op, proof_of_ka_op_kb)` where `k*a` is the repeated-addition
-/// expression `a + a + ... + a` (k times).
+/// `(k*a, k*b, op, proof_of_ka_op_kb)` where `k*a` is an addition tree with
+/// `k` occurrences of `a`.
+#[derive(Clone)]
 pub(super) struct SortCmpAcc {
     pub(super) lhs: Expr,
     pub(super) rhs: Expr,
@@ -260,14 +261,64 @@ pub(super) struct SortCmpAcc {
     pub(super) proof: Expr,
 }
 
-/// Scale a single hypothesis by a positive integer coefficient via repeated
-/// addition.
+/// Combine two authenticated comparison accumulators by addition.
 ///
-/// For coefficient 1, returns the hypothesis directly.
-/// For coefficient k > 1, builds `k*a op k*b` by repeatedly combining
-/// `h : a op b` with the accumulator using `add_cmp_add_right` (for the
-/// accumulated side) and `add_cmp_add_left` (for the hypothesis), joined
-/// by a transitivity chain step.
+/// Given `a0 op0 b0` and `a1 op1 b1`, constructs a kernel proof of
+/// `(a1 + a0) combine(op0, op1) (b1 + b0)`. Keeping this operation in one
+/// helper makes both coefficient scaling and N-bound accumulation use the
+/// same checked proof shape.
+fn combine_two_scaled_bounds(
+    sort: &Sort,
+    first: &SortCmpAcc,
+    second: &SortCmpAcc,
+) -> Option<SortCmpAcc> {
+    let step1 = mk_add_cmp_add_left(
+        sort,
+        first.op,
+        &first.lhs,
+        &first.rhs,
+        &first.proof,
+        &second.lhs,
+    )?;
+    let step2 = mk_add_cmp_add_right(
+        sort,
+        second.op,
+        &second.lhs,
+        &second.rhs,
+        &second.proof,
+        &first.rhs,
+    )?;
+    let combined_lhs = mk_sort_add(sort, &second.lhs, &first.lhs)?;
+    let sum_mid = mk_sort_add(sort, &second.lhs, &first.rhs)?;
+    let combined_rhs = mk_sort_add(sort, &second.rhs, &first.rhs)?;
+    let combined_op = expr_builders_arith::combine_ops(first.op, second.op);
+    let combined_proof = mk_chain_step(
+        sort,
+        first.op,
+        second.op,
+        &combined_lhs,
+        &sum_mid,
+        &combined_rhs,
+        &step1,
+        &step2,
+    )?;
+
+    Some(SortCmpAcc {
+        lhs: combined_lhs,
+        rhs: combined_rhs,
+        op: combined_op,
+        proof: combined_proof,
+    })
+}
+
+/// Scale a single hypothesis by a positive integer coefficient with a binary
+/// addition chain.
+///
+/// For coefficient 1, returns the hypothesis directly. For coefficient
+/// `k > 1`, repeated doubling builds authenticated powers of two and the set
+/// bits of `k` are combined with [`combine_two_scaled_bounds`]. The resulting
+/// arithmetic expression still contains exactly `k` copies of each endpoint,
+/// while its proof depth is logarithmic rather than linear in `k`.
 ///
 /// Requires: `coeff >= 1`, sort is Int or Real.
 pub(super) fn scale_bound(
@@ -282,68 +333,30 @@ pub(super) fn scale_bound(
         return None;
     }
 
-    let mk_add = |a: &Expr, b: &Expr| -> Option<Expr> { mk_sort_add(sort, a, b) };
-    let mk_acl = |o: CmpOp, a: &Expr, b: &Expr, h: &Expr, c: &Expr| -> Option<Expr> {
-        mk_add_cmp_add_left(sort, o, a, b, h, c)
+    let base = SortCmpAcc {
+        lhs: lhs.clone(),
+        rhs: rhs.clone(),
+        op,
+        proof: hyp.clone(),
     };
-    let mk_acr = |o: CmpOp, a: &Expr, b: &Expr, h: &Expr, c: &Expr| -> Option<Expr> {
-        mk_add_cmp_add_right(sort, o, a, b, h, c)
-    };
-    let mk_cs = |lo: CmpOp,
-                 ro: CmpOp,
-                 a: &Expr,
-                 b: &Expr,
-                 c: &Expr,
-                 h1: &Expr,
-                 h2: &Expr|
-     -> Option<Expr> { mk_chain_step(sort, lo, ro, a, b, c, h1, h2) };
 
-    if coeff == 1 {
-        return Some(SortCmpAcc {
-            lhs: lhs.clone(),
-            rhs: rhs.clone(),
-            op,
-            proof: hyp.clone(),
-        });
+    let mut remaining = coeff;
+    let mut power = base;
+    let mut result: Option<SortCmpAcc> = None;
+    while remaining != 0 {
+        if remaining & 1 == 1 {
+            result = Some(match result {
+                Some(acc) => combine_two_scaled_bounds(sort, &acc, &power)?,
+                None => power.clone(),
+            });
+        }
+        remaining >>= 1;
+        if remaining != 0 {
+            power = combine_two_scaled_bounds(sort, &power, &power)?;
+        }
     }
 
-    // k=2: combine h with itself
-    // step1 = add_cmp_add_left(a, b, h, a) → a+a op a+b
-    // step2 = add_cmp_add_right(a, b, h, b) → a+b op b+b
-    // chain: a+a op a+b, a+b op b+b
-    // result: a+a op b+b = 2a op 2b
-    let step1 = mk_acl(op, lhs, rhs, hyp, lhs)?;
-    let step2 = mk_acr(op, lhs, rhs, hyp, rhs)?;
-    let acc_lhs = mk_add(lhs, lhs)?;
-    let sum_mid = mk_add(lhs, rhs)?;
-    let acc_rhs = mk_add(rhs, rhs)?;
-    let acc_op = expr_builders_arith::combine_ops(op, op);
-    let acc_proof = mk_cs(op, op, &acc_lhs, &sum_mid, &acc_rhs, &step1, &step2)?;
-
-    let mut acc = SortCmpAcc {
-        lhs: acc_lhs,
-        rhs: acc_rhs,
-        op: acc_op,
-        proof: acc_proof,
-    };
-
-    // k=3..coeff: keep adding h
-    for _ in 2..coeff {
-        let step_a = mk_acr(acc.op, &acc.lhs, &acc.rhs, &acc.proof, lhs)?;
-        let step_b = mk_acl(op, lhs, rhs, hyp, &acc.rhs)?;
-        let new_lhs = mk_add(&acc.lhs, lhs)?;
-        let mid = mk_add(&acc.rhs, lhs)?;
-        let new_rhs = mk_add(&acc.rhs, rhs)?;
-        let new_proof = mk_cs(acc.op, op, &new_lhs, &mid, &new_rhs, &step_a, &step_b)?;
-        acc = SortCmpAcc {
-            lhs: new_lhs,
-            rhs: new_rhs,
-            op: expr_builders_arith::combine_ops(acc.op, op),
-            proof: new_proof,
-        };
-    }
-
-    Some(acc)
+    result
 }
 
 /// Combine N scaled bound accumulators into a single additive proof.
@@ -358,62 +371,14 @@ pub(super) fn combine_scaled_bounds(sort: &Sort, accs: &mut [SortCmpAcc]) -> Opt
         return None;
     }
 
-    let mk_add = |a: &Expr, b: &Expr| -> Option<Expr> { mk_sort_add(sort, a, b) };
-    let mk_acl = |o: CmpOp, a: &Expr, b: &Expr, h: &Expr, c: &Expr| -> Option<Expr> {
-        mk_add_cmp_add_left(sort, o, a, b, h, c)
-    };
-    let mk_acr = |o: CmpOp, a: &Expr, b: &Expr, h: &Expr, c: &Expr| -> Option<Expr> {
-        mk_add_cmp_add_right(sort, o, a, b, h, c)
-    };
-    let mk_cs = |lo: CmpOp,
-                 ro: CmpOp,
-                 a: &Expr,
-                 b: &Expr,
-                 c: &Expr,
-                 h1: &Expr,
-                 h2: &Expr|
-     -> Option<Expr> { mk_chain_step(sort, lo, ro, a, b, c, h1, h2) };
-
-    // Base case: combine first two accumulators
-    let b1 = &accs[1];
-    let b0 = &accs[0];
-    let step1 = mk_acl(b0.op, &b0.lhs, &b0.rhs, &b0.proof, &b1.lhs)?;
-    let step2 = mk_acr(b1.op, &b1.lhs, &b1.rhs, &b1.proof, &b0.rhs)?;
-    let combined_lhs = mk_add(&b1.lhs, &b0.lhs)?;
-    let sum_mid = mk_add(&b1.lhs, &b0.rhs)?;
-    let combined_rhs = mk_add(&b1.rhs, &b0.rhs)?;
-    let combined_op = expr_builders_arith::combine_ops(b0.op, b1.op);
-    let combined_proof = mk_cs(
-        b0.op,
-        b1.op,
-        &combined_lhs,
-        &sum_mid,
-        &combined_rhs,
-        &step1,
-        &step2,
-    )?;
-
-    let mut acc = SortCmpAcc {
-        lhs: combined_lhs,
-        rhs: combined_rhs,
-        op: combined_op,
-        proof: combined_proof,
-    };
+    let mut acc = combine_two_scaled_bounds(sort, &accs[0], &accs[1])?;
 
     // Iterate for remaining accumulators
     for bound in accs.iter().skip(2) {
-        let step_a = mk_acr(acc.op, &acc.lhs, &acc.rhs, &acc.proof, &bound.lhs)?;
-        let step_b = mk_acl(bound.op, &bound.lhs, &bound.rhs, &bound.proof, &acc.rhs)?;
-        let new_lhs = mk_add(&acc.lhs, &bound.lhs)?;
-        let mid = mk_add(&acc.rhs, &bound.lhs)?;
-        let new_rhs = mk_add(&acc.rhs, &bound.rhs)?;
-        let new_proof = mk_cs(acc.op, bound.op, &new_lhs, &mid, &new_rhs, &step_a, &step_b)?;
-        acc = SortCmpAcc {
-            lhs: new_lhs,
-            rhs: new_rhs,
-            op: expr_builders_arith::combine_ops(acc.op, bound.op),
-            proof: new_proof,
-        };
+        // The helper returns `second + first`; reverse the arguments here to
+        // preserve the established left-associated `acc + bound` endpoint
+        // shape consumed by symbolic normal-form closeout.
+        acc = combine_two_scaled_bounds(sort, bound, &acc)?;
     }
 
     Some(acc)

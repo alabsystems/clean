@@ -487,9 +487,18 @@ fn test_extract_referenced_tokens_excludes_created_paths() {
     assert!(toks.iter().any(|t| t == "/Use\x72s/x/in.jsonl"), "{toks:?}");
     assert!(toks.iter().any(|t| t == "/Use\x72s/x/dep.sh"), "{toks:?}");
     // …outputs are dropped (plain + quoted redirects, mkdir args).
-    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/out.snap"), "{toks:?}");
-    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/quoted.log"), "{toks:?}");
-    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/build.out"), "{toks:?}");
+    assert!(
+        !toks.iter().any(|t| t == "/Use\x72s/x/out.snap"),
+        "{toks:?}"
+    );
+    assert!(
+        !toks.iter().any(|t| t == "/Use\x72s/x/quoted.log"),
+        "{toks:?}"
+    );
+    assert!(
+        !toks.iter().any(|t| t == "/Use\x72s/x/build.out"),
+        "{toks:?}"
+    );
     assert!(!toks.iter().any(|t| t == "/Use\x72s/x/made.d"), "{toks:?}");
 }
 

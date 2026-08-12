@@ -29,6 +29,7 @@
 //!   return _2
 //! ```
 
+pub mod codata_recognize;
 mod lower;
 pub(crate) mod mentions;
 #[cfg(test)]

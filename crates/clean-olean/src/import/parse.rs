@@ -66,6 +66,34 @@ pub fn parse_module_file(path: impl AsRef<Path>) -> OleanResult<ParsedModule> {
     parse_module(&bytes)
 }
 
+/// Decide whether `region_bytes` is a *higher-address incremental* olean that
+/// cross-references `base_bytes` (i.e. its objects must be resolved against the
+/// base), as opposed to a self-contained region sharing the base's address
+/// range.
+///
+/// A module-system `.olean.server` / `.olean.private` is loaded by Lean at an
+/// address strictly *above* the end of the base region, so its base address is
+/// `>= base_base_addr + base_len`. A classic, self-contained olean shares (or
+/// overlaps) the base's address range and must be parsed standalone.
+///
+/// Both headers are parsed here, so a malformed `region_bytes` (e.g. a
+/// truncated or non-olean file) surfaces its header error to the caller rather
+/// than being silently misrouted.
+///
+/// # ENSURES
+/// - Returns `Ok(true)` iff `region.base_addr >= base.base_addr + base.len`.
+/// - Propagates `OleanError` if either header fails to parse.
+fn is_higher_address_region(base_bytes: &[u8], region_bytes: &[u8]) -> OleanResult<bool> {
+    let base_header = OleanHeader::parse(base_bytes)?;
+    let region_header = OleanHeader::parse(region_bytes)?;
+    let Some(base_end) = base_header.base_addr.checked_add(base_bytes.len() as u64) else {
+        // A base whose address range overflows u64 cannot anchor an incremental
+        // region; treat the companion as self-contained (standalone parse).
+        return Ok(false);
+    };
+    Ok(region_header.base_addr >= base_end)
+}
+
 /// Parse an .olean.private file as an incremental region that shares pointers
 /// with its base .olean file (and optionally the .olean.server file).
 ///
@@ -230,7 +258,17 @@ pub fn parse_module_parts(base_path: impl AsRef<Path>) -> OleanResult<Vec<Parsed
     let server_path = base_path.with_extension("olean.server");
     if server_path.exists() {
         let server_bytes = std::fs::read(&server_path)?;
-        let module = parse_module(&server_bytes)?;
+        // ROUTE BY ADDRESS. Under the module system the `.olean.server` is a
+        // higher-address INCREMENTAL region whose objects cross-reference the
+        // base, so parsing it standalone resolves its pointers against the wrong
+        // buffer. A classic self-contained server olean instead shares the base's
+        // address range and parses standalone. Deciding by header address covers
+        // both; assuming either one silently corrupts the other.
+        let module = if is_higher_address_region(&base_bytes, &server_bytes)? {
+            parse_module_incremental(&base_bytes, None, &server_bytes)?
+        } else {
+            parse_module(&server_bytes)?
+        };
         parts.push(ParsedModulePart {
             level: OLeanLevel::Server,
             module,

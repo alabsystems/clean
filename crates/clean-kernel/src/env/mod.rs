@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 mod axiom_audit;
 #[cfg(any(test, feature = "math-overlays"))]
 mod carrier_refutation;
+mod codata_origin;
 mod decl_add;
 mod decl_emit;
 mod inductive_info;
@@ -62,6 +63,7 @@ pub use carrier_refutation::{
     census_carriers, classify_refutation, is_refutable, scan_admitted_axioms, CarrierCensus,
     RefutationOutcome, RefutationScan,
 };
+pub use codata_origin::{CodataLane, CodataOrigin};
 #[cfg(test)]
 use decl_add::find_undef_level_param;
 pub use decl_add::{mm_axiom_only, mm_two_pass_active, set_mm_axiom_only, MmAxiomOnlyGuard};
@@ -2012,6 +2014,23 @@ pub struct Environment {
     /// Missing metadata is conservative/unknown, never checked-by-default.
     #[serde(skip)]
     declaration_verification: HashMap<Name, DeclarationVerification>,
+    /// Provenance for elaborator-generated `codata`/`codef` constants (B2).
+    ///
+    /// Not serialized, for the same reason as `declaration_verification` and
+    /// one more: this is a HINT that a consumer must structurally replay, so a
+    /// deserialized artifact must not be able to ship a forged origin claiming
+    /// a hand-written constant is generated codata. Absence downgrades (the
+    /// consumer declines); presence still authorizes nothing on its own.
+    /// Never consulted by type checking. See [`codata_origin`].
+    #[serde(skip)]
+    codata_origins: HashMap<Name, CodataOrigin>,
+    /// Carrier types the `codata` command generated (B3 carrier provenance).
+    ///
+    /// Not serialized, for the same reasons as `codata_origins`. Recognition
+    /// requires membership here, so a hand-written type that merely owns a
+    /// `<C>.corec` cannot be mistaken for generated codata.
+    #[serde(skip)]
+    codata_carriers: hashbrown::HashSet<Name>,
     /// Persistent environment extension entries and state (Lean 4-compatible).
     persistent_extensions: HashMap<Name, PersistentEnvExtensionState>,
     /// Materialized typed extension states (from persistent_ext framework, #916).
@@ -4467,6 +4486,8 @@ impl Environment {
             constants: HashMap::with_capacity(capacity),
             constant_origins: HashMap::with_capacity(capacity),
             declaration_verification: HashMap::with_capacity(capacity),
+            codata_origins: HashMap::new(),
+            codata_carriers: hashbrown::HashSet::new(),
             inductives: HashMap::with_capacity(capacity / 8),
             constructors: HashMap::with_capacity(capacity / 4),
             recursors: HashMap::with_capacity(capacity / 6),

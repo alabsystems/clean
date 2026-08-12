@@ -193,3 +193,81 @@ fn test_build_mathlib_full() {
     );
     assert!(result.total_shards > 0, "should write at least one shard");
 }
+
+// ---------------------------------------------------------------------------
+// Multi-root shard namespacing (regression: earlier roots were clobbered)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_shard_prefix_for_label_sanitizes_and_is_distinct() {
+    // Alphanumeric labels pass through unchanged.
+    assert_eq!(shard_prefix_for_label("toolchain"), "toolchain");
+    assert_eq!(shard_prefix_for_label("mathlib"), "mathlib");
+    // `:` (and any non-alphanumeric) becomes `_` so it is filesystem-safe.
+    assert_eq!(shard_prefix_for_label("pkg:batteries"), "pkg_batteries");
+    assert_eq!(shard_prefix_for_label("pkg:Qq"), "pkg_Qq");
+    // An all-punctuation label falls back rather than collapsing to empty.
+    assert_eq!(shard_prefix_for_label(":::"), "root");
+
+    // The standard root labels must map to DISTINCT prefixes — this is exactly
+    // the property that prevents one root's `_0000..` shards from overwriting
+    // another's on disk.
+    let labels = [
+        "toolchain",
+        "pkg:batteries",
+        "pkg:Qq",
+        "pkg:aesop",
+        "mathlib",
+    ];
+    let prefixes: std::collections::HashSet<String> =
+        labels.iter().map(|l| shard_prefix_for_label(l)).collect();
+    assert_eq!(
+        prefixes.len(),
+        labels.len(),
+        "each root label must map to a distinct shard prefix, got {prefixes:?}"
+    );
+}
+
+/// Regression for the multi-root clobber bug: initializing the manifest ONCE
+/// and then appending each root's shards (distinct prefixes,
+/// `reset_manifest: false`) must leave every root's shards registered — the
+/// previous code re-`init()`ed per root and left only the last root's shards.
+#[test]
+fn test_multiroot_manifest_accumulates_without_clobber() {
+    use crate::manifest::LibraryLoader;
+    use crate::shard::ShardWriter;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let loader = LibraryLoader::new(tmp.path().to_path_buf());
+
+    // Mirror `build_mathlib_library`: init the shared manifest exactly once.
+    loader.init().expect("init shared library once");
+
+    // Three roots, each appending a shard under its own prefix (the
+    // `reset_manifest: false` path — no re-init between roots).
+    for name in ["toolchain_0000", "pkg_batteries_0000", "mathlib_0000"] {
+        let writer = ShardWriter::new();
+        loader
+            .write_shard(&writer, name, false)
+            .unwrap_or_else(|e| panic!("write shard {name}: {e}"));
+    }
+
+    let manifest = loader.load_manifest().expect("load merged manifest");
+    let paths: Vec<String> = manifest
+        .all_shards()
+        .iter()
+        .map(|s| s.path.clone())
+        .collect();
+
+    assert_eq!(
+        paths.len(),
+        3,
+        "all three roots' shards must survive in the manifest, got {paths:?}"
+    );
+    for expect in ["toolchain_0000", "pkg_batteries_0000", "mathlib_0000"] {
+        assert!(
+            paths.iter().any(|p| p.contains(expect)),
+            "manifest must retain {expect} (not clobbered), got {paths:?}"
+        );
+    }
+}

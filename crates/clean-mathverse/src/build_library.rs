@@ -40,8 +40,38 @@ pub struct BuildConfig {
     /// Files larger than this are skipped. Useful for avoiding multi-MB
     /// compiler-internal files (Init/Meta.olean ~3.4MB) that dominate build time.
     pub max_file_size: u64,
+    /// Base name for the shards this build writes, e.g. `"lean4"` produces
+    /// `base/lean4_0000.mathverse`, `base/lean4_0001.mathverse`, ...
+    ///
+    /// Multi-root builds (see [`crate::build_mathlib`]) MUST give each root a
+    /// distinct prefix, otherwise later roots' shards silently overwrite earlier
+    /// roots' shards on disk (they all restart numbering at `_0000`). Empty
+    /// falls back to `"lean4"` for backward compatibility.
+    pub shard_prefix: String,
+    /// Whether to reset the output manifest to empty before writing shards.
+    ///
+    /// `true` (the single-root default) reinitializes the library directory so a
+    /// rebuild starts clean. Multi-root builds set this to `false` for every
+    /// root after the first, so each root *appends* its shards to the shared
+    /// manifest instead of wiping the previous roots' entries.
+    pub reset_manifest: bool,
     /// Print progress information to stderr.
     pub verbose: bool,
+}
+
+impl Default for BuildConfig {
+    fn default() -> Self {
+        Self {
+            lean_lib_dir: PathBuf::new(),
+            output_dir: PathBuf::new(),
+            modules: Vec::new(),
+            shard_size_limit: 10_000,
+            max_file_size: 0,
+            shard_prefix: "lean4".to_string(),
+            reset_manifest: true,
+            verbose: false,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,9 +136,24 @@ pub fn build_lean4_library(config: &BuildConfig) -> MathverseResult<BuildResult>
         );
     }
 
-    // Set up the output directory structure via LibraryLoader.
+    // Set up the output directory structure via LibraryLoader. `reset_manifest`
+    // wipes the manifest for a clean single-root rebuild; multi-root builds pass
+    // `false` for every root after the first so each root appends its shards to
+    // the shared manifest instead of clobbering earlier roots' entries.
     let loader = LibraryLoader::new(config.output_dir.clone());
-    loader.init()?;
+    if config.reset_manifest {
+        loader.init()?;
+    } else {
+        loader.ensure_dirs()?;
+    }
+
+    // Shard base name. Multi-root builds MUST pass a distinct prefix per root or
+    // later roots overwrite earlier roots' `_0000..` files on disk.
+    let shard_prefix: &str = if config.shard_prefix.is_empty() {
+        "lean4"
+    } else {
+        &config.shard_prefix
+    };
 
     let mut writer = ShardWriter::new();
     let mut shard_constants: usize = 0;
@@ -162,7 +207,7 @@ pub fn build_lean4_library(config: &BuildConfig) -> MathverseResult<BuildResult>
 
         // Split shard when size limit is exceeded.
         if config.shard_size_limit > 0 && shard_constants >= config.shard_size_limit {
-            let name = format!("lean4_{shard_idx:04}");
+            let name = format!("{shard_prefix}_{shard_idx:04}");
             seal_shard(
                 &mut sealed,
                 &mut writer,
@@ -189,7 +234,7 @@ pub fn build_lean4_library(config: &BuildConfig) -> MathverseResult<BuildResult>
 
     // Seal remaining constants.
     if shard_constants > 0 {
-        let name = format!("lean4_{shard_idx:04}");
+        let name = format!("{shard_prefix}_{shard_idx:04}");
         seal_shard(
             &mut sealed,
             &mut writer,
@@ -393,6 +438,7 @@ pub fn build_combined_library(
         shard_size_limit: 10_000,
         max_file_size,
         verbose,
+        ..BuildConfig::default()
     };
     let lean_result = build_lean4_library(&lean_config)?;
 
@@ -626,6 +672,7 @@ mod tests {
             // Core types (Bool, Nat) are in Init/Core.olean (1.9MB) — included.
             max_file_size: 2_500_000,
             verbose: true,
+            ..BuildConfig::default()
         };
 
         let result = build_lean4_library(&config).expect("build should succeed");
@@ -709,6 +756,7 @@ mod tests {
             // Skip files >2.5MB (only Init/Meta, Init/Prelude, and Lemma files)
             max_file_size: 2_500_000,
             verbose: true,
+            ..BuildConfig::default()
         };
 
         let result = build_lean4_library(&config).expect("build should succeed");

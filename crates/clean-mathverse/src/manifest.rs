@@ -331,6 +331,13 @@ impl LibraryLoader {
         MathverseManifest::new().save(&self.paths.manifest)
     }
 
+    /// Ensure the library directory structure exists without touching the
+    /// manifest. Used by multi-root builds where the first root already
+    /// initialized (and owns) the shared manifest, and later roots only append.
+    pub fn ensure_dirs(&self) -> MathverseResult<()> {
+        self.paths.ensure_dirs()
+    }
+
     /// Load the library manifest.
     ///
     /// Prefers the in-place `manifest.json` ([`MathverseManifest`] shape). If it

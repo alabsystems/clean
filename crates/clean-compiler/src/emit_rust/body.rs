@@ -13,7 +13,7 @@ use crate::join_point_lower::{LoweredAlt, LoweredBody};
 
 impl RustEmitter {
     /// Emit a lowered function body.
-    pub fn emit_body(&mut self, body: &LoweredBody) -> Result<(), IRError> {
+    pub(super) fn emit_body(&mut self, body: &LoweredBody) -> Result<(), IRError> {
         if self.emit_mutation(body)? {
             return Ok(());
         }

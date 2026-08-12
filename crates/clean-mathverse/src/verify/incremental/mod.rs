@@ -3526,6 +3526,43 @@ fn run_incremental_over_reader(
     initial_env: Environment,
     policy: InductiveReplayPolicy,
 ) -> (Environment, IncrementalVerifyReport) {
+    run_incremental_over_reader_bounded(
+        reader,
+        initial_env,
+        policy,
+        clean_kernel::env::ProofValueElision::None,
+    )
+}
+
+/// Number of constants processed between periodic proof-value elision sweeps
+/// (see [`run_incremental_over_reader_bounded`]). A sweep is O(constants in env),
+/// so this trades a small amount of CPU for a large drop in resident memory; the
+/// value keeps sweeps rare relative to the per-constant kernel work.
+const ELISION_CADENCE: usize = 50_000;
+
+/// Core corpus replay loop with an optional bounded-memory proof-value elision
+/// policy.
+///
+/// With `elision == ProofValueElision::None` this is the exact legacy behavior.
+/// Otherwise, every [`ELISION_CADENCE`] constants (and once at the end) the
+/// already-verified proof VALUES selected by the policy are dropped from the
+/// environment (types are always retained), bounding resident memory for a
+/// whole-Mathlib pass whose later shards carry very large proof terms.
+///
+/// SOUNDNESS: `Environment::elide_proof_values` keeps every constant's TYPE, so
+/// a dependent's by-name reference still resolves. [`ProofValueElision::OpaqueOnly`]
+/// is statically verdict-preserving (opaque values are never δ-unfolded).
+/// [`ProofValueElision::OpaqueAndTheorem`] additionally drops theorem proofs; the
+/// kernel CAN δ-unfold theorems, so that policy is validated empirically by the
+/// caller (the kernel-verified count must be identical to a `None` run on the
+/// target corpus). Elision only ever removes information the kernel already
+/// accepted, so it can under-count but never falsely verify.
+fn run_incremental_over_reader_bounded(
+    reader: &ShardReader,
+    initial_env: Environment,
+    policy: InductiveReplayPolicy,
+    elision: clean_kernel::env::ProofValueElision,
+) -> (Environment, IncrementalVerifyReport) {
     let start = Instant::now();
     let total = reader.constants.len();
 
@@ -3616,6 +3653,13 @@ fn run_incremental_over_reader(
     // constants (forward-propagated; see `propagate_standin_reach` /
     // `standin_blocked_evidence`'s transitive extension).
     let mut standin_reachable: HashSet<String> = HashSet::new();
+
+    // Bounded-memory elision: drop already-verified proof VALUES periodically so
+    // a whole-corpus pass does not accumulate every proof term in resident
+    // memory. No-op when `elision == None`. `processed` counts constants stepped
+    // through so the sweep fires on a fixed cadence regardless of skips.
+    let elide_enabled = elision != clean_kernel::env::ProofValueElision::None;
+    let mut processed: usize = 0;
 
     for name in topo.order.iter().chain(cyclic_unsafe.iter().copied()) {
         let ci = match name_to_idx.get(name.as_str()) {
@@ -3835,6 +3879,20 @@ fn run_incremental_over_reader(
                 failures.push((name.clone(), msg));
             }
         }
+
+        // Periodic bounded-memory sweep: free proof values the policy selects
+        // once every ELISION_CADENCE constants. Types stay resident so later
+        // dependents still resolve; only never-needed proof terms are dropped.
+        processed += 1;
+        if elide_enabled && processed.is_multiple_of(ELISION_CADENCE) {
+            env.elide_proof_values(elision);
+        }
+    }
+
+    // Final sweep so the returned env is bounded too (callers that keep the env
+    // for further sound kernel queries only ever need TYPES of elided kinds).
+    if elide_enabled {
+        env.elide_proof_values(elision);
     }
 
     for name in &topo.cyclic {
@@ -3931,6 +3989,65 @@ pub fn verify_corpus_incremental_with_env_policy(
 ) -> (Environment, IncrementalVerifyReport) {
     let merged = library.as_merged_reader();
     run_incremental_over_reader(&merged, initial_env, policy)
+}
+
+/// Like [`verify_corpus_incremental_with_env_policy`], but first REPAIRS the
+/// merged reader's dedup-corrupted `level_params` windows in memory (see
+/// [`crate::shard_integrity::repair_level_params`]) before the dependency-ordered
+/// replay. This recovers KernelVerified status for corpora built by a shard
+/// exporter that scattered multi-universe parameter names — without a rebuild
+/// from source oleans.
+///
+/// SOUNDNESS: the repair only supplies universe-parameter names for
+/// reconstruction; `run_incremental_over_reader` still re-typechecks every value
+/// through the kernel, so a mis-repair can only under-count, never falsely
+/// verify. Returns the repair statistics alongside the usual env + report.
+pub fn verify_corpus_incremental_repaired_with_env_policy(
+    library: &MathverseLibrary,
+    initial_env: Environment,
+    policy: InductiveReplayPolicy,
+) -> (
+    Environment,
+    IncrementalVerifyReport,
+    crate::shard_integrity::LevelParamRepairStats,
+) {
+    verify_corpus_incremental_repaired_bounded(
+        library,
+        initial_env,
+        policy,
+        clean_kernel::env::ProofValueElision::None,
+    )
+}
+
+/// Like [`verify_corpus_incremental_repaired_with_env_policy`], but bounds
+/// resident memory by periodically dropping already-verified proof VALUES
+/// selected by `elision` (see [`run_incremental_over_reader_bounded`]).
+///
+/// This is what makes a whole-Mathlib corpus KV pass fit on a fixed-RAM box: the
+/// later shards (CategoryTheory, analysis, …) carry very large proof terms whose
+/// values are never needed again once kernel-checked. TYPES are always retained,
+/// so dependency resolution is unaffected.
+///
+/// SOUNDNESS: elision only removes values the kernel already ACCEPTED, so the
+/// pass can under-count but never falsely verify. With
+/// [`ProofValueElision::OpaqueOnly`](clean_kernel::env::ProofValueElision::OpaqueOnly)
+/// the kernel-verified count is provably identical to a non-elided run; with
+/// `OpaqueAndTheorem` the caller MUST confirm the count is unchanged against a
+/// non-elided run on the same corpus before trusting it.
+pub fn verify_corpus_incremental_repaired_bounded(
+    library: &MathverseLibrary,
+    initial_env: Environment,
+    policy: InductiveReplayPolicy,
+    elision: clean_kernel::env::ProofValueElision,
+) -> (
+    Environment,
+    IncrementalVerifyReport,
+    crate::shard_integrity::LevelParamRepairStats,
+) {
+    let mut merged = library.as_merged_reader();
+    let repair = crate::shard_integrity::repair_level_params(&mut merged);
+    let (env, report) = run_incremental_over_reader_bounded(&merged, initial_env, policy, elision);
+    (env, report, repair)
 }
 
 /// Variant of [`verify_shard_incremental_recheck`] that starts from a

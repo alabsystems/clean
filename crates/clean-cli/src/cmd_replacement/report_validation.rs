@@ -106,7 +106,7 @@ impl ReplacementReportValidation {
             .cloned()
             .unwrap_or_default();
         let row_count = rows.len();
-        let mut seen_row_ids = std::collections::BTreeSet::new();
+        let mut seen_row_ids = BTreeSet::new();
         let mut duplicate_row_ids = Vec::new();
         let mut evidence_row_count = 0usize;
         for row in &rows {

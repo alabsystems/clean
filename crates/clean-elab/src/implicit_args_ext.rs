@@ -11,6 +11,9 @@
 //!
 //! Reference: lean4-ref/src/library/elaborator/app.cpp
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![allow(dead_code)]
 use clean_kernel::{BinderData, BinderInfo, Expr, ExprKind, Name};
 
 use crate::error::ElabError;

@@ -8,6 +8,9 @@
 //!
 //! Builds on [`lean4_compat`] and [`lean4_compat_ext`].
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![allow(dead_code)]
 use crate::lean4_compat_ext::Lean4Version;
 use hashbrown::HashMap;
 use std::cell::Cell;

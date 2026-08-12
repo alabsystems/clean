@@ -34,11 +34,13 @@ use clean_kernel::{ConstantInfo, Declaration, Environment, Name};
 
 // Shared shard-side inductive-family reconstruction (single code path with
 // the cake gate's carried-family replay; see `crate::inductive_replay`).
+#[cfg(test)]
+use crate::inductive_replay::InductiveReplayMetadata;
 use crate::inductive_replay::{
     build_inductive_replay_metadata, checked_inductive_replay_matches_shard,
     inductive_all_names_from_header, reconstruct_constant, reconstruct_constant_from_slices,
-    types_equal_ignoring_binder_info, InductiveReplayMetadata, NormMode, ReconstructedConstant,
-    ShardFamilyMatch, ShardSlices,
+    types_equal_ignoring_binder_info, NormMode, ReconstructedConstant, ShardFamilyMatch,
+    ShardSlices,
 };
 use crate::library::MathverseLibrary;
 use crate::shard::ShardReader;
@@ -1139,7 +1141,7 @@ fn truncate_diagnostic(msg: &str) -> Cow<'_, str> {
 fn try_add_inductive_family_checked(
     env: &mut Environment,
     reader: &ShardReader,
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     reconstructed: &ReconstructedConstant,
     policy: InductiveReplayPolicy,
 ) -> Result<FamilyReplayOutcome, String> {
@@ -1199,7 +1201,7 @@ fn try_add_inductive_family_checked(
 fn run_family_replay_attempt(
     env: &Environment,
     reader: &ShardReader,
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     reconstructed: &ReconstructedConstant,
     policy: InductiveReplayPolicy,
     mode: NormMode,
@@ -1223,7 +1225,7 @@ fn run_family_replay_attempt(
 #[cfg(test)]
 fn build_single_type_inductive_replay_metadata(
     reader: &ShardReader,
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     reconstructed: &ReconstructedConstant,
 ) -> Result<Option<InductiveReplayMetadata>, String> {
     let metadata =
@@ -1380,12 +1382,21 @@ fn reconstruct_and_replay_one(
                 // fall through BYTE-IDENTICALLY to the axiom lane below — the
                 // discharge runs only in this value-less arm, so it can never
                 // mask a rejected value (regressed-0 by construction).
-                match axiom_discharge::attempt_axiom_discharge(
+                let direct_discharge = axiom_discharge::attempt_axiom_discharge(
                     env,
                     &reconstructed.decl_name,
                     &reconstructed.level_params,
                     &reconstructed.type_expr,
-                ) {
+                );
+                if let axiom_discharge::DischargeAttempt::ProofRejected(reason) = &direct_discharge
+                {
+                    eprintln!(
+                        "warning: direct axiom-discharge proof for `{}` was kernel-rejected: \
+                         {reason}; trying the lock-pattern fallback",
+                        reconstructed.decl_name
+                    );
+                }
+                match direct_discharge {
                     axiom_discharge::DischargeAttempt::Discharged => {
                         AddConstResult::AxiomDischarged
                     }
@@ -1402,12 +1413,22 @@ fn reconstruct_and_replay_one(
                         // `NotAttempted`/`ProofRejected` leaves `env` untouched
                         // and falls through BYTE-IDENTICALLY to the axiom lane —
                         // regressed-0 by construction (value-less arm only).
-                        match axiom_discharge::attempt_lock_pattern_discharge(
+                        let lock_discharge = axiom_discharge::attempt_lock_pattern_discharge(
                             env,
                             &reconstructed.decl_name,
                             &reconstructed.level_params,
                             &reconstructed.type_expr,
-                        ) {
+                        );
+                        if let axiom_discharge::DischargeAttempt::ProofRejected(reason) =
+                            &lock_discharge
+                        {
+                            eprintln!(
+                                "warning: lock-pattern axiom-discharge proof for `{}` was \
+                                 kernel-rejected: {reason}; retaining the declaration as an axiom",
+                                reconstructed.decl_name
+                            );
+                        }
+                        match lock_discharge {
                             axiom_discharge::DischargeAttempt::Discharged => {
                                 AddConstResult::AxiomDischarged
                             }
@@ -1441,7 +1462,7 @@ fn try_add_constant(
     env: &mut Environment,
     name: &str,
     reader: &ShardReader,
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     policy: InductiveReplayPolicy,
     force_type_only: bool,
 ) -> AddConstResult {
@@ -1473,9 +1494,7 @@ fn try_add_constant(
     }
 }
 
-fn reject_inductive_family_skeleton(
-    constant: &crate::types::MathverseConstantHeader,
-) -> AddConstResult {
+fn reject_inductive_family_skeleton(constant: &MathverseConstantHeader) -> AddConstResult {
     reject_inductive_family_skeleton_with_failure(constant, None)
 }
 
@@ -1517,7 +1536,7 @@ fn reject_inductive_family_skeleton(
 /// env-gated speculative capture log (observation only).
 fn try_inductive_family_standin(
     env: &mut Environment,
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     reconstructed: &ReconstructedConstant,
     superseded_failure: &str,
 ) -> Option<AddConstResult> {
@@ -1556,7 +1575,7 @@ fn try_inductive_family_standin(
 /// why" to the message text, so faildumps stop attributing every family
 /// failure to the generic confidence guard.
 fn reject_inductive_family_skeleton_with_failure(
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     failure: Option<&FamilyReplayFailure>,
 ) -> AddConstResult {
     let stage = failure
@@ -1572,9 +1591,7 @@ fn reject_inductive_family_skeleton_with_failure(
     ))
 }
 
-fn validate_inductive_skeleton_trust(
-    constant: &crate::types::MathverseConstantHeader,
-) -> Result<(), String> {
+fn validate_inductive_skeleton_trust(constant: &MathverseConstantHeader) -> Result<(), String> {
     let confidence = constant
         .confidence()
         .map_err(|raw| format!("invalid import_confidence {raw}"))?;
@@ -2747,6 +2764,7 @@ fn peel_pi_codomain(ty: &Expr, n: usize) -> Option<&Expr> {
 /// `{1,1}` (the kernel then rejects and the value falls to the clean stand-in,
 /// exactly as before this rung), and every candidate the flip does build is
 /// still kernel-arbitrated.
+#[cfg(test)]
 fn is_provably_prop(env: &Environment, term: &Expr) -> bool {
     is_provably_prop_ctx(env, term, &[], 0)
 }
@@ -3439,7 +3457,7 @@ fn seed_constant_for_recheck(
     env: &mut Environment,
     name: &str,
     reader: &ShardReader,
-    constant: &crate::types::MathverseConstantHeader,
+    constant: &MathverseConstantHeader,
     policy: InductiveReplayPolicy,
 ) -> Option<AddConstResult> {
     let decl_name = Name::from_string(name);

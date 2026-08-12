@@ -1,0 +1,82 @@
+[
+ {
+  "kind": "def",
+  "name": "ir_h2_b0",
+  "source": "def ir_h2_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_tLevel ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d3 ir_nl0 (ir_sc ir_d2 ir_d1 (ir_sc ir_d3 ir_d2 ir_sc0)) Bool.true)))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_b1",
+  "source": "def ir_h2_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tBool (IRConst.bool_ Bool.true)) ir_d4) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d4))))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_b2",
+  "source": "def ir_h2_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tBool (IRConst.bool_ Bool.true)) ir_d5) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d5))))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_b3",
+  "source": "def ir_h2_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tBool (IRConst.bool_ Bool.false)) ir_d6) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d6))))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_b4",
+  "source": "def ir_h2_b4 : IRBlock := IRBlock.mk ir_d4 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_func",
+  "source": "def ir_h2_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_h2_b0 (ir_blk ir_h2_b1 (ir_blk ir_h2_b2 (ir_blk ir_h2_b3 (ir_blk ir_h2_b4 ir_blk0)))))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_module",
+  "source": "def ir_h2_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_h2_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_on_cubical",
+  "source": "def ir_h2_on_cubical : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d2 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_on_directed",
+  "source": "def ir_h2_on_directed : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_on_constructive",
+  "source": "def ir_h2_on_constructive : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_on_settheoretic",
+  "source": "def ir_h2_on_settheoretic : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d5 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_mach0",
+  "source": "def ir_h2_mach0 (mem : IRList IRMemSlot) (a : Nat) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl1 ir_d0) (ir_vl1 (IRScalar.ptr_ a)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_after_load",
+  "source": "def ir_h2_after_load (mem : IRList IRMemSlot) (a : Nat) (na : Nat) (o : (IROption IRMemSlot)) : IRConfig := ir_bind_result (ir_h2_mach0 mem a na) (ir_nl1 ir_d2) (ir_load_slot o)"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_exact",
+  "source": "def ir_h2_exact (mem : IRList IRMemSlot) (a : Nat) (na : Nat) (m : CleanModeR) : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var (clean_mode_tag m) ir_sp0) Bool.true)) -> Eq IROutcome (ir_run ir_d6 ir_h2_module (IRConfig.running (ir_h2_mach0 mem a na))) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) := CleanModeR.rec (fun (m0 : CleanModeR) => Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var (clean_mode_tag m0) ir_sp0) Bool.true)) -> Eq IROutcome (ir_run ir_d6 ir_h2_module (IRConfig.running (ir_h2_mach0 mem a na))) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m0))))) (fun (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d0 ir_sp0) Bool.true))) => Eq.subst (IROption IRMemSlot) (fun (o : (IROption IRMemSlot)) => Eq IROutcome (ir_run ir_d5 ir_h2_module (ir_h2_after_load mem a na o)) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d0 ir_sp0) Bool.true)) (ir_mem_lookup mem a) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d0 ir_sp0) Bool.true)) h) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))))) (fun (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d1 ir_sp0) Bool.true))) => Eq.subst (IROption IRMemSlot) (fun (o : (IROption IRMemSlot)) => Eq IROutcome (ir_run ir_d5 ir_h2_module (ir_h2_after_load mem a na o)) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d1 ir_sp0) Bool.true)) (ir_mem_lookup mem a) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d1 ir_sp0) Bool.true)) h) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))))) (fun (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d2 ir_sp0) Bool.true))) => Eq.subst (IROption IRMemSlot) (fun (o : (IROption IRMemSlot)) => Eq IROutcome (ir_run ir_d5 ir_h2_module (ir_h2_after_load mem a na o)) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d2 ir_sp0) Bool.true)) (ir_mem_lookup mem a) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d2 ir_sp0) Bool.true)) h) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))))) (fun (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d3 ir_sp0) Bool.true))) => Eq.subst (IROption IRMemSlot) (fun (o : (IROption IRMemSlot)) => Eq IROutcome (ir_run ir_d5 ir_h2_module (ir_h2_after_load mem a na o)) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d3 ir_sp0) Bool.true)) (ir_mem_lookup mem a) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d3 ir_sp0) Bool.true)) h) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))))) (fun (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d4 ir_sp0) Bool.true))) => Eq.subst (IROption IRMemSlot) (fun (o : (IROption IRMemSlot)) => Eq IROutcome (ir_run ir_d5 ir_h2_module (ir_h2_after_load mem a na o)) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d4 ir_sp0) Bool.true)) (ir_mem_lookup mem a) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d4 ir_sp0) Bool.true)) h) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))))) (fun (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d5 ir_sp0) Bool.true))) => Eq.subst (IROption IRMemSlot) (fun (o : (IROption IRMemSlot)) => Eq IROutcome (ir_run ir_d5 ir_h2_module (ir_h2_after_load mem a na o)) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d5 ir_sp0) Bool.true)) (ir_mem_lookup mem a) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d5 ir_sp0) Bool.true)) h) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))))) m"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_correct",
+  "source": "def ir_h2_correct (mem : IRList IRMemSlot) (fuel : Nat) (na : Nat) (r : IRScalar) (m : CleanModeR) (henc : EncodesCleanMode mem r m) : Le ir_d6 fuel -> Eq IROutcome (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) := EncodesCleanMode.rec mem (fun (s0 : IRScalar) (m0 : CleanModeR) (_ : EncodesCleanMode mem s0 m0) => Le ir_d6 fuel -> Eq IROutcome (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 s0) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m0))))) (fun (a : Nat) (m0 : CleanModeR) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var (clean_mode_tag m0) ir_sp0) Bool.true))) (hle : Le ir_d6 fuel) => ir_run_le_ret ir_h2_module ir_d6 fuel hle (IRConfig.running (ir_h2_mach0 mem a na)) (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m0))) (ir_h2_exact mem a na m0 h)) r m henc"
+ },
+ {
+  "kind": "def",
+  "name": "ir_h2_correct_witness",
+  "source": "def ir_h2_correct_witness : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical CleanModeR.directed)))) := ir_h2_correct (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d6 ir_d1 (IRScalar.ptr_ ir_d0) CleanModeR.directed (EncodesCleanMode.mk (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d0 CleanModeR.directed (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d3 ir_sp0) Bool.true)))) (Le.refl ir_d6)"
+ }
+]

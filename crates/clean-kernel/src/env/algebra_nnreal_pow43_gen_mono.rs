@@ -53,6 +53,8 @@ struct Pow43GenMonoConsts {
     rat_lt: Expr,
     nnreal_le: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nnreal_mul: Expr,
     nnreal_of_rat: Expr,
     nnreal_cbrt_gen: Expr,

@@ -6,20 +6,13 @@ use super::{
     discover_mathverse_files, source_system_name, verify_shard_dir_default as verify_shard_dir,
     write_results_json,
 };
-use crate::shard::{ShardReader, ShardWriter};
+use crate::shard::ShardWriter;
 use crate::types::{
     AxiomProfile, ContentDomain, ImportConfidence, MathverseConstantHeader, SourceSystem, NO_VALUE,
 };
 use clean_kernel::flat::{FlatExpr, FlatLevel};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-/// Build a ShardReader from a ShardWriter by writing to in-memory buffer.
-fn reader_from_writer(writer: &ShardWriter) -> ShardReader {
-    let mut buf = Vec::new();
-    writer.write(&mut buf).unwrap();
-    ShardReader::from_bytes(&buf).unwrap()
-}
 
 /// Write a ShardWriter to a temp file and return the path.
 fn write_shard_to_file(writer: &ShardWriter, dir: &Path, name: &str) -> PathBuf {
@@ -1053,8 +1046,8 @@ fn test_no_drifted_foundational_axioms_const_array() {
         s
     };
     let mut offenders: Vec<PathBuf> = Vec::new();
-    fn walk(dir: &std::path::Path, needle: &str, out: &mut Vec<PathBuf>) {
-        let entries = match std::fs::read_dir(dir) {
+    fn walk(dir: &Path, needle: &str, out: &mut Vec<PathBuf>) {
+        let entries = match fs::read_dir(dir) {
             Ok(e) => e,
             Err(_) => return,
         };
@@ -1067,7 +1060,7 @@ fn test_no_drifted_foundational_axioms_const_array() {
                 }
                 walk(&path, needle, out);
             } else if path.extension().is_some_and(|e| e == "rs") {
-                if let Ok(body) = std::fs::read_to_string(&path) {
+                if let Ok(body) = fs::read_to_string(&path) {
                     if body.contains(needle) {
                         out.push(path);
                     }
@@ -1079,7 +1072,7 @@ fn test_no_drifted_foundational_axioms_const_array() {
 
     // Normalise for comparison (Path::canonicalize follows symlinks; use
     // component-wise equality via ends_with on the suffix instead).
-    let canonical_suffix = std::path::Path::new("crates/clean-kernel/src/env/axiom_audit.rs");
+    let canonical_suffix = Path::new("crates/clean-kernel/src/env/axiom_audit.rs");
     offenders.retain(|p| !p.ends_with(canonical_suffix));
 
     assert!(

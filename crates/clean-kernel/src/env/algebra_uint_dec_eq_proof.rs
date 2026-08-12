@@ -76,6 +76,8 @@ use crate::name::Name;
 pub(crate) enum WrapperCarrier {
     Nat,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     Fin(Expr),
     /// v4.30 UInt/USize carrier: `<T>.ofBitVec : BitVec <width> → <T>`,
     /// projection `<T>.toBitVec : <T> → BitVec <width>`. Equality is decided by

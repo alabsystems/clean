@@ -44,6 +44,29 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
+/// THE premise: every `whnf_fuel_red` result has a normal-form head.
+///
+/// **This premise is FALSE** — `hnf_is_false` (`hnf_refutation.rs`) refutes it in
+/// the kernel, because the deployed kernel whnf-reduces a recursor's major premise
+/// before the constructor-rule lookup (`micro/checker.rs:777`) and the reflected
+/// `iota_reduct` does not (`iota_step.rs:127`). Everything spliced with it is
+/// therefore vacuous, and must not be reported as a result.
+///
+/// It lives here, once, because it did not used to. This exact text was
+/// copy-pasted **verbatim into four files** — `defeq_capstone.rs`,
+/// `defeq_round_binder.rs`, `defeq_round_leaf.rs`, `defeq_round_rest.rs` — which is
+/// how a single false premise became **nine** vacuous declarations before anyone
+/// noticed. One definition means one place to correct, one place to delete, and
+/// one grep to find every carrier. `test_hnf_premise_is_defined_only_here` keeps it
+/// that way.
+///
+/// Its home is `nf_head.rs` because it is a statement *about* `nf_head`: when the
+/// pre-pass gap is closed, this premise and `nf_head`'s `neutral` arm move
+/// together.
+pub(super) const HNF: &str = "(hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
+     Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (OptionType.some KExpr r) -> \
+     nf_head r) ";
+
 impl Specification {
     /// The normal-form head predicate and its tag stability.
     pub(super) fn add_nf_head(&mut self) -> Result<(), SpecError> {
@@ -61,7 +84,8 @@ impl Specification {
              iota_immune (KExpr.app f a) -> nf_head (KExpr.app f a)\n\
              | constdead : forall (cn : Name) (cus : ListType Level), \
              Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) \
-             (OptionType.none KExpr) -> nf_head (KExpr.const cn cus)",
+             (OptionType.none KExpr) -> nf_head (KExpr.const cn cus)\n\
+             | bvar : forall (bi : Nat), nf_head (KExpr.bvar bi)",
             "nf_head e: e has a normal-form head — a lambda, or a rigid head (sort, pi, literal, \
              projection, or an application on one of those). Deliberately COARSER than \
              rigid_app_head and deliberately NOT the same predicate: rigid_app_head's app arm \
@@ -133,14 +157,24 @@ impl Specification {
                  Eq.symm Nat (kexpr_tag w) (kexpr_tag (KExpr.const cn cus)) \
                  (Eq.cong KExpr Nat kexpr_tag w (KExpr.const cn cus) \
                  (par_reduces_cd_star_const_dead_inv_eq cn cus w hdd hs))) \
+                 (fun (bi : Nat) (w : KExpr) \
+                 (hs : par_reduces_cd_star the_red_env (KExpr.bvar bi) w) => \
+                 Eq.symm Nat (kexpr_tag w) (kexpr_tag (KExpr.bvar bi)) \
+                 (Eq.cong KExpr Nat kexpr_tag w (KExpr.bvar bi) \
+                 (par_reduces_cd_star_bvar_inv_eq the_red_env bi w hs))) \
                  e hn"
             ),
             "nf_head_star_preserves_tag: reduction out of a normal-form-headed term preserves the \
-             head tag, for EVERY is_whnf shape. Four arms: lam via the binder inversion, rigid by \
-             delegation, a const-headed neutral application via the neutral-app inversion, and a \
-             delta-dead bare constant via the dead-const inversion. The lam and neutral arms wrap \
-             their Prop-valued goal in LiftP because those inversions take C : Type; the \
-             const arm's inversion is equation-form and needs no wrap. \
+             head tag, for EVERY is_whnf shape. Five arms: lam via the binder inversion, rigid by \
+             delegation, a const-headed neutral application via the neutral-app inversion, a \
+             delta-dead bare constant via the dead-const inversion, and a bound variable via the \
+             rigid bvar inversion. The lam and neutral arms wrap their Prop-valued goal in LiftP \
+             because those inversions take C : Type; the const and bvar arms' inversions are \
+             equation-form and need no wrap. \
+             \
+             The bvar arm is unconditional, and cheaply so: par_reduces_cd has NO arm mentioning \
+             bvar, and both iota_step and delta_step need a const head, so only refl relates a \
+             bound variable to anything. A bvar is as rigid as a normal form gets. \
              \
              The neutral arm's iota_neutral and iota_immune obligations are carried in the \
              PREDICATE, deliberately visible rather than absent: a const-headed spine can \
@@ -185,7 +219,7 @@ mod tests {
         let decl_start = rigid
             .find("inductive rigid_app_head")
             .expect("rigid_app_head is declared");
-        let decl = &rigid[decl_start..decl_start + 600];
+        let decl = &rigid[decl_start..decl_start + 800];
         let decl = &decl[..decl.find("\",").unwrap_or(decl.len())];
         assert!(
             !decl.contains("| lam "),
@@ -236,5 +270,43 @@ mod tests {
             2,
             "both legs must be pushed to the common reduct"
         );
+    }
+
+    /// The `hnf` premise must be DEFINED IN EXACTLY ONE PLACE.
+    ///
+    /// It used to be copy-pasted verbatim into four files, and that is precisely
+    /// how one false premise became nine vacuous declarations: correcting or
+    /// deleting it meant finding all four, and nothing made the fourth
+    /// discoverable from the first.
+    ///
+    /// This test reads the four former carriers and asserts none of them defines
+    /// the premise again. It deliberately scans SOURCE TEXT rather than a
+    /// generated string, because the property under test *is* a property of the
+    /// source. (The usual rule in this program — assert on generated strings, not
+    /// source — exists to stop tests measuring their own literals; that trap is
+    /// avoided here because this test lives in nf_head.rs and never scans it.)
+    #[test]
+    fn test_hnf_premise_is_defined_only_here() {
+        let marker = concat!("const ", "HNF");
+        for (name, src) in [
+            ("defeq_capstone.rs", include_str!("defeq_capstone.rs")),
+            (
+                "defeq_round_binder.rs",
+                include_str!("defeq_round_binder.rs"),
+            ),
+            ("defeq_round_leaf.rs", include_str!("defeq_round_leaf.rs")),
+            ("defeq_round_rest.rs", include_str!("defeq_round_rest.rs")),
+        ] {
+            assert!(
+                !src.contains(marker),
+                "{name} defines the hnf premise again — it belongs in nf_head.rs alone. \
+                 Four verbatim copies are how ONE false premise became NINE vacuous \
+                 declarations."
+            );
+            assert!(
+                src.contains("use super::nf_head::HNF;"),
+                "{name} must import the single shared premise"
+            );
+        }
     }
 }

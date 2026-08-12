@@ -64,6 +64,7 @@ use crate::name::Name;
 const AMGM_COEFF: u32 = 27;
 
 /// Pre-resolved handles + smart-constructors for the cubed-AM-GM lift.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct CubedAmGmConsts {
     nat: Expr,
     rat: Expr,
@@ -104,6 +105,7 @@ struct CubedAmGmConsts {
     quot_ind: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl CubedAmGmConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

@@ -436,7 +436,7 @@ fn find_negation(dag: &SmtProofDag, term_id: SmtTermId) -> Option<SmtTermId> {
     for (i, t) in dag.terms.iter().enumerate() {
         if let super::dag::SmtTerm::Not(inner) = t {
             if *inner == term_id {
-                return Some(super::dag::SmtTermId(i as u32));
+                return Some(SmtTermId(i as u32));
             }
         }
     }
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_resolution_no_premises_returns_trusted() {
-        let mut dag = SmtProofDag::new();
+        let dag = SmtProofDag::new();
         let step_id = SmtStepId(0);
         let verdict = check_resolution(&dag, step_id, &[], &[], None, &[]);
         assert_eq!(verdict.trust_level, StepTrustLevel::Trusted);
@@ -508,9 +508,9 @@ mod tests {
         let not_b = dag.add_term(SmtTerm::Not(b));
         let not_c = dag.add_term(SmtTerm::Not(c));
 
-        let s0 = dag.add_step(SmtProofStep::Assume(a)); // placeholder
-        let s1 = dag.add_step(SmtProofStep::Assume(not_a)); // placeholder
-        let s2 = dag.add_step(SmtProofStep::Assume(b)); // placeholder
+        let _s0 = dag.add_step(SmtProofStep::Assume(a)); // placeholder
+        let _s1 = dag.add_step(SmtProofStep::Assume(not_a)); // placeholder
+        let _s2 = dag.add_step(SmtProofStep::Assume(b)); // placeholder
 
         // 3-premise chain resolution on a,b -> result should be {c, not_c}
         // which simplifies, but for test we just check the mechanism.
@@ -777,7 +777,7 @@ mod tests {
         // Resolving with an empty premise should yield {} (trivially).
         let mut dag = SmtProofDag::new();
         let a = dag.add_term(SmtTerm::Var("a".to_string(), SmtSort::Bool));
-        let not_a = dag.add_term(SmtTerm::Not(a));
+        let _not_a = dag.add_term(SmtTerm::Not(a));
 
         let derived = vec![Some(vec![]), Some(vec![a])];
 

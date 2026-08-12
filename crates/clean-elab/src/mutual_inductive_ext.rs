@@ -8,6 +8,8 @@
 //!
 //! Lean 4 reference: `src/Lean/Elab/MutualDef.lean`, `src/kernel/inductive.cpp`.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use clean_kernel::inductive::mentions_name;
@@ -76,6 +78,8 @@ pub(crate) struct MutualCtorEntry {
 #[derive(Debug, Clone)]
 pub(crate) struct MutualIndExtBlock {
     pub(crate) types: Vec<MutualTypeEntry>,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) universe_params: Vec<Name>,
 }
 
@@ -391,9 +395,13 @@ fn is_strictly_positive(name: &Name, expr: &Expr) -> bool {
 #[derive(Debug, Clone)]
 pub(crate) struct MutualRecursorSpec {
     pub(crate) name: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) target_type: Name,
     pub(crate) num_motives: u32,
     pub(crate) num_minors: u32,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) type_expr: Expr,
 }
 
@@ -402,6 +410,8 @@ pub(crate) struct MutualRecursorSpec {
 pub(crate) struct InductionPrincipleSpec {
     pub(crate) name: Name,
     pub(crate) target_type: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) type_expr: Expr,
 }
 
@@ -409,7 +419,11 @@ pub(crate) struct InductionPrincipleSpec {
 #[derive(Debug, Clone)]
 pub(crate) struct BelowSpec {
     pub(crate) name: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) target_type: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) type_expr: Expr,
 }
 
@@ -417,7 +431,11 @@ pub(crate) struct BelowSpec {
 #[derive(Debug, Clone)]
 pub(crate) struct BRecSpec {
     pub(crate) name: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) target_type: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) type_expr: Expr,
 }
 
@@ -528,8 +546,12 @@ pub(crate) struct MutualIndExtStats {
 /// Result of extended mutual inductive elaboration.
 #[derive(Debug, Clone)]
 pub(crate) struct MutualIndExtResult {
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) unified_universe: Level,
     pub(crate) num_params: usize,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) dep_graph: MutualDepGraph,
     pub(crate) recursors: Vec<MutualRecursorSpec>,
     pub(crate) induction_principles: Vec<InductionPrincipleSpec>,

@@ -62,6 +62,8 @@ struct FinSumConstOneConsts {
     eq_refl: Expr,
     eq_trans: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_symm: Expr,
     congr_arg: Expr,
     // Quot machinery over the Rat.Raw / Rat.Raw.Equiv carrier.
@@ -79,6 +81,7 @@ struct FinSumConstOneConsts {
     false_: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl FinSumConstOneConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

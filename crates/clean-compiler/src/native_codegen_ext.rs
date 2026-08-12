@@ -184,7 +184,14 @@ impl ExtNativeType {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeDecl {
     pub(crate) name: String,
+    // `generate_runtime_decls` builds the whole clean ABI table with full
+    // signatures (see `rt`), but no emitter consumes it yet — only `name` and
+    // `is_extern` are inspected. Kept because the signatures are the point:
+    // they are what extern-declaration emission and FFI arity checking will
+    // read — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) params: Vec<(String, ExtNativeType)>,
+    #[allow(dead_code)]
     pub(crate) return_type: ExtNativeType,
     pub(crate) is_extern: bool,
 }

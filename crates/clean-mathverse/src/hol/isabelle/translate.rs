@@ -154,7 +154,7 @@ impl IsabelleTranslator {
                 Ok(Expr::const_(Name::from_string(&full_name), vec![]))
             }
             IsaTerm::Const { name, .. } => Ok(Expr::const_str(name)),
-            IsaTerm::Abs { name, ty, body } => {
+            IsaTerm::Abs { name: _, ty, body } => {
                 let lean_ty = self.translate_type(ty)?;
                 let lean_body = self.translate_term(body)?;
                 Ok(Expr::lam(BinderInfo::Default, lean_ty, lean_body))

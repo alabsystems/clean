@@ -36,9 +36,7 @@ pub async fn handle_server_info(state: &ServerState, id: RequestId) -> Response 
     let info = ServerInfo {
         name: "clean-server".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        lean_toolchain_version: state
-            .lean_toolchain_version()
-            .map(std::borrow::ToOwned::to_owned),
+        lean_toolchain_version: state.lean_toolchain_version().map(ToOwned::to_owned),
         // Use centralized registry as single source of truth for method names
         methods: crate::registry::all_method_names(),
         gpu_available: state.gpu_enabled,
@@ -66,9 +64,7 @@ pub async fn handle_get_config(state: &ServerState, id: RequestId) -> Response {
         default_timeout_ms: state.default_timeout_ms,
         worker_threads: state.worker_threads,
         effective_threads,
-        lean_toolchain_version: state
-            .lean_toolchain_version()
-            .map(std::borrow::ToOwned::to_owned),
+        lean_toolchain_version: state.lean_toolchain_version().map(ToOwned::to_owned),
     };
 
     Response::success_typed(id.clone(), &result)

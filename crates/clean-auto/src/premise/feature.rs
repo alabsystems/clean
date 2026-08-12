@@ -46,7 +46,12 @@ impl FeatureSet {
     }
 
     /// Check if empty
+    ///
+    /// Kept alive as the mandatory `len`/`is_empty` counterpart (clippy's
+    /// `len_without_is_empty` requires it); no test exercises it yet —
+    /// awaiting production wiring — 2026-07-31.
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.features.is_empty()
     }

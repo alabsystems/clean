@@ -369,4 +369,110 @@ impl Parser {
 
         Ok(binders)
     }
+
+    /// Parse a `codef` declaration (copattern definition into a codata
+    /// type): clauses are `name := expr`, one per observation/branch.
+    ///
+    /// ```text
+    /// codef natsFrom (n : Nat) : Stream Nat where
+    ///   head := n
+    ///   tail := natsFrom (Nat.succ n)
+    /// ```
+    pub(in crate::grammar) fn codef_decl_with_mods(
+        &mut self,
+        start_span: Span,
+        modifiers: DeclModifiers,
+    ) -> Result<SurfaceDecl, ParseError> {
+        let name = self.decl_name()?;
+        let binders = self.optional_binders()?;
+        self.expect(&TokenKind::Colon)?;
+        let ty = Box::new(self.expr()?);
+        self.expect(&TokenKind::Where)?;
+
+        let mut clauses = Vec::new();
+        while matches!(self.current_kind(), TokenKind::Ident(_))
+            && matches!(self.peek_kind(1), Some(TokenKind::ColonEq))
+        {
+            let clause_name = self.ident()?;
+            self.expect(&TokenKind::ColonEq)?;
+            let value = self.field_type_expr()?;
+            clauses.push((clause_name, value));
+        }
+
+        Ok(SurfaceDecl::Codef {
+            span: start_span,
+            name,
+            binders,
+            ty,
+            clauses,
+            modifiers,
+        })
+    }
+
+    /// Parse a `codata` declaration (Rocq-style Type-level codata as an
+    /// observation record; M-type encoded by the elaborator):
+    ///
+    /// ```text
+    /// codata Stream (A : Type) where
+    ///   head : A
+    ///   tail : Stream A
+    /// ```
+    ///
+    /// Reuses the structure field grammar (`name : Ty` only — field
+    /// defaults are rejected loudly). `extends` is not part of the codata
+    /// surface.
+    pub(in crate::grammar) fn codata_decl_with_mods(
+        &mut self,
+        start_span: Span,
+        modifiers: DeclModifiers,
+    ) -> Result<SurfaceDecl, ParseError> {
+        let name = self.decl_name()?;
+        let universe_params = self.universe_params()?;
+        let binders = self.optional_binders()?;
+
+        // Optional explicit result sort: `codata Foo : Type where`
+        let ty = if self.eat(&TokenKind::Colon) {
+            Some(Box::new(self.expr()?))
+        } else {
+            None
+        };
+
+        self.expect(&TokenKind::Where)?;
+
+        let mut fields = Vec::new();
+        while self.is_field_start() {
+            let field_span = self.current_span();
+            let field_name = self.ident()?;
+            self.expect(&TokenKind::Colon)?;
+            let field_ty = self.field_type_expr()?;
+            if self.check(&TokenKind::ColonEq) {
+                return Err(ParseError::UnexpectedToken {
+                    line: self.current_line(),
+                    col: self.current_span().start,
+                    message: "codata fields are observations and cannot carry default values"
+                        .to_string(),
+                });
+            }
+            fields.push(SurfaceField {
+                span: field_span,
+                name: field_name,
+                ty: field_ty,
+                default: None,
+                is_default_override: false,
+            });
+        }
+
+        let deriving = self.parse_deriving_clause()?;
+
+        Ok(SurfaceDecl::Codata {
+            span: start_span,
+            name,
+            universe_params,
+            binders,
+            ty,
+            fields,
+            deriving,
+            modifiers,
+        })
+    }
 }

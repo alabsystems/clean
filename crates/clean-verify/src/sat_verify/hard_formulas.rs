@@ -128,13 +128,13 @@ impl LcgRng {
 #[must_use]
 pub fn classify_structure(clauses: &[Clause], num_vars: u32) -> FormulaProfile {
     let num_clauses = clauses.len();
-    let total_width: usize = clauses.iter().map(std::vec::Vec::len).sum();
+    let total_width: usize = clauses.iter().map(Vec::len).sum();
     let avg_clause_width = if num_clauses == 0 {
         0.0
     } else {
         total_width as f64 / num_clauses as f64
     };
-    let max_clause_width = clauses.iter().map(std::vec::Vec::len).max().unwrap_or(0);
+    let max_clause_width = clauses.iter().map(Vec::len).max().unwrap_or(0);
     let clause_var_ratio = if num_vars == 0 {
         0.0
     } else {

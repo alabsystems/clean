@@ -51,6 +51,8 @@ struct ChiSuccConsts {
     rat_sub: Expr,
     rat_two: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fin_prod: Expr,
     fin_prod_succ: Expr,
     fin_cast_succ: Expr,
@@ -117,6 +119,7 @@ impl ChiSuccConsts {
         Expr::apps(self.rat_mul.clone(), [a, b])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn prod(&self, n: Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_prod.clone(), [n, g])
     }

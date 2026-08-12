@@ -15,9 +15,13 @@
 //! - **Logical operators** -> And, Or, implies, Not
 //! - **Arithmetic** -> axiomatized TLA.add, TLA.sub, etc.
 
-use super::types::{QuantifierKind, TlaDecl, TlaDeclKind, TlaExpr, TlaModule};
+#[cfg(test)]
+use super::types::TlaDecl;
+use super::types::{QuantifierKind, TlaDeclKind, TlaExpr, TlaModule};
 use crate::types::{AxiomProfile, Provenance, SourceSystem, TrustLevel};
-use clean_kernel::{BinderInfo, Expr, ExprKind, LevelVec, Name};
+#[cfg(test)]
+use clean_kernel::ExprKind;
+use clean_kernel::{BinderInfo, Expr, LevelVec, Name};
 use thiserror::Error;
 
 // ════════════════════════════════════════════════════════════════════════════

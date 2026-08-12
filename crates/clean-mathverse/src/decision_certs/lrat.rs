@@ -11,7 +11,9 @@
 //! Reference: Cruz-Filipe, Heule, Hunt, Kaufmann, Schneider-Kamp —
 //! "Efficient Certified RAT Verification" (CADE 2017).
 
-use super::types::{CnfFormula, LratStep, LratStepKind, SatCertFormat, SatCertificate};
+#[cfg(test)]
+use super::types::LratStepKind;
+use super::types::{CnfFormula, LratStep, SatCertFormat, SatCertificate};
 use crate::decision::CertError;
 
 // ---------------------------------------------------------------------------

@@ -53,6 +53,8 @@ struct KeystoneConsts {
     fixed_step: Expr,
     twocycle_step: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_rec1: Expr, // Nat.rec.{1} — motive M : Nat → Prop wrapped (returns Prop, but recursion on Nat is Sort 1 elimination → level of motive is 0; use Nat.rec.{0})
     nat_rec0: Expr, // Nat.rec.{0}
     nat_not_succ_le_zero: Expr,

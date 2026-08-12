@@ -9,13 +9,12 @@ use clean_kernel::{ExprKind, Name as LeanName};
 
 use crate::types::{AxiomProfile, SourceSystem, TrustLevel};
 
-use super::cross_system::{HolUnifier, UnifierStatistics};
+use super::cross_system::HolUnifier;
 use super::error::HolError;
-use super::hol4::{Hol4Importer, Hol4Statistics, Hol4Theory};
-use super::hol_light::{HolLightImporter, HolLightStatistics, HolLightTheory};
+use super::hol4::{Hol4Importer, Hol4Statistics};
+use super::hol_light::{HolLightImporter, HolLightStatistics};
 use super::opentheory_bridge::{
-    ImportStatistics, ImportedConstantKind, MathverseImportedConstant, OtMathverseBridge,
-    HOL_BASE_PROFILE,
+    ImportStatistics, ImportedConstantKind, OtMathverseBridge, HOL_BASE_PROFILE,
 };
 
 /// Minimal OpenTheory article proving `x = x` via `refl`.
@@ -113,75 +112,6 @@ ref
 nil
 cons
 2
-ref
-thm
-"#;
-
-/// Article with a named constant `foo : A -> bool`.
-const CONST_ARTICLE: &str = r#"
-6
-version
-"x"
-"A"
-varType
-3
-def
-var
-1
-def
-varTerm
-2
-def
-refl
-4
-def
-"bool"
-typeOp
-nil
-opType
-5
-def
-"->"
-typeOp
-3
-ref
-5
-ref
-nil
-cons
-cons
-opType
-6
-def
-"->"
-typeOp
-3
-ref
-6
-ref
-nil
-cons
-cons
-opType
-7
-def
-"="
-const
-7
-ref
-constTerm
-2
-ref
-appTerm
-2
-ref
-appTerm
-8
-def
-4
-ref
-nil
-8
 ref
 thm
 "#;
@@ -1424,9 +1354,7 @@ fn test_unifier_multiple_equivalence_groups() {
 // Cross-System: HolTheoryAlignment Tests
 // ============================================================================
 
-use super::cross_system::{
-    CrossSystemStatistics, HolConstantIndex, HolTheoryAlignment, UnificationResult,
-};
+use super::cross_system::{HolConstantIndex, HolTheoryAlignment};
 
 #[test]
 fn test_alignment_new_is_empty() {
@@ -1919,7 +1847,7 @@ fn test_compute_alignments_sorted_by_name() {
 // OpenTheory Bridge: OtImportConfig Tests
 // ============================================================================
 
-use super::opentheory_bridge::{OtAxiomPolicy, OtImportConfig, OtImportResult, OtStatistics};
+use super::opentheory_bridge::{OtAxiomPolicy, OtImportConfig, OtStatistics};
 
 #[test]
 fn test_ot_import_config_default() {
@@ -2096,7 +2024,7 @@ fn test_batch_import_all_failures() {
 fn test_import_with_config_default() {
     let bridge =
         OtMathverseBridge::new(LeanName::from_string("Test.Config"), SourceSystem::HolLight);
-    let article = clean_kernel::open_theory::parse_article(REFL_ARTICLE).expect("should parse");
+    let article = parse_article(REFL_ARTICLE).expect("should parse");
     let config = OtImportConfig::default();
     let result = bridge
         .import_with_config(&article, &config)
@@ -2110,7 +2038,7 @@ fn test_import_with_config_default() {
 fn test_import_with_config_theorems_only() {
     let bridge =
         OtMathverseBridge::new(LeanName::from_string("Test.Config"), SourceSystem::HolLight);
-    let article = clean_kernel::open_theory::parse_article(REFL_ARTICLE).expect("should parse");
+    let article = parse_article(REFL_ARTICLE).expect("should parse");
     let config = OtImportConfig::theorems_only();
     let result = bridge
         .import_with_config(&article, &config)

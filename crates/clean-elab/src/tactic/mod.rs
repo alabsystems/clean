@@ -73,6 +73,8 @@ pub(crate) mod calc;
 mod calc_tests;
 pub(crate) mod calc_trans;
 pub(crate) mod calc_trans_match;
+#[cfg(test)]
+mod case_binder_rename_cache_tests;
 pub(crate) mod cases;
 #[cfg(test)]
 mod cases_tests;
@@ -84,6 +86,9 @@ pub(crate) mod omega_tactic;
 // contradiction: enhanced contradiction/exfalso/absurd with extra patterns (#3082)
 mod combinator_solve;
 pub(crate) mod combinators;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod combinators_ext;
 #[cfg(test)]
 mod combinators_ext_tests;
@@ -100,6 +105,9 @@ pub(crate) mod contradiction;
 mod contradiction_tests;
 pub(crate) mod conv;
 pub(crate) mod conv_congr_recombine;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod conv_deep;
 #[cfg(test)]
 mod conv_deep_tests;
@@ -111,6 +119,9 @@ pub(crate) mod debug;
 pub(crate) mod decide;
 pub(crate) mod decide_eq;
 pub(crate) mod decide_eq_noconfusion;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod decide_ext;
 #[cfg(test)]
 mod decide_ext_tests;
@@ -122,13 +133,22 @@ pub(crate) mod display;
 mod display_tests;
 pub mod domain_profile;
 pub mod drat;
+pub(crate) mod elim_info;
+#[cfg(test)]
+mod elim_info_tests;
 pub(crate) mod eq_goal_solver;
 pub(crate) mod equality;
 pub(crate) mod existential;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod exists_use;
 #[cfg(test)]
 mod exists_use_tests;
 pub(crate) mod extensionality;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod extensionality_config;
 pub(crate) mod field;
 pub(crate) mod field_denom;
@@ -139,6 +159,8 @@ pub(crate) mod finite_cases;
 pub(crate) mod finite_cases_proof;
 pub(crate) mod forward;
 pub(crate) mod gcongr;
+#[cfg(test)]
+mod gcongr_discharge_tests;
 pub(crate) mod generalize;
 pub(crate) mod goal;
 pub(crate) mod grind;
@@ -147,17 +169,26 @@ pub(crate) mod groebner_basis;
 pub(crate) mod have_let;
 pub(crate) mod hypothesis;
 pub(crate) mod induction;
+pub(crate) mod induction_elim;
+#[cfg(test)]
+mod induction_elim_tests;
 pub(crate) mod inductive_reasoning;
 // injection: TacticCtx wrappers + classify_constructor_equality helper (#3082)
 pub(crate) mod injection;
 pub(crate) mod instance;
 pub(crate) mod interval_cases;
 pub(crate) mod library_search;
+// Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
+#[cfg(test)]
 pub(crate) mod library_search_ext;
 #[cfg(test)]
 mod library_search_ext_tests;
 pub(crate) mod llm_oracle;
 pub(crate) mod mathverse_env;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod mathverse_ext;
 #[cfg(test)]
 mod mathverse_ext_tests;
@@ -184,12 +215,17 @@ pub(crate) mod polynomial;
 pub(crate) mod polyrith;
 pub(crate) mod positivity;
 pub(crate) mod project_mathverse;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod proof_cert_verify;
 #[cfg(test)]
 mod proof_cert_verify_tests;
 pub(crate) mod proof_manipulation;
 pub(crate) mod proof_term;
 pub(crate) mod proof_term_cert;
+#[cfg(test)]
+mod rcases_alternation_field_tests;
 pub(crate) mod registry;
 pub(crate) mod ring;
 pub(crate) mod ring_helpers;
@@ -202,9 +238,15 @@ pub(crate) mod ring_proof_surface;
 pub mod script_runner;
 pub(crate) mod search;
 pub(crate) mod simp;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod simp_all;
 #[cfg(test)]
 mod simp_all_tests;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod simp_index;
 #[cfg(test)]
 mod simp_index_tests;
@@ -214,13 +256,27 @@ pub(crate) mod smt_translate;
 pub(crate) mod specialize_generalize;
 #[cfg(test)]
 mod specialize_generalize_tests;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod state_ser;
 #[cfg(test)]
 mod state_ser_tests;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod suggest;
 #[cfg(test)]
 mod suggest_tests;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+// DELETION CANDIDATE (2026-07-30): the tactic_doc/entries.rs doc tables have no
+// production caller anywhere in the crate; a future owner pass should decide keep-vs-delete.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tactic_doc;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tactic_doc_ext;
 #[cfg(test)]
 #[path = "tactic_doc_ext_tests.rs"]
@@ -230,6 +286,9 @@ pub use tactic_interp::{
     proof_state_for_tactic_target, run_tactic_script_with_snapshots, TacticGoalSnapshot,
     TacticPostSnapshotRange, TacticScriptSnapshotRun,
 };
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tactic_interp_ext;
 #[cfg(test)]
 #[path = "tactic_interp_ext_tests.rs"]
@@ -238,8 +297,14 @@ pub mod tactic_registry;
 pub mod tacticm;
 pub(crate) mod tauto;
 pub(crate) mod tc_app;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod term_builder;
 pub(crate) mod term_close;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod trace;
 #[cfg(test)]
 mod trace_tests;
@@ -452,7 +517,7 @@ pub use cert_simp::{cert_simp, CertSimpConfig};
 
 // Re-export proof_manipulation tactics (cases) and induction (split to induction.rs, #307)
 pub use cases::{eval_cases, eval_rcases, eval_rcases_depth, RCasesPattern};
-pub use induction::{induction, induction_using};
+pub use induction::{induction, induction_using, induction_using_alts};
 pub use proof_manipulation::cases;
 
 // Re-export proof_term tactics (exact, intro, apply, assumption, constructor, rfl)

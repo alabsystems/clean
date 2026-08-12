@@ -54,8 +54,3 @@ pub use c028_spec::{
     c028_theorem_entries, C028_SOS_CERTIFICATE_SOUNDNESS, C028_SOS_IMPLIES_NO_BAB,
     C028_STABLE_NETWORK_IS_POLYNOMIAL,
 };
-pub(crate) use polynomial::{
-    box_domain_constraints, evaluate_network, network_to_polynomials, AffineLayer, LayerPattern,
-    NeuronPattern, NnSosCertificate, PolynomialNetwork, PolynomialProperty,
-};
-pub(crate) use verify::{verify_network_property, verify_nn_sos_certificate, NnSosVerdict};

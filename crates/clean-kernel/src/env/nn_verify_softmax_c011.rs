@@ -332,6 +332,7 @@ impl Environment {
 
     /// Check if C011 declarations have been initialized.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_nn_verify_softmax_c011(&self) -> bool {
         self.nn_verify_softmax_c011_init
     }

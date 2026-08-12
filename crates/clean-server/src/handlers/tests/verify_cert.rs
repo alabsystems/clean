@@ -226,7 +226,7 @@ async fn test_verify_cert_valid_pi() {
 
     // Use infer_type_with_cert to generate correct certificate
     use clean_kernel::TypeChecker;
-    let env = clean_kernel::Environment::new();
+    let env = Environment::new();
     let tc = TypeChecker::new(&env);
     let (_, cert) = tc
         .infer_type_with_cert(&pi_expr)
@@ -274,7 +274,7 @@ async fn test_verify_cert_valid_lambda() {
 
     // Use infer_type_with_cert to generate correct certificate
     use clean_kernel::TypeChecker;
-    let env = clean_kernel::Environment::new();
+    let env = Environment::new();
     let tc = TypeChecker::new(&env);
     let (_, cert) = tc
         .infer_type_with_cert(&lam_expr)
@@ -329,7 +329,7 @@ async fn test_verify_cert_valid_app() {
 
     // Use infer_type_with_cert to generate correct certificate
     use clean_kernel::TypeChecker;
-    let env = clean_kernel::Environment::new();
+    let env = Environment::new();
     let tc = TypeChecker::new(&env);
     let (_, cert) = tc
         .infer_type_with_cert(&app_expr)
@@ -435,7 +435,7 @@ async fn test_verify_cert_nested_app_lambda() {
 
     // Use infer_type_with_cert to generate correct certificate
     use clean_kernel::TypeChecker;
-    let env = clean_kernel::Environment::new();
+    let env = Environment::new();
     let tc = TypeChecker::new(&env);
     let (_, cert) = tc
         .infer_type_with_cert(&nested_app)

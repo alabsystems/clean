@@ -171,7 +171,7 @@ fn test_projection_receiver_error_and_namespace_retry_restore_expected_context()
     // type has been hidden. Neither the receiver error nor its failed qualified
     // fallback may strand `current_expected_type = None`.
     let missing_receiver = SurfaceExpr::Ident(span, "MissingReceiver".to_string());
-    let missing_field = clean_parser::Projection::Named("field".to_string());
+    let missing_field = Projection::Named("field".to_string());
     assert!(ctx.elab_proj(&missing_receiver, &missing_field).is_err());
     assert_eq!(ctx.current_expected_type, Some(outer_expected.clone()));
     assert_eq!(ctx.locals, locals_before);
@@ -179,7 +179,7 @@ fn test_projection_receiver_error_and_namespace_retry_restore_expected_context()
     // Reuse the same context for the namespace-only success path. `Foo` is not
     // a value, but `Foo.bar` is a real declaration.
     let namespace_receiver = SurfaceExpr::Ident(span, "Foo".to_string());
-    let namespace_field = clean_parser::Projection::Named("bar".to_string());
+    let namespace_field = Projection::Named("bar".to_string());
     let result = ctx
         .elab_proj(&namespace_receiver, &namespace_field)
         .expect("namespace fallback should remain usable after receiver failure");

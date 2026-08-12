@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use crate::build_library::load_built_library;
-use crate::error::{MathverseError, MathverseResult};
+use crate::error::MathverseResult;
 use crate::graduate::BaselineIndex;
 use crate::library::MathverseLibrary;
 use crate::manifest::LibraryLoader;

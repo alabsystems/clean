@@ -60,7 +60,7 @@ pub enum BoogieType {
 
 impl BoogieType {
     /// Parse a Boogie type from a string token.
-    pub(crate) fn parse(s: &str) -> Result<Self, BoogieParseError> {
+    pub fn parse(s: &str) -> Result<Self, BoogieParseError> {
         let s = s.trim();
         match s {
             "int" => Ok(Self::Int),

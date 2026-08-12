@@ -62,6 +62,8 @@ struct DeltaConsts {
     bool_rec1: Expr,
     eq1: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_refl1: Expr,
 }
 
@@ -108,6 +110,7 @@ impl DeltaConsts {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn refl_rat(&self, e: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), e])
     }
@@ -832,6 +835,8 @@ struct CombineConsts {
     btrue: Expr,
     bfalse: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     bool_rec1: Expr,
     congr_arg_br: Expr, // congrArg Bool→Rat
     congr_arg_hr: Expr, // congrArg HCPoint→Rat (level 2,2)
@@ -1958,6 +1963,8 @@ struct SumSwapConsts {
     rat_add: Expr,
     eq1: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_refl1: Expr,
     eq_trans1: Expr,
     eq_symm1: Expr,

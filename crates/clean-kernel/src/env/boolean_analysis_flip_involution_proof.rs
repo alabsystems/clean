@@ -44,6 +44,8 @@ struct FiConsts {
     bool_not: Expr,
     nat_beq: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_xor: Expr,
     nat_succ: Expr,
     nat_zero: Expr,
@@ -114,6 +116,7 @@ impl FiConsts {
         Expr::apps(self.fin_val.clone(), [m, k])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn nxor(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.nat_xor.clone(), [a, b])
     }

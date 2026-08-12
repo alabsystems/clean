@@ -632,7 +632,7 @@ fn test_replace_local_decl_with_value_produces_kernel_checked_closed_let() {
     let closed = state
         .closed_proof()
         .expect("the replacement chain must expose a fully closed proof");
-    let checker = clean_kernel::TypeChecker::new(state.env());
+    let checker = TypeChecker::new(state.env());
     assert!(
         checker.check_type(&closed, &target).is_ok(),
         "the closed let-shadowing proof must pass the kernel type checker: {closed:?}"

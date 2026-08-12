@@ -1113,7 +1113,7 @@ impl<'a> ElabCtx<'a> {
         do_u: &Level,
         do_v: &Level,
     ) -> Result<Expr, ElabError> {
-        crate::stack_safe(|| match elems {
+        stack_safe(|| match elems {
             // Fall-through: yield the current accumulator values.
             [] => {
                 let acc = self.pack_step_acc(accs, None)?;
@@ -1516,7 +1516,7 @@ impl<'a> ElabCtx<'a> {
 
 /// Collect the names declared with `let mut` anywhere in a do-block.
 pub(super) fn collect_do_mut_var_names(elems: &[DoElem], out: &mut Vec<String>) {
-    crate::stack_safe(|| {
+    stack_safe(|| {
         for elem in elems {
             match elem {
                 DoElem::LetMut(_, binder, _) if !out.contains(&binder.name) => {
@@ -1562,7 +1562,7 @@ pub(super) fn collect_do_mut_var_names(elems: &[DoElem], out: &mut Vec<String>) 
 /// blocks keep the legacy transformer-stack lane (the pure lane models only
 /// mutation and if/return control flow).
 pub(super) fn do_block_has_try_catch(elems: &[DoElem]) -> bool {
-    crate::stack_safe(|| {
+    stack_safe(|| {
         elems.iter().any(|elem| match elem {
             DoElem::TryCatch(..) => true,
             DoElem::If(_, _, t, e)
@@ -1586,7 +1586,7 @@ pub(super) fn do_block_has_try_catch(elems: &[DoElem]) -> bool {
 /// including inside `for` bodies). B23's pure lane models `for` loops only, so a
 /// `while`/`repeat` combined with a control effect is descoped LOUD.
 pub(super) fn do_block_has_while_repeat(elems: &[DoElem]) -> bool {
-    crate::stack_safe(|| {
+    stack_safe(|| {
         elems.iter().any(|elem| match elem {
             DoElem::While(..) | DoElem::Repeat(..) => true,
             DoElem::For(_, _, _, body) => do_block_has_while_repeat(body),
@@ -1620,7 +1620,7 @@ pub(super) fn do_block_has_while_repeat(elems: &[DoElem]) -> bool {
 /// the pure lane cannot lower — descoped LOUD (Lean also rejects it outside a
 /// loop). Descends into `if`/`match`/fallback branches but NOT loop bodies.
 pub(super) fn do_block_has_toplevel_break_continue(elems: &[DoElem]) -> bool {
-    crate::stack_safe(|| {
+    stack_safe(|| {
         elems.iter().any(|elem| match elem {
             DoElem::Break(_) | DoElem::Continue(_) => true,
             // A loop consumes its own break/continue: do not descend.
@@ -1657,7 +1657,7 @@ pub(super) fn do_block_has_toplevel_break_continue(elems: &[DoElem]) -> bool {
 /// NOT model; when combined with a control effect the block is descoped LOUD.
 #[allow(dead_code)]
 pub(super) fn do_block_has_hard_control(elems: &[DoElem]) -> bool {
-    crate::stack_safe(|| {
+    stack_safe(|| {
         elems.iter().any(|elem| match elem {
             DoElem::For(..) | DoElem::While(..) | DoElem::Repeat(..) => true,
             DoElem::Break(_) | DoElem::Continue(_) => true,

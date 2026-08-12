@@ -188,10 +188,23 @@ fn check_file_empty_file() {
 
 #[test]
 fn check_file_multiple_definitions() {
+    // This test is about a file holding SEVERAL definitions; the individual
+    // names are incidental. The third one used to be spelled `flip`, which
+    // stopped checking at a61e1120e ("feat(kernel): register flip so the named
+    // form works") — that commit gave the builtin prelude a real
+    // root-namespace `flip` constant, so a user file redefining the bare name
+    // is now a genuine duplicate declaration. Real Lean agrees: `flip` is
+    // declared at `Init/Core.lean:65` (toolchain v4.30.0-rc2, the pin in
+    // `lean-toolchain`), and `lean` rejects this very source with
+    // "`flip` has already been declared". So the name was moved out of the
+    // prelude's way — exactly the dodge the first definition already makes for
+    // the prelude's `id` (hence `idFun`). The collision itself is the correct
+    // behavior and is pinned below by
+    // `check_file_redefining_prelude_flip_is_a_loud_duplicate`.
     let code = r"
 def idFun (A : Type) (x : A) : A := x
 def const (A B : Type) (x : A) (y : B) : A := x
-def flip (A B C : Type) (f : A → B → C) (b : B) (a : A) : C := f a b
+def flipFun (A B C : Type) (f : A → B → C) (b : B) (a : A) : C := f a b
 ";
 
     let dir = tempfile::tempdir().expect("tempdir should be created");
@@ -200,6 +213,59 @@ def flip (A B C : Type) (f : A → B → C) (b : B) (a : A) : C := f a b
 
     check_file(&path, false, false, PreludeMode::Builtin)
         .expect("Multiple definitions should type check");
+}
+
+/// Lean-parity pin for a61e1120e: the builtin prelude owns the root-namespace
+/// name `flip`, so a source file that redefines it must FAIL loudly with the
+/// kernel's duplicate-declaration rejection.
+///
+/// Ground truth (verified against the pinned toolchain, not from memory):
+/// `~/.elan/toolchains/leanprover--lean4---v4.30.0-rc2/src/lean/Init/Core.lean:65`
+/// declares `@[inline] def flip {α : Sort u} {β : Sort v} {φ : Sort w}
+/// (f : α → β → φ) : β → α → φ`, and running the `flip` body below through
+/// `lean` exits 1 with "`flip` has already been declared".
+///
+/// The pin fails in BOTH of the bad directions, which is the point:
+///
+/// * If the duplicate rejection is ever softened — made idempotent, or
+///   caught-and-ignored in the elaborator/driver so a "re-registration" is
+///   waved through — the colliding file starts passing. That would mask
+///   genuine duplicate definitions in user code, which the kernel is right to
+///   reject.
+/// * If the prelude's `flip` constant is deleted to make the collision go
+///   away, the colliding file also starts passing. That would silently drop
+///   the named/fully-applied `flip f b a` capability a61e1120e added (whose
+///   positive direction is pinned by `clean-elab`'s
+///   `lean4_corpus_tests::test_r155_flip_elaborates` / `..._soundness`).
+///
+/// The `flipFun` control below is byte-identical to the colliding declaration
+/// apart from the NAME, so a failure here is attributable to the collision and
+/// to nothing else about the declaration.
+#[test]
+fn check_file_redefining_prelude_flip_is_a_loud_duplicate() {
+    let dir = tempfile::tempdir().expect("tempdir should be created");
+
+    let colliding = r"
+def flip (A B C : Type) (f : A → B → C) (b : B) (a : A) : C := f a b
+";
+    let colliding_path = dir.path().join("flip_collides.clean");
+    fs::write(&colliding_path, colliding).expect("write should succeed");
+    let result = check_file(&colliding_path, false, false, PreludeMode::Builtin);
+    assert!(
+        result.is_err(),
+        "redefining the prelude's root-namespace `flip` must be rejected as a \
+         duplicate declaration (Lean: \"`flip` has already been declared\"), \
+         never silently re-registered"
+    );
+
+    // Control: the same declaration under a name the prelude does not own.
+    let free = r"
+def flipFun (A B C : Type) (f : A → B → C) (b : B) (a : A) : C := f a b
+";
+    let free_path = dir.path().join("flip_free.clean");
+    fs::write(&free_path, free).expect("write should succeed");
+    check_file(&free_path, false, false, PreludeMode::Builtin)
+        .expect("the identical declaration under a free name must type check");
 }
 
 // ========== CLI parsing tests ==========

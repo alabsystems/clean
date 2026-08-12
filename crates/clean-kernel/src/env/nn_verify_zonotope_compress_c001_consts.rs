@@ -22,6 +22,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Constants for C001 theorem construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct C001Consts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -51,6 +52,7 @@ pub(super) struct C001Consts {
     pub(super) tail_norm_sum: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl C001Consts {
     pub(super) fn new() -> Self {
         Self {

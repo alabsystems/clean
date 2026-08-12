@@ -715,7 +715,7 @@ fn test_c002_identity_matrix_is_definition() {
     // Verify it is classified as a Definition, not an Axiom
     assert_eq!(
         ci.kind,
-        crate::env::types::ConstantKind::Definition,
+        ConstantKind::Definition,
         "identity_matrix should be ConstantKind::Definition. Part of #3372.",
     );
 }
@@ -736,7 +736,7 @@ fn test_c002_matrix_sub_is_definition() {
     );
     assert_eq!(
         ci.kind,
-        crate::env::types::ConstantKind::Definition,
+        ConstantKind::Definition,
         "matrix_sub should be ConstantKind::Definition. Part of #3372.",
     );
 }
@@ -835,7 +835,7 @@ fn test_c002_mean_projection_kernel_validates_via_add_decl() {
         .expect("mean_projection Opaque carries its placeholder body");
     let declared_type = ci.type_.clone();
 
-    let mut tc = TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc
         .infer_type(&value)
         .expect("kernel should infer type of mean_projection Opaque body");

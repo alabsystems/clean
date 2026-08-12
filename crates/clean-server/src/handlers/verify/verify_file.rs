@@ -74,7 +74,36 @@ pub async fn handle_verify_file(
     // Initialize FATE Mathlib stubs if needed (lazy initialization)
     // This ensures types like Prime, IsPrincipalIdealRing, Polynomial are available
     // for elaboration even when no proof is provided.
-    super::initialize_verify_file_env(state).await;
+    let initialize_start = Instant::now();
+    if let Err(error) = super::initialize_verify_file_env(state).await {
+        let elapsed_ns = start.elapsed().as_nanos() as u64;
+        let result = VerifyFileResult {
+            verified: false,
+            theorem,
+            sorries,
+            time_ns: elapsed_ns,
+            timing: Some(TimingBreakdown {
+                parse_ns,
+                elaborate_ns: 0,
+                verify_ns: 0,
+                total_ns: elapsed_ns,
+            }),
+            error: Some(VerifyProofError {
+                message: format!("failed to initialize verification environment: {error}"),
+                position: None,
+                expected_type: None,
+                actual_goals: vec![],
+                suggestions: vec!["check the server's kernel environment".to_string()],
+            }),
+            trust_summary: None,
+        };
+        return Response::success_typed(id.clone(), &result)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+    }
+    // Environment construction is prerequisite setup, not proof execution.
+    // Keep it in reported wall-clock latency without consuming the caller's
+    // parsing/elaboration/replay budget.
+    let effective_timeout = timeout.saturating_add(initialize_start.elapsed());
 
     // If no proof provided, just return extracted info
     let proof = match &params.proof {
@@ -251,7 +280,7 @@ pub async fn handle_verify_file(
             continue;
         }
 
-        if start.elapsed() > timeout {
+        if start.elapsed() > effective_timeout {
             let verify_ns = verify_start.elapsed().as_nanos() as u64;
             let elapsed_ns = start.elapsed().as_nanos() as u64;
             let result = VerifyFileResult {

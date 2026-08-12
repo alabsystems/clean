@@ -18,6 +18,7 @@ use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     /// Initialize Nat min/max operations
     ///
@@ -389,7 +390,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instMinNat"),
             class_name: Name::from_string("Min"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -633,7 +634,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instOrdNat"),
                 class_name: Name::from_string("Ord"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -753,7 +754,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instOrdBool"),
                 class_name: Name::from_string("Ord"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -894,7 +895,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instOrdOrdering"),
                 class_name: Name::from_string("Ord"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });

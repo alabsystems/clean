@@ -393,7 +393,7 @@ mod tests {
     fn build_theorem_index_emits_agent_json_shape_from_source() {
         let dir = tempfile::tempdir().expect("tempdir");
         let source = dir.path().join("Demo.lean");
-        std::fs::write(
+        fs::write(
             &source,
             "import Init\n\nnamespace Demo\n theorem one : True := True.intro\nend Demo\n",
         )

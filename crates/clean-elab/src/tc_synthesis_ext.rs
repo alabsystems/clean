@@ -68,6 +68,9 @@ pub(crate) enum TcSynthError {
 
 /// A single step in the synthesis trace.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct SynthTraceEntry {
     pub(crate) class_name: Name,
     pub(crate) candidate: Name,
@@ -81,6 +84,9 @@ pub(crate) enum SynthOutcome {
     Success,
     StructuralMismatch,
     DependencyFailed,
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     Skipped,
 }
 

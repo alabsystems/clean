@@ -134,6 +134,25 @@ pub struct RunArgs {
     pub keep_temp: bool,
 }
 
+/// Arguments for `clean extract` — width-1 differential-checked C
+/// extraction (`designs/2026-08-06-clean-extract-width1.md`). The battery
+/// always runs; a refusal or differential mismatch writes no artifacts.
+#[derive(Debug, Clone, Args)]
+pub struct ExtractArgs {
+    /// Path to the `.lean` source file containing the declaration.
+    #[arg(value_name = "FILE")]
+    pub file: PathBuf,
+    /// Name of the first-order computational declaration to extract.
+    #[arg(long, value_name = "NAME")]
+    pub decl: String,
+    /// Output directory for the C file + manifest (must not exist).
+    #[arg(long, value_name = "DIR")]
+    pub out: PathBuf,
+    /// Keep the scratch build directory and print its path.
+    #[arg(long)]
+    pub keep_temp: bool,
+}
+
 /// Feature descriptors surfaced by `clean-cli` itself
 /// (`repl`, `sorry-trace`, `sorry-census`).
 pub const FEATURES: &[FeatureDescriptor] = &[
@@ -386,6 +405,36 @@ build directory (emitted C + runtime + binary) for inspection.",
             },
         ],
         domain_root: Some("run"),
+        alternative_forms: &[],
+        feature_gate: None,
+    },
+    FeatureDescriptor {
+        path: &["extract"],
+        summary:
+            "Extract a first-order computational decl to differential-checked C (Experimental)",
+        description: "\
+Width-1 C extraction (the Rocq `Extraction` analog, fail-closed; \
+`designs/2026-08-06-clean-extract-width1.md`). Elaborates `<FILE>`, gates \
+`--decl <NAME>` to the v1 computational class (no Prop anywhere in the type, \
+no universe params, first-order `Nat`/`Bool`/`UIntW` telescope, straight-line \
+body), emits C through the same closure as `clean compile --emit c`, verifies \
+shim coverage over the emitted text, `cc`-links against the embedded runtime \
+with a synthesized battery driver, and DIFFERENTIALLY checks every battery \
+point against kernel-side evaluation before writing the C file plus a \
+blake3-digested `manifest.json` into `--out`.\n\n\
+The manifest records the claim honestly: a differential check over the \
+recorded battery, not a proof of translation correctness. Any refusal \
+(stable `E_*` codes) or differential mismatch exits nonzero and writes \
+nothing.",
+        category: Category::Dev,
+        stability: Stability::Experimental,
+        examples: &[Example {
+            cmd: "clean extract arith.lean --decl double --out out/double",
+            what: "extract `double` to C with a differential-checked manifest",
+        }],
+        see_also: &["run", "compile"],
+        references: &[],
+        domain_root: None,
         alternative_forms: &[],
         feature_gate: None,
     },

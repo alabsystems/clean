@@ -44,14 +44,61 @@
 //!
 //! Lifting this to `par_reduces_cd_star` needs the head to still be stuck
 //! after reducing — `whnf_stuck_head f -> par_reduces_cd env f f2 ->
-//! whnf_stuck_head f2` — and that preservation lemma is genuinely separate
-//! work, because its own `app` case wants an application inversion. The
-//! non-circular order is: prove preservation by induction on
-//! `whnf_stuck_head`, using the SINGLE-STEP inversion below (which needs no
-//! preservation), and only then lift to the closure. A first draft of this
-//! module skipped that and wrote a star version referencing a
-//! `stuck_head_par_star_preserved` that does not exist; it is dropped rather
-//! than shipped dangling.
+//! whnf_stuck_head f2`. A first draft of this module wrote a star version
+//! referencing a `stuck_head_par_star_preserved` that does not exist; it was
+//! dropped rather than shipped dangling.
+//!
+//! ### That preservation lemma is FALSE as stated — do not try to prove it
+//!
+//! This file used to prescribe the fix: "prove preservation by induction on
+//! `whnf_stuck_head`, using the single-step inversion below, and only then
+//! lift to the closure." **That plan is not executable over
+//! `par_reduces_cd`,** and the reason is one specific arm.
+//!
+//! Five of the six arms are fine. `sort`, `pi` and `lit` reduce only to
+//! themselves; `app` is the single-step inversion below; `proj` recurses into
+//! a scrutinee that is itself `whnf_stuck_head`, and `par_reduces_cd` has
+//! **no projection-reduction rule** (`proj` appears only as a congruence in
+//! `CD_STRUCTURAL_ARMS`), so a `proj` can only ever become a `proj`.
+//!
+//! The sixth arm, **`projw`**, breaks it. Its premise is `is_whnf sub`, and
+//! `is_whnf` reaches const-headed spines through `neutral`:
+//!
+//! ```text
+//! is_neutral.const : forall n us, const_whnf n us -> is_neutral (KExpr.const n us)
+//! is_neutral.app   : forall f a, is_neutral f -> is_neutral (KExpr.app f a)
+//! ```
+//!
+//! `const_whnf` is **δ-deadness only — there is no recmeta-freeness
+//! requirement**. A recursor is δ-dead (it carries no def value), so a
+//! sufficiently-applied recursor spine `app (const Nat.rec us) … major` is
+//! `is_neutral`, hence `is_whnf`, hence `proj s i <that spine>` is
+//! `whnf_stuck_head` by `projw`. But that spine still **ι-fires** once the
+//! major reaches a constructor, and the rule body it produces need be neither
+//! `is_whnf` nor `whnf_stuck_head`. Both `proj` arms then fail on the reduct,
+//! so `whnf_stuck_head` is not preserved.
+//!
+//! Note the asymmetry that makes this a `projw`-only defect: `whnf_stuck_head`
+//! has **no `const` arm**, so its own `app` arm never admits a recursor spine.
+//! `projw` is the single place the laxer `is_whnf` notion leaks in — which is
+//! also why the older ι-free reading was sound. `is_whnf`/`is_neutral` were
+//! built for the const+δ fragment, whose own doc says it "has no
+//! proj-reduction"; importing them into an ι-carrying calculus is what
+//! introduces the hole.
+//!
+//! **Status of this claim:** an argument from the two quoted inductive
+//! declarations, not a kernel-checked refutation. What would upgrade it is a
+//! concrete `iota_step (red_rec env) sub sub2` witness with a rule body that
+//! is neither `is_whnf` nor `whnf_stuck_head` (a `bvar` body suffices — `bvar`
+//! appears in neither predicate); `par_reduces_cd.iota` then lifts it. That
+//! needs a `RecEnv` carrying a real rule, which is why it is recorded here
+//! rather than proved in passing.
+//!
+//! **The repair, when someone needs this lemma:** give `projw` an explicit
+//! recmeta-freeness side condition on the scrutinee's spine head, in the same
+//! idiom as `stuck_major_dead_const_no_ctor_reduct`, which takes exactly that
+//! hypothesis "so the gap is visible in the type instead of buried in a
+//! proof". Do not weaken `is_whnf` — it is load-bearing elsewhere.
 //!
 //! `DerivedProved` throughout, empty axiom closures; the witness is
 //! census-neutral.
@@ -171,11 +218,11 @@ impl Specification {
         };
 
         // refl: nothing moved.
-        let mut arms = format!(
+        let mut arms = String::from(
             "(fun (e0 : KExpr) (f : KExpr) (a : KExpr) (_hs : whnf_stuck_head f) \
              (heq : Eq KExpr e0 (KExpr.app f a)) => \
              StuckAppRedWitness.mk env f a e0 f a heq \
-             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) "
+             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) ",
         );
 
         // `names` supplies a name for each recursive proof binder. Anonymous
@@ -235,9 +282,8 @@ impl Specification {
         }
 
         // lam, pi, forall_, let_ : conclude at a different head.
-        for idx in 2..6 {
+        for (idx, &(_, _, src, tgt)) in CD_STRUCTURAL_ARMS.iter().enumerate().take(6).skip(2) {
             let (payload, proofs, ihs) = binder_block(idx, &[]);
-            let (_, _, src, tgt) = CD_STRUCTURAL_ARMS[idx];
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
                  (_hs : whnf_stuck_head f) (heq : Eq KExpr {src} (KExpr.app f a)) => \

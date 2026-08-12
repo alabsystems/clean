@@ -53,6 +53,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Shared constants for interval arithmetic proof construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct IAConsts {
     nat: Expr,
     rat: Expr,
@@ -87,6 +88,7 @@ struct IAConsts {
     sub_le_sub: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl IAConsts {
     fn new() -> Self {
         Self {

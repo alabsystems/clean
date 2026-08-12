@@ -47,6 +47,7 @@ use crate::expr::{BinderInfo, Expr};
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct IntLeOfOfNatConsts {
     nat: Expr,
     nat_succ: Expr,

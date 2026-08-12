@@ -41,6 +41,8 @@ pub struct InitContract {
     /// Stable identifier for this contract.
     pub id: InitContractId,
     /// Human-readable name of the init function (e.g. `"init_topology_subspace"`).
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub init_name: &'static str,
     /// Prerequisite contract ids that must be executed before this one.
     pub dependencies: Vec<InitContractId>,
@@ -63,6 +65,7 @@ pub struct InitContractRegistry {
 /// Result of a dependency closure audit for one contract.
 #[derive(Debug)]
 pub struct ClosureAuditResult {
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub contract_id: InitContractId,
     /// Constants that were referenced by newly-added declarations but were
     /// not present in the environment (missing dependencies).
@@ -359,6 +362,7 @@ impl InitContractRegistry {
     }
 
     /// Get a contract by id.
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn get(&self, id: &InitContractId) -> Option<&InitContract> {
         self.id_index.get(id).map(|&idx| &self.contracts[idx])
     }

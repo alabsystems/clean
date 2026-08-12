@@ -109,6 +109,41 @@ impl ProofState {
         ctx_floor.max(self.fvar_base)
     }
 
+    /// The binder base for a goal whose context may have NARROWED — the
+    /// capture-safe form of [`Self::goal_fvar_base`].
+    ///
+    /// `clear` / `clear_except` / aesop's `destruct` remove a decl from
+    /// `goal.local_ctx` directly, without re-minting the goal's metavariable
+    /// (`hypothesis::clear`). The removed local stays in the meta's immutable
+    /// creation scope and stays bound by a live `lambda` in the already-committed
+    /// parent assignment, so the goal's context is no longer a reliable proxy
+    /// for binder depth: minting from it hands back an id that is still bound.
+    /// `close_fvars`' id-to-depth arithmetic then resolves the new local to the
+    /// CLEARED binder — variable capture that `assignment_scope_violation`
+    /// cannot see, because scopes are keyed on bare `FVarId` and the reused id
+    /// reads as the local it aliases.
+    ///
+    /// Taking the max over the meta's scope as well keeps the new id strictly
+    /// above every still-live binder. Where nothing has narrowed (the common
+    /// case, incl. fresh sibling goals) the two agree exactly, so the
+    /// sibling-`intro` depth invariant (#2533) is preserved.
+    pub(crate) fn goal_binder_base(&self, goal: &Goal) -> u64 {
+        let scope_floor = self
+            .metas
+            .get(goal.meta_id)
+            .map(|meta| {
+                meta.locals
+                    .iter()
+                    .map(|(_, fvar, _)| fvar.as_u64())
+                    .filter(|id| *id >= self.fvar_base && *id < self.next_fvar)
+                    .map(|id| id.saturating_add(1))
+                    .max()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        self.goal_fvar_base(goal).max(scope_floor)
+    }
+
     /// Create a fresh universe parameter level.
     ///
     /// Generates a new universe parameter name like `u_0`, `u_1`, etc.

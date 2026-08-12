@@ -122,6 +122,7 @@ impl DensitySymmConsts {
         Expr::app(Expr::const_(Name::from_string("Fin"), vec![]), n.clone())
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn hcpoint_to_rat(&self, n: &Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.hcpoint_of(n), self.rat.clone())
     }

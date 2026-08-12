@@ -90,6 +90,9 @@ pub(crate) fn elaborate_interpolation(
 /// when the caller only needs the desugared surface expression without
 /// elaboration.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn desugar_s_interpolation(parts: &[InterpolationPart]) -> clean_parser::SurfaceExpr {
     desugar_interpolation(parts.to_vec())
 }
@@ -99,6 +102,9 @@ pub(crate) fn desugar_s_interpolation(parts: &[InterpolationPart]) -> clean_pars
 /// Thin wrapper that re-exports `desugar_prefixed_interpolation_parts` under
 /// a name scoped to this module.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn desugar_by_kind(
     kind: InterpolatedStringKind,
     parts: &[InterpolationPart],
@@ -113,6 +119,9 @@ pub(crate) fn desugar_by_kind(
 /// can be elaborated as a simple string literal without the `toString`/
 /// `String.append` overhead.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn is_plain_literal(parts: &[InterpolationPart]) -> bool {
     parts
         .iter()
@@ -125,6 +134,9 @@ pub(crate) fn is_plain_literal(parts: &[InterpolationPart]) -> bool {
 /// When `Some`, the caller can emit a single string literal instead of
 /// the full `String.append` chain.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn try_extract_plain_text(parts: &[InterpolationPart]) -> Option<String> {
     if !is_plain_literal(parts) {
         return None;
@@ -142,6 +154,9 @@ pub(crate) fn try_extract_plain_text(parts: &[InterpolationPart]) -> Option<Stri
 ///
 /// Useful for diagnostics and complexity estimation.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn count_interpolated_exprs(parts: &[InterpolationPart]) -> usize {
     parts
         .iter()

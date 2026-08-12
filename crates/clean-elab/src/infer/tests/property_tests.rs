@@ -165,7 +165,7 @@ proptest! {
         let input = n.to_string();
         if let Ok(surface) = parse_expr(&input) {
             if let Ok(ref expr) = ctx.elaborate(&surface) {
-                if let ExprKind::Lit(clean_kernel::Literal::Nat(v)) = expr.kind() {
+                if let ExprKind::Lit(Literal::Nat(v)) = expr.kind() {
                     // Should be a Lit expression with the same value
                     prop_assert_eq!(v.to_u64(), Some(n), "Natural literal value should be preserved");
                 }

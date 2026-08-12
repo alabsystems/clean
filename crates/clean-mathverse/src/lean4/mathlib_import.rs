@@ -319,14 +319,14 @@ pub fn load_mathlib_foundations(
 // ---------------------------------------------------------------------------
 
 /// Check if a specific theorem exists in the environment.
-pub(crate) fn has_theorem(env: &Environment, name: &str) -> bool {
+pub fn has_theorem(env: &Environment, name: &str) -> bool {
     let n = Name::from_string(name);
     env.get_const(&n).is_some()
 }
 
 /// Check if a theorem has a proof term (value) — distinguishing true theorems
 /// from axioms.
-pub(crate) fn has_proof(env: &Environment, name: &str) -> bool {
+pub fn has_proof(env: &Environment, name: &str) -> bool {
     let n = Name::from_string(name);
     env.get_const(&n)
         .map(|ci| ci.value.is_some())
@@ -334,7 +334,7 @@ pub(crate) fn has_proof(env: &Environment, name: &str) -> bool {
 }
 
 /// Collect all constant names matching a prefix.
-pub(crate) fn constants_with_prefix(env: &Environment, prefix: &str) -> Vec<String> {
+pub fn constants_with_prefix(env: &Environment, prefix: &str) -> Vec<String> {
     env.constants()
         .map(|ci| ci.name.to_string())
         .filter(|name| name.starts_with(prefix))
@@ -476,7 +476,7 @@ impl GammaCrownLoadResult {
 ///
 /// Returns `Some(kind_str)` if the constant exists, describing whether it
 /// is a `Theorem` (with proof), `Axiom`, `Definition`, `Opaque`, etc.
-pub(crate) fn describe_constant(env: &Environment, name: &str) -> Option<String> {
+pub fn describe_constant(env: &Environment, name: &str) -> Option<String> {
     let n = Name::from_string(name);
     env.get_const(&n).map(|ci| {
         let has_value = ci.value.is_some();

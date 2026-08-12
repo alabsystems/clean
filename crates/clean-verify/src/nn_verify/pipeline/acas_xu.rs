@@ -24,6 +24,12 @@
 //! verify the safety property. Real ACAS Xu networks are 6x50, but the
 //! pipeline mechanics are identical.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use crate::nn_verify::certificate::chain::{
     CertificateChain, CertificateEntry, ChainTrustLevel, VerificationMethod,
 };
@@ -166,6 +172,8 @@ pub(crate) fn safe_separation_input_bounds() -> Vec<Interval> {
 #[derive(Debug, Clone)]
 pub(crate) struct AcasXuVerificationResult {
     /// Whether the safety property was verified.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) verified: bool,
     /// Per-layer IBP bounds (input bounds + one per layer output).
     pub(crate) layer_bounds: Vec<Vec<Interval>>,
@@ -355,7 +363,7 @@ fn build_certificate_chain(
     network: &NetworkArchitecture,
 ) -> CertificateChain {
     let mut entries = Vec::with_capacity(network.layers.len());
-    for (i, layer) in network.layers.iter().enumerate() {
+    for (i, _layer) in network.layers.iter().enumerate() {
         let input_b: Vec<(f64, f64)> = layer_bounds[i]
             .iter()
             .map(|iv| (iv.lower, iv.upper))

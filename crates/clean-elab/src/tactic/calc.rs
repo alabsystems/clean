@@ -174,6 +174,9 @@ pub fn calc_block(state: &mut ProofState, start: Expr, steps: Vec<CalcStep>) -> 
 ///
 /// ENSURES: returns a fully-applied relation expression with correct implicit
 /// type and instance arguments for the given `CalcRel` variant
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn make_calc_rel(rel: CalcRel, lhs: &Expr, rhs: &Expr, state: &mut ProofState) -> Expr {
     let rel_name = match rel {
         CalcRel::Eq => "Eq",

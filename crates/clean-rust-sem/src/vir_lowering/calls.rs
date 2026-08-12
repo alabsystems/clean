@@ -9,7 +9,7 @@ use super::type_helpers::{autoderef_place_to_expected_inner, nominal_type_name};
 use super::VirLoweringError;
 use crate::expr::Expr;
 use crate::ownership::Place;
-use crate::types::{Mutability, ReceiverMode, RustType};
+use crate::types::{Mutability, RustType};
 use crate::vir::{
     AggregateKind, BorrowKind, Constant, MutBorrowKind, Operand, RetagKind, Rvalue,
     Stmt as VirStmt, Term,

@@ -78,7 +78,7 @@ fn collect_failures(result: &ElabResult, out: &mut Vec<String>) {
 /// `sorryAx`, no domain axioms — foundational axioms are not reported here).
 fn axiom_closure(env: &Environment, name: &str) -> Option<Vec<String>> {
     env.axiom_deps(&Name::from_string(name))
-        .map(|deps| deps.iter().map(std::string::ToString::to_string).collect())
+        .map(|deps| deps.iter().map(ToString::to_string).collect())
 }
 
 fn assert_empty_closure(env: &Environment, name: &str) {

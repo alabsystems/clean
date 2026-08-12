@@ -10,7 +10,7 @@
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{
     Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType, KernelClassInfo,
-    KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
+    KernelInstanceInfo, LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
@@ -220,7 +220,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instHashableNat"),
             class_name: Name::from_string("Hashable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -288,7 +288,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instHashableBool"),
             class_name: Name::from_string("Hashable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });

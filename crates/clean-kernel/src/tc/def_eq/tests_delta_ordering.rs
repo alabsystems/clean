@@ -21,7 +21,7 @@
 //!   byte-identical unfold-both path (constant-function detector pin)
 
 use super::*;
-use crate::env::{ConstantInfo, Environment, Reducibility, TransparencyMode};
+use crate::env::{ConstantInfo, Environment, Reducibility};
 use crate::expr::BinderInfo;
 use crate::level::Level;
 use std::cmp::Ordering;

@@ -81,6 +81,7 @@ impl ComposeConsts {
         Expr::apps(self.subset_sum.clone(), [n.clone(), g])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn fsum(&self, n: Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [n, g])
     }

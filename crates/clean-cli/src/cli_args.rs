@@ -41,8 +41,11 @@ pub(crate) use clean_lake::cli::{CacheCommands, LakeCommands, ScriptCommands};
 use crate::cli::bench::BenchCommands;
 use crate::cmd_attempts::AttemptCommands;
 use crate::cmd_audit::AuditCommands;
+use crate::cmd_drift::DriftCommands;
 use crate::cmd_factory::FactoryCommands;
+use crate::cmd_false_controls::FalseControlCommands;
 use crate::cmd_math::MathCommands;
+use crate::cmd_math_map::MathMapCommands;
 use crate::cmd_project::ProjectCommands;
 use crate::cmd_promote::PromoteCommands;
 use crate::cmd_release::ReleaseCommands;
@@ -182,6 +185,40 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         command: MathCommands,
     },
+    /// MathMap/Harmonic Lean patch-bundle ingest and trusted-key surfaces
+    ///
+    /// Drives the fail-closed `clean_mathverse::math_map` ingest pipeline:
+    /// `math-map ingest` validates a signed `clean-math_map-bundle-v1`
+    /// directory against the trusted-key registry and the ingest policy, and
+    /// `math-map keys list|verify` inspects and validates that registry.
+    /// Nothing in a bundle is trusted; a rejected or blocked ingest exits
+    /// non-zero unless `--report-only` is set.
+    MathMap {
+        #[command(subcommand)]
+        command: MathMapCommands,
+    },
+    /// Environment snapshot drift and statement-preservation gates
+    ///
+    /// Drives the `clean_mathverse::drift` snapshot/diff engine: `drift
+    /// snapshot` freezes a kernel environment's declaration surface into
+    /// deterministic JSON, and `drift diff` compares two such snapshots under
+    /// the statement-preservation authority gate. Blocking drift exits
+    /// non-zero unless `--allow-weaker` / `--allow-authority-gate-blocking`
+    /// are passed explicitly.
+    Drift {
+        #[command(subcommand)]
+        command: DriftCommands,
+    },
+    /// Run false-control rejection probes for release gating
+    ///
+    /// Drives the `clean_mathverse::false_control_suite` probe engine. Every
+    /// probe feeds a verifier an input that is known to be wrong, so the only
+    /// healthy outcome is rejection: a control that accepted its bad input —
+    /// or never ran — exits non-zero as a soundness alarm.
+    FalseControls {
+        #[command(subcommand)]
+        command: FalseControlCommands,
+    },
     /// Clean-native project authority surfaces
     Project {
         #[command(subcommand)]
@@ -303,6 +340,9 @@ pub(crate) enum Commands {
     /// contract is a nullary `Nat`-returning def (e.g.
     /// `def answer : Nat := Nat.succ (Nat.succ 0)`). `Stability::Experimental`.
     Run(crate::cli::RunArgs),
+    /// Extract a first-order computational declaration to differential-checked
+    /// C (`Stability::Experimental`; see the `extract` feature descriptor).
+    Extract(crate::cli::ExtractArgs),
     /// Rank every `sorry` site in the kernel / verify crates by estimated
     /// first-order proof cost (Experimental).
     ///

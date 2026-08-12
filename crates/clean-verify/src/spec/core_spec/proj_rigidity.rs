@@ -44,6 +44,12 @@
 //! `DerivedProved` throughout, empty axiom closures; the witness is
 //! census-neutral.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use crate::spec::core_spec::kexpr_discr::CD_STRUCTURAL_ARMS;
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
@@ -82,10 +88,10 @@ impl Specification {
         let goal = |tgt: &str| format!("(ProjRedWitness env s i sub {tgt})");
 
         // refl: nothing moved, so the subject reaches itself.
-        let mut arms = format!(
+        let mut arms = String::from(
             "(fun (e0 : KExpr) (s : Name) (i : Nat) (sub : KExpr) \
              (heq : Eq KExpr e0 (KExpr.proj s i sub)) => \
-             ProjRedWitness.mk env s i sub e0 sub heq (par_reduces_cd_star.refl env sub)) "
+             ProjRedWitness.mk env s i sub e0 sub heq (par_reduces_cd_star.refl env sub)) ",
         );
 
         let absurd = |idx: usize| {
@@ -152,7 +158,7 @@ impl Specification {
 
         // proj: THE substantive arm. Recover the name / index / subject
         // equalities from the in-tree projection injectivity, then rebuild.
-        arms.push_str(&format!(
+        arms.push_str(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub2 : KExpr) \
              (hp : par_reduces_cd env psub psub2) \
              (_ih : forall (s : Name) (i : Nat) (sub : KExpr), \
@@ -171,8 +177,8 @@ impl Specification {
              psub sub hs hp) (par_reduces_cd_star.refl env psub2))) \
              (proj_inj_name ps pidx psub s i sub heq) \
              (proj_inj_idx ps pidx psub s i sub heq) \
-             (proj_inj_sub ps pidx psub s i sub heq)) "
-        ));
+             (proj_inj_sub ps pidx psub s i sub heq)) ",
+        );
 
         let _ = target_kind;
         arms

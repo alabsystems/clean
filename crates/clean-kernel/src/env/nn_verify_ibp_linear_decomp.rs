@@ -53,6 +53,8 @@ pub(super) struct DecompConsts {
     pub(super) eq_symm: Expr,
     /// `@Eq.refl.{1}`.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) eq_refl: Expr,
     pub(super) rat_zero_add: Expr,
     pub(super) rat_add_zero: Expr,
@@ -138,6 +140,7 @@ impl DecompConsts {
 
     /// `@Eq.refl.{1} Rat v`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn refl_rat(&self, v: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [self.rat.clone(), v])
     }

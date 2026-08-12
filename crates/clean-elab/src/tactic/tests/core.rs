@@ -2006,21 +2006,26 @@ fn test_first_tactic_last_branch_error_propagates() {
 }
 
 #[test]
-fn test_first_tactic_stops_on_type_check_failure() {
+fn test_first_tactic_stops_on_fatal_error() {
     let env = setup_env();
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let a_expr = Expr::const_(Name::from_string("a"), vec![]);
     let mut state = ProofState::new(env, target);
 
     let tactics: Vec<Tactic> = vec![
-        Box::new(|_| Err(TacticError::TypeCheckFailed("fatal".into()))),
+        Box::new(|_| {
+            Err(TacticError::ParseFailed {
+                tactic: "first branch".into(),
+                detail: "fatal".into(),
+            })
+        }),
         Box::new(move |s| exact(s, a_expr.clone())),
     ];
 
     let result = first_tactic(&mut state, tactics);
 
     assert!(
-        matches!(result, Err(TacticError::TypeCheckFailed(ref msg)) if msg == "fatal"),
+        matches!(result, Err(TacticError::ParseFailed { ref detail, .. }) if detail == "fatal"),
         "fatal first-branch errors should stop immediately, got {result:?}"
     );
     assert_eq!(
@@ -2409,16 +2414,16 @@ fn test_specialize_reduces_pi_type() {
     let arrow_ty = Expr::arrow(a_ty.clone(), b_ty.clone());
 
     // Goal is just B, we'll specialize a hypothesis
-    let mut state = ProofState::new(env, b_ty.clone());
-
-    // Add hypothesis h : A → B
-    let fvar = state.fresh_fvar();
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar,
-        name: "h".to_string(),
-        ty: arrow_ty.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        b_ty.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(0),
+            name: "h".to_string(),
+            ty: arrow_ty.clone(),
+            value: None,
+        }],
+    );
 
     // Specialize h with 'a'
     let a_term = Expr::const_(Name::from_string("a"), vec![]);
@@ -2587,15 +2592,16 @@ fn test_revert_moves_hyp_to_goal() {
     let b_ty = Expr::const_(Name::from_string("B"), vec![]);
 
     // Start with goal B and hypothesis h : A
-    let mut state = ProofState::new(env, b_ty.clone());
-
-    let fvar = state.fresh_fvar();
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar,
-        name: "h".to_string(),
-        ty: a_ty.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        b_ty.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(0),
+            name: "h".to_string(),
+            ty: a_ty.clone(),
+            value: None,
+        }],
+    );
 
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 1);
 
@@ -4292,7 +4298,7 @@ fn test_tc_cache_invalidated_on_pop_current_goal() {
 fn test_proof_state_scope_with_context_root_is_exact() {
     let env = setup_env();
     let local_ty = Expr::const_(Name::from_string("A"), vec![]);
-    let local_fvar = clean_kernel::FVarId::new(17);
+    let local_fvar = FVarId::new(17);
     let local_ctx = vec![LocalDecl {
         fvar: local_fvar,
         name: "x".to_string(),
@@ -4317,7 +4323,7 @@ fn test_proof_state_scope_with_context_root_is_exact() {
 fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
     let env = setup_env();
     let elab_ty = Expr::type_();
-    let elab_fvar = clean_kernel::FVarId::new(10);
+    let elab_fvar = FVarId::new(10);
     let elab_decl = LocalDecl {
         fvar: elab_fvar,
         name: "alpha".to_string(),
@@ -4326,7 +4332,7 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
     };
     let mut state = ProofState::with_elab_context(env, Expr::prop(), vec![elab_decl.clone()]);
 
-    let parent_only_fvar = clean_kernel::FVarId::new(11);
+    let parent_only_fvar = FVarId::new(11);
     state
         .current_goal_mut()
         .expect("initial goal")
@@ -4338,7 +4344,7 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
             value: None,
         });
 
-    let child_fvar = clean_kernel::FVarId::new(12);
+    let child_fvar = FVarId::new(12);
     let child_ty = Expr::const_(Name::from_string("A"), vec![]);
     let child_ctx = vec![
         elab_decl,
@@ -4375,7 +4381,7 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
 #[test]
 fn test_proof_state_scope_clone_imports_missing_meta_exactly() {
     let env = setup_env();
-    let elab_fvar = clean_kernel::FVarId::new(20);
+    let elab_fvar = FVarId::new(20);
     let elab_ty = Expr::type_();
     let elab_decl = LocalDecl {
         fvar: elab_fvar,
@@ -4385,7 +4391,7 @@ fn test_proof_state_scope_clone_imports_missing_meta_exactly() {
     };
     let parent = ProofState::with_elab_context(env, Expr::prop(), vec![elab_decl.clone()]);
 
-    let child_fvar = clean_kernel::FVarId::new(21);
+    let child_fvar = FVarId::new(21);
     let child_ty = Expr::const_(Name::from_string("A"), vec![]);
     let goal = Goal {
         meta_id: crate::unify::MetaId(1_000),
@@ -4423,7 +4429,7 @@ fn test_proof_state_scope_clone_imports_missing_meta_exactly() {
 )]
 fn test_proof_state_scope_clone_mismatch_fails_closed() {
     let env = setup_env();
-    let original_fvar = clean_kernel::FVarId::new(30);
+    let original_fvar = FVarId::new(30);
     let original_ty = Expr::const_(Name::from_string("A"), vec![]);
     let state = ProofState::with_context(
         env,
@@ -4440,7 +4446,7 @@ fn test_proof_state_scope_clone_mismatch_fails_closed() {
         meta_id: state.root_meta_id,
         target: Expr::prop(),
         local_ctx: vec![LocalDecl {
-            fvar: clean_kernel::FVarId::new(31),
+            fvar: FVarId::new(31),
             name: "different".to_string(),
             ty: Expr::prop(),
             value: None,
@@ -4457,7 +4463,7 @@ fn test_proof_state_scope_clone_mismatch_fails_closed() {
 )]
 fn test_proof_state_scope_clone_retype_mismatch_fails_closed() {
     let env = setup_env();
-    let fvar = clean_kernel::FVarId::new(32);
+    let fvar = FVarId::new(32);
     let state = ProofState::with_context(
         env,
         Expr::prop(),
@@ -4503,8 +4509,8 @@ fn test_proof_state_scope_clone_target_mismatch_fails_closed() {
 fn test_proof_state_scope_clone_accepts_narrowed_context() {
     let env = setup_env();
     let ty = Expr::const_(Name::from_string("A"), vec![]);
-    let kept_fvar = clean_kernel::FVarId::new(40);
-    let cleared_fvar = clean_kernel::FVarId::new(41);
+    let kept_fvar = FVarId::new(40);
+    let cleared_fvar = FVarId::new(41);
     let mut state = ProofState::with_context(
         env,
         Expr::prop(),
@@ -4545,7 +4551,7 @@ fn test_proof_state_scope_clone_accepts_narrowed_context() {
 fn test_proof_state_scope_clone_accepts_renamed_context() {
     let env = setup_env();
     let ty = Expr::const_(Name::from_string("A"), vec![]);
-    let fvar = clean_kernel::FVarId::new(50);
+    let fvar = FVarId::new(50);
     let mut state = ProofState::with_context(
         env,
         Expr::prop(),
@@ -4578,7 +4584,7 @@ fn test_proof_state_scope_clone_accepts_renamed_context() {
 fn test_proof_state_scope_fresh_scratch_clone_uses_explicit_context() {
     let env = setup_env();
     let ty = Expr::const_(Name::from_string("A"), vec![]);
-    let front_fvar = clean_kernel::FVarId::new(60);
+    let front_fvar = FVarId::new(60);
     let state = ProofState::with_context(
         env,
         Expr::prop(),
@@ -4590,7 +4596,7 @@ fn test_proof_state_scope_fresh_scratch_clone_uses_explicit_context() {
         }],
     );
 
-    let scratch_fvar = clean_kernel::FVarId::new(61);
+    let scratch_fvar = FVarId::new(61);
     let scratch_ctx = vec![LocalDecl {
         fvar: scratch_fvar,
         name: "scratch".to_string(),
@@ -4636,7 +4642,7 @@ fn test_assert_continuation_uses_hypothesis_and_closed_proof_checks() {
     let closed = state
         .closed_proof()
         .expect("assert must expose a fully closed proof term");
-    let checker = clean_kernel::TypeChecker::new(state.env());
+    let checker = TypeChecker::new(state.env());
     assert!(
         checker.check_type(&closed, &target).is_ok(),
         "the closed assert proof must pass the kernel type checker"

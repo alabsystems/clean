@@ -8,6 +8,9 @@
 //! invocation statistics. Handlers: BEq, Hashable, Repr, Ord, DecidableEq,
 //! Inhabited, Nonempty, SizeOf.
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![cfg_attr(not(test), allow(dead_code))]
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -2316,7 +2319,7 @@ fn decidable_eq_multi_ctor_fields_value(
         // Inside the outer minor (after entering `cᵢ`'s `kᵢ` field binders): the
         // outer major `b` is `bvar(kᵢ)`; the a-fields occupy `bvar(0)…bvar(kᵢ-1)`.
         // `cᵢ aF…` references the a-fields at base 0.
-        let ci_a = apply_ctor(ctor_i, 0);
+        let _ci_a = apply_ctor(ctor_i, 0);
 
         // Inner motive: `fun (b' : T) => Decidable (@Eq T (cᵢ aF…) b')`. The
         // motive binder pushes everything by 1, so `cᵢ aF…` is at base 1.

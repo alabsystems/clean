@@ -17,6 +17,7 @@
 //! the same result, avoiding kernel type mismatches like:
 //! `TypeMismatch { expected: Sort(Param("u_1")), inferred: Sort(Param("u_0")) }`
 
+pub(crate) mod level_solve;
 mod meta_id;
 mod meta_state;
 mod unifier;

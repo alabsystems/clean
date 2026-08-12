@@ -45,7 +45,7 @@ impl Ctx {
         // budget — a pathological recorded proof (multi-hundred-MB congruence
         // tower with superlinear reconstruction) fails FAST as an honest
         // bounded reject instead of grinding the corpus replay on one line.
-        if let Some(budget) = super::super::bump_translate_steps() {
+        if let Some(budget) = bump_translate_steps() {
             return Err(TranslateError::BudgetExceeded(budget));
         }
         match p {
@@ -288,7 +288,7 @@ impl Ctx {
                 // latched the poison flag and returned a partial (discarded)
                 // tree — reject the line now instead of translating garbage or
                 // grinding further quadratic clones.
-                if let Some(budget) = super::super::subst_poison_budget() {
+                if let Some(budget) = subst_poison_budget() {
                     return Err(TranslateError::BudgetExceeded(budget));
                 }
             }
@@ -405,7 +405,7 @@ impl Ctx {
         // Shares the per-LINE node budget with [`Self::translate_proof`]: the
         // bidirectional expecting channels recurse through their own inner
         // dispatch, so an uncounted tower here would evade the runaway guard.
-        if let Some(budget) = super::super::bump_translate_steps() {
+        if let Some(budget) = bump_translate_steps() {
             return Err(TranslateError::BudgetExceeded(budget));
         }
         match self.translate_proof_expecting_inner(pr, expected, closure, binders) {
@@ -519,7 +519,7 @@ impl Ctx {
             // conclusion (a *phantom* binder, e.g. the let-body result type of
             // `let_weak_cong`) no supplied term argument constrains it — only the
             // expectation does. Routing every applied PThm through
-            // [`Self::apply_thm_expecting`] solves such phantoms (the buggy
+            // [`Self::apply_thm_expecting_with_tables`] solves such phantoms (the buggy
             // `any_in_scope_type` fallback collapsed them onto an existing type).
             // The method falls back to the plain [`Self::apply_thm`] when the
             // expectation does not solve every otherwise-unfilled binder, so no
@@ -705,7 +705,7 @@ impl Ctx {
                 // `expected` proposition). Filling the generic entries verbatim
                 // manufactures fresh unconstrained parameters (`?x.0 ↦ param x.0`)
                 // that the kernel then rejects, so route these through the
-                // bidirectional `apply_thm_expecting` instead, which solves the
+                // bidirectional `apply_thm_expecting_with_tables` instead, which solves the
                 // binders by unifying the referenced conclusion against `expected`.
                 // When the consumer genuinely shares the schematic (a real identity
                 // use), the expectation is stated over those same shared params, so
@@ -747,7 +747,7 @@ impl Ctx {
             }
             // **OfClass→membership superclass projection**: an `IsaProof::OfClass`
             // sort-witness leaf reached under a class-membership expectation (the
-            // `apply_thm_explicit`/`apply_thm_expecting` premise-argument path threads
+            // `apply_thm_explicit`/`apply_thm_expecting_with_tables` premise-argument path threads
             // the referenced telescope's ground binder domain here as `expected`). The
             // fall-through ([`Self::translate_proof`]) mints the vacuous `True.intro`
             // — correct only where `expected` IS `True`. Under a `Real`-membership

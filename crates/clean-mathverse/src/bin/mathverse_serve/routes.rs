@@ -36,7 +36,6 @@
 use clean_mathverse::serve_api::{CoreHandle, SearchParams};
 use clean_mathverse::trust_sign::{
     StageError, SubmissionError, SubmissionQueue, VerdictStore, SUBMISSION_TRUST_NOTE,
-    VERDICT_TRUST_NOTE,
 };
 
 use super::config::{DownloadMode, ServeConfig};

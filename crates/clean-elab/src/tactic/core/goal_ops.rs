@@ -7,7 +7,7 @@ use super::{Goal, LocalDecl, ProofState};
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
 use clean_kernel::sorry::{create_sorry_term_with_kind_at_level, SorryKind};
-use clean_kernel::{Environment, Expr, ExprKind, Level};
+use clean_kernel::{Environment, Expr, ExprKind, FVarId, Level};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -70,6 +70,21 @@ impl ProofState {
     /// ENSURES: On Err(TypeMismatch), `proof`'s inferred type ≠ goal target; state unchanged
     /// ENSURES: On Err(TypeCheckFailed), meta assignment failed; state unchanged
     pub(crate) fn close_goal(&mut self, goal: &Goal, proof: Expr) -> Result<(), TacticError> {
+        self.close_goal_with_bound_locals(goal, proof, &[])
+    }
+
+    /// Checked goal closing for a proof that introduces known local binders.
+    ///
+    /// Each pair identifies an exact FVar and the minimum binder depth at which
+    /// it is in scope.  This is deliberately narrower than inferring authority
+    /// from allocator order: proof-building helpers may allocate unrelated
+    /// FVars before assembling a `let`, creating harmless ID gaps.
+    pub(crate) fn close_goal_with_bound_locals(
+        &mut self,
+        goal: &Goal,
+        proof: Expr,
+        explicitly_bound: &[(FVarId, u64)],
+    ) -> Result<(), TacticError> {
         // Strict (infer_only=false) inference: validate App-argument types and
         // Lam/Pi domain sorts, matching what the kernel's add_decl does. The
         // lenient infer_type (infer_only=true) skips those checks and so accepts
@@ -94,8 +109,12 @@ impl ProofState {
             });
         }
 
-        #[allow(deprecated)] // close_goal is the checked wrapper — it must call through
-        self.close_goal_unchecked(proof)
+        if explicitly_bound.is_empty() {
+            #[allow(deprecated)] // close_goal is the checked wrapper — it must call through
+            self.close_goal_unchecked(proof)
+        } else {
+            self.assign_current_goal(proof, explicitly_bound)
+        }
     }
 
     /// Close the current goal with an **assembled recursor/eliminator** proof
@@ -145,9 +164,8 @@ impl ProofState {
                 actual: format!("{proof_ty:?}"),
             });
         }
-        #[allow(deprecated)]
         // checked: def-eq target match above + strict verify_tactic_proof later
-        self.close_goal_unchecked(proof)
+        self.assign_current_goal(proof, &[])
     }
 
     /// Close the current goal with a proof term **without type-checking**.
@@ -168,6 +186,14 @@ impl ProofState {
     /// ENSURES: On Err(TypeCheckFailed), meta assignment failed; state unchanged
     #[deprecated(note = "use close_goal (checked) instead — see #2154")]
     pub(crate) fn close_goal_unchecked(&mut self, proof: Expr) -> Result<(), TacticError> {
+        self.assign_current_goal(proof, &[])
+    }
+
+    fn assign_current_goal(
+        &mut self,
+        proof: Expr,
+        explicitly_bound: &[(FVarId, u64)],
+    ) -> Result<(), TacticError> {
         let goal = self.goals.front().cloned().ok_or(TacticError::NoGoals)?;
         let goal_meta_id = goal.meta_id;
         let meta = self.metas.get(goal_meta_id).cloned().ok_or_else(|| {
@@ -228,6 +254,7 @@ impl ProofState {
         if let Some(detail) = super::close_fvars::assignment_scope_violation(
             &instantiated_proof,
             &allowed,
+            explicitly_bound,
             &self.metas,
             assignment_binder_base,
             self.next_fvar,

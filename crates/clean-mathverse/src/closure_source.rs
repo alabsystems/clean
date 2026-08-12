@@ -129,6 +129,7 @@ impl ShardConstantSource {
     /// global name index. First occurrence across shards wins (matching the
     /// merge "last-writer-wins"-free append model and the eager loader's
     /// insert-only/idempotent-on-duplicate registration).
+    #[cfg(test)]
     pub(crate) fn from_readers(readers: Vec<ShardMmapReader>) -> Self {
         let module_count = readers.len();
         Self::from_readers_with_modules(readers, vec![None; module_count])
@@ -310,26 +311,6 @@ impl ShardConstantSource {
     #[cfg(test)]
     pub(crate) fn servable_names(&self) -> Vec<Name> {
         self.shared.by_name.keys().cloned().collect()
-    }
-
-    /// DEMAND-PAGED reconstruct of one constant's type/value sub-DAGs straight out
-    /// of the shard's mmap'd expr arena — only the reachable 16-byte `FlatExpr`
-    /// entries fault in. Byte-identical to the slice-based fold (pinned by
-    /// `shard_reconstruct::mmap_subdag_matches_slice_subdag`), so the served
-    /// `ConstantInfo` is exactly what the eager `ShardReader` path produced.
-    fn reconstruct_subdag(reader: &ShardMmapReader, root_idx: u32) -> Option<Expr> {
-        // `read_expr` decodes one FlatExpr from `mmap[base..base+16]` — the only
-        // bytes that fault in for that node.
-        let read_flat = |i: u32| reader.read_expr(i).map_err(|e| e.to_string());
-        reconstruct_single_subdag_with_reader(
-            read_flat,
-            reader.header.expr_count,
-            &reader.levels,
-            &reader.strings,
-            &reader.level_lists,
-            root_idx,
-        )
-        .ok()
     }
 
     fn materialize(&self, shard: u32, idx: u32) -> Option<ConstantInfo> {
@@ -516,7 +497,7 @@ fn reconstruct_subdag_for(reader: &ShardMmapReader, root_idx: u32) -> Option<Exp
 /// `is_projection_fn_body` (import/convert.rs) so the lazy source assigns the
 /// SAME `Reducible` reducibility to projection functions the eager olean path
 /// does — required for verdict parity (projection chains must δ-reduce).
-fn is_projection_fn_body(expr: &clean_kernel::expr::Expr) -> bool {
+fn is_projection_fn_body(expr: &Expr) -> bool {
     use clean_kernel::expr::ExprKind;
     let mut e = expr;
     loop {
@@ -577,14 +558,14 @@ impl ConstantSource for ShardConstantSource {
         self.shared.by_name.keys().cloned().collect()
     }
 
-    fn fresh(&self) -> Option<std::sync::Arc<dyn ConstantSource>> {
+    fn fresh(&self) -> Option<Arc<dyn ConstantSource>> {
         // `fresh_view` shares the immutable mmap readers + name index and the
         // per-shard verified flags zero-copy, but starts an EMPTY FrozenMap —
         // the append-only memo of materialized `ConstantInfo` that a long
         // chunked run must periodically release. Materialization is
         // deterministic against the (unchanged) verified arenas, so the fresh
         // view resolves every name byte-identically: the `fresh` contract.
-        Some(std::sync::Arc::new(self.fresh_view()))
+        Some(Arc::new(self.fresh_view()))
     }
 }
 
@@ -680,7 +661,7 @@ mod tests {
         ) else {
             return;
         };
-        let src = ShardConstantSource::from_dir(std::path::Path::new(&dir)).expect("load shards");
+        let src = ShardConstantSource::from_dir(Path::new(&dir)).expect("load shards");
         let nm = Name::from_string(&name);
         match src.get(&nm) {
             None => eprintln!(
@@ -703,7 +684,7 @@ mod tests {
         }
     }
 
-    fn expr_has_fvar(e: &clean_kernel::expr::Expr) -> bool {
+    fn expr_has_fvar(e: &Expr) -> bool {
         use clean_kernel::expr::ExprKind;
         let mut stack = vec![e];
         while let Some(cur) = stack.pop() {

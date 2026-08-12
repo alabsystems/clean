@@ -50,6 +50,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the `2^{4/3}` keystone.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct TwoFourThirdsConsts {
     #[cfg(test)]
     nat: Expr,
@@ -243,6 +244,7 @@ impl TwoFourThirdsConsts {
         Expr::apps(self.congr_arg1.clone(), [t.clone(), t.clone(), a, b, f, h])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn rat_eq(&self, a: Expr, b: Expr) -> Expr {
         self.eq_ty(&self.rat.clone(), a, b)
     }

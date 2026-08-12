@@ -146,19 +146,32 @@ pub(crate) enum NativeOp {
     Ge,
 
     // Bitwise / logical
+    // Instruction classes nothing builds yet — neither the `expr_to_instrs`
+    // lowering nor the codegen tests reach the bitwise, shift, or boxing
+    // groups. Kept because this enum is the target instruction set the backend
+    // is being built against, not a log of what is reachable today
+    // — 2026-07-31.
+    #[allow(dead_code)]
     And,
+    #[allow(dead_code)]
     Or,
+    #[allow(dead_code)]
     Not,
+    #[allow(dead_code)]
     Xor,
 
     // Shifts
+    #[allow(dead_code)]
     Shl,
+    #[allow(dead_code)]
     Shr,
 
     // Boxing
     /// Box a scalar into a heap object.
+    #[allow(dead_code)]
     Box_,
     /// Unbox a heap object to a scalar.
+    #[allow(dead_code)]
     Unbox,
 
     // Memory
@@ -175,6 +188,10 @@ pub(crate) enum NativeOp {
     /// Constructor application (name, tag).
     Ctor(String, u16),
     /// Case split on constructor tag: vec of (tag, branch instructions).
+    // Staged alongside the bitwise/shift/boxing classes above: the lowering
+    // still flattens cases into the caller's instruction stream instead of
+    // nesting them here — 2026-07-31.
+    #[allow(dead_code)]
     Case(Vec<(u16, Vec<NativeInstr>)>),
 }
 

@@ -22,6 +22,9 @@ fn prop() -> Expr {
 }
 
 /// Create `Sort (u + 1)` for a universe param.
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn type_param(name: &str) -> Expr {
     Expr::sort(Level::succ(Level::param(Name::from_string(name))))
 }

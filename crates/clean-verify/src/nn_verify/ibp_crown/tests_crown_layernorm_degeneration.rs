@@ -248,7 +248,7 @@ fn test_ibp_returns_correct_dimension() {
 
 #[test]
 fn test_ibp_lower_le_upper() {
-    let n = 4;
+    let _n = 4;
     let gamma = vec![1.0, 2.0, 0.5, 3.0];
     let beta = vec![0.1, -0.1, 0.0, 0.5];
     let lo = vec![-1.0, 0.0, 1.0, 2.0];

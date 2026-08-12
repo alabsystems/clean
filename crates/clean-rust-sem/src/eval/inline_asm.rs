@@ -81,8 +81,7 @@ pub(crate) enum AsmOperand {
         out_expr: Option<Expr>,
     },
     Const(Expr),
-    Sym(String),
-    Label(String),
+    Sym,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum OperandRef {
@@ -222,7 +221,7 @@ impl InlineAsmBlock {
                     out_expr: out_expr.clone(),
                 },
                 ExprAsmOperand::Const(expr) => AsmOperand::Const(expr.clone()),
-                ExprAsmOperand::Sym(symbol) => AsmOperand::Sym(symbol.clone()),
+                ExprAsmOperand::Sym(_) => AsmOperand::Sym,
             })
             .collect();
         Ok(Self::new(template, operands))
@@ -253,14 +252,13 @@ enum RuntimeOperand {
     },
     Const,
     Sym,
-    Label,
 }
 impl RuntimeOperand {
     fn read(&self) -> Result<&Value, String> {
         match self {
             Self::In { value } | Self::InOut { value, .. } => Ok(value),
             Self::Out { .. } => Err("inline asm output operand cannot be read".to_string()),
-            Self::Const | Self::Sym | Self::Label => {
+            Self::Const | Self::Sym => {
                 Err("inline asm instruction requires register operands".to_string())
             }
         }
@@ -371,8 +369,7 @@ fn collect_operands(
                 let _ = eval_value(interpreter, expr)?;
                 Ok(RuntimeOperand::Const)
             }
-            AsmOperand::Sym(_) => Ok(RuntimeOperand::Sym),
-            AsmOperand::Label(_) => Ok(RuntimeOperand::Label),
+            AsmOperand::Sym => Ok(RuntimeOperand::Sym),
         })
         .collect()
 }
@@ -401,10 +398,7 @@ fn apply_fallback_outputs(interpreter: &mut Interpreter, operands: &[AsmOperand]
         let output_expr = match operand {
             AsmOperand::Out { expr, .. } => expr.as_ref(),
             AsmOperand::InOut { out_expr, .. } => out_expr.as_ref(),
-            AsmOperand::In { .. }
-            | AsmOperand::Const(_)
-            | AsmOperand::Sym(_)
-            | AsmOperand::Label(_) => None,
+            AsmOperand::In { .. } | AsmOperand::Const(_) | AsmOperand::Sym => None,
         };
         if let Some(expr) = output_expr {
             match interpreter.assign_place(expr, Value::Uninit) {

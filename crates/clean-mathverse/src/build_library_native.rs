@@ -742,7 +742,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let config = NativeBuildConfig {
             shard_filename: "forged-cake.mathverse",
-            source_system: crate::types::SourceSystem::Cake,
+            source_system: SourceSystem::Cake,
             ..Default::default()
         };
 

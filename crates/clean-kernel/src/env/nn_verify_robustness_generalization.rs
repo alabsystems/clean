@@ -48,6 +48,7 @@ pub(super) struct RobustnessGenConsts {
     pub(super) lt_lt: Expr,
     pub(super) inst_le_rat: Expr,
     pub(super) inst_lt_rat: Expr,
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) and: Expr,
     pub(super) nat_to_rat: Expr,
     pub(super) sqrt: Expr,

@@ -469,6 +469,7 @@ impl RatPolyProver {
 
     /// Check, without building a proof, that `lhs` and `rhs` are the same poly.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn is_identity(&self, lhs: &Expr, rhs: &Expr) -> Result<bool, PolyProveError> {
         Ok(self.parse(lhs)? == self.parse(rhs)?)
     }

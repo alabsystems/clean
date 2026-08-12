@@ -208,6 +208,7 @@ pub mod oracle;
 pub mod premise;
 pub(crate) mod proof;
 #[cfg(test)]
+#[cfg(test)]
 mod test_env;
 // One wire contract for every bincode-2 kernel proof carrier.  This stays
 // outside the ay feature gate so the solver cache cannot grow a second codec.

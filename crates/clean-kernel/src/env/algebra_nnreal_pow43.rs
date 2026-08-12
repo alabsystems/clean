@@ -58,6 +58,8 @@ pub(crate) struct Pow43Consts {
     rat_cbrt_approx: Expr,
     rat_zero_le_cbrt_approx: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nnrat_of_rat: Expr,
     nnreal: Expr,
     nnreal_le: Expr,

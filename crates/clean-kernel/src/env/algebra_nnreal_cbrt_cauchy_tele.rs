@@ -63,6 +63,8 @@ pub(crate) struct CbrtTeleConsts {
     rat_zero: Expr,
     rat_add: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     rat_mul: Expr,
     rat_inv: Expr,
     rat_le: Expr,

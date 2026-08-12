@@ -59,6 +59,8 @@ struct NatTotalityConsts {
     le_trans_thm: Expr,
     lt_irrefl_thm: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     succ_le_succ_thm: Expr,
     le_of_lt_thm: Expr,
     le_or_lt_thm: Expr,

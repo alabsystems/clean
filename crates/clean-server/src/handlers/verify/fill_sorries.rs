@@ -159,7 +159,38 @@ pub async fn handle_fill_sorries(
     let normalized_original_proof = original_tactics.join("\n");
     let original_sorries = collect_explicit_sorry_positions(&theorem, &normalized_original_proof);
 
-    super::initialize_verify_file_env(state).await;
+    let initialize_start = Instant::now();
+    if let Err(error) = super::initialize_verify_file_env(state).await {
+        let elapsed_ns = start.elapsed().as_nanos() as u64;
+        let result = build_error_result(
+            Some(theorem),
+            Some(normalized_original_proof),
+            original_sorries,
+            vec![],
+            0,
+            TimingBreakdown {
+                parse_ns,
+                elaborate_ns: 0,
+                verify_ns: 0,
+                total_ns: elapsed_ns,
+            },
+            VerifyProofError {
+                message: format!("failed to initialize verification environment: {error}"),
+                position: None,
+                expected_type: None,
+                actual_goals: vec![],
+                suggestions: vec!["check the server's kernel environment".to_string()],
+            },
+            None,
+            vec![],
+        );
+        return Response::success_typed(id.clone(), &result)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+    }
+    // Environment construction is prerequisite setup, not proof execution.
+    // Keep it in reported wall-clock latency without consuming the caller's
+    // parsing/elaboration/replay budget.
+    let effective_timeout = timeout.saturating_add(initialize_start.elapsed());
 
     let elaborate_start = Instant::now();
     let surface_expr = match parse_expr_with_tactics_exact(&theorem.goal, &state.tactic_patterns) {
@@ -239,7 +270,7 @@ pub async fn handle_fill_sorries(
     let mut sorry_index = 0usize;
 
     for (index, tactic) in original_tactics.iter().enumerate() {
-        if start.elapsed() > timeout {
+        if start.elapsed() > effective_timeout {
             let filled_proof =
                 render_rewritten_proof(&rewritten_tactics, &original_tactics[index..]);
             let remaining_sorries = collect_explicit_sorry_positions(&theorem, &filled_proof);
@@ -290,7 +321,7 @@ pub async fn handle_fill_sorries(
             let mut chosen_tactic = None;
 
             for candidate in &tactic_sequence {
-                if start.elapsed() > timeout {
+                if start.elapsed() > effective_timeout {
                     break;
                 }
 

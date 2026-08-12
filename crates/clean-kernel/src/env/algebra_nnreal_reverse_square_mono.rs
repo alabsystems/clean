@@ -83,6 +83,8 @@ pub(crate) struct MulMonoConsts {
     rat_mul_close: Expr,
     // Nat lemmas.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_le_trans: Expr,
     // Logic.
     and_c: Expr,
@@ -100,6 +102,7 @@ pub(crate) struct MulMonoConsts {
     quot_ind: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl MulMonoConsts {
     pub(crate) fn new() -> Self {
         let lvl1 = Level::succ(Level::zero());

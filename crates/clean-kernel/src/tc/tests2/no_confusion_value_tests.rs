@@ -351,7 +351,7 @@ fn test_regenerate_fixes_olean_arg_order_mismatch() {
     // Create a fresh environment with casesOn as RecursorVal (clean convention)
     let mut env = make_myexpr_env();
     let nct_name = Name::from_string("MyExpr.noConfusionType");
-    let nc_name = Name::from_string("MyExpr.noConfusion");
+    let _nc_name = Name::from_string("MyExpr.noConfusion");
 
     // Sanity: both exist after add_inductive with correct values
     let nct = env.get_const(&nct_name).unwrap();

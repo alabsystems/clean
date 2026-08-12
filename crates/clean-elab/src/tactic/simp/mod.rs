@@ -8,7 +8,13 @@
 //! of expressions using rewrite lemmas, beta/eta reduction, and other normalizations.
 
 mod all;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod congr;
+mod discharge;
+#[cfg(test)]
+mod discharge_tests;
 mod expr;
 mod lemmas;
 mod lemmas_builtin;
@@ -147,9 +153,14 @@ pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
 
                 // Try to rewrite current_lhs using simp lemmas (with proof terms)
                 for lemma in simp_lemmas.candidates(state, &goal, &current_lhs) {
-                    if let Some((new_lhs, lhs_proof)) =
-                        try_apply_simp_lemma_with_proof(state, &goal, &current_lhs, lemma)
-                    {
+                    if let Some((new_lhs, lhs_proof)) = try_apply_simp_lemma_with_proof(
+                        state,
+                        &goal,
+                        &current_lhs,
+                        lemma,
+                        &simp_lemmas,
+                        &config,
+                    ) {
                         if new_lhs == current_lhs {
                             continue;
                         }

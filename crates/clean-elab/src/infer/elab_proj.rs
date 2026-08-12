@@ -22,7 +22,7 @@ impl<'a> ElabCtx<'a> {
     pub(crate) fn elab_proj(
         &mut self,
         expr: &SurfaceExpr,
-        proj: &clean_parser::Projection,
+        proj: &Projection,
     ) -> Result<Expr, ElabError> {
         // Projection/qualified-name disambiguation (#497, #501):
         // The parser produces Proj for all dotted terms like `x.y`.
@@ -46,7 +46,7 @@ impl<'a> ElabCtx<'a> {
         // genuine local/term value, so method dot-notation `x.f` (x a local) is
         // unaffected.
         if let SurfaceExpr::Ident(_, base_name) = unwrapped {
-            if let clean_parser::Projection::Named(field) = proj {
+            if let Projection::Named(field) = proj {
                 // Root-namespace escape: `_root_.Bool` parses as
                 // `Proj(Ident("_root_"), "Bool")`. Resolve the field as a global
                 // name with the marker stripped (Track R: `Ty.isSigned : Ty →
@@ -88,7 +88,7 @@ impl<'a> ElabCtx<'a> {
         // so genuine receiver chains `x.y.z` (x a local/constant) keep the
         // structure-projection / dot-notation path.
         if let SurfaceExpr::Proj(_, inner_base, inner_proj) = unwrapped {
-            if let clean_parser::Projection::Named(field) = proj {
+            if let Projection::Named(field) = proj {
                 if let Some(base_qualified) =
                     Self::try_collect_qualified_name(inner_base, inner_proj)
                 {
@@ -156,7 +156,7 @@ impl<'a> ElabCtx<'a> {
                             | ElabError::UnknownIdentWithSuggestions { .. }),
                         ) => {
                             // Base identifier not found - try qualified name fallback
-                            if let clean_parser::Projection::Named(field) = proj {
+                            if let Projection::Named(field) = proj {
                                 let qualified = format!("{base_name}.{field}");
                                 let name = Name::from_string(&qualified);
                                 if let Some(info) = self.env.get_const(&name) {
@@ -199,7 +199,7 @@ impl<'a> ElabCtx<'a> {
                             | ElabError::UnknownIdentWithSuggestions { .. }),
                         ) => {
                             // Try to collect full qualified name from nested projections
-                            if let clean_parser::Projection::Named(field) = proj {
+                            if let Projection::Named(field) = proj {
                                 if let Some(base_qualified) =
                                     Self::try_collect_qualified_name(inner_base, inner_proj)
                                 {
@@ -253,7 +253,7 @@ impl<'a> ElabCtx<'a> {
             Ok((struct_name, num_fields, is_structure)) => {
                 // Single-ctor projection: expr.field -> proj(struct_name, idx, expr)
                 match proj {
-                    clean_parser::Projection::Named(name) => {
+                    Projection::Named(name) => {
                         // Named `.field` requires structure field-name metadata.
                         // For a plain (non-structure) single-ctor inductive there
                         // is no field accessor, so fall straight through to
@@ -301,7 +301,7 @@ impl<'a> ElabCtx<'a> {
                             }
                         }
                     }
-                    clean_parser::Projection::Index(idx) => {
+                    Projection::Index(idx) => {
                         // Surface `.1`/`.2` are 1-based (Lean convention); the kernel
                         // `Proj(S, i, e)` index is 0-based. Mirror Lean's elaborator
                         // (Lean/Elab/App.lean: `if idx - 1 < numFields`): reject `.0`,
@@ -335,7 +335,7 @@ impl<'a> ElabCtx<'a> {
                 // fully instantiated and the emitted `Expr::proj` is kernel-
                 // re-checked; this only lets the elaborator NAME the projection
                 // target it previously could not.
-                if let clean_parser::Projection::Index(idx) = proj {
+                if let Projection::Index(idx) = proj {
                     if let Some(result) = self.try_index_proj_through_implicits(&expr_val, *idx)? {
                         return Ok(result);
                     }
@@ -440,14 +440,10 @@ impl<'a> ElabCtx<'a> {
     ///
     /// For `expr.field` where `expr : T` and `T` is not a structure,
     /// looks up `T.field` as a constant and applies it: `T.field expr`.
-    fn elab_dot_notation(
-        &mut self,
-        expr_val: &Expr,
-        proj: &clean_parser::Projection,
-    ) -> Result<Expr, ElabError> {
+    fn elab_dot_notation(&mut self, expr_val: &Expr, proj: &Projection) -> Result<Expr, ElabError> {
         let field_name = match proj {
-            clean_parser::Projection::Named(n) => n.clone(),
-            clean_parser::Projection::Index(_) => {
+            Projection::Named(n) => n.clone(),
+            Projection::Index(_) => {
                 // Index projection doesn't make sense for non-structures
                 return Err(ElabError::InvalidProjectionTarget(
                     "index projection on non-structure type".to_string(),
@@ -1199,12 +1195,12 @@ impl<'a> ElabCtx<'a> {
     /// we need to collect the full dotted name and look it up.
     pub(crate) fn try_collect_qualified_name(
         base: &SurfaceExpr,
-        proj: &clean_parser::Projection,
+        proj: &Projection,
     ) -> Option<String> {
         stack_safe(|| {
             let field = match proj {
-                clean_parser::Projection::Named(n) => n,
-                clean_parser::Projection::Index(_) => return None,
+                Projection::Named(n) => n,
+                Projection::Index(_) => return None,
             };
 
             match base {

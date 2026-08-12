@@ -28,7 +28,7 @@ fn domain_axioms(env: &Environment, name: &str) -> Vec<String> {
         .axiom_deps(&Name::from_string(name))
         .unwrap_or_else(|| panic!("{name} should be registered"))
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     v.sort();
     v
@@ -83,6 +83,7 @@ fn list_int() -> Expr {
         int_ty(),
     )
 }
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn list_list_int() -> Expr {
     Expr::app(
         Expr::const_(Name::from_string("List"), vec![Level::succ(Level::zero())]),

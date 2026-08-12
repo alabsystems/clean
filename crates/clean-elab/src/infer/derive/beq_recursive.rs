@@ -401,7 +401,7 @@ impl<'a> ElabCtx<'a> {
         ind_type: &Expr,
         aux_type: &Expr,
         ind_name: &Name,
-        aux_name: &Name,
+        _aux_name: &Name,
         major_is_aux: bool,
         num_motives: usize,
         analysis: &CtorAnalysis,

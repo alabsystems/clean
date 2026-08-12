@@ -30,6 +30,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Shared constants for C007 streaming certificate theorem construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct C007Consts {
     pub(super) nat: Expr,
     #[cfg(test)]
@@ -72,6 +73,7 @@ pub(super) struct C007Consts {
     pub(super) incremental_cost_helper: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl C007Consts {
     pub(super) fn new() -> Self {
         Self {

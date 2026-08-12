@@ -33,6 +33,12 @@
 //! - `interval_concretize_sound`: Symbolic bound + input interval => concrete bound.
 //! - `backward_compose`: If each layer's relaxation is sound, composition is sound.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use super::crown::{crown_concretize, CrownBound};
 use super::crown_backward::{crown_linear_backward, crown_relu_backward, verify_crown_bounds};
 use super::ibp::Interval;
@@ -54,8 +60,12 @@ const PROOF_EPS: f64 = 1e-9;
 #[derive(Debug, Clone)]
 pub(crate) struct T40Witness {
     /// Pre-activation lower bound.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub lower: f64,
     /// Pre-activation upper bound.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub upper: f64,
     /// Upper relaxation slope: u / (u - l).
     pub lambda: f64,
@@ -268,8 +278,12 @@ pub(crate) fn verify_t41_backward_propagation(
 #[derive(Debug, Clone)]
 pub(crate) struct T42Witness {
     /// Pre-activation lower bound.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub lower: f64,
     /// Pre-activation upper bound.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub upper: f64,
     /// Envelope slope.
     pub slope: f64,
@@ -352,10 +366,16 @@ pub(crate) fn verify_t42_concave_envelope(
 #[derive(Debug, Clone)]
 pub(crate) struct T43Witness {
     /// The alpha values used.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub alphas: Vec<f64>,
     /// Pre-activation lower bounds.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub pre_lower: Vec<f64>,
     /// Pre-activation upper bounds.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub pre_upper: Vec<f64>,
     /// Number of crossing neurons verified.
     pub crossing_verified: usize,
@@ -447,6 +467,8 @@ pub(crate) struct T44Witness {
     /// CROWN output width (with alpha=0).
     pub crown_width: f64,
     /// Alpha-CROWN output width.
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub alpha_crown_width: f64,
     /// Width improvement (crown_width - alpha_crown_width).
     pub improvement: f64,
@@ -516,6 +538,8 @@ pub(crate) struct T45Witness {
     /// Number of layers composed.
     pub num_layers: usize,
     /// Per-layer relaxation type (Linear or ReLU).
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub layer_types: Vec<&'static str>,
     /// Final bound after composition.
     pub final_bound_width: f64,
@@ -775,7 +799,7 @@ pub(crate) fn verify_t47_crown_ibp_dominance(
     // IBP forward.
     let ibp_linear = IbpLinearSpec::new();
     let ibp_relu = IbpReluSpec::new();
-    let ibp_comp = IbpCompositionSpec::new();
+    let _ibp_comp = IbpCompositionSpec::new();
 
     let mut ibp_current: Vec<Interval> = input_lower
         .iter()

@@ -28,6 +28,7 @@ use crate::name::Name;
 
 /// Shared constants for certified eval definitions.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct CertEvalConsts {
     pub(crate) nat: Expr,
     pub(crate) rat: Expr,

@@ -379,7 +379,7 @@ fn test_process_imports_real_basic() {
 
 #[test]
 fn test_process_imports_mathlib_zmod_basic_surface_type() {
-    crate::prelude_providers::reset_mathlib_init();
+    prelude_providers::reset_mathlib_init();
     let mut env = Environment::new();
     let paths = vec![vec!["Mathlib", "Data", "ZMod", "Basic"]
         .into_iter()
@@ -436,7 +436,7 @@ fn test_process_imports_lean_elab_tactic_succeeds_via_shim() {
         .into_iter()
         .map(String::from)
         .collect()];
-    crate::imports::process_imports_clean_native(&mut env, &paths)
+    imports::process_imports_clean_native(&mut env, &paths)
         .expect("Lean.Elab.Tactic must import via the Clean-native meta shim");
 
     // Whichever path served the import, the core Lean meta types must resolve so
@@ -1857,7 +1857,7 @@ fn test_nested_subterm_hole_records_ascribed_expected_type() {
     let src = "def f : Nat := Nat.succ (_ : Nat)";
     let decl = parse_decl(src).expect("decl should parse");
 
-    let mut ctx = crate::ElabCtx::new(&env);
+    let mut ctx = ElabCtx::new(&env);
     ctx.elab_decl(&decl).expect("declaration should elaborate");
     let holes = ctx.collect_hole_contexts();
 
@@ -1901,7 +1901,7 @@ fn test_no_hole_decl_records_no_hole_context() {
     // A declaration with no user-written `_` holes records no hole contexts.
     let decl = parse_decl("def g : Nat := Nat.succ Nat.zero").expect("decl should parse");
 
-    let mut ctx = crate::ElabCtx::new(&env);
+    let mut ctx = ElabCtx::new(&env);
     ctx.elab_decl(&decl).expect("declaration should elaborate");
     let holes = ctx.collect_hole_contexts();
 
@@ -1924,7 +1924,7 @@ fn test_body_hole_records_declaration_type() {
     // A body-level `_` hole: its expected type is the declaration's own type.
     let decl = parse_decl("def h : Nat := _").expect("decl should parse");
 
-    let mut ctx = crate::ElabCtx::new(&env);
+    let mut ctx = ElabCtx::new(&env);
     ctx.elab_decl(&decl).expect("declaration should elaborate");
     let holes = ctx.collect_hole_contexts();
 

@@ -31,7 +31,7 @@ use super::reduce::{beta_reduce, eta_reduce};
 use super::simproc::{try_simprocs, SimprocSet};
 use super::types::{SimpConfig, SimpLemma, SimpLemmaSet, SimpResult};
 use crate::tactic::core::{Goal, ProofState};
-use crate::tactic::op_projection::reduce_op_projection_head;
+use crate::tactic::op_projection::{is_hetero_op_projection, reduce_op_projection_head};
 
 /// Extract lhs = rhs from a lemma type (handles forall quantifiers)
 ///
@@ -71,6 +71,66 @@ pub(crate) fn extract_equality_full(ty: &Expr) -> Option<(Expr, Expr, Expr)> {
         }
         _ => None,
     })
+}
+
+/// Count a lemma type's leading `Pi` binders without allocating.
+///
+/// The allocation-free counterpart to [`collect_binder_types_in_conclusion`],
+/// used to skip that (cloning, lifting) walk entirely for the overwhelmingly
+/// common case of an unconditional lemma whose every binder the LHS match
+/// already determined.
+///
+/// ENSURES: agrees with `collect_binder_types_in_conclusion(ty).len()`.
+pub(crate) fn leading_pi_binder_count(ty: &Expr) -> usize {
+    let mut count = 0;
+    let mut current = ty;
+    while let ExprKind::Pi(_bi, _domain, body) = current.kind() {
+        count += 1;
+        current = body;
+    }
+    count
+}
+
+/// Collect the types of a lemma's leading `Pi` binders, re-expressed in the
+/// **conclusion's** de Bruijn context.
+///
+/// `extract_equality_full` strips every leading `Pi` before reading off
+/// `@Eq α lhs rhs`, so the indices in the returned `lhs`/`rhs` count binders
+/// from the innermost outwards: with `∀ (a b : Nat) (h : b ≤ a), a - b + b = a`,
+/// `h` is `BVar 0`, `b` is `BVar 1` and `a` is `BVar 2`. This function returns
+/// the binder *types* under the SAME indexing, so `result[i]` is the type of
+/// `BVar i` as it appears in the conclusion — which is exactly the indexing
+/// `convert_bvars_to_metas` / `substitute_bvars_with_metas` use.
+///
+/// Each binder's declared type lives in its own (shorter) context, so it is
+/// lifted: binder `k` counted from the OUTSIDE, of `n` total, is `BVar n-1-k`
+/// in the conclusion and its domain must be lifted by `n - k`. For the example
+/// above, `h`'s domain `b ≤ a` is stored as `BVar 0 ≤ BVar 1` at its own binder
+/// and becomes `BVar 1 ≤ BVar 2` here.
+///
+/// ENSURES: `result.len()` equals the number of leading `Pi` binders of `ty`
+///   — the same count `extract_equality_full` / `extract_iff_with_binders`
+///   strip, so the two are always in agreement.
+/// ENSURES: `result[i]` has no BVar referring to a binder this lemma does not
+///   have (every loose index is `< result.len()`).
+pub(crate) fn collect_binder_types_in_conclusion(ty: &Expr) -> Vec<Expr> {
+    // Outermost-first, each domain in its own context.
+    let mut outer = Vec::with_capacity(leading_pi_binder_count(ty));
+    let mut current = ty;
+    while let ExprKind::Pi(_bi, domain, body) = current.kind() {
+        outer.push(domain.as_ref().clone());
+        current = body;
+    }
+
+    let total = outer.len();
+    // `total - k` never underflows (`k < total`); reversing turns the
+    // outermost-first walk into the innermost-first (= BVar-index) order.
+    outer
+        .into_iter()
+        .enumerate()
+        .map(|(k, domain)| domain.lift((total - k) as u32))
+        .rev()
+        .collect()
 }
 
 /// Extract `(lhs, rhs)` from a lemma type whose conclusion is `Iff lhs rhs`.
@@ -319,7 +379,7 @@ pub(crate) fn simp_expr(
     // absorbs the entire target, yielding an identity rewrite.
     for lemma in lemmas.candidates(state, goal, &result.expr) {
         if let Some((new_expr, proof)) =
-            try_apply_simp_lemma_with_proof(state, goal, &result.expr, lemma)
+            try_apply_simp_lemma_with_proof(state, goal, &result.expr, lemma, lemmas, config)
         {
             if new_expr != result.expr {
                 let step = SimpResult {
@@ -724,18 +784,91 @@ fn collapse_nat_ofnat_literals(e: &Expr) -> Option<Expr> {
     collapser.changed.then_some(folded)
 }
 
+/// Peel the LEMMA PATTERN's heterogeneous-operator projection layer when — and
+/// only when — doing so makes its head agree with the (already peeled) match
+/// target's head.
+///
+/// `simp` peels the projection layer off the GOAL subterm so a bare-head lemma
+/// (`Nat.add ?n 0`) can match `n + 0`. That peel is one-sided, so the mirror
+/// configuration never matched: a lemma whose own statement is written in
+/// NOTATION (`n - m + m = n`, i.e. `@HAdd.hAdd … (@instHSub …) …`) keeps its
+/// `HAdd.hAdd` head while the goal subterm has just been reduced to `Nat.add`.
+/// Head-keyed unification then fails on the head constant alone. Every imported
+/// Lean lemma stated over `+ - * / % ^ ++ &&& ||| ^^^ <<< >>>` is in that
+/// configuration, which is why `simp only [Nat.sub_add_cancel]` reported
+/// `NoProgress` while `exact Nat.sub_add_cancel h` (which goes through def-eq,
+/// not head-keyed matching) succeeded on the same goal.
+///
+/// This is the mirror of the pattern-side arm `rw` already has in
+/// `equality/rewrite.rs::keyed_head_unify`, and it is guarded the same way: the
+/// peel is used ONLY if the reduced head is the same constant as the target's
+/// head. So it can never change a case that already matches — it only rescues
+/// cases whose heads currently disagree, where unification fails today.
+///
+/// Also collapses `@OfNat.ofNat Nat k (instOfNatNat k)` operand leaves in the
+/// pattern to the raw literal, mirroring what the target already gets: without
+/// it a peeled `Nat.div ?n (@OfNat.ofNat Nat 1 …)` still would not meet the
+/// target's `Nat.div n 1`, because the `OfNat` instance does not unfold at
+/// `withReducible` transparency.
+///
+/// SOUNDNESS: peeling is definitional (the instance's own ι/δ-reduction), and
+/// nothing downstream is restated over the peeled form — `lhs_inst` is still
+/// built from the ORIGINAL `lemma.lhs`, still checked def-eq to `expr`, the
+/// assembled proof still goes through `proof_matches_rewrite`, and the kernel
+/// `add_decl` re-check remains the backstop. This only decides which candidate
+/// is *selected*.
+///
+/// ENSURES: on `Some(p)`, `p` is def-eq to `pattern` and `p`'s head constant is
+///   the same `Name` as `match_target`'s head constant.
+/// ENSURES: `None` whenever the heads already agree, the pattern head is not a
+///   hetero-op projection, or the peel does not reach the target's head — in
+///   every such case the caller keeps the unpeeled pattern.
+fn peel_pattern_to_target_head(
+    state: &ProofState,
+    goal: &Goal,
+    pattern: &Expr,
+    match_target: &Expr,
+) -> Option<Expr> {
+    let ExprKind::Const(pat_name, _) = pattern.get_app_fn().kind() else {
+        return None;
+    };
+    let ExprKind::Const(target_name, _) = match_target.get_app_fn().kind() else {
+        return None;
+    };
+    if pat_name == target_name || !is_hetero_op_projection(pat_name) {
+        return None;
+    }
+    let reduced = reduce_op_projection_head(state, goal, pattern)?;
+    let reduced = collapse_nat_ofnat_literals(&reduced).unwrap_or(reduced);
+    match reduced.get_app_fn().kind() {
+        ExprKind::Const(reduced_name, _) if reduced_name == target_name => Some(reduced),
+        _ => None,
+    }
+}
+
 /// Try to apply a simp lemma and also produce the proof term.
 ///
 /// On success, returns `(result, proof)` where `proof` is the lemma constant
 /// applied to the matched arguments (i.e., `lemma_name arg0 arg1 ...`).
 /// The proof has type `from = to` where `from` matched `expr` and `to` is the result.
+/// Conditional lemmas (RC-J) are handled here: any binder the LHS match left
+/// undetermined that is a genuine `Prop` side condition is handed to
+/// [`super::discharge::discharge_premise`], and the whole rewrite is abandoned
+/// when it cannot be closed. `lemmas`/`config` are threaded in for that
+/// discharger (it may run `simp` recursively on the premise, bounded by
+/// [`SimpConfig::discharge_depth`]).
+///
 /// REQUIRES: `lemma.name` and its BVar layout align with `lemma.lhs`/`lemma.rhs`
 /// ENSURES: On Some, returns the instantiated RHS plus a proof term built from `lemma.name`
+/// ENSURES: On Some, every side condition of `lemma` was discharged with a
+///   type-checked proof term; no argument slot is silently skipped
 pub(crate) fn try_apply_simp_lemma_with_proof(
     state: &ProofState,
     goal: &Goal,
     expr: &Expr,
     lemma: &SimpLemma,
+    lemmas: &SimpLemmaSet,
+    config: &SimpConfig,
 ) -> Option<(Expr, Expr)> {
     let mut metas = MetaState::new();
     // Pattern metas are scoped to the GOAL's locals (elab locals + goal ctx):
@@ -743,7 +876,7 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
     // goal FVar (`?n := a` for `a * 1`), while binder-opened temporaries stay
     // rejected by the unifier's scope check (B102).
     let pattern_scope = state.meta_scope_for_context(&goal.local_ctx);
-    let (pattern_with_metas, bvar_to_meta) =
+    let (pattern_with_metas, mut bvar_to_meta) =
         convert_bvars_to_metas(&lemma.lhs, &mut metas, &pattern_scope);
 
     // Match target. When `expr` is a heterogeneous-operator typeclass projection
@@ -774,6 +907,16 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
     let collapsed = collapse_nat_ofnat_literals(match_target);
     let match_target = collapsed.as_ref().unwrap_or(match_target);
 
+    // Normalize the LEMMA PATTERN the same way, so the two sides meet. Without
+    // this the normalization above is ONE-SIDED: a lemma whose own statement is
+    // written in notation keeps its `HDiv.hDiv` head while the goal subterm has
+    // just been reduced to `Nat.div`, and head-keyed unification fails on the
+    // head alone — even when pattern and goal subterm are otherwise byte-identical.
+    // See [`peel_pattern_to_target_head`].
+    let peeled_pattern =
+        peel_pattern_to_target_head(state, goal, &pattern_with_metas, match_target);
+    let match_pattern = peeled_pattern.as_ref().unwrap_or(&pattern_with_metas);
+
     let ctx = LocalContext::new();
     let unify_result = {
         // B15 (simp-set discipline): match lemma LHSs at `withReducible`
@@ -793,7 +936,7 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
         // should be trivial fails on mismatched normal forms. `unify_core`
         // still reduces internally wherever discriminants disagree, so genuine
         // def-eq matches (and the `Nat.zero ≡ Lit 0` bridge) are preserved.
-        unifier.unify_no_initial_whnf(&pattern_with_metas, match_target)
+        unifier.unify_no_initial_whnf(match_pattern, match_target)
     };
 
     match unify_result {
@@ -809,9 +952,6 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
             // no-op when no level param was solved, so the common case is
             // untouched.
             let inst = |e: &Expr| metas.instantiate_levels(&metas.instantiate(e));
-
-            let rhs_with_metas = substitute_bvars_with_metas(&lemma.rhs, &bvar_to_meta);
-            let result = inst(&rhs_with_metas);
 
             // The instantiated LHS the proof is *stated* over. For lemmas whose
             // builtin pattern uses a bare head (`Nat.mul`) but whose match target
@@ -853,7 +993,7 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
             // genuine rewrite fully instantiates every pattern metavariable, so a
             // leaked meta means the match was spurious: bail to `None` and let
             // simp try another candidate / report NoProgress.
-            if contains_unassigned_meta(&lhs_inst) || contains_unassigned_meta(&result) {
+            if contains_unassigned_meta(&lhs_inst) {
                 return None;
             }
 
@@ -867,6 +1007,32 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
                 if !lhs_ok || !state.is_def_eq(goal, &lhs_inst, expr) {
                     return None;
                 }
+            }
+
+            // RC-J: the LHS match determines only the binders that OCCUR in the
+            // pattern. A conditional lemma's hypotheses do not, so they arrive
+            // here unbound; discharge them (or abandon the rewrite). Runs after
+            // the cheap `lhs_inst ≡ expr` guard so a spurious match never pays
+            // for a discharge attempt.
+            if !bind_undetermined_binders(
+                state,
+                goal,
+                lemma,
+                &metas,
+                &mut bvar_to_meta,
+                lemmas,
+                config,
+            ) {
+                return None;
+            }
+
+            // The RHS is instantiated only AFTER discharge: a dependent
+            // conclusion may mention the hypothesis binder, and `bvar_to_meta`
+            // now carries its proof.
+            let rhs_with_metas = substitute_bvars_with_metas(&lemma.rhs, &bvar_to_meta);
+            let result = inst(&rhs_with_metas);
+            if contains_unassigned_meta(&result) {
+                return None;
             }
 
             let proof = if let Some(proof_expr) = &lemma.proof_expr {
@@ -970,6 +1136,111 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
     }
 }
 
+/// Bind the lemma binders the LHS match left undetermined, discharging the ones
+/// that are genuine `Prop` side conditions (RC-J).
+///
+/// `convert_bvars_to_metas` mints a metavariable only for a BVar that OCCURS in
+/// the pattern, so a conditional lemma
+/// (`(a b : Nat) (h : b ≤ a) : a - b + b = a`) reaches proof assembly with `h`'s
+/// slot missing entirely. The old assembly loop then skipped that argument, so
+/// the term it built was `mycond a b` — still `Pi`-typed — which only the
+/// downstream kernel `add_decl` rejected, with
+/// `TypeMismatch { expected: <the equality>, inferred: Pi(..) }`.
+///
+/// Binders are walked from the OUTERMOST inwards (decreasing BVar index):
+/// binder `k`'s type may mention only binders outside it, which carry HIGHER
+/// indices, so by the time a slot is examined everything its type depends on is
+/// already resolved.
+///
+/// Three outcomes per undetermined slot:
+///
+/// * **Not statable** (the instantiated domain still has loose BVars or an
+///   unassigned meta — e.g. simp is recursing under a binder): left alone, the
+///   pre-existing behaviour. The assembled proof stays `Pi`-typed and is
+///   rejected by `proof_matches_rewrite`, so this is still fail-closed.
+/// * **Not a `Prop`**: also left alone. A missing DATA argument is a malformed
+///   pattern, not a side condition, and inventing a witness for it would be
+///   unsound; the same fail-closed rejection applies.
+/// * **A stated `Prop`**: handed to the discharger. On success its proof is
+///   inserted into `bvar_to_meta` so every downstream consumer (RHS
+///   substitution, `proof_expr` templates, the argument loop) picks it up
+///   uniformly. On failure this returns `false` and the caller abandons the
+///   rewrite.
+///
+/// # Soundness
+///
+/// This function never fabricates a term. The only expressions it inserts come
+/// from `discharge_premise`, which type-checks each candidate against the
+/// premise before returning it. Returning `false` is always safe: it merely
+/// means simp reports `NoProgress` for this lemma.
+///
+/// ENSURES: Returns `true` only when every slot it chose to fill was filled
+///   with a proof whose inferred type is def-eq to the corresponding premise.
+#[allow(clippy::too_many_arguments)]
+fn bind_undetermined_binders(
+    state: &ProofState,
+    goal: &Goal,
+    lemma: &SimpLemma,
+    metas: &MetaState,
+    bvar_to_meta: &mut hashbrown::HashMap<u32, Expr>,
+    lemmas: &SimpLemmaSet,
+    config: &SimpConfig,
+) -> bool {
+    // A rule minted from a LOCAL hypothesis (`simp [*]`, `simp [h]`) carries
+    // that hypothesis' name, which may coincide with an environment constant —
+    // and reading THAT constant's binder telescope would describe a completely
+    // different lemma. Local hypotheses shadow environment constants here
+    // exactly as they do in `lemmas::resolve_unfold_defs`.
+    let lemma_name = lemma.name.to_string();
+    if goal.local_ctx.iter().any(|decl| decl.name == lemma_name) {
+        return true;
+    }
+    // Hand-written builtin patterns likewise have no environment declaration to
+    // read binders from; they are unconditional by construction, so there is
+    // nothing to discharge.
+    let Some(info) = state.env.get_const(&lemma.name) else {
+        return true;
+    };
+    // Fast path: an unconditional lemma whose every binder the LHS match
+    // already determined needs no work at all, and that is the overwhelming
+    // majority of matches. Counting the Pi spine allocates nothing; the
+    // lifting walk below only runs when a slot is genuinely open.
+    let total = leading_pi_binder_count(&info.type_);
+    if total == 0 || (0..total as u32).all(|index| bvar_to_meta.contains_key(&index)) {
+        return true;
+    }
+    let binder_types = collect_binder_types_in_conclusion(&info.type_);
+
+    for index in (0..binder_types.len()).rev() {
+        let key = index as u32;
+        if bvar_to_meta.contains_key(&key) {
+            continue;
+        }
+
+        let domain = substitute_bvars_with_metas(&binder_types[index], bvar_to_meta);
+        let domain = metas.instantiate_levels(&metas.instantiate(&domain));
+        if domain.has_loose_bvars() || contains_unassigned_meta(&domain) {
+            continue;
+        }
+
+        // Only propositions are side conditions.
+        let is_prop = state
+            .infer_type(goal, &domain)
+            .is_ok_and(|sort| state.is_def_eq(goal, &sort, &Expr::prop()));
+        if !is_prop {
+            continue;
+        }
+
+        let Some(proof) = super::discharge::discharge_premise(state, goal, &domain, lemmas, config)
+        else {
+            return false;
+        };
+        bvar_to_meta.insert(key, proof);
+    }
+
+    true
+}
+
 /// The level-param name Clean's hand-written builtin simp patterns
 /// (`simp/lemmas_builtin.rs`) use for their universe-polymorphic `Const` heads.
 /// It is a pattern-local convention, NOT any declaration's level param.
@@ -1027,6 +1298,18 @@ fn contains_unassigned_meta(expr: &Expr) -> bool {
     })
 }
 
+/// Whether `proof` really witnesses `expr = result`.
+///
+/// The extraction is deliberately **top-level only** (`extract_eq_parts`, not
+/// `extract_equality_full`). `extract_equality_full` recurses THROUGH `Pi`
+/// binders, so it read a still-undischarged conditional proof of type
+/// `∀ (h : b ≤ a), a - b + b = a` as if it proved the bare equality — which is
+/// exactly how a `Pi`-typed simp proof used to escape this guard and surface
+/// only at the kernel as
+/// `TypeMismatch { expected: <the equality>, inferred: Pi(..) }` (RC-J).
+/// A proof of a universally quantified equality is not a proof of that
+/// equality, so rejecting it here turns a kernel type error into a clean
+/// `NoProgress`.
 fn proof_matches_rewrite(
     state: &ProofState,
     goal: &Goal,
@@ -1037,7 +1320,7 @@ fn proof_matches_rewrite(
     let Some((_, proof_lhs, proof_rhs)) = state
         .infer_type(goal, proof)
         .ok()
-        .and_then(|ty| extract_equality_full(&ty))
+        .and_then(|ty| extract_eq_parts(&ty))
     else {
         return false;
     };

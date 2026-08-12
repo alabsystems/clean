@@ -15,9 +15,8 @@
 //! This test suite verifies that clean's TC can handle these patterns,
 //! reproducing the `Lean.Syntax.brecOn_2.eq` TypeMismatch failure (#3134).
 
-use super::test_helpers::assert_const;
 use super::*;
-use crate::env::types::{ConstantInfo, Declaration, Reducibility};
+use crate::env::types::{ConstantInfo, Reducibility};
 use crate::inductive::{Constructor, InductiveDecl, InductiveType};
 use crate::tc::TypeChecker;
 
@@ -128,7 +127,7 @@ fn test_nat_brec_on_go_construction() {
 #[test]
 fn test_nat_brec_on_zero_reduces() {
     let env = make_nat_brec_env();
-    let u = Name::from_string("u");
+    let _u = Name::from_string("u");
 
     // Build: @Nat.brecOn.{u} @motive Nat.zero F
     // where motive : Nat → Sort u, F : (t : Nat) → Nat.below t → motive t

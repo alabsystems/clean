@@ -91,6 +91,8 @@ struct MaskedNoiseConsts {
     fin_sum: Expr,
     hcpoint: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     bool_: Expr,
     bool_not: Expr,
     bool_fn: Expr,

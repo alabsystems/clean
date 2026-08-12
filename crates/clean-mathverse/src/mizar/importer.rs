@@ -11,7 +11,9 @@
 
 use super::translate::{translate_article_item, MizTranslateError, MizTranslationContext};
 use super::xml_parser::parse_article;
-use crate::types::{AxiomProfile, Provenance, SourceSystem, TrustLevel};
+#[cfg(test)]
+use crate::types::SourceSystem;
+use crate::types::{AxiomProfile, Provenance, TrustLevel};
 use clean_kernel::Expr;
 use thiserror::Error;
 

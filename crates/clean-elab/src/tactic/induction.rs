@@ -62,13 +62,19 @@ pub fn induction(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 
 /// Structural induction on `hyp_name`, optionally with a named recursor override.
 ///
-/// `rec_override` is the fully-qualified recursor name requested by an
-/// `induction … using <rec>` clause. When `None`, the type's default `<Ind>.rec`
-/// is used. The named recursor is looked up like the default one, so an
-/// unregistered or non-recursor name fails closed with
-/// [`TacticError::EnvironmentMissing`]; the assembled proof term is re-checked
-/// by the kernel exactly as for the default recursor, so a recursor that does
-/// not fit the goal is rejected there rather than silently accepted.
+/// `rec_override` is the fully-qualified eliminator name requested by an
+/// `induction … using <elim>` clause. When `None`, the type's default
+/// `<Ind>.rec` is used.
+///
+/// A `using` name that IS a registered kernel recursor takes this function's
+/// recursor path. A name that is a constant but not a recursor — Lean's
+/// `@[elab_as_elim]` eliminators, such as `Nat.strongRecOn` — is handed to
+/// [`super::induction_elim::induction_using_eliminator`], which reads the
+/// motive/target/alternative layout off the eliminator's own type. A name that
+/// is neither still fails closed with [`TacticError::EnvironmentMissing`].
+/// Either way the assembled proof term is re-checked by the kernel, so an
+/// eliminator that does not fit the goal is rejected there rather than
+/// silently accepted.
 ///
 /// # Contract
 ///
@@ -82,6 +88,40 @@ pub fn induction_using(
     hyp_name: &str,
     rec_override: Option<&Name>,
 ) -> TacticResult {
+    induction_using_alts(state, hyp_name, rec_override, &[])
+}
+
+/// [`induction_using`] plus the `with`-block alternative names, in source
+/// order.
+///
+/// The names matter only on the custom-eliminator path: Clean's kernel `Pi`
+/// stores no binder name, so an `@[elab_as_elim]` eliminator's alternative tags
+/// cannot be read back from the environment and are taken positionally from the
+/// `with` block instead. See [`super::induction_elim`]. The recursor path
+/// ignores them — it tags cases with constructor names, as before.
+///
+/// # Contract
+///
+/// REQUIRES: `state.goals` is non-empty
+/// ENSURES: identical behaviour to [`induction_using`] whenever `rec_override`
+///   names a registered kernel recursor (or is `None`)
+pub fn induction_using_alts(
+    state: &mut ProofState,
+    hyp_name: &str,
+    rec_override: Option<&Name>,
+    alt_names: &[String],
+) -> TacticResult {
+    // Custom eliminator (`@[elab_as_elim]`): a `using` name that is a real
+    // constant but NOT a kernel recursor. Dispatching here — and only here —
+    // leaves the recursor path below byte-for-byte unchanged.
+    if let Some(elim) = rec_override {
+        if state.env.get_recursor(elim).is_none() && state.env.get_const(elim).is_some() {
+            return super::induction_elim::induction_using_eliminator(
+                state, hyp_name, elim, alt_names,
+            );
+        }
+    }
+
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     let (hyp_idx, hyp_decl) = goal
@@ -174,7 +214,36 @@ fn build_induction_cases(
     ctx: &InductionCtx<'_>,
 ) -> Result<Vec<InductionCase>, TacticError> {
     let mut cases = Vec::with_capacity(ctx.ind_info.constructor_names.len());
+
+    // Every constructor branch's field / IH FVars must be numbered from the SAME
+    // base, exactly as `cases_core` numbers its branches (`proof_manipulation.rs`
+    // — see the long note there). `close_fvars` accepts a tactic FVar inside the
+    // assembled recursor term only when `id - binder_base < binder_depth` at its
+    // occurrence (`close_fvars::assignment_scope_violation`), and each minor
+    // premise's lambda chain re-starts that depth at zero. Letting the global
+    // counter run on across constructors makes the SECOND field-binding branch's
+    // first field `base + <fields bound so far>` at depth 1, so the proof is
+    // rejected with "assignment violates its creation scope". That is why
+    // `induction` failed on every inductive with two or more field-binding
+    // constructors (`Or`, `Sum`, …) while `Nat` / `List` / `Option` — whose only
+    // field-binding constructor is the last one — kept working. Branch FVars
+    // never cross branches (each appears only in its own `new_ctx` and its own
+    // minor-premise lambda), so resetting per branch is safe.
+    //
+    // The base is derived from THIS goal — one past its highest tactic FVar,
+    // floored at `fvar_base` — not from the monotonic global `next_fvar`, so
+    // sibling goals reaching `induction` with different counter values still get
+    // depth-correct ids. `goal_binder_base` is `goal_fvar_base` widened to the
+    // goal meta's creation scope: identical unless the context was narrowed by
+    // `clear`, in which case the context alone would hand back an id still bound
+    // by a live `lambda` (capture). `cases_core` uses the same base.
+    let branch_fvar_base = state.goal_binder_base(ctx.goal);
+    let mut branch_fvar_max = branch_fvar_base;
+
     for (ctor_idx, ctor_name) in ctx.ind_info.constructor_names.iter().enumerate() {
+        // Reset so this branch allocates from the same base as branch 0.
+        state.next_fvar = branch_fvar_base;
+
         let ctor_info = state
             .env
             .get_constructor(ctor_name)
@@ -206,6 +275,10 @@ fn build_induction_cases(
             &recursive_fields,
             ctx.hyp_fvar,
         );
+        // Track the largest id any branch reserved so the post-loop counter sits
+        // past every branch's fields and IHs (mirrors `cases_core`).
+        branch_fvar_max = branch_fvar_max.max(state.next_fvar);
+
         let mut ctor_app = Expr::const_(ctor_name.clone(), ctx.levels.to_vec());
         for arg in ctx.args.iter().take(ctx.ind_info.num_params as usize) {
             ctor_app = Expr::app(ctor_app, arg.clone());
@@ -232,6 +305,11 @@ fn build_induction_cases(
             ctor_tag: ctor_short_tag,
         });
     }
+
+    // Leave the counter past every branch's fields so tactics later run on the
+    // case goals cannot collide with them (mirrors `cases_core`).
+    state.next_fvar = branch_fvar_max;
+
     Ok(cases)
 }
 

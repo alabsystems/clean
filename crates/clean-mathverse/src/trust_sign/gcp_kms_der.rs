@@ -127,7 +127,7 @@ impl<'a> DerReader<'a> {
             return Ok(first as usize);
         }
         let n = (first & 0x7f) as usize;
-        if n == 0 || n > std::mem::size_of::<usize>() {
+        if n == 0 || n > size_of::<usize>() {
             return Err(SigningError::Key(format!(
                 "DER unsupported length-of-length {n}"
             )));

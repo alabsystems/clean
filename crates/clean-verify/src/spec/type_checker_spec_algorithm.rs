@@ -203,7 +203,7 @@ fn infer_type_spec(
                 vec![ty_witness, body_witness],
             ))
         }
-        ExprKind::Pi(binder, ty, body) => {
+        ExprKind::Pi(_binder, ty, body) => {
             let ty_witness = infer_type_spec(env, ctx, ty)?;
             let domain_level = ensure_sort(&ty_witness.inferred_type)?;
             let extended_ctx = extend_context(ctx, ty.as_ref().clone());

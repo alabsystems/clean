@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(text, "\u{22a2} True\n\nh : False\n\u{22a2} True");
     }
 
-    // -- Handler stub tests (async) -------------------------------------------
+    // -- Dispatched endpoint tests (async) ------------------------------------
 
     #[tokio::test]
     async fn test_handle_get_interactive_goals_returns_empty() {
@@ -381,7 +381,14 @@ mod tests {
             },
             position: Position::default(),
         };
-        let resp = handle_get_interactive_goals(&state, RequestId::Number(1), params).await;
+        let resp = crate::dispatch::dispatch_request(
+            "Lean.Widget.getInteractiveGoals",
+            Some(serde_json::to_value(params).unwrap()),
+            RequestId::Number(1),
+            &state,
+            None,
+        )
+        .await;
         assert!(resp.error.is_none());
         let goals: InteractiveGoals = serde_json::from_value(resp.result.unwrap()).unwrap();
         assert!(goals.goals.is_empty());
@@ -396,7 +403,14 @@ mod tests {
             },
             line_range: None,
         };
-        let resp = handle_get_interactive_diagnostics(&state, RequestId::Number(2), params).await;
+        let resp = crate::dispatch::dispatch_request(
+            "Lean.Widget.getInteractiveDiagnostics",
+            Some(serde_json::to_value(params).unwrap()),
+            RequestId::Number(2),
+            &state,
+            None,
+        )
+        .await;
         assert!(resp.error.is_none());
         let d: InteractiveDiagnostics = serde_json::from_value(resp.result.unwrap()).unwrap();
         assert!(d.diagnostics.is_empty());
@@ -414,7 +428,14 @@ mod tests {
                 character: 0,
             },
         };
-        let resp = handle_get_plain_goal(&state, RequestId::Number(3), params).await;
+        let resp = crate::dispatch::dispatch_request(
+            "getPlainGoal",
+            Some(serde_json::to_value(params).unwrap()),
+            RequestId::Number(3),
+            &state,
+            None,
+        )
+        .await;
         assert!(resp.error.is_none());
         assert!(
             resp.result.unwrap().is_null(),

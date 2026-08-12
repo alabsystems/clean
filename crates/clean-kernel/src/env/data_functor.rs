@@ -28,7 +28,7 @@
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{
     Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType, KernelClassInfo,
-    KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
+    KernelInstanceInfo, LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
@@ -295,7 +295,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string(inst_name),
                 class_name: Name::from_string("Functor"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });

@@ -274,9 +274,15 @@ impl Specification {
         //    already asserted about that shape — guards included where the old
         //    axioms had them. No producer gained strength.
         //
-        // FVar/Let/Lit/Proj/MData arms exist in the real kernel but are outside
-        // the core KExpr fragment (sort/bvar/app/lam/pi/const only) — the
-        // inductive is scoped to KExpr.
+        // FVar/Let/Lit/Proj/MData arms exist in the real kernel. Of those,
+        // Let/Lit/Proj ARE in KExpr — the live inductive has all NINE
+        // constructors (sort/bvar/app/lam/pi/const/let_/proj/lit,
+        // expr_model.rs), and has since the proj/lit rung. What they are outside
+        // is the fragment THIS inductive models, which stops at
+        // sort/bvar/app/lam/pi/const. Only FVar and MData are genuinely absent
+        // from KExpr. Stating it the other way round — as an earlier version of
+        // this comment did — reads as a fact about the reflected calculus when it
+        // is really a statement about a gap in KernelInferAccepts.
         //
         // `st : KernelState` is a UNIFORM PARAMETER; (e, T) remain TRUE indices —
         // the five ctor conclusions differ in the e position, so e cannot be
@@ -550,13 +556,18 @@ impl Specification {
                     "KernelInputAdmissible st (KExpr.const n us) -> ",
                     "has_type (KExpr.const n us) T) ",
                     // let_ minor: like bvar, KernelInferAccepts has NO let_
-                    // constructor (Let is outside the core KExpr fragment the
-                    // infer model covers), so the inversion payload at a let is
-                    // Empty. Three recursive fields (ty, val, body) + three IHs.
+                    // constructor — NOT because `let_` is outside KExpr (it is a
+                    // KExpr constructor, and the deployed kernel has a successful
+                    // Let arm at tc/infer.rs) but because this inductive's
+                    // modelled fragment stops short of it. So the inversion
+                    // payload at a let is Empty. Three recursive fields (ty, val,
+                    // body) + three IHs.
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => ",
                     "Empty) ",
-                    // proj/lit: outside the core KExpr fragment the infer model
-                    // covers (like bvar/let_), so the inversion payload is Empty.
+                    // proj/lit: KExpr constructors (proj/lit rung) that this
+                    // inductive's modelled fragment does not reach — like let_,
+                    // absent from the MODEL, not from KExpr — so the inversion
+                    // payload is Empty.
                     "(fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Empty) ",
                     "(fun (_ : Nat) => Empty) ",
                     "x"

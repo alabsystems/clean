@@ -208,7 +208,7 @@ pub fn parse_proven_theorem(json: &str) -> Result<IsaProvenTheorem, serde_json::
     // recursive descent over deep nodes does not overflow the stack.
     let mut de = serde_json::Deserializer::from_str(json);
     de.disable_recursion_limit();
-    let thm = <IsaProvenTheorem as serde::Deserialize>::deserialize(&mut de)?;
+    let thm = <IsaProvenTheorem as Deserialize>::deserialize(&mut de)?;
     de.end()?;
     Ok(thm)
 }

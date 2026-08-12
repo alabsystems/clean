@@ -1263,8 +1263,8 @@ def mainVal : Type 1 := baseVal"
             !summaries.is_empty(),
             "expected load summaries from dependency chain"
         );
-        let base = clean_kernel::name::Name::from_string("baseVal");
-        let main_const = clean_kernel::name::Name::from_string("mainVal");
+        let base = Name::from_string("baseVal");
+        let main_const = Name::from_string("mainVal");
         assert!(
             load_env.get_const(&base).is_some(),
             "baseVal should be loaded from payload"
@@ -1349,7 +1349,7 @@ lean_lib DepTest where
         let _ = clean_olean::load_module_with_deps(&mut env, "DepTest.Top", &[lib_dir])
             .expect("load top with deps");
         for name in ["baseVal", "midVal", "topVal"] {
-            let n = clean_kernel::name::Name::from_string(name);
+            let n = Name::from_string(name);
             assert!(
                 env.get_const(&n).is_some(),
                 "{name} should be available after loading payload olean"

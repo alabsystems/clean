@@ -59,13 +59,7 @@ fn test_best_first_strategy() {
     let p = Expr::const_(Name::from_string("P"), vec![]);
 
     // Goal: P with hp : P in context (trivial)
-    let mut state = ProofState::new(env, p.clone());
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = state_with_hp(env, p.clone());
 
     // Use BestFirst (default)
     let config = AesopConfig {
@@ -91,13 +85,7 @@ fn test_depth_first_strategy() {
     let p = Expr::const_(Name::from_string("P"), vec![]);
 
     // Goal: P with hp : P in context (trivial)
-    let mut state = ProofState::new(env, p.clone());
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = state_with_hp(env, p.clone());
 
     // Use DepthFirst
     let config = AesopConfig {
@@ -123,13 +111,7 @@ fn test_breadth_first_strategy() {
     let p = Expr::const_(Name::from_string("P"), vec![]);
 
     // Goal: P with hp : P in context (trivial)
-    let mut state = ProofState::new(env, p.clone());
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = state_with_hp(env, p.clone());
 
     // Use BreadthFirst
     let config = AesopConfig {
@@ -159,13 +141,7 @@ fn test_all_strategies_find_proof() {
         let env = setup_strategy_env();
         let p = Expr::const_(Name::from_string("P"), vec![]);
 
-        let mut state = ProofState::new(env, p.clone());
-        state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-            fvar: FVarId::new(100),
-            name: "hp".to_string(),
-            ty: p.clone(),
-            value: None,
-        });
+        let mut state = state_with_hp(env, p.clone());
 
         let config = AesopConfig {
             strategy,
@@ -234,4 +210,17 @@ fn setup_strategy_env() -> Environment {
     }
 
     env
+}
+
+fn state_with_hp(env: Environment, target: Expr) -> ProofState {
+    ProofState::with_context(
+        env,
+        target.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: target,
+            value: None,
+        }],
+    )
 }

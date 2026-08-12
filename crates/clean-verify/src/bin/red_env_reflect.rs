@@ -135,7 +135,7 @@ fn run() -> i32 {
         return run_probe(&spec);
     }
 
-    let dir = std::path::Path::new(GENERATED_DIR);
+    let dir = Path::new(GENERATED_DIR);
     let script_path = dir.join("kernel_core_red_env.defs.txt");
     let interning_path = dir.join("kernel_core_red_env.interning.tsv");
     let ledger_path = dir.join("kernel_core_red_env.skips.md");
@@ -339,6 +339,111 @@ fn replace_artifact_set(dir: &Path, artifacts: &[(PathBuf, String)]) -> io::Resu
     Ok(())
 }
 
+/// The one-rfl-at-scale PROBE (Stage-4 feasibility preview): whnf-evaluate
+/// each Stage-1 closure checker over the registered `kernel_core_red_env`
+/// and time the fold. Requires the registration stage to be in the spec.
+fn run_probe(spec: &Specification) -> i32 {
+    if spec
+        .env()
+        .get_const(&clean_kernel::Name::from_string("kernel_core_red_env"))
+        .is_none()
+    {
+        eprintln!(
+            "[red_env_reflect] --probe: kernel_core_red_env not registered in the spec \
+             (run after the Stage-2 registration stage lands)"
+        );
+        return 1;
+    }
+    let tc = TypeChecker::new(spec.env());
+    let mut code = 0;
+    for (checker, proj) in [
+        ("rec_env_closed_b", "red_rec"),
+        ("rec_env_lift_closed_b", "red_rec"),
+        ("def_env_closed_b", "red_def"),
+        ("def_env_lift_closed_b", "red_def"),
+    ] {
+        let e = Expr::app(
+            Expr::const_str(checker),
+            Expr::app(
+                Expr::const_str(proj),
+                Expr::const_str("kernel_core_red_env"),
+            ),
+        );
+        let t = Instant::now();
+        let w = tc.whnf(&e);
+        let dt = t.elapsed();
+        let head = format!("{w}");
+        eprintln!(
+            "[red_env_reflect] probe {checker} ({proj} kernel_core_red_env): whnf = {} in {:.3}s",
+            head.chars().take(80).collect::<String>(),
+            dt.as_secs_f64()
+        );
+        if !(head.starts_with("Bool.true") || head.starts_with("Bool.false")) {
+            eprintln!("[red_env_reflect] probe {checker}: fold STUCK (non-Bool head)");
+            code = 1;
+        }
+    }
+
+    // Aggregate per-element cost (the TRUE-case fold cost the Bool.and
+    // short-circuit hides): force the full per-element checker test
+    // `nat_eqb (bvar_ceiling <term>) 0` for every reflected rule rhs and
+    // def value, and total the whnf time. This is the measured one-rfl
+    // budget for a Stage-4 depth-aware checker at real-env scale.
+    let reflection = reflect_foundation_core(spec.env());
+    let mut elements: Vec<(String, &clean_verify::red_env_reflect::SpecExpr)> = Vec::new();
+    for rec in &reflection.recs {
+        for rule in &rec.rules {
+            elements.push((format!("{}/{}", rec.name, rule.ctor), &rule.rhs));
+        }
+    }
+    for def in &reflection.defs {
+        elements.push((def.name.clone(), &def.value));
+    }
+    let mut total = std::time::Duration::ZERO;
+    let mut worst = (String::new(), std::time::Duration::ZERO);
+    let mut trues = 0usize;
+    for (label, term) in &elements {
+        let reflected_term = match reflection.kexpr_term(term) {
+            Ok(term) => term,
+            Err(error) => {
+                eprintln!("[red_env_reflect] element probe {label}: {error}");
+                code = 1;
+                continue;
+            }
+        };
+        let e = Expr::apps(
+            Expr::const_str("nat_eqb"),
+            [
+                Expr::app(Expr::const_str("bvar_ceiling"), reflected_term),
+                Expr::const_str("kcre_nat_0"),
+            ],
+        );
+        let t = Instant::now();
+        let w = tc.whnf(&e);
+        let dt = t.elapsed();
+        total += dt;
+        if dt > worst.1 {
+            worst = (label.clone(), dt);
+        }
+        let head = format!("{w}");
+        if head.starts_with("Bool.true") {
+            trues += 1;
+        } else if !head.starts_with("Bool.false") {
+            eprintln!("[red_env_reflect] element probe {label}: STUCK (non-Bool head {head})");
+            code = 1;
+        }
+    }
+    eprintln!(
+        "[red_env_reflect] element probes: {} elements, {} ceiling-0 (bvar-free), total {:.3}s, worst {} at {:.3}s",
+        elements.len(),
+        trues,
+        total.as_secs_f64(),
+        worst.0,
+        worst.1.as_secs_f64()
+    );
+    code
+}
+
 #[cfg(test)]
 mod publication_tests {
     use super::replace_artifact_set;
@@ -443,109 +548,4 @@ mod publication_tests {
         }
         assert_no_transaction_files(dir.path());
     }
-}
-
-/// The one-rfl-at-scale PROBE (Stage-4 feasibility preview): whnf-evaluate
-/// each Stage-1 closure checker over the registered `kernel_core_red_env`
-/// and time the fold. Requires the registration stage to be in the spec.
-fn run_probe(spec: &Specification) -> i32 {
-    if spec
-        .env()
-        .get_const(&clean_kernel::Name::from_string("kernel_core_red_env"))
-        .is_none()
-    {
-        eprintln!(
-            "[red_env_reflect] --probe: kernel_core_red_env not registered in the spec \
-             (run after the Stage-2 registration stage lands)"
-        );
-        return 1;
-    }
-    let tc = TypeChecker::new(spec.env());
-    let mut code = 0;
-    for (checker, proj) in [
-        ("rec_env_closed_b", "red_rec"),
-        ("rec_env_lift_closed_b", "red_rec"),
-        ("def_env_closed_b", "red_def"),
-        ("def_env_lift_closed_b", "red_def"),
-    ] {
-        let e = Expr::app(
-            Expr::const_str(checker),
-            Expr::app(
-                Expr::const_str(proj),
-                Expr::const_str("kernel_core_red_env"),
-            ),
-        );
-        let t = Instant::now();
-        let w = tc.whnf(&e);
-        let dt = t.elapsed();
-        let head = format!("{w}");
-        eprintln!(
-            "[red_env_reflect] probe {checker} ({proj} kernel_core_red_env): whnf = {} in {:.3}s",
-            head.chars().take(80).collect::<String>(),
-            dt.as_secs_f64()
-        );
-        if !(head.starts_with("Bool.true") || head.starts_with("Bool.false")) {
-            eprintln!("[red_env_reflect] probe {checker}: fold STUCK (non-Bool head)");
-            code = 1;
-        }
-    }
-
-    // Aggregate per-element cost (the TRUE-case fold cost the Bool.and
-    // short-circuit hides): force the full per-element checker test
-    // `nat_eqb (bvar_ceiling <term>) 0` for every reflected rule rhs and
-    // def value, and total the whnf time. This is the measured one-rfl
-    // budget for a Stage-4 depth-aware checker at real-env scale.
-    let reflection = reflect_foundation_core(spec.env());
-    let mut elements: Vec<(String, &clean_verify::red_env_reflect::SpecExpr)> = Vec::new();
-    for rec in &reflection.recs {
-        for rule in &rec.rules {
-            elements.push((format!("{}/{}", rec.name, rule.ctor), &rule.rhs));
-        }
-    }
-    for def in &reflection.defs {
-        elements.push((def.name.clone(), &def.value));
-    }
-    let mut total = std::time::Duration::ZERO;
-    let mut worst = (String::new(), std::time::Duration::ZERO);
-    let mut trues = 0usize;
-    for (label, term) in &elements {
-        let reflected_term = match reflection.kexpr_term(term) {
-            Ok(term) => term,
-            Err(error) => {
-                eprintln!("[red_env_reflect] element probe {label}: {error}");
-                code = 1;
-                continue;
-            }
-        };
-        let e = Expr::apps(
-            Expr::const_str("nat_eqb"),
-            [
-                Expr::app(Expr::const_str("bvar_ceiling"), reflected_term),
-                Expr::const_str("kcre_nat_0"),
-            ],
-        );
-        let t = Instant::now();
-        let w = tc.whnf(&e);
-        let dt = t.elapsed();
-        total += dt;
-        if dt > worst.1 {
-            worst = (label.clone(), dt);
-        }
-        let head = format!("{w}");
-        if head.starts_with("Bool.true") {
-            trues += 1;
-        } else if !head.starts_with("Bool.false") {
-            eprintln!("[red_env_reflect] element probe {label}: STUCK (non-Bool head {head})");
-            code = 1;
-        }
-    }
-    eprintln!(
-        "[red_env_reflect] element probes: {} elements, {} ceiling-0 (bvar-free), total {:.3}s, worst {} at {:.3}s",
-        elements.len(),
-        trues,
-        total.as_secs_f64(),
-        worst.0,
-        worst.1.as_secs_f64()
-    );
-    code
 }

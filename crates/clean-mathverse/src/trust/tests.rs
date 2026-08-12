@@ -913,8 +913,6 @@ fn test_dependency_graph_stats_with_cycle() {
 // Topological order tests
 // ============================================================================
 
-use crate::trust::axiom_propagation::CycleError;
-
 #[test]
 fn test_topological_order_empty_graph() {
     let graph = DependencyGraph::new(0);
@@ -1147,7 +1145,7 @@ fn test_incremental_propagation_out_of_bounds() {
 // ============================================================================
 
 use crate::trust::audit_report::{AuditFinding, AuditReportBuilder, AuditSeverity};
-use crate::trust::verification::{SelfVerificationSuite, VerificationEvidence, VerificationSuite};
+use crate::trust::verification::{SelfVerificationSuite, VerificationEvidence};
 
 #[test]
 fn test_self_verification_propagation_completeness_valid() {
@@ -1349,9 +1347,7 @@ fn test_verification_evidence_summary_contains_status() {
 // Audit report formatting tests
 // ============================================================================
 
-use crate::trust::audit_report::{
-    compare_reports, AuditComparison, AuditReport, AuditReportFormat,
-};
+use crate::trust::audit_report::{compare_reports, AuditReportFormat};
 
 #[test]
 fn test_audit_report_to_json_empty() {

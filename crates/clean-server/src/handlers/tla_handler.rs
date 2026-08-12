@@ -312,9 +312,10 @@ async fn batch_prove_tla_impl(
             total_items / 200 // ~200 updates max
         };
 
-        let prove_item = |item: &BatchProveTlaItem| {
+        let prove_item = |engine: &mut clean_tla::tactic::TlaTacticEngine,
+                          item: &BatchProveTlaItem| {
             let item_start = Instant::now();
-            let result = clean_tla::tactic::prove_tla_obligation(&item.obligation);
+            let result = engine.prove(&item.obligation);
             let time_us = item_start.elapsed().as_micros() as u64;
 
             // Update progress with adaptive frequency (best effort, non-blocking)
@@ -353,8 +354,16 @@ async fn batch_prove_tla_impl(
         };
 
         let results: Vec<BatchProveTlaItemResult> = match pool {
-            Some(Some(pool)) => pool.install(|| items.par_iter().map(prove_item).collect()),
-            _ => items.par_iter().map(prove_item).collect(),
+            Some(Some(pool)) => pool.install(|| {
+                items
+                    .par_iter()
+                    .map_init(clean_tla::tactic::TlaTacticEngine::new, prove_item)
+                    .collect()
+            }),
+            _ => items
+                .par_iter()
+                .map_init(clean_tla::tactic::TlaTacticEngine::new, prove_item)
+                .collect(),
         };
 
         let wall_time_us = start.elapsed().as_micros() as u64;

@@ -917,9 +917,7 @@ mod tests {
         assert!(!vcs.is_empty(), "Should generate VCs for incr function");
 
         // Verify the VCs (postcondition VCs should be present)
-        let has_postcondition = vcs
-            .iter()
-            .any(|vc| vc.kind == crate::vcgen::VCKind::Postcondition);
+        let has_postcondition = vcs.iter().any(|vc| vc.kind == VCKind::Postcondition);
         assert!(has_postcondition, "Should have postcondition VC");
     }
 

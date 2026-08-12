@@ -13,7 +13,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::formalize::{AdmissionTier, FormalizationResult, PaperFormalization};
-use crate::error::{MathverseError, MathverseResult};
+use crate::error::MathverseResult;
 use crate::shard::ShardWriter;
 use crate::types::{
     AxiomProfile, ContentDomain, ImportConfidence, MathverseConstantHeader, SourceSystem, NO_VALUE,

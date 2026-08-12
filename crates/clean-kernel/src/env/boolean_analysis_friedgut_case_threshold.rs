@@ -69,6 +69,8 @@ struct ThrConsts {
     nat: Expr,
     rat: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     bool_: Expr,
     nat_zero: Expr,
     nat_succ: Expr,
@@ -95,6 +97,7 @@ struct ThrConsts {
     l1: Level,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl ThrConsts {
     fn new() -> Self {
         let l0 = Level::zero();

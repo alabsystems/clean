@@ -25,6 +25,11 @@ pub(crate) enum NativeCompileError {
         exit_code: i32,
         stderr: String,
     },
+    // Raised once the pipeline actually spawns toolchains: the module only
+    // *plans* commands today (`plan_*` returns the argv, it never execs), so
+    // no probe exists yet to fail. Kept as part of the pipeline's error
+    // contract — 2026-07-31.
+    #[allow(dead_code)]
     #[error("tool not found: {0}")]
     ToolNotFound(String),
     #[error("linker `{tool}` failed (exit {exit_code}): {stderr}")]
@@ -268,6 +273,10 @@ pub(crate) struct LinkerCommand {
     pub(crate) tool: String,
     pub(crate) args: Vec<String>,
     pub(crate) objects: Vec<PathBuf>,
+    // Recorded here and also spliced into `args` as `-o <output>`; the
+    // structured copy is what an executing driver will read back to locate the
+    // artifact. No exec driver yet — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) output: PathBuf,
 }
 
@@ -430,6 +439,9 @@ impl ParallelCompilePlan {
 #[derive(Debug)]
 pub(crate) struct JitModule {
     pub(crate) name: String,
+    // The dlopen target. Only read once a loader exists; the module currently
+    // stops at planning the shared-library path — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) lib_path: PathBuf,
     pub(crate) symbols: Vec<String>,
 }
@@ -475,6 +487,9 @@ pub(crate) fn plan_jit_compile(
 /// Descriptor for a loaded shared library (dlopen handle placeholder).
 #[derive(Debug)]
 pub(crate) struct SharedLibHandle {
+    // The library this handle stands for. Read by the real dlopen call this
+    // placeholder is standing in for — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) path: PathBuf,
     pub(crate) loaded: bool,
     symbols: HashMap<String, usize>,

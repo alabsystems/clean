@@ -7,14 +7,9 @@
 //! `embed_const`/`embed_const2`). Moved verbatim from the original single-file
 //! `isabelle_pure_translate` module; behaviour is byte-identical.
 
-use std::collections::BTreeMap;
+use clean_kernel::{BinderInfo, Expr};
 
-use clean_kernel::expr::FVarId;
-use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
-
-use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
+use super::super::isabelle_pure::IsaTerm;
 use super::*;
 
 impl Ctx {

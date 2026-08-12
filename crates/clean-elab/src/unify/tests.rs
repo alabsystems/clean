@@ -133,7 +133,10 @@ fn test_unify_meta_constrains_concrete_type_level_for_fvar_assignment() {
         Expr::sort(alpha_level.clone()),
         BinderInfo::Implicit,
     );
-    let meta_id = state.fresh(Expr::type_());
+    let meta_id = state.fresh_with_locals(
+        Expr::type_(),
+        vec![("α".to_string(), alpha, Expr::sort(alpha_level.clone()))],
+    );
     let meta_expr = meta_expr(meta_id);
 
     let result = {
@@ -185,7 +188,8 @@ fn test_unify_meta_type_accepts_prop_fvar_by_cumulativity() {
     let mut ctx = LocalContext::new();
     let mut state = MetaState::new();
     let a_fvar = ctx.push(Name::from_string("A"), Expr::prop(), BinderInfo::Default);
-    let meta_id = state.fresh(Expr::type_());
+    let meta_id =
+        state.fresh_with_locals(Expr::type_(), vec![("A".to_string(), a_fvar, Expr::prop())]);
     let meta_expr = meta_expr(meta_id);
 
     let result = {
@@ -2022,7 +2026,10 @@ fn test_bare_meta_meta_reverses_away_from_scope_widening() {
 // =====================================================================
 
 /// `?f x =?= Nat.succ x` is a Miller pattern (single distinct local arg).
-/// It must solve `?f := λ x. Nat.succ x` (the `?f x := x + 1` archetype).
+/// The abstracted solution `λ x. Nat.succ x` is an eta-expansion of
+/// `Nat.succ`, and pattern solutions are eta-contracted before assignment
+/// (un-contracted solutions snowball into eta/beta towers when stored
+/// constants are re-applied), so it must solve `?f := Nat.succ`.
 #[test]
 fn test_miller_pattern_single_arg_solves_lambda() {
     let env = Environment::new();
@@ -2049,26 +2056,24 @@ fn test_miller_pattern_single_arg_solves_lambda() {
         "Miller pattern ?f x =?= Nat.succ x should solve, got {result:?}"
     );
 
-    // Expected solution: `λ x. Nat.succ (BVar 0)` — the abstracted body.
+    // Expected solution: the abstracted body `λ x. Nat.succ (BVar 0)`
+    // eta-contracts to the bare head `Nat.succ`.
     let assigned = state
         .get_assignment(f)
         .expect("?f should be assigned by the pattern rule")
         .clone();
-    let ExprKind::Lam(_, _, body) = assigned.kind() else {
-        panic!("expected ?f := λ _. _, got {:?}", assigned.kind());
-    };
-    let expected_body = Expr::app(Expr::const_str("Nat.succ"), Expr::bvar(0));
     assert_eq!(
-        **body, expected_body,
-        "?f should be λ x. Nat.succ x with x abstracted to BVar(0)"
+        assigned,
+        Expr::const_str("Nat.succ"),
+        "?f should be the eta-contracted solution Nat.succ"
     );
 
-    // Instantiating `?f x` yields the redex `(λ x. Nat.succ x) x`; the unifier
-    // assigns but does not beta-reduce. The redex beta-reduces to the RHS,
-    // which is exactly what the kernel will check.
-    assert!(
-        matches!(state.instantiate(&lhs).kind(), ExprKind::App(f, _) if f.is_lam()),
-        "instantiating ?f x should produce the beta-redex (λ x. _) x"
+    // Instantiating `?f x` therefore yields the RHS directly (no beta-redex
+    // left behind), which is exactly what the kernel will check.
+    assert_eq!(
+        state.instantiate(&lhs),
+        rhs,
+        "instantiating ?f x should produce Nat.succ x directly"
     );
 }
 
@@ -2373,9 +2378,11 @@ fn test_miller_same_meta_flex_flex_decomposes() {
 
 /// Distinct-head flex-flex where both sides are Miller patterns:
 /// `?m x y =?= ?n y z`. The intersection rule invents a fresh `?h` over the
-/// shared variable `{y}` and assigns `?m := λ x y. ?h y`, `?n := λ y z. ?h y`.
-/// Both `?m x y` and `?n y z` then beta-reduce to `?h y`, so re-unifying the
-/// instantiated sides succeeds (the kernel-level definitional equality holds).
+/// shared variable `{y}` and assigns `?m := λ x y. ?h y` (eta-contracted on
+/// commit to `λ x. ?h`), `?n := λ y z. ?h y` (not contractible — `y` is the
+/// outer binder). Both `?m x y` and `?n y z` still beta-reduce to `?h y`, so
+/// re-unifying the instantiated sides succeeds (the kernel-level definitional
+/// equality holds).
 #[test]
 fn test_miller_flex_flex_intersection_distinct_patterns_solves() {
     let env = Environment::new();
@@ -2416,31 +2423,25 @@ fn test_miller_flex_flex_intersection_distinct_patterns_solves() {
         "flex-flex intersection ?m x y =?= ?n y z should solve, got {result:?}"
     );
 
-    // ?m := λ x y. ?h (BVar 0)  — y is the inner binder, so the common var y is
-    // BVar(0) in the body.
+    // ?m := λ x y. ?h (BVar 0) — y is the inner binder, so the common var y is
+    // BVar(0) in the body, and the inner `λ y. ?h y` eta-contracts to `?h`
+    // (pattern solutions are eta-contracted before assignment). The committed
+    // form is therefore `?m := λ x. ?h`; `?m x y` still beta-reduces to `?h y`.
     let m_assigned = state
         .get_assignment(m)
         .expect("?m should be assigned by the intersection rule")
         .clone();
     let ExprKind::Lam(_, _, m_body1) = m_assigned.kind() else {
-        panic!("expected ?m := λ _. λ _. _, got {:?}", m_assigned.kind());
-    };
-    let ExprKind::Lam(_, _, m_body2) = m_body1.kind() else {
-        panic!("expected ?m to have two binders, got {:?}", m_body1.kind());
+        panic!("expected ?m := λ _. _, got {:?}", m_assigned.kind());
     };
     // The fresh ?h is the only meta created after m and n.
-    let h_fvar = match m_body2.get_app_fn().kind() {
+    let h_fvar = match m_body1.kind() {
         ExprKind::FVar(id) => *id,
-        other => panic!("expected ?m body head to be ?h, got {other:?}"),
+        other => panic!("expected ?m body to be the eta-contracted ?h, got {other:?}"),
     };
     assert!(
         MetaState::from_fvar(h_fvar).is_some(),
-        "?m body head must be a fresh metavariable ?h"
-    );
-    assert_eq!(
-        **m_body2,
-        Expr::app(Expr::fvar(h_fvar), Expr::bvar(0)),
-        "?m := λ x y. ?h y with y abstracted to BVar(0)"
+        "?m body must be a fresh metavariable ?h"
     );
 
     // ?n := λ y z. ?h (BVar 1)  — y is the OUTER binder here, so the common var
@@ -2815,4 +2816,109 @@ fn test_unify_levels_param_succ_paths_unchanged() {
         drop(unifier);
         assert_eq!(state.instantiate_level(&u0), state.instantiate_level(&u1));
     }
+}
+
+// ---- U2 rung-1a: first-class compound (bound) level assignments ----------
+// The rung-0b histogram measured compound assignments (`?u := Succ(?v)`)
+// stored ONLY in the legacy map as the dominant live solver-debt class
+// (70/97 events): the legacy fallback resolves only while the param is its
+// own root, so any later re-rooting union silently LOST the assignment.
+
+#[test]
+fn test_level_bound_compound_survives_rerooting() {
+    let mut state = MetaState::new();
+    let u = Name::from_string("bound_u");
+    let v = Name::from_string("bound_v");
+    let w = Name::from_string("bound_w");
+
+    // Compound assignment while `u` is its own root.
+    state
+        .add_level_constraint(u.clone(), Level::succ(Level::param(v.clone())))
+        .expect("compound assignment should be accepted");
+    // Now union `u` with `w`; the union re-roots `u`'s class onto `w`.
+    state
+        .add_level_constraint(u.clone(), Level::param(w.clone()))
+        .expect("param union should be accepted");
+
+    // THE pinned hole: before rung-1a this returned `Param(w)` (assignment
+    // lost with the re-rooting); the bound must survive on the new root.
+    let resolved_u = state.instantiate_level(&Level::param(u.clone()));
+    assert_eq!(
+        resolved_u,
+        Level::succ(Level::param(v.clone())),
+        "compound assignment must survive re-rooting"
+    );
+    // And the whole class sees it, not just the original param.
+    let resolved_w = state.instantiate_level(&Level::param(w.clone()));
+    assert_eq!(
+        resolved_w,
+        Level::succ(Level::param(v)),
+        "the re-rooted class root must resolve through the migrated bound"
+    );
+}
+
+#[test]
+fn test_level_bound_undo_rollback_restores_state() {
+    let mut state = MetaState::new();
+    let u = Name::from_string("bound_undo_u");
+    let v = Name::from_string("bound_undo_v");
+
+    let scope = state.push_owned_scope();
+    state
+        .add_level_constraint(u.clone(), Level::succ(Level::param(v)))
+        .expect("compound assignment should be accepted");
+    assert_eq!(state.level_bound.len(), 1);
+    state
+        .close_owned_scope(scope, true)
+        .expect("rollback should close its marker");
+    assert!(
+        state.level_bound.is_empty(),
+        "rollback must remove the bound assignment"
+    );
+    assert_eq!(
+        state.instantiate_level(&Level::param(u.clone())),
+        Level::param(u),
+        "after rollback the param must resolve to itself"
+    );
+}
+
+#[test]
+fn test_level_bound_merge_from_propagates() {
+    let mut state = MetaState::new();
+    let mut focused = state.clone();
+    let u = Name::from_string("bound_merge_u");
+    let v = Name::from_string("bound_merge_v");
+    focused
+        .add_level_constraint(u.clone(), Level::succ(Level::param(v.clone())))
+        .expect("compound assignment should be accepted");
+
+    state.merge_from(&focused);
+    assert_eq!(
+        state.instantiate_level(&Level::param(u)),
+        Level::succ(Level::param(v)),
+        "merge_from must carry compound bound assignments"
+    );
+}
+
+#[test]
+fn test_level_bound_cyclic_class_terminates() {
+    let mut state = MetaState::new();
+    let u = Name::from_string("bound_cyc_u");
+    let v = Name::from_string("bound_cyc_v");
+
+    // `u := Succ(v)` then union `v` into `u`'s class: the bound now
+    // references its own class. The chain guard must terminate and return
+    // the canonical-param fixed point inside the Succ.
+    state
+        .add_level_constraint(u.clone(), Level::succ(Level::param(v.clone())))
+        .expect("compound assignment should be accepted");
+    state
+        .add_level_constraint(v, Level::param(u.clone()))
+        .expect("param union should be accepted");
+
+    let resolved = state.instantiate_level(&Level::param(u));
+    assert!(
+        matches!(resolved, Level::Succ(_)),
+        "cyclic bound must terminate at the guarded fixed point, got {resolved:?}"
+    );
 }

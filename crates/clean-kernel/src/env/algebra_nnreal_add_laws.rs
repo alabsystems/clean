@@ -51,6 +51,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the `NNReal` additive laws.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct NNAddLawConsts {
     nat: Expr,
     rat: Expr,
@@ -96,6 +97,7 @@ pub(crate) struct NNAddLawConsts {
     congr_arg: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl NNAddLawConsts {
     pub(crate) fn new() -> Self {
         let lvl1 = Level::succ(Level::zero());

@@ -159,6 +159,47 @@ pub enum SurfaceDecl {
         modifiers: DeclModifiers,
     },
 
+    /// Rocq-style Type-level codata: an observation record elaborated to
+    /// the indexed-container M-type encoding (`Codata.*` seed library) —
+    /// no kernel cofix, no new reduction rule.
+    ///
+    /// ```text
+    /// codata Stream (A : Type) where
+    ///   head : A
+    ///   tail : Stream A
+    /// ```
+    Codata {
+        span: Span,
+        name: String,
+        universe_params: Vec<String>,
+        binders: Vec<SurfaceBinder>,
+        /// Optional declared result sort (`: Type`)
+        ty: Option<Box<SurfaceExpr>>,
+        fields: Vec<SurfaceField>,
+        /// Deriving clauses (rejected loudly by the elaborator for now)
+        deriving: Vec<String>,
+        /// Declaration modifiers (private, protected, noncomputable, etc.)
+        modifiers: DeclModifiers,
+    },
+
+    /// Copattern definition into a codata type: each clause gives one
+    /// observation of the result; recursive clauses are self-calls.
+    /// Compiles to the codata's generated corecursor.
+    ///
+    /// ```text
+    /// codef natsFrom (n : Nat) : Stream Nat where
+    ///   head := n
+    ///   tail := natsFrom (Nat.succ n)
+    /// ```
+    Codef {
+        span: Span,
+        name: String,
+        binders: Vec<SurfaceBinder>,
+        ty: Box<SurfaceExpr>,
+        clauses: Vec<(String, SurfaceExpr)>,
+        modifiers: DeclModifiers,
+    },
+
     /// Structure (single-constructor inductive with named fields)
     ///
     /// ```text
@@ -495,6 +536,8 @@ impl SurfaceDecl {
             | SurfaceDecl::Opaque { span, .. }
             | SurfaceDecl::Inductive { span, .. }
             | SurfaceDecl::Coinductive { span, .. }
+            | SurfaceDecl::Codata { span, .. }
+            | SurfaceDecl::Codef { span, .. }
             | SurfaceDecl::Structure { span, .. }
             | SurfaceDecl::Class { span, .. }
             | SurfaceDecl::Instance { span, .. }

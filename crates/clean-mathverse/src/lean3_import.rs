@@ -24,12 +24,6 @@ pub(crate) enum DeclKind {
     Class,
 }
 impl DeclKind {
-    fn has_value(self) -> bool {
-        !matches!(
-            self,
-            Self::Theorem | Self::Lemma | Self::Axiom | Self::Constant
-        )
-    }
     fn body_block(self) -> bool {
         matches!(self, Self::Inductive | Self::Structure | Self::Class)
     }

@@ -75,6 +75,176 @@ fn map_add_decl_error(operation: impl Into<String>, error: clean_kernel::EnvErro
     map_kernel_check_error(&error).unwrap_or_else(|| kernel_registration_failed(operation, error))
 }
 
+/// Opt-in retry for inductive declarations the kernel rejected with
+/// `NestedParamsContainLocals` (a nested occurrence whose parameter
+/// instantiation captures constructor-locals — the shape Lean rejects and
+/// Rocq accepts). When `clean.inductive.liftNestedLocals` is enabled, the
+/// capturing occurrences are lifted into specialized aux mutual families and
+/// the resulting block is re-submitted through the ordinary CHECKED
+/// `add_inductive` path (the first, failed attempt rolled the environment
+/// back, so the retry starts clean). Fail-closed: with the option off, on a
+/// different kernel error, or when the lift itself declines, the original
+/// kernel error surfaces.
+fn retry_add_inductive_with_local_lift(
+    env: &mut clean_kernel::Environment,
+    decl: &clean_kernel::InductiveDecl,
+    operation: &str,
+    original: clean_kernel::EnvError,
+) -> Result<(), ElabError> {
+    use clean_kernel::{EnvError, InductiveError};
+
+    let lift_enabled = match env.get_option("clean.inductive.liftNestedLocals") {
+        Some(Some(v)) => v != "false",
+        _ => false, // default: disabled (opt-in Clean extension)
+    };
+    if !lift_enabled
+        || !matches!(
+            original,
+            EnvError::Inductive(InductiveError::NestedParamsContainLocals)
+        )
+    {
+        return Err(kernel_registration_failed(operation, original));
+    }
+    let lifted = match env.lift_nested_locals(decl) {
+        Ok(lifted) => lifted,
+        Err(lift_error) => {
+            return Err(ElabError::KernelRegistrationFailed {
+                operation: operation.to_string(),
+                detail: format!("{original} (nested-local lift declined: {lift_error})"),
+            });
+        }
+    };
+    let clean_kernel::LocalLift {
+        decl: lifted_decl,
+        families,
+        ..
+    } = lifted;
+    // Snapshot for the fail-closed paths below: a round-trip-guard or bridge
+    // failure is evidence of a synthesis bug and must leave no trace.
+    let snapshot = env.clone();
+    env.add_inductive(lifted_decl).map_err(|e| {
+        kernel_registration_failed(format!("{operation} (after nested-local lift)"), e)
+    })?;
+
+    // Round-trip guard (always when the lift fired): the registered block
+    // must be re-derivable from the synthesis records.
+    if let Err(guard_error) = env.verify_local_lift_anchor(decl, &families) {
+        *env = snapshot;
+        return Err(ElabError::KernelRegistrationFailed {
+            operation: format!("{operation} (lift round-trip guard)"),
+            detail: guard_error.to_string(),
+        });
+    }
+
+    // Bridge lemmas (rung P3): kernel-checked equivalences back to the
+    // user's original spelling. Declared limitations skip additively; any
+    // attempted-and-failed synthesis or registration rolls the retry back.
+    match env.synthesize_local_lift_bridges(decl, &families) {
+        Ok(clean_kernel::BridgeOutcome::OutOfScope { reason }) => {
+            tracing::warn!("nested-local lift: bridges skipped for {operation}: {reason}");
+            Ok(())
+        }
+        Ok(clean_kernel::BridgeOutcome::Bridges(bridge_decls)) => {
+            for bridge in bridge_decls {
+                let label = match &bridge {
+                    clean_kernel::Declaration::Theorem { name, .. } => {
+                        format!("nested-local lift bridge {name}")
+                    }
+                    _ => "nested-local lift bridge".to_string(),
+                };
+                if let Err(e) = add_decl_with_kernel_check(env, bridge, &label) {
+                    *env = snapshot;
+                    return Err(e);
+                }
+            }
+            Ok(())
+        }
+        Ok(_) => {
+            // Future BridgeOutcome variants (#[non_exhaustive]): treat as a
+            // declared skip rather than failing a working lift.
+            Ok(())
+        }
+        Err(synth_error) => {
+            *env = snapshot;
+            Err(ElabError::KernelRegistrationFailed {
+                operation: format!("{operation} (bridge synthesis)"),
+                detail: synth_error.to_string(),
+            })
+        }
+    }
+}
+
+/// Opt-in deep-induction post-pass (rung P4): when
+/// `clean.inductive.deepInduction` is enabled and a just-registered type is
+/// nested, generate the elementwise `T.deep_ind` principle (plus the
+/// container's `All` family) as kernel-checked declarations. Declared
+/// limitations skip additively with a warning; synthesis invariant failures
+/// or kernel rejections fail the declaration (fail-closed).
+fn generate_deep_induction_post_pass(
+    env: &mut clean_kernel::Environment,
+    type_names: &[Name],
+    explicit: bool,
+) -> Result<(), ElabError> {
+    let enabled = explicit
+        || match env.get_option("clean.inductive.deepInduction") {
+            Some(Some(v)) => v != "false",
+            _ => false, // default: disabled (opt-in Clean extension)
+        };
+    if !enabled {
+        return Ok(());
+    }
+    for name in type_names {
+        let is_nested = env.get_inductive(name).is_some_and(|iv| iv.is_nested);
+        if !is_nested {
+            if explicit {
+                return Err(ElabError::Unsupported {
+                    feature: format!(
+                        "deriving DeepInduction: {name} is not a nested inductive (v1)"
+                    ),
+                });
+            }
+            continue;
+        }
+        match env.synthesize_deep_induction(name) {
+            Ok(clean_kernel::DeepIndOutcome::OutOfScope { reason }) => {
+                if explicit {
+                    // Explicit `deriving DeepInduction` is never silently
+                    // skipped (design §Scope: loud on decline).
+                    return Err(ElabError::Unsupported {
+                        feature: format!("deriving DeepInduction for {name}: {reason}"),
+                    });
+                }
+                tracing::warn!("deep induction skipped for {name}: {reason}");
+            }
+            Ok(clean_kernel::DeepIndOutcome::Decls {
+                all_families,
+                theorems,
+            }) => {
+                for fam in all_families {
+                    env.add_inductive(fam).map_err(|e| {
+                        kernel_registration_failed(
+                            format!("deep-induction All family for {name}"),
+                            e,
+                        )
+                    })?;
+                }
+                for thm in theorems {
+                    let label = format!("deep induction for {name}");
+                    add_decl_with_kernel_check(env, thm, &label)?;
+                }
+            }
+            Ok(_) => {}
+            Err(synth) => {
+                return Err(ElabError::KernelRegistrationFailed {
+                    operation: format!("deep induction for {name}"),
+                    detail: synth.to_string(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Add a declaration with kernel type checking (#2198, #2207, #2454).
 ///
 /// Kernel type checking is unconditional and fail-closed: this always runs
@@ -290,6 +460,25 @@ fn register_elab_result_in_place(
             // `is_reducible: false` → `Reducibility::Regular(height)` (normal def)
             // Part of #3391.
             let is_reducible = modifiers.is_abbrev;
+            // U2 rung-0b histogram: a surviving FRESH-minted level param
+            // (`u_N` / `_u.N`) on a registering definition is an implicit
+            // auto-generalization — the levelMVarToParam (rung 4) workload.
+            if crate::u2_histogram::u2_hist_enabled() {
+                for lp in universe_params {
+                    let n = lp.to_string();
+                    let is_fresh = n
+                        .strip_prefix("u_")
+                        .is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit()))
+                        || n.starts_with("_u.");
+                    if is_fresh {
+                        crate::u2_histogram::u2_hist(
+                            "generalized-fresh-param",
+                            "register-def",
+                            &format!("{name} keeps {n}"),
+                        );
+                    }
+                }
+            }
             let decl = Declaration::Definition {
                 name: name.clone(),
                 level_params: universe_params.clone(),
@@ -474,6 +663,26 @@ fn register_elab_result_in_place(
             env.register_structure_fields(name.clone(), field_names.clone())
                 .map_err(|e| kernel_registration_failed("register_structure_fields", e))?;
 
+            // Named-argument binder row for the CONSTRUCTOR: the struct's
+            // params (implicit in the ctor telescope) then the fields
+            // (explicit), so `S.mk (A := T) (fst := x)` resolves by name —
+            // the ctor-arm of `resolve_named_args` leaves param slots
+            // unnamed, which failed LOUD before this row existed (U2 rung 2
+            // follow-on to the B92 projection rows).
+            let ctor_param_infos: Vec<(String, clean_kernel::BinderInfo)> = projection_param_infos
+                .iter()
+                .take(projection_param_infos.len().saturating_sub(1))
+                .map(|(n, _)| (n.clone(), clean_kernel::BinderInfo::Implicit))
+                .chain(
+                    field_names
+                        .iter()
+                        .map(|f| (f.to_string(), clean_kernel::BinderInfo::Default)),
+                )
+                .collect();
+            if !ctor_param_infos.is_empty() {
+                env.set_param_infos(ctor_name.clone(), ctor_param_infos);
+            }
+
             // Register `extends` parent subobject metadata (elaborator-only):
             // `(toParent, Parent)` pairs so anonymous-constructor flattening and
             // structure-literal parent assembly can reconstruct the subobject.
@@ -589,6 +798,7 @@ fn register_elab_result_in_place(
             ty,
             constructors,
             derived_instances,
+            wants_deep_induction,
             modifiers,
         } => {
             use clean_kernel::{Constructor, InductiveDecl, InductiveType, KernelInstanceInfo};
@@ -609,8 +819,14 @@ fn register_elab_result_in_place(
                         .collect(),
                 }],
             };
-            env.add_inductive(decl)
-                .map_err(|e| kernel_registration_failed("add_inductive Inductive", e))?;
+            if let Err(e) = env.add_inductive(decl.clone()) {
+                retry_add_inductive_with_local_lift(env, &decl, "add_inductive Inductive", e)?;
+            }
+            generate_deep_induction_post_pass(
+                env,
+                std::slice::from_ref(name),
+                *wants_deep_induction,
+            )?;
 
             // Register derived instances with full kernel registration. Part of
             // #1301.
@@ -661,8 +877,11 @@ fn register_elab_result_in_place(
             derived_instances,
             modifiers,
         } => {
-            env.add_inductive(decl.clone())
-                .map_err(|e| kernel_registration_failed("add_inductive MutualInductive", e))?;
+            if let Err(e) = env.add_inductive(decl.clone()) {
+                retry_add_inductive_with_local_lift(env, decl, "add_inductive MutualInductive", e)?;
+            }
+            let member_names: Vec<Name> = decl.types.iter().map(|t| t.name.clone()).collect();
+            generate_deep_induction_post_pass(env, &member_names, false)?;
 
             // Register derived instances through the same fail-closed path as
             // the single-inductive case.

@@ -129,6 +129,40 @@ impl FileContext {
         Self::default()
     }
 
+    /// The LEXICAL state of this context, frozen at the current source
+    /// position, with the import caches left behind.
+    ///
+    /// Header-first batch elaboration ([`crate::module_batch`]) takes one of
+    /// these per declaration. That is what makes lexical scoping structural
+    /// rather than a convention: a declaration elaborated out of authored order
+    /// holds `open`, `notation`, `set_option`, `variable`, the namespace state
+    /// and the local/scoped/default instance tables exactly as they stood WHERE
+    /// IT WAS WRITTEN, so an `open` or an `end` appearing later in the file
+    /// cannot reach backward into it.
+    ///
+    /// `import_search_paths` and `import_visited` are deliberately NOT carried.
+    /// They are a memo of which `.olean` closures have already been walked —
+    /// for a Mathlib file, thousands of `String`s added precisely to make
+    /// imports O(union) — and they are not lexical: a snapshot is never used to
+    /// process an `import`, which the plan phase applies in authored order
+    /// against the caller's own context. `disable_external_import_search` IS
+    /// carried: it is import POLICY, not a cache.
+    ///
+    /// COST, stated honestly: this clones the whole context and then drops the
+    /// caches, so the transient allocation is the same as `clone()`. What
+    /// changes is what is RETAINED — a batch holds one snapshot per
+    /// declaration, and the difference between `O(declarations × lexical
+    /// state)` and `O(declarations × import closure)` is the one that decides
+    /// whether the approach scales to a Mathlib-sized file. The transient is
+    /// freed before the next snapshot is taken.
+    #[must_use]
+    pub fn lexical_snapshot(&self) -> Self {
+        let mut snapshot = self.clone();
+        snapshot.import_search_paths = Vec::new();
+        snapshot.import_visited = hashbrown::HashSet::new();
+        snapshot
+    }
+
     /// Add variables from a `variable` declaration
     ///
     /// # ENSURES
@@ -328,6 +362,30 @@ impl FileContext {
     /// commands.
     pub fn namespace_state_mut(&mut self) -> &mut NamespaceState {
         &mut self.namespace_state
+    }
+
+    /// Read the persisted macro context WITHOUT moving it out.
+    ///
+    /// The take/replace pair below is the driver's idiom, and it is correct
+    /// there because a declaration is elaborated exactly once. Header-first
+    /// batch elaboration re-elaborates a deferred declaration in a later round
+    /// against the same lexical snapshot, so it must borrow instead: taking
+    /// would leave the snapshot holding EMPTY macro state for every round after
+    /// the first, silently un-registering the file's notation mid-batch.
+    pub(crate) fn macro_ctx(&self) -> &MacroCtx {
+        &self.macro_ctx
+    }
+
+    /// Read the persisted tactic registry without moving it out. See
+    /// [`FileContext::macro_ctx`].
+    pub(crate) fn tactic_registry(&self) -> Option<&TacticRegistry> {
+        self.tactic_registry.as_ref()
+    }
+
+    /// Read the persisted user term elaborators without moving them out. See
+    /// [`FileContext::macro_ctx`].
+    pub(crate) fn user_term_elabs(&self) -> &HashMap<String, UserTermElab> {
+        &self.user_term_elabs
     }
 
     /// Move the persisted macro context out for a declaration elaboration.

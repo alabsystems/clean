@@ -28,7 +28,7 @@ fn expr_is_const(expr: &Expr, expected: &str) -> bool {
 }
 
 /// Find a derived instance by class name in an `ElabResult`'s instance list.
-fn find_instance<'a>(result: &'a ElabResult, class: &str) -> &'a crate::infer::DerivedInstance {
+fn find_instance<'a>(result: &'a ElabResult, class: &str) -> &'a DerivedInstance {
     let insts = match result {
         ElabResult::Inductive {
             derived_instances, ..
@@ -47,10 +47,7 @@ fn find_instance<'a>(result: &'a ElabResult, class: &str) -> &'a crate::infer::D
 /// Re-add a derived instance to a FRESH env that has only `prelude_decls`
 /// registered, exercising the strict kernel type check (infer_type) on the
 /// committed term. Returns the populated env so axiom deps can be queried.
-fn kernel_check_instance(
-    inst: &crate::infer::DerivedInstance,
-    prelude_decls: &[&str],
-) -> Environment {
+fn kernel_check_instance(inst: &DerivedInstance, prelude_decls: &[&str]) -> Environment {
     let mut env = Environment::with_prelude();
     for src in prelude_decls {
         let decl = parse_decl_for_elab(src).expect("decl should parse");

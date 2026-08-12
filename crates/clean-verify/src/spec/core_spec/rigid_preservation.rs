@@ -45,7 +45,7 @@ use crate::spec::Specification;
 /// The five `rigid_app_head` constructors, as `(payload binders, applied form,
 /// recursive sub-head or None)` — mirrored from `rigid_app_head.rs` because the
 /// `not_let` induction needs the same arm list.
-const RIGID_ARMS: [(&str, &str, Option<&str>); 5] = [
+const RIGID_ARMS: [(&str, &str, Option<&str>); 6] = [
     ("(n : Level)", "(KExpr.sort n)", None),
     (
         "(pty : KExpr) (pbody : KExpr)",
@@ -59,6 +59,11 @@ const RIGID_ARMS: [(&str, &str, Option<&str>); 5] = [
         "(KExpr.proj s i sub)",
         None,
     ),
+    // Mirrors `rigid_app_head.rs`'s table, which this DUPLICATES. The two must
+    // stay in lockstep: a constructor added there and missed here fails only at
+    // the spec build, ~30 minutes later, with an arity mismatch that names the
+    // consumer rather than the table.
+    ("(i : Nat)", "(KExpr.bvar i)", None),
 ];
 
 impl Specification {

@@ -34,7 +34,7 @@ fn test_elab_do_return_literal() {
     match expr.kind() {
         ExprKind::App(func, arg) => {
             match arg.kind() {
-                ExprKind::Lit(clean_kernel::Literal::Nat(ref n)) => {
+                ExprKind::Lit(Literal::Nat(ref n)) => {
                     assert_eq!(n.to_u64(), Some(42), "expected literal 42");
                 }
                 _ => panic!("expected Lit(Nat(42)), got {arg:?}"),
@@ -88,8 +88,7 @@ fn test_elab_do_let_binding() {
                 ExprKind::Let(_, _, val, body, _) => {
                     // val should be literal 1
                     match val.kind() {
-                        ExprKind::Lit(clean_kernel::Literal::Nat(ref n))
-                            if n.to_u64() == Some(1) => {}
+                        ExprKind::Lit(Literal::Nat(ref n)) if n.to_u64() == Some(1) => {}
                         _ => panic!("expected Lit(Nat(1)) as let value, got {val:?}"),
                     }
                     // body should be BVar(0) (reference to the let-bound variable)

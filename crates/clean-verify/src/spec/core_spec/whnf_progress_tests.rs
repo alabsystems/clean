@@ -591,7 +591,7 @@ fn test_whnf_progress_bd_targets_exact_fragment_and_relation() {
     let step_ty = step
         .elaborated_type
         .as_ref()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .unwrap_or_default();
     assert!(
         step_ty.contains("beta_reduces_bd"),

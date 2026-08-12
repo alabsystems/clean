@@ -934,15 +934,14 @@ fn test_ratchet_no_new_inplace_target_mutations() {
 
     scan_dir_for_target_mutations(&tactic_dir, &tactic_dir, &mut violations, &mut total_count);
 
-    // Known baseline: 7 allowed in-place target mutations in production code.
+    // Known baseline: 6 allowed in-place target mutations in production code.
     // builtins.rs:  g.target = conv.focus;         (conv_nav temporary state)
     // builtins_phase3d_rewrite.rs ×2: g.target = new_target; (conv focus rewrite:
     //   single-focus witness path + multi-focus congr-tree path)
-    // core/local_ops.rs: current_goal.target = final_goal.target; (validated explicit-value insertion)
     // conv_ext.rs ×3: g.target = working;          (#2477 Phase 4 multi-focus
     //   congr focus narrowing — proof carried by conv_focus_tree + kernel-checked
     //   at the reconstruction boundary; see the doc comment above for SOUNDNESS).
-    const BASELINE: u32 = 7;
+    const BASELINE: u32 = 6;
 
     assert!(
         total_count <= BASELINE,

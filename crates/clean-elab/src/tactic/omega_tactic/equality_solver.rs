@@ -372,6 +372,9 @@ fn bigint_gcd(a: num_bigint::BigInt, b: num_bigint::BigInt) -> num_bigint::BigIn
 
 /// (Kept for any external callers; equality_solver no longer uses i64
 /// linear_add internally — the BigInt path supersedes it.)
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 fn linear_add(a: &LinearExpr, b: &LinearExpr) -> Option<LinearExpr> {
     let constant = a.constant.checked_add(b.constant)?;
     let mut coeffs: Vec<(usize, i64)> = Vec::with_capacity(a.coeffs.len() + b.coeffs.len());

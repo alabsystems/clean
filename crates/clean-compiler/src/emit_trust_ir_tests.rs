@@ -2185,8 +2185,10 @@ fn test_emit_trust_ir_e2e_closure_invocation_links_and_runs() {
         "cc runtime: {}",
         String::from_utf8_lossy(&rt.stderr)
     );
-    let link = std::process::Command::new("cc")
-        .args(["-arch", arch, "-o"])
+    let mut link_command = std::process::Command::new("cc");
+    add_host_arch_link_arg(&mut link_command, arch);
+    let link = link_command
+        .arg("-o")
         .arg(&bin)
         .arg(&mobj)
         .arg(&rtobj)
@@ -2382,8 +2384,10 @@ fn test_emit_trust_ir_e2e_string_links_and_runs() {
         "cc runtime: {}",
         String::from_utf8_lossy(&rt.stderr)
     );
-    let link = std::process::Command::new("cc")
-        .args(["-arch", arch, "-o"])
+    let mut link_command = std::process::Command::new("cc");
+    add_host_arch_link_arg(&mut link_command, arch);
+    let link = link_command
+        .arg("-o")
         .arg(&bin)
         .arg(&mobj)
         .arg(&rtobj)
@@ -2609,15 +2613,16 @@ fn test_emit_trust_ir_e2e_inline_ops_link_and_run() {
         String::from_utf8_lossy(&sh.stderr)
     );
 
-    let link = run_cc(&[
-        OsStr::new("-arch"),
-        OsStr::new(arch),
-        OsStr::new("-o"),
-        bin.as_os_str(),
-        mobj.as_os_str(),
-        rtobj.as_os_str(),
-        shimobj.as_os_str(),
-    ]);
+    let mut link_command = std::process::Command::new("cc");
+    add_host_arch_link_arg(&mut link_command, arch);
+    let link = link_command
+        .arg("-o")
+        .arg(&bin)
+        .arg(&mobj)
+        .arg(&rtobj)
+        .arg(&shimobj)
+        .output()
+        .expect("spawn cc link");
     assert!(
         link.status.success(),
         "cc link: {}",
@@ -2712,8 +2717,10 @@ fn test_emit_trust_ir_e2e_managed_runtime_links_and_runs() {
     );
 
     // cc: link the trust-cg object against the runtime into an executable.
-    let link = std::process::Command::new("cc")
-        .args(["-arch", arch, "-o"])
+    let mut link_command = std::process::Command::new("cc");
+    add_host_arch_link_arg(&mut link_command, arch);
+    let link = link_command
+        .arg("-o")
         .arg(&bin)
         .arg(&mobj)
         .arg(&rtobj)
@@ -2864,6 +2871,14 @@ fn find_trust_cg() -> Option<std::path::PathBuf> {
             .map(|dir| dir.join("trust-cg"))
             .find(|candidate| candidate.is_file())
     })
+}
+
+/// Add the host-architecture selector understood by Apple's linker driver.
+/// ELF toolchains already infer the host architecture and reject `-arch`.
+fn add_host_arch_link_arg(command: &mut std::process::Command, arch: &str) {
+    if cfg!(target_os = "macos") {
+        command.args(["-arch", arch]);
+    }
 }
 
 #[test]
@@ -3677,8 +3692,10 @@ fn diff_trust_ir_exit(
     cc_compile(&wrap_c, &wrapobj);
     cc_compile(&shim_c, &shimobj);
 
-    let link = std::process::Command::new("cc")
-        .args(["-arch", arch, "-o"])
+    let mut link_command = std::process::Command::new("cc");
+    add_host_arch_link_arg(&mut link_command, arch);
+    let link = link_command
+        .arg("-o")
         .arg(&bin)
         .arg(&mobj)
         .arg(&wrapobj)

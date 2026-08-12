@@ -239,11 +239,11 @@ fn register_cert_size_monotone_axiom(env: &mut Environment) -> Result<(), Discov
     let conclusion = Expr::apps(le_le, [nat.clone(), inst_le_nat, cs_a, cs_b]);
 
     // forall (_ : LE.le a b), conclusion
-    let body = Expr::pi(clean_kernel::BinderInfo::Default, premise, conclusion);
+    let body = Expr::pi(BinderInfo::Default, premise, conclusion);
     // forall (b : Nat), body
-    let body = Expr::pi(clean_kernel::BinderInfo::Default, nat.clone(), body);
+    let body = Expr::pi(BinderInfo::Default, nat.clone(), body);
     // forall (a : Nat), body
-    let axiom_ty = Expr::pi(clean_kernel::BinderInfo::Default, nat, body);
+    let axiom_ty = Expr::pi(BinderInfo::Default, nat, body);
 
     register_if_missing(env, "NNVerify.ProofComplexity.cert_size_monotone", axiom_ty)
 }

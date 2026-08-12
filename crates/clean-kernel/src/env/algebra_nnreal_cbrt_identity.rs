@@ -52,6 +52,7 @@ use crate::name::Name;
 mod equiv;
 
 /// Pre-resolved handles for the cube identity rung.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct CbrtIdentityConsts {
     nat: Expr,
     nat_zero: Expr,
@@ -244,6 +245,7 @@ impl CbrtIdentityConsts {
         Expr::apps(self.rat_lt_of_le_of_lt.clone(), [a, b, c, h1, h2])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn lt_of_lt_of_le(&self, a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
         Expr::apps(self.rat_lt_of_lt_of_le.clone(), [a, b, c, h1, h2])
     }

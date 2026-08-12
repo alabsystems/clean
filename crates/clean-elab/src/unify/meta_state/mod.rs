@@ -67,6 +67,17 @@ pub(super) struct MetaScopeMarker {
 pub struct MetaState {
     /// All metavariables
     pub(super) metas: HashMap<MetaId, MetaVar>,
+    /// Every FVarId ever captured in ANY metavariable's `locals` — a
+    /// monotone SUPERSET of the live captured set (undo never shrinks
+    /// it). `Unifier::push_binder_local` consults this to reject a fresh
+    /// binder local that aliases a historical captured local; a superset
+    /// can only reject MORE candidates, so the no-alias guarantee is
+    /// preserved a fortiori while avoiding the per-crossing rebuild of
+    /// the exact set (a measured constant-factor drag on long unifier
+    /// sessions). MAINTENANCE: any new writer of `MetaVar::locals` must
+    /// extend this set — `fresh_internal` and `ensure_meta_with_locals`
+    /// are the only writers today (debug-asserted in the reader).
+    pub(super) historical_local_fvars: std::collections::HashSet<FVarId>,
     /// Next fresh metavariable id
     pub(super) next_id: u64,
     /// Universe level constraints: param name -> assigned level
@@ -78,6 +89,13 @@ pub struct MetaState {
     /// Concrete level assignments for canonical (root) params
     /// When a param chain resolves to a concrete level, it's stored here.
     pub(super) level_concrete: HashMap<Name, Level>,
+    /// COMPOUND (params-containing, non-param) level assignments for canonical
+    /// (root) params — `?u := Succ(?v)`, `?u := Max(?v, w)`. First-class U2
+    /// rung-1a store: the legacy `level_constraints` map held these where only
+    /// the own-root `instantiate_level` fallback could see them, so any
+    /// re-rooting union LOST the assignment (measured dominant class of the
+    /// rung-0b histogram, 70/97 events). Keyed by root; migrated on union.
+    pub(super) level_bound: HashMap<Name, Level>,
     /// RIGID universe parameters of the declaration currently being elaborated
     /// (those written in `def f.{u,v}` / auto-bound from `Type u`). These are
     /// genuine `Level.param`s, NOT universe metavariables, so unification must
@@ -111,10 +129,12 @@ impl MetaState {
     pub fn new() -> Self {
         Self {
             metas: HashMap::new(),
+            historical_local_fvars: std::collections::HashSet::new(),
             next_id: 0,
             level_constraints: HashMap::new(),
             level_parent: HashMap::new(),
             level_concrete: HashMap::new(),
+            level_bound: HashMap::new(),
             rigid_level_params: std::collections::HashSet::new(),
             undo_trail: Vec::new(),
             scope_markers: Vec::new(),
@@ -182,6 +202,8 @@ impl MetaState {
             old_value: self.next_id,
         });
         self.next_id = next_id;
+        self.historical_local_fvars
+            .extend(locals.iter().map(|(_, fvar, _)| *fvar));
         self.metas.insert(
             id,
             MetaVar {
@@ -201,6 +223,9 @@ impl MetaState {
     /// Used when a goal's meta_id was created in a different MetaState (e.g.,
     /// a temporary proof state). Registers the meta and bumps `next_id` so
     /// that subsequent `fresh()` calls produce non-colliding IDs. Part of #2199.
+    // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+    // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn ensure_meta(&mut self, id: MetaId, ty: Expr) {
         self.ensure_meta_with_locals(id, ty, Vec::new());
     }
@@ -217,6 +242,8 @@ impl MetaState {
         locals: Vec<(String, FVarId, Expr)>,
     ) {
         if self.metas.get(&id).is_none() {
+            self.historical_local_fvars
+                .extend(locals.iter().map(|(_, fvar, _)| *fvar));
             self.metas.insert(
                 id,
                 MetaVar {
@@ -397,7 +424,7 @@ impl MetaState {
         //     cannot contain one;
         //   - a pointer-identity visited set, mirroring the kernel
         //     `instantiate` DAG-memo (expr/subst.rs Track XX regression).
-        let mut visited: hashbrown::HashSet<*const Expr> = hashbrown::HashSet::new();
+        let mut visited: HashSet<*const Expr> = HashSet::new();
         let mut stack: Vec<&Expr> = vec![expr];
         while let Some(e) = stack.pop() {
             if !e.has_fvar_quick() {
@@ -417,6 +444,12 @@ impl MetaState {
     }
 
     /// Iterate over all metavariables
+    /// The monotone superset of every FVarId ever captured in a
+    /// metavariable's locals (see the field doc).
+    pub(crate) fn historical_local_fvars(&self) -> &std::collections::HashSet<FVarId> {
+        &self.historical_local_fvars
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (MetaId, &MetaVar)> {
         self.metas.iter().map(|(id, meta)| (*id, meta))
     }
@@ -493,6 +526,16 @@ impl MetaState {
                     old_level: None,
                 });
                 self.level_concrete.insert(name.clone(), level.clone());
+            }
+        }
+        // Copy new compound (bound) level assignments from other
+        for (name, level) in &other.level_bound {
+            if !self.level_bound.contains_key(name) {
+                self.record_undo(UndoRecord::LevelBound {
+                    name: name.clone(),
+                    old_level: None,
+                });
+                self.level_bound.insert(name.clone(), level.clone());
             }
         }
     }

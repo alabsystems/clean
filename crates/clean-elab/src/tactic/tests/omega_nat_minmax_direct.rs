@@ -143,7 +143,7 @@ fn ctx_ab() -> Vec<LocalDecl> {
 fn assert_omega_proves(mut state: ProofState, label: &str) {
     reset_all_counters();
     let axiom_before = axiom_snapshot();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_ok(),
         "omega should prove `{label}`, got: {result:?}"
@@ -170,7 +170,7 @@ fn assert_omega_proves(mut state: ProofState, label: &str) {
 
 fn assert_omega_rejects(mut state: ProofState, label: &str) {
     reset_all_counters();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_err() && !state.is_complete(),
         "omega must REJECT the false min/max goal `{label}`, but it closed: {result:?}"
@@ -220,6 +220,9 @@ fn const_a() -> Expr {
 fn const_b() -> Expr {
     Expr::const_(Name::from_string("b"), vec![])
 }
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn const_c() -> Expr {
     Expr::const_(Name::from_string("c"), vec![])
 }

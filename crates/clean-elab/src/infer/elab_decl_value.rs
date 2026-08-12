@@ -1185,6 +1185,95 @@ fn collect_def_level_params(expr: &Expr, params: &mut Vec<Name>) {
     collector.visit_expr(expr);
 }
 
+impl ElabCtx<'_> {
+    /// U2 rung 4 — the `levelMVarToParam` analog, run once at declaration
+    /// close. Splits the surviving universe params into the DECLARED (rigid)
+    /// head and the FRESH (auto-generalized) tail, orders the tail by first
+    /// use (traversal order: type before value — Lean's ordering), renames it
+    /// contiguously `u_1..u_k` (no gaps; mint-index gaps like `t5.{u_0,u_2}`
+    /// were the measured naming divergence), substitutes the renames into the
+    /// declaration, and — when the declaration carried an explicit `.{...}`
+    /// list — REFUSES leftover fresh levels loudly instead of appending them
+    /// (an explicit list is closed in Lean).
+    pub(super) fn finalize_level_params(
+        &mut self,
+        ty: Expr,
+        val: Expr,
+    ) -> Result<(Vec<Name>, Expr, Expr), ElabError> {
+        // Canonicalize FIRST: the decl-close canonicalize pass
+        // (`canonicalize_levels_in_elab_result`) resolves every level through
+        // the union-find, so a rename applied to un-canonicalized exprs would
+        // be clobbered when a resurrected mint-name flows back. After this,
+        // whatever params remain are genuinely unsolved.
+        let ty = self.metas.canonicalize_levels_in_expr(&ty);
+        let val = self.metas.canonicalize_levels_in_expr(&val);
+        let mut used = Vec::new();
+        collect_def_level_params(&ty, &mut used);
+        collect_def_level_params(&val, &mut used);
+        let mut declared: Vec<Name> = Vec::new();
+        let mut fresh: Vec<Name> = Vec::new();
+        for s in &self.universe_params {
+            let n = Name::from_string(s);
+            if !used.contains(&n) {
+                continue;
+            }
+            if self.metas.is_rigid_level_param(&n) {
+                declared.push(n);
+            } else {
+                fresh.push(n);
+            }
+        }
+        if fresh.is_empty() {
+            return Ok((declared, ty, val));
+        }
+        // NOTE (rung-4 scope cut): Lean treats an explicit `.{...}` list as
+        // CLOSED (leftover fresh levels error). Clean cannot yet distinguish
+        // a declared `.{u}` from `universe u`-merged params at this layer —
+        // the file-context preprocessor folds both into `universe_params`
+        // (test_issue168_param_to_param_canonical is exactly the merged
+        // case) — so enforcement waits on a real explicitness channel
+        // through preprocess.rs; until then explicit lists still
+        // auto-extend (pinned as the p21 divergence fixture).
+        fresh.sort_by_key(|n| used.iter().position(|u| u == n));
+        // Rename targets are freshly MINTED param names (`fresh_universe_param`):
+        // guaranteed absent from the metas' union-find, so the decl-close
+        // canonicalize pass cannot rewrite them back into a solved mint-name.
+        // The tail is a contiguous block in first-use order (the measured
+        // divergence was mint-index GAPS like `t5.{u_0,u_2}`; 1-based
+        // Lean-exact numbering is a cosmetic follow-up).
+        let mut subst: Vec<(Name, Level)> = Vec::new();
+        let mut renamed: Vec<Name> = Vec::new();
+        for f in &fresh {
+            let tname = match self.fresh_universe_param() {
+                Level::Param(n) => n,
+                _ => unreachable!("fresh_universe_param mints a Param"),
+            };
+            subst.push((f.clone(), Level::param(tname.clone())));
+            renamed.push(tname);
+        }
+        let (ty, val) = if subst.is_empty() {
+            (ty, val)
+        } else {
+            (
+                ty.instantiate_level_params(&subst),
+                val.instantiate_level_params(&subst),
+            )
+        };
+        declared.extend(renamed);
+        Ok((declared, ty, val))
+    }
+
+    /// Type-only variant of [`Self::finalize_level_params`] (axioms/opaque
+    /// declarations with no value expression).
+    pub(super) fn finalize_level_params_ty(
+        &mut self,
+        ty: Expr,
+    ) -> Result<(Vec<Name>, Expr), ElabError> {
+        let (params, ty, _) = self.finalize_level_params(ty, Expr::sort(Level::zero()))?;
+        Ok((params, ty))
+    }
+}
+
 /// Replace every occurrence of the forward-declaration free variable `fvar`
 /// with `Const(name)` (no universe args — the course-of-values auxiliary is
 /// universe-monomorphic at `Nat → R × R`). Mirrors `replace_mutual_fvars` but
@@ -1307,15 +1396,8 @@ impl<'a> ElabCtx<'a> {
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
 
-        let mut used_level_params = Vec::new();
-        collect_def_level_params(&wrapper_ty_expr, &mut used_level_params);
-        collect_def_level_params(&wrapper_val_expr, &mut used_level_params);
-        let surviving_universe_params: Vec<Name> = self
-            .universe_params
-            .iter()
-            .map(|s| Name::from_string(s))
-            .filter(|name| used_level_params.contains(name))
-            .collect();
+        let (surviving_universe_params, wrapper_ty_expr, wrapper_val_expr) =
+            self.finalize_level_params(wrapper_ty_expr, wrapper_val_expr)?;
 
         let wrapper_result = ElabResult::Definition {
             name: decl_name,
@@ -1628,16 +1710,8 @@ impl<'a> ElabCtx<'a> {
             self.collect_attributes(&decl_name, attrs);
 
             // Filter to surviving params only (#3396).
-            let mut used_level_params = Vec::new();
-            collect_def_level_params(&ty_expr, &mut used_level_params);
-            collect_def_level_params(&val_expr, &mut used_level_params);
-
-            let surviving_universe_params: Vec<Name> = self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .filter(|name| used_level_params.contains(name))
-                .collect();
+            let (surviving_universe_params, ty_expr, val_expr) =
+                self.finalize_level_params(ty_expr, val_expr)?;
 
             return Ok(ElabResult::Definition {
                 name: decl_name,
@@ -1692,16 +1766,8 @@ impl<'a> ElabCtx<'a> {
         // but they remain in `universe_params`. This causes level count
         // mismatches when the definition is later unfolded.
         // Same pattern as #3390 fix for structures (see elab_structure.rs).
-        let mut used_level_params = Vec::new();
-        collect_def_level_params(&ty_expr, &mut used_level_params);
-        collect_def_level_params(&val_expr, &mut used_level_params);
-
-        let surviving_universe_params: Vec<Name> = self
-            .universe_params
-            .iter()
-            .map(|s| Name::from_string(s))
-            .filter(|name| used_level_params.contains(name))
-            .collect();
+        let (surviving_universe_params, ty_expr, val_expr) =
+            self.finalize_level_params(ty_expr, val_expr)?;
 
         Ok(ElabResult::Definition {
             name: decl_name,
@@ -1777,16 +1843,8 @@ impl<'a> ElabCtx<'a> {
             self.ensure_known_attributes(attrs)?;
             self.collect_attributes(&decl_name, attrs);
 
-            let mut used_level_params = Vec::new();
-            collect_def_level_params(&ty_expr, &mut used_level_params);
-            collect_def_level_params(&proof_expr, &mut used_level_params);
-
-            let surviving_universe_params: Vec<Name> = self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .filter(|name| used_level_params.contains(name))
-                .collect();
+            let (surviving_universe_params, ty_expr, proof_expr) =
+                self.finalize_level_params(ty_expr, proof_expr)?;
 
             return Ok(ElabResult::Theorem {
                 name: decl_name,
@@ -1826,16 +1884,8 @@ impl<'a> ElabCtx<'a> {
         // Use self.universe_params which includes auto-bound params
         // (same fix as Definition, see #1324)
         // Filter to surviving params only (#3396, same as Definition).
-        let mut used_level_params = Vec::new();
-        collect_def_level_params(&ty_expr, &mut used_level_params);
-        collect_def_level_params(&proof_expr, &mut used_level_params);
-
-        let surviving_universe_params: Vec<Name> = self
-            .universe_params
-            .iter()
-            .map(|s| Name::from_string(s))
-            .filter(|name| used_level_params.contains(name))
-            .collect();
+        let (surviving_universe_params, ty_expr, proof_expr) =
+            self.finalize_level_params(ty_expr, proof_expr)?;
 
         Ok(ElabResult::Theorem {
             name: decl_name,
@@ -1880,15 +1930,7 @@ impl<'a> ElabCtx<'a> {
         // Use self.universe_params which includes auto-bound params
         // (same fix as Definition, see #1324)
         // Filter to surviving params only (#3396, same as Definition).
-        let mut used_level_params = Vec::new();
-        collect_def_level_params(&ty_expr, &mut used_level_params);
-
-        let surviving_universe_params: Vec<Name> = self
-            .universe_params
-            .iter()
-            .map(|s| Name::from_string(s))
-            .filter(|name| used_level_params.contains(name))
-            .collect();
+        let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
 
         Ok(ElabResult::Axiom {
             name: decl_name,
@@ -1896,6 +1938,68 @@ impl<'a> ElabCtx<'a> {
             ty: ty_expr,
             modifiers: *modifiers,
         })
+    }
+
+    /// Elaborate ONLY a declaration's SIGNATURE into a header: its
+    /// namespace-qualified name, its surviving universe parameters, and its
+    /// type. The body/proof is not elaborated and nothing is registered.
+    ///
+    /// This is the primitive that header-first, two-phase checking is built on
+    /// (Trust I1): every declaration's header is elaborated before ANY body is,
+    /// so name resolution sees the whole symbol table and stops depending on
+    /// source order. It is deliberately the SAME computation `elab_axiom_inner`
+    /// already performs for the signature of an `axiom` — an axiom *is* a
+    /// header — minus attribute collection, which belongs to the authoritative
+    /// pass that registers the real declaration.
+    ///
+    /// SOUNDNESS — a header is a TYPE, never a proof. Installing one as a
+    /// constant is indistinguishable, to everything downstream, from asserting
+    /// an axiom the user never wrote. A caller may therefore install headers
+    /// ONLY in a non-authoritative staging environment, and owes two things
+    /// this function cannot check for it:
+    ///
+    ///   1. elaborate a body only once every declaration it actually depends on
+    ///      is a real, kernel-checked definition — never against the header of
+    ///      something still unproved; and
+    ///   2. verify, after registration, that the registered term mentions no
+    ///      still-staged header.
+    ///
+    /// Without (2) a dependency scan that misses an edge silently upgrades a
+    /// header into an assumption backing a kernel-certified proof. With it, a
+    /// missed edge can only cause a spurious rejection.
+    pub(crate) fn elab_decl_header_inner(
+        &mut self,
+        name: &str,
+        universe_params: &[String],
+        binders: &[SurfaceBinder],
+        ty: &SurfaceExpr,
+    ) -> Result<(Name, Vec<Name>, Expr), ElabError> {
+        self.set_decl_universe_params(universe_params);
+        let ty_expr = self.elab_axiom_type(binders, ty)?;
+
+        // Same normalization the axiom path applies: metavariables and level
+        // constraints solved during signature unification must be substituted
+        // before the type is used as a header, or the staged constant carries
+        // unsolved holes the kernel would reject.
+        let ty_expr = self.metas.instantiate(&ty_expr);
+        let ty_expr = self.metas.instantiate_levels(&ty_expr);
+
+        let auto_implicits = self.take_auto_implicits();
+        let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
+
+        let decl_name = Name::from_string(&self.qualify_name(name));
+
+        // Filter to surviving params only (#3396, as Definition/Axiom do).
+        let mut used_level_params = Vec::new();
+        collect_def_level_params(&ty_expr, &mut used_level_params);
+        let surviving_universe_params: Vec<Name> = self
+            .universe_params
+            .iter()
+            .map(|s| Name::from_string(s))
+            .filter(|name| used_level_params.contains(name))
+            .collect();
+
+        Ok((decl_name, surviving_universe_params, ty_expr))
     }
 
     /// Elaborate an `opaque` declaration.
@@ -1945,16 +2049,8 @@ impl<'a> ElabCtx<'a> {
                 Self::wrap_with_auto_implicits(ty_expr, val_expr, &auto_implicits);
 
             // Filter to surviving params only (#3396, same as Definition).
-            let mut used_level_params = Vec::new();
-            collect_def_level_params(&ty_expr, &mut used_level_params);
-            collect_def_level_params(&val_expr, &mut used_level_params);
-
-            let surviving_universe_params: Vec<Name> = self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .filter(|name| used_level_params.contains(name))
-                .collect();
+            let (surviving_universe_params, ty_expr, val_expr) =
+                self.finalize_level_params(ty_expr, val_expr)?;
 
             Ok(ElabResult::Opaque {
                 name: decl_name,
@@ -1974,15 +2070,7 @@ impl<'a> ElabCtx<'a> {
             let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
 
             // Filter to surviving params only (#3396, same as Definition).
-            let mut used_level_params = Vec::new();
-            collect_def_level_params(&ty_expr, &mut used_level_params);
-
-            let surviving_universe_params: Vec<Name> = self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .filter(|name| used_level_params.contains(name))
-                .collect();
+            let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
 
             Ok(ElabResult::Opaque {
                 name: decl_name,
@@ -2071,14 +2159,7 @@ impl<'a> ElabCtx<'a> {
         let auto_implicits = self.take_auto_implicits();
         let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
 
-        let mut used_level_params = Vec::new();
-        collect_def_level_params(&ty_expr, &mut used_level_params);
-        let surviving_universe_params: Vec<Name> = self
-            .universe_params
-            .iter()
-            .map(|s| Name::from_string(s))
-            .filter(|name| used_level_params.contains(name))
-            .collect();
+        let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
 
         Ok(ElabResult::Opaque {
             name: decl_name,

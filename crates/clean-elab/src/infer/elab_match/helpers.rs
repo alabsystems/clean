@@ -1494,6 +1494,9 @@ impl<'a> ElabCtx<'a> {
     /// `major_ty`'s parameters (genuinely-mutual imported blocks keep their
     /// siblings there). The caller supplies `num_motives` from the recursor (or
     /// `all_names.len()` when the eliminator is a plain imported constant).
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(in crate::infer) fn block_motive_domains(
         &self,
         cases_on_name: &Name,

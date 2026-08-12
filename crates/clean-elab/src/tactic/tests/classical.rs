@@ -276,11 +276,7 @@ fn test_constructor_on_iff_tags_subgoals_mp_mpr() {
     );
 
     // Both arms are `P → P`, closable by the identity lambda `fun h : P => h`.
-    let id_p = Expr::lam(
-        clean_kernel::BinderInfo::Default,
-        p_ty.clone(),
-        Expr::bvar(0),
-    );
+    let id_p = Expr::lam(BinderInfo::Default, p_ty.clone(), Expr::bvar(0));
 
     // Focus and close `mpr` first, then `mp` (order-independent).
     assert!(focus_by_tag(&mut state, "mpr"), "tag `mpr` must be found");

@@ -445,7 +445,7 @@ fn test_profiler_category_breakdown_through_pi_inference() {
     let has_infer = profile
         .categories
         .iter()
-        .any(|e| e.category == crate::tc::heartbeat_profiler::HeartbeatProfileCategory::InferType);
+        .any(|e| e.category == heartbeat_profiler::HeartbeatProfileCategory::InferType);
     assert!(has_infer, "InferType category should appear in profile");
 
     // Verify display format includes the expected fields

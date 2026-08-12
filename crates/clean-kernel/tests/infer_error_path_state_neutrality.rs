@@ -30,7 +30,7 @@
 //! reason to exist, and `clean-olean` calls it per declaration — a call-site
 //! workaround. This test removes the need for the workaround at the source.
 
-use clean_kernel::{BinderInfo, Environment, Expr, Level, TypeChecker};
+use clean_kernel::{BinderInfo, Environment, Expr, Level, Name, TypeChecker};
 
 /// `fun (x : Prop) => x x` — well-formed syntax, ill-typed body (`x` applied to
 /// itself where `x : Prop` is not a function). Inference must fail INSIDE the
@@ -53,7 +53,7 @@ fn ill_typed_let() -> Expr {
     let type0 = Expr::sort(Level::succ(Level::zero()));
     let prop = Expr::sort(Level::zero());
     let x = Expr::bvar(0);
-    Expr::let_(type0, prop, Expr::app(x.clone(), x))
+    Expr::let_named(Name::anon(), type0, prop, Expr::app(x.clone(), x), false)
 }
 
 fn assert_neutral(label: &str, term: Expr) {
@@ -128,7 +128,8 @@ fn success_path_leaves_local_context_empty() {
         Expr::sort(Level::zero()),
         Expr::bvar(0),
     );
-    tc.infer_type(&identity)
+    let _inferred = tc
+        .infer_type(&identity)
         .expect("fun (x : Prop) => x must type-check");
     assert_eq!(
         tc.local_context_len(),

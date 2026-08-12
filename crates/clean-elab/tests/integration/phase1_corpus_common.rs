@@ -5,6 +5,9 @@
 //! Shared Phase 1 corpus helpers used by both the AC6 gate and the dedicated
 //! full-corpus measurement sweep.
 
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#![allow(dead_code)]
 use clean_kernel::{BinderData, BinderInfo, Declaration, Environment, Expr, Name};
 use clean_parser::{parse_file, SurfaceDecl};
 use std::borrow::Cow;

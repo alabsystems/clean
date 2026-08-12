@@ -7,6 +7,12 @@
 //! These certificates turn the runtime interpolation checks into structured,
 //! serializable artifacts that can be consumed by the proof promotion pipeline.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use super::{
     mcmillan::{
         extract_mcmillan_interpolant, verify_shared_variable_property, Partition, ResolutionDag,

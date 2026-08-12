@@ -219,7 +219,7 @@ pub(crate) fn validate_frontend_parity_report(
         "exit_status_cross_check",
         "diagnostic_artifact_cross_check",
     ];
-    let dimensions: std::collections::BTreeSet<&str> = rows
+    let dimensions: BTreeSet<&str> = rows
         .iter()
         .filter_map(|row| row.get("dimension").and_then(serde_json::Value::as_str))
         .collect();

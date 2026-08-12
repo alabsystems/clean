@@ -7,14 +7,11 @@
 //! original single-file `isabelle_pure_translate` module; behaviour is
 //! byte-identical.
 
-use std::collections::BTreeMap;
-
 use clean_kernel::expr::FVarId;
 use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::Expr;
 
-use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
+use super::super::isabelle_pure::IsaType;
 use super::*;
 
 impl Ctx {
@@ -180,7 +177,6 @@ impl Ctx {
                 Param {
                     fvar,
                     ty: Expr::type_(),
-                    is_type: true,
                 },
             ));
         }
@@ -211,14 +207,8 @@ impl Ctx {
     pub(crate) fn term_param(&mut self, name: &str, ty: Expr) -> Expr {
         let fvar = param_fvar(1, name);
         if !self.term_params.iter().any(|(k, _)| k == name) {
-            self.term_params.push((
-                name.to_string(),
-                Param {
-                    fvar,
-                    ty,
-                    is_type: false,
-                },
-            ));
+            self.term_params
+                .push((name.to_string(), Param { fvar, ty }));
         }
         Expr::fvar(fvar)
     }
@@ -306,14 +296,8 @@ impl Ctx {
     pub(crate) fn hyp_param(&mut self, key: &str, prop_ty: Expr) -> Expr {
         let fvar = param_fvar(2, key);
         if !self.hyp_params.iter().any(|(k, _)| k == key) {
-            self.hyp_params.push((
-                key.to_string(),
-                Param {
-                    fvar,
-                    ty: prop_ty,
-                    is_type: false,
-                },
-            ));
+            self.hyp_params
+                .push((key.to_string(), Param { fvar, ty: prop_ty }));
         }
         Expr::fvar(fvar)
     }

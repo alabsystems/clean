@@ -309,7 +309,7 @@ mod tests {
                 cert: crate::cert::ProofCert::Sort {
                     level: crate::level::Level::zero(),
                 },
-                computed_type: crate::expr::Expr::from_kind(crate::expr::ExprKind::Sort(
+                computed_type: Expr::from_kind(crate::expr::ExprKind::Sort(
                     crate::level::Level::zero(),
                 )),
             });
@@ -389,8 +389,8 @@ mod tests {
         let pool = BuilderPool::new(8);
 
         let b1 = pool.acquire();
-        let b2 = pool.acquire();
-        let b3 = pool.acquire();
+        let _b2 = pool.acquire();
+        let _b3 = pool.acquire();
         assert_eq!(pool.stats().peak_concurrent, 3);
 
         drop(b1);
@@ -428,9 +428,9 @@ mod tests {
             cert: crate::cert::ProofCert::Sort {
                 level: crate::level::Level::zero(),
             },
-            computed_type: crate::expr::Expr::from_kind(crate::expr::ExprKind::Sort(
-                crate::level::Level::zero(),
-            )),
+            computed_type: Expr::from_kind(
+                crate::expr::ExprKind::Sort(crate::level::Level::zero()),
+            ),
         });
         assert_eq!(builder.nodes.len(), 1);
     }

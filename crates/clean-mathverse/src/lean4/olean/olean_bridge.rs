@@ -576,7 +576,7 @@ pub fn convert_olean_dir_to_mathverse(
 /// been independently kernel-checked. Only the TC-verified path (constants
 /// whose names appear in `verified_names`, set by
 /// `import_module_with_provenance_verified`) may upgrade to `KernelVerified`.
-fn confidence_for_constant(constant: &clean_olean::module::ParsedConstant) -> ImportConfidence {
+fn confidence_for_constant(constant: &ParsedConstant) -> ImportConfidence {
     use clean_olean::module::ConstantKind;
     match constant.kind {
         ConstantKind::Axiom | ConstantKind::Opaque => ImportConfidence::Axiomatized,
@@ -596,7 +596,7 @@ fn confidence_for_constant(constant: &clean_olean::module::ParsedConstant) -> Im
 }
 
 /// Determine whether a constant has a meaningful value.
-fn has_value_for(constant: &clean_olean::module::ParsedConstant) -> bool {
+fn has_value_for(constant: &ParsedConstant) -> bool {
     use clean_olean::module::ConstantKind;
     match constant.kind {
         ConstantKind::Theorem | ConstantKind::Definition => constant.value.is_some(),

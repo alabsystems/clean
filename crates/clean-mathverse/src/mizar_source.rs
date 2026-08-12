@@ -487,7 +487,6 @@ use clean_kernel::flat::FlatExpr;
 
 const NO_LEVELS: u32 = u32::MAX;
 const BINDER_DEFAULT: u8 = 0;
-const SORT_PROP: u32 = 0;
 
 /// Parse a Mizar statement/type string into `writer`, returning the root
 /// expression index. Returns `None` on parse failure, empty input, or any

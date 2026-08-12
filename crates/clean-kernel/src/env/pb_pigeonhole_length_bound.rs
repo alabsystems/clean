@@ -31,6 +31,7 @@ use crate::name::Name;
 
 /// Shared constants used across PB pigeonhole length-bound declarations.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct PBPigeonholeLengthBoundConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,

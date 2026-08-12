@@ -13,9 +13,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use clean_kernel::{
-    ConstantInfo, Declaration, Environment, Expr, ExprKind, Level, Name, TypeChecker,
-};
+#[cfg(test)]
+use clean_kernel::Declaration;
+use clean_kernel::{ConstantInfo, Environment, Expr, ExprKind, Level, Name, TypeChecker};
 
 use crate::dependency_tracker::DependencyGraph;
 use crate::error::DiscoveryError;
@@ -137,7 +137,7 @@ pub struct RepairResult {
 }
 
 /// Orchestrates detection, identification, and repair of broken proofs.
-pub(crate) struct ProofRepairer {
+pub struct ProofRepairer {
     dependency_graph: DependencyGraph,
     strategies: Vec<RepairStrategy>,
 }
@@ -145,7 +145,7 @@ pub(crate) struct ProofRepairer {
 impl ProofRepairer {
     /// Create a repairer with the default strategy ordering.
     #[must_use]
-    pub(crate) fn new(dependency_graph: DependencyGraph) -> Self {
+    pub fn new(dependency_graph: DependencyGraph) -> Self {
         Self {
             dependency_graph,
             strategies: vec![
@@ -161,7 +161,7 @@ impl ProofRepairer {
 
     /// Create a repairer with custom strategy ordering.
     #[must_use]
-    pub(crate) fn with_strategies(
+    pub fn with_strategies(
         dependency_graph: DependencyGraph,
         strategies: Vec<RepairStrategy>,
     ) -> Self {
@@ -172,7 +172,7 @@ impl ProofRepairer {
     }
 
     /// Detect changes, find affected proofs, attempt repair, update library.
-    pub(crate) fn repair_all(
+    pub fn repair_all(
         &mut self,
         old_env: &Environment,
         new_env: &Environment,
@@ -728,12 +728,14 @@ impl ProofRepairer {
         }
     }
 
+    /// Return the dependency graph used to identify affected proofs.
     #[must_use]
-    pub(crate) fn dependency_graph(&self) -> &DependencyGraph {
+    pub fn dependency_graph(&self) -> &DependencyGraph {
         &self.dependency_graph
     }
 
-    pub(crate) fn dependency_graph_mut(&mut self) -> &mut DependencyGraph {
+    /// Return the dependency graph for adding, replacing, or removing proof entries.
+    pub fn dependency_graph_mut(&mut self) -> &mut DependencyGraph {
         &mut self.dependency_graph
     }
 }

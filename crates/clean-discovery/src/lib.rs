@@ -25,7 +25,7 @@ pub mod abstract_domain;
 pub mod candidate;
 pub mod cli;
 pub mod complexity;
-pub(crate) mod dependency_tracker;
+pub mod dependency_tracker;
 pub mod discovery_loop;
 pub mod discovery_stats;
 pub mod error;
@@ -52,6 +52,7 @@ pub mod tactic_recommender;
 pub mod tightness;
 
 pub use candidate::CandidateTheorem;
+pub use dependency_tracker::{extract_dependencies, DependencyGraph};
 pub use discovery_loop::{DiscoveryLoop, DiscoveryLoopConfig, DiscoveryLoopResult};
 pub use discovery_stats::{DiscoveryStats, StatsReport};
 pub use error::DiscoveryError;
@@ -66,7 +67,7 @@ pub use goal_features::{extract_goal_features, ArgTypeTag, FeatureVector, GoalFe
 pub use lemma_library::{compute_content_hash, LemmaEntry, LemmaLibrary};
 pub use novelty::{NoveltyFilter, NoveltyScore};
 pub use proof_repair::{
-    ChangeKind, ChangedDefinition, RepairOutcome, RepairResult, RepairStrategy,
+    ChangeKind, ChangedDefinition, ProofRepairer, RepairOutcome, RepairResult, RepairStrategy,
 };
 pub use runner::DiscoveryRunner;
 pub use search::{ExhaustiveSearch, SearchResult, SearchStats};

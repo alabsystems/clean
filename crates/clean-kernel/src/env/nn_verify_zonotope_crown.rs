@@ -68,6 +68,7 @@ use crate::expr::{BinderInfo, Expr};
 use crate::name::Name;
 
 /// Shared constants for C010 zonotope-CROWN equivalence construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct ZonotopeCrownConsts {
     pub(super) base: IbpLinearConsts,
     pub(super) nat_zero: Expr,

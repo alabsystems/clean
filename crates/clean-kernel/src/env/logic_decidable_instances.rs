@@ -81,7 +81,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instDecidableTrue"),
                 class_name: Name::from_string("Decidable"),
-                priority: 100,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -114,7 +114,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instDecidableFalse"),
                 class_name: Name::from_string("Decidable"),
-                priority: 100,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });

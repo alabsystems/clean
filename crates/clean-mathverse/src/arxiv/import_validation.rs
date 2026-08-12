@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 /// Sorted whitelist of known-valid Mathlib modules for prefix validation.
-pub(crate) const KNOWN_MATHLIB_MODULES: &[&str] = &[
+pub const KNOWN_MATHLIB_MODULES: &[&str] = &[
     "Mathlib.Algebra.BigOperators.Ring.Finset",
     "Mathlib.Algebra.Field.Basic",
     "Mathlib.Algebra.Field.Defs",
@@ -81,17 +81,17 @@ pub(crate) const KNOWN_MATHLIB_MODULES: &[&str] = &[
 
 /// Validation output for discovered Mathlib imports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ImportValidationResult {
-    pub(crate) valid_imports: Vec<String>,
-    pub(crate) invalid_imports: Vec<String>,
-    pub(crate) rewrites: Vec<ImportRewrite>,
+pub struct ImportValidationResult {
+    pub valid_imports: Vec<String>,
+    pub invalid_imports: Vec<String>,
+    pub rewrites: Vec<ImportRewrite>,
 }
 
 /// Rewrite payload for one fictional import.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ImportRewrite {
-    pub(crate) original_import: String,
-    pub(crate) replacement_code: String,
+pub struct ImportRewrite {
+    pub original_import: String,
+    pub replacement_code: String,
 }
 
 #[must_use]
@@ -221,7 +221,7 @@ fn replacement_code_for_import(import_path: &str) -> String {
 
 /// Extract likely type names from an import path by taking its last component.
 #[must_use]
-pub(crate) fn extract_implied_types(import_path: &str) -> Vec<String> {
+pub fn extract_implied_types(import_path: &str) -> Vec<String> {
     import_path
         .rsplit('.')
         .next()
@@ -231,7 +231,7 @@ pub(crate) fn extract_implied_types(import_path: &str) -> Vec<String> {
 
 /// Validate all `import Mathlib.*` references in generated Lean code.
 #[must_use]
-pub(crate) fn validate_imports(lean_code: &str) -> ImportValidationResult {
+pub fn validate_imports(lean_code: &str) -> ImportValidationResult {
     let mut valid_imports = Vec::new();
     let mut invalid_imports = Vec::new();
     let mut rewrites = Vec::new();
@@ -258,7 +258,7 @@ pub(crate) fn validate_imports(lean_code: &str) -> ImportValidationResult {
 /// Remove fictional imports and replace them with warning comments and local
 /// `sorry`-based placeholder definitions.
 #[must_use]
-pub(crate) fn rewrite_invalid_imports(lean_code: &str, result: &ImportValidationResult) -> String {
+pub fn rewrite_invalid_imports(lean_code: &str, result: &ImportValidationResult) -> String {
     let invalid: HashSet<&str> = result.invalid_imports.iter().map(String::as_str).collect();
     let mut output = Vec::new();
 

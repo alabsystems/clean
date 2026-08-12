@@ -590,6 +590,7 @@ fn test_derived_name_collision_rolls_back_parent_inductive() {
         num_params: 0,
         ty: Expr::type_(),
         constructors: vec![(ctor.clone(), parent_ty.clone())],
+        wants_deep_induction: false,
         derived_instances: vec![DerivedInstance {
             // Deliberately collide with the constructor created by add_inductive.
             name: ctor.clone(),

@@ -391,6 +391,74 @@ impl CertBundle {
         Ok(bundle)
     }
 
+    /// Assemble a **non-authoritative** bundle view for readiness diagnostics.
+    ///
+    /// [`Self::build`] is the *trust* constructor: it refuses to mint a
+    /// manifest entry for a theorem with no replayable proof term, because a
+    /// manifest entry is a claim of proof authority and an assumed theorem has
+    /// none. Readiness diagnostics need the opposite capability — they must be
+    /// able to *represent* the deficient state in order to report it, which is
+    /// the whole point of [`BundleInspectIssue::MissingProofTerm`].
+    ///
+    /// Everything produced here is quarantined:
+    ///
+    /// * every entry, and the aggregate, is pinned to
+    ///   [`TrustLevel::Unverified`], so an assumed theorem can never be
+    ///   rendered as proved or certified;
+    /// * `proof_hash` stays empty when there is no proof term, so no hash is
+    ///   ever fabricated for material that does not exist;
+    /// * [`Self::save`], [`Self::verify_all`] and [`Self::verify_theorem`]
+    ///   re-run the full trust validation and therefore still reject it.
+    ///
+    /// The supported operation on the result is [`Self::inspect`].
+    pub fn for_inspection(
+        project: &str,
+        clean_version: &str,
+        env: Environment,
+        certs: HashMap<Name, ProofCert>,
+        xproj_certs: HashMap<Name, CrossProjectCert>,
+    ) -> Result<Self, CertBundleError> {
+        if certs.len() > MAX_BUNDLE_ENTRIES || xproj_certs.len() > MAX_BUNDLE_ENTRIES {
+            return Err(CertBundleError::ResourceLimit(
+                "bundle entry count exceeds maximum".to_string(),
+            ));
+        }
+        let env_bytes = bincode::serde::encode_to_vec(&env, bincode::config::standard())
+            .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
+        let env_hash = sha256_hex(&env_bytes);
+
+        let mut names: Vec<&Name> = certs.keys().collect();
+        names.sort_by_key(|name| name.to_string());
+        let mut entries = Vec::with_capacity(certs.len());
+        for name in names {
+            let (type_hash, proof_hash, sorry_free) = diagnostic_declaration_metadata(&env, name)?;
+            entries.push(CertBundleEntry {
+                name: name.to_string(),
+                type_hash,
+                proof_hash,
+                // Nothing in a diagnostics view has been replayed, so nothing
+                // in it carries authority.
+                trust_level: TrustLevel::Unverified,
+                sorry_free,
+            });
+        }
+
+        Ok(Self {
+            manifest: CertBundleManifest {
+                version: BUNDLE_VERSION,
+                project: project.to_string(),
+                clean_version: clean_version.to_string(),
+                env_hash,
+                theorems: entries,
+                trust_level: TrustLevel::Unverified,
+            },
+            env,
+            certs,
+            xproj_certs,
+            trust_chain: None,
+        })
+    }
+
     // ── Persistence ──────────────────────────────────────────────────────
 
     /// Save the bundle to a `.cleancert` file.
@@ -455,7 +523,44 @@ impl CertBundle {
     }
 
     /// Load a bundle from a `.cleancert` file.
+    ///
+    /// Fails closed: the manifest must agree with the embedded environment and
+    /// every certificate must replay. Use [`Self::load_for_inspection`] when
+    /// the goal is to diagnose a file this rejects.
     pub fn load(path: impl AsRef<Path>) -> Result<Self, CertBundleError> {
+        let bundle = Self::decode_archive_file(path)?;
+        validate_bundle_contents(
+            &bundle.manifest,
+            &bundle.env,
+            &bundle.certs,
+            &bundle.xproj_certs,
+        )?;
+        bundle.ensure_all_replay_valid()?;
+        Ok(bundle)
+    }
+
+    /// Load a `.cleancert` file for **readiness diagnostics only**.
+    ///
+    /// This performs the same structural decoding as [`Self::load`] — magic,
+    /// resource limits, archive shape, environment hash — but deliberately
+    /// skips the manifest/environment agreement and certificate replay checks,
+    /// so a file that `load` rejects can still be described to the user by
+    /// [`Self::inspect`] instead of collapsing into a single opaque error.
+    ///
+    /// The result is quarantined: every recorded trust claim is overwritten
+    /// with [`TrustLevel::Unverified`], because nothing here has been replayed.
+    /// A forged manifest asserting [`TrustLevel::KernelVerified`] for an
+    /// assumed theorem is therefore reported as unverified and incomplete,
+    /// never as certified.
+    pub fn load_for_inspection(path: impl AsRef<Path>) -> Result<Self, CertBundleError> {
+        let mut bundle = Self::decode_archive_file(path)?;
+        bundle.quarantine_trust_claims();
+        Ok(bundle)
+    }
+
+    /// Structural decode shared by [`Self::load`] and
+    /// [`Self::load_for_inspection`]. Performs no trust validation.
+    fn decode_archive_file(path: impl AsRef<Path>) -> Result<Self, CertBundleError> {
         let file = std::fs::File::open(path)?;
         let raw = read_unknown_bounded(
             file,
@@ -526,24 +631,96 @@ impl CertBundle {
             xproj_certs.insert(Name::from_string(name_str), xproj);
         }
 
-        validate_bundle_contents(&archive.manifest, &env, &certs, &xproj_certs)?;
-
-        let bundle = Self {
+        Ok(Self {
             manifest: archive.manifest,
             env,
             certs,
             xproj_certs,
             trust_chain: archive.trust_chain,
-        };
-        bundle.ensure_all_replay_valid()?;
-        Ok(bundle)
+        })
+    }
+
+    /// Strip every recorded trust claim from a bundle that has not been
+    /// replay-validated. Serialized trust is a claim, never evidence.
+    ///
+    /// The digests go with the trust level, and for the same reason. A
+    /// quarantined read validates nothing, so `type_hash` and `proof_hash` are
+    /// just two more attacker-chosen strings in the file — and unlike
+    /// `trust_level` they *look* like evidence, which is worse: a forged
+    /// bundle could otherwise render a 64-hex `proof_hash` directly beside
+    /// `has_proof_term: false`, inviting a reader to believe some proof was
+    /// hashed. Clearing them costs nothing, because every fact the inspect
+    /// report actually asserts — `declaration_kind`, `theorem_type`,
+    /// `has_proof_term`, `MissingProofTerm` — is derived from the EMBEDDED
+    /// ENVIRONMENT DECLARATION rather than the manifest (see
+    /// [`Self::inspect_manifest_entry`]), and `inspect` renders an empty digest
+    /// as `None`. This is the same discipline [`Self::for_inspection`] already
+    /// applies in memory, where `proof_hash` is left empty rather than
+    /// fabricated when a declaration has no proof term.
+    fn quarantine_trust_claims(&mut self) {
+        for entry in &mut self.manifest.theorems {
+            entry.trust_level = TrustLevel::Unverified;
+            entry.type_hash.clear();
+            entry.proof_hash.clear();
+        }
+        self.manifest.trust_level = TrustLevel::Unverified;
     }
 
     // ── Verification ─────────────────────────────────────────────────────
 
     /// Verify all certificates in the bundle against the embedded environment.
+    ///
+    /// Fails closed on a structurally invalid bundle: [`validate_bundle_contents`]
+    /// runs first, so a manifest entry that is not a well-formed claim of proof
+    /// authority (for example a theorem with no proof term) is rejected outright
+    /// rather than replayed. Use [`Self::verify_all_for_inspection`] when the
+    /// goal is to *describe* a bundle this refuses.
     pub fn verify_all(&self) -> Result<BundleVerifyResult, CertBundleError> {
         validate_bundle_contents(&self.manifest, &self.env, &self.certs, &self.xproj_certs)?;
+        Ok(self.replay_every_manifest_entry())
+    }
+
+    /// Replay every manifest entry and report the outcome, for **readiness
+    /// diagnostics only**.
+    ///
+    /// [`Self::verify_all`] is the trust verb, and its up-front structural gate
+    /// is the point of it: an entry claiming proof authority for a theorem with
+    /// no proof term is refused, not verified. That refusal stays. But a
+    /// refusal is a single opaque error, and the readiness vocabulary
+    /// ([`BundleInspectIssue::MissingProofTerm`], `incomplete`, `ready_count`)
+    /// exists precisely to say *which* theorem is not ready and *why*. This
+    /// entry point supplies the per-theorem shape those renderers need by
+    /// skipping only the structural gate — no replay, agreement, or audit check
+    /// is relaxed.
+    ///
+    /// The result is non-authoritative, and structurally so:
+    ///
+    /// * [`BundleVerifyResult::trust_level`] is pinned to
+    ///   [`TrustLevel::Unverified`], so a bundle the trust gate would reject can
+    ///   never acquire a trust verdict by taking this path;
+    /// * a theorem with no proof term always fails
+    ///   [`Self::verify_theorem`] with "declaration has no proof term", so it is
+    ///   always counted in `failed` and can never appear in `passed`.
+    ///
+    /// Callers are still expected to fail (exit non-zero) — this reports what is
+    /// wrong, it does not condone it.
+    #[must_use]
+    pub fn verify_all_for_inspection(&self) -> BundleVerifyResult {
+        BundleVerifyResult {
+            // Nothing reached through the diagnostics path carries authority,
+            // however the individual replays turned out.
+            trust_level: TrustLevel::Unverified,
+            ..self.replay_every_manifest_entry()
+        }
+    }
+
+    /// Replay each manifest entry and tally the outcome.
+    ///
+    /// Deliberately performs no structural validation: the caller decides
+    /// whether the [`validate_bundle_contents`] gate applies, which is the only
+    /// difference between [`Self::verify_all`] and
+    /// [`Self::verify_all_for_inspection`].
+    fn replay_every_manifest_entry(&self) -> BundleVerifyResult {
         let mut passed = 0usize;
         let mut failed = 0usize;
         let mut failures = Vec::new();
@@ -564,7 +741,7 @@ impl CertBundle {
             }
         }
 
-        Ok(BundleVerifyResult {
+        BundleVerifyResult {
             passed,
             failed,
             failures,
@@ -572,7 +749,7 @@ impl CertBundle {
                 .into_iter()
                 .reduce(trust_min)
                 .unwrap_or(TrustLevel::Unverified),
-        })
+        }
     }
 
     /// Verify a single named theorem.
@@ -715,7 +892,19 @@ impl CertBundle {
                     name: name.to_string(),
                     reason: e.to_string(),
                 })?;
-        if !verifier.def_eq(&verified_type, &decl.type_) {
+        // The independent-replay guarantee lives in `verifier.verify` above
+        // (the certificate re-derives the proof's type step by step). The
+        // FINAL comparison of two CLOSED top-level types is a definitional-
+        // equality question on which the kernel's own checker is the
+        // authority — and it carries the full rule set (notably structure
+        // eta, which the cert lane's context-free engine cannot implement
+        // soundly: its raw-de-Bruijn comparison has no binder context for
+        // the same-structure type guard). The cert-lane fragment is a strict
+        // subset of kernel def-eq, so this accepts nothing `add_decl` would
+        // not have (first exercised by the clean-mtype Sigma statements,
+        // 2026-08-06).
+        let tc = crate::tc::TypeChecker::with_mode(&self.env, self.env.mode());
+        if !tc.is_def_eq(&verified_type, &decl.type_) {
             return Err(CertBundleError::VerificationFailed {
                 name: name.to_string(),
                 reason: format!(
@@ -948,6 +1137,33 @@ fn declaration_metadata(
         sha256_hex(&proof_bytes),
         !proof.has_sorry(),
     ))
+}
+
+/// Best-effort manifest metadata for a diagnostics view.
+///
+/// Where [`declaration_metadata`] *rejects* a theorem whose declaration has no
+/// proof term, this records what actually exists and leaves the rest empty, so
+/// [`CertBundle::inspect`] can report the deficiency instead of the caller
+/// getting an opaque construction failure. It never invents a `proof_hash` for
+/// a proof that does not exist.
+fn diagnostic_declaration_metadata(
+    env: &Environment,
+    name: &Name,
+) -> Result<(String, String, bool), CertBundleError> {
+    let Some(declaration) = env.get_const(name) else {
+        return Ok((String::new(), String::new(), true));
+    };
+    let type_bytes = bincode::serde::encode_to_vec(&declaration.type_, bincode::config::standard())
+        .map_err(|error| CertBundleError::Serialization(error.to_string()))?;
+    let type_hash = sha256_hex(&type_bytes);
+    let Some(proof) = declaration.value.as_ref() else {
+        // No proof term: vacuously `sorry`-free, but the entry is flagged
+        // `missing-proof-term` and pinned to `Unverified` by the caller.
+        return Ok((type_hash, String::new(), true));
+    };
+    let proof_bytes = bincode::serde::encode_to_vec(proof, bincode::config::standard())
+        .map_err(|error| CertBundleError::Serialization(error.to_string()))?;
+    Ok((type_hash, sha256_hex(&proof_bytes), !proof.has_sorry()))
 }
 
 fn validate_cross_project_metadata(
@@ -1446,28 +1662,9 @@ mod tests {
         // Inspection intentionally accepts an incomplete in-memory fixture;
         // construction/persistence reject it because there is no replayable
         // proof term.
-        let env_bytes =
-            bincode::serde::encode_to_vec(&env, bincode::config::standard()).expect("encode env");
-        let bundle = CertBundle {
-            manifest: CertBundleManifest {
-                version: BUNDLE_VERSION,
-                project: "inspection-only".to_string(),
-                clean_version: "0.1.0".to_string(),
-                env_hash: sha256_hex(&env_bytes),
-                theorems: vec![CertBundleEntry {
-                    name: "Test.assumed".to_string(),
-                    type_hash: String::new(),
-                    proof_hash: String::new(),
-                    trust_level: TrustLevel::Unverified,
-                    sorry_free: true,
-                }],
-                trust_level: TrustLevel::Unverified,
-            },
-            env,
-            certs,
-            xproj_certs: HashMap::new(),
-            trust_chain: None,
-        };
+        let bundle =
+            CertBundle::for_inspection("inspection-only", "0.1.0", env, certs, HashMap::new())
+                .expect("assemble diagnostics view");
 
         let report = bundle.inspect();
         let entry = &report.entries[0];
@@ -1477,6 +1674,219 @@ mod tests {
         assert!(entry.has_environment_declaration);
         assert!(!entry.has_proof_term);
         assert_eq!(entry.issues, vec![BundleInspectIssue::MissingProofTerm]);
+        assert_eq!(report.ready_count, 0);
+        assert_eq!(report.incomplete_count, 1);
+
+        // The diagnostics view must never become a trust laundering path: an
+        // assumed theorem stays `Unverified`, records no proof hash, and the
+        // bundle is still refused by every authority-bearing operation.
+        assert_eq!(entry.trust_level, TrustLevel::Unverified);
+        assert_eq!(entry.proof_hash, None);
+        assert_eq!(bundle.manifest().trust_level, TrustLevel::Unverified);
+        assert!(matches!(
+            bundle.verify_all(),
+            Err(CertBundleError::InvalidManifest(ref reason))
+                if reason.contains("has no proof term")
+        ));
+        assert!(matches!(
+            bundle.verify_theorem(&Name::from_string("Test.assumed")),
+            Err(CertBundleError::VerificationFailed { ref reason, .. })
+                if reason == "declaration has no proof term"
+        ));
+        let dir = tempfile::tempdir().expect("create temp dir");
+        assert!(matches!(
+            bundle.save(dir.path().join("quarantined.cleancert")),
+            Err(CertBundleError::InvalidManifest(ref reason))
+                if reason.contains("has no proof term")
+        ));
+    }
+
+    /// The diagnostics replay must *report* an unproved theorem as failed —
+    /// and must never let it, or the bundle carrying it, acquire authority.
+    #[test]
+    fn test_verify_all_for_inspection_reports_failure_without_conferring_trust() {
+        let mut env = Environment::with_prelude();
+        let axiom_name = Name::from_string("Test.assumed");
+        env.add_decl(Declaration::Axiom {
+            name: axiom_name.clone(),
+            level_params: vec![],
+            type_: Expr::const_(Name::from_string("True"), vec![]),
+        })
+        .expect("register axiom");
+
+        let mut certs = HashMap::new();
+        certs.insert(
+            axiom_name,
+            ProofCert::Const {
+                name: Name::from_string("True.intro"),
+                levels: vec![],
+                type_: Box::new(Expr::const_(Name::from_string("True"), vec![])),
+            },
+        );
+
+        let bundle =
+            CertBundle::for_inspection("inspection-only", "0.1.0", env, certs, HashMap::new())
+                .expect("assemble diagnostics view");
+
+        // The trust verb still refuses the bundle outright.
+        assert!(matches!(
+            bundle.verify_all(),
+            Err(CertBundleError::InvalidManifest(ref reason))
+                if reason.contains("has no proof term")
+        ));
+
+        // The diagnostics verb describes the same deficiency instead.
+        let result = bundle.verify_all_for_inspection();
+        assert_eq!(result.passed, 0);
+        assert_eq!(result.failed, 1);
+        assert!(!result.all_passed());
+        assert_eq!(
+            result.trust_level,
+            TrustLevel::Unverified,
+            "a bundle the trust gate rejects must never gain a trust verdict"
+        );
+        let (name, reason) = &result.failures[0];
+        assert_eq!(name, "Test.assumed");
+        assert_eq!(
+            reason,
+            "verification failed for theorem 'Test.assumed': declaration has no proof term"
+        );
+    }
+
+    /// Even when every replay succeeds, a bundle that the structural gate
+    /// rejects must not be laundered into a trust verdict by the diagnostics
+    /// verb.
+    #[test]
+    fn test_verify_all_for_inspection_never_mints_trust_for_a_rejected_bundle() {
+        let (env, certs, xproj_certs) = test_env_and_certs();
+        let mut bundle = CertBundle::build("test-project", "0.1.0", env, certs, xproj_certs, None)
+            .expect("build bundle");
+        let authoritative = bundle.verify_all().expect("verify built bundle");
+        assert_eq!(authoritative.failed, 0);
+
+        // Corrupt the manifest so the structural gate refuses the bundle while
+        // every certificate still replays.
+        for entry in &mut bundle.manifest.theorems {
+            entry.type_hash = "00".repeat(32);
+        }
+        assert!(matches!(
+            bundle.verify_all(),
+            Err(CertBundleError::InvalidManifest(ref reason))
+                if reason.contains("do not match the environment")
+        ));
+
+        let diagnostic = bundle.verify_all_for_inspection();
+        assert_eq!(diagnostic.failed, 0, "replay itself still succeeds");
+        assert_eq!(
+            diagnostic.trust_level,
+            TrustLevel::Unverified,
+            "the diagnostics path is never a source of authority"
+        );
+    }
+
+    /// Regression guard for the readiness-diagnostics path: a `.cleancert`
+    /// the trust loader refuses must still be *describable*, and the forged
+    /// `KernelVerified` claim it carries must be reported as `Unverified`.
+    #[test]
+    fn test_bundle_load_for_inspection_never_honors_a_forged_trust_claim() {
+        let mut env = Environment::with_prelude();
+        let axiom_name = Name::from_string("Test.assumed");
+        env.add_decl(Declaration::Axiom {
+            name: axiom_name.clone(),
+            level_params: vec![],
+            type_: Expr::const_(Name::from_string("True"), vec![]),
+        })
+        .expect("register axiom");
+
+        let cert = ProofCert::Const {
+            name: Name::from_string("True.intro"),
+            levels: vec![],
+            type_: Box::new(Expr::const_(Name::from_string("True"), vec![])),
+        };
+        let env_bytes =
+            bincode::serde::encode_to_vec(&env, bincode::config::standard()).expect("encode env");
+        let cert_bytes =
+            bincode::serde::encode_to_vec(&cert, bincode::config::standard()).expect("encode cert");
+        let archive = BundleArchive {
+            manifest: CertBundleManifest {
+                version: BUNDLE_VERSION,
+                project: "forged".to_string(),
+                clean_version: "0.1.0".to_string(),
+                env_hash: sha256_hex(&env_bytes),
+                theorems: vec![CertBundleEntry {
+                    name: "Test.assumed".to_string(),
+                    type_hash: "00".repeat(32),
+                    proof_hash: "11".repeat(32),
+                    // The forgery under test: kernel authority asserted for a
+                    // theorem that has no proof term at all.
+                    trust_level: TrustLevel::KernelVerified,
+                    sorry_free: true,
+                }],
+                trust_level: TrustLevel::KernelVerified,
+            },
+            env_bytes,
+            certs: HashMap::from([("Test.assumed".to_string(), cert_bytes)]),
+            xproj_certs: HashMap::new(),
+            trust_chain: None,
+        };
+
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("forged.cleancert");
+        let uncompressed = bincode::serde::encode_to_vec(&archive, bincode::config::standard())
+            .expect("encode archive");
+        let compressed = zstd::encode_all(uncompressed.as_slice(), 3).expect("compress archive");
+        let mut bytes = BUNDLE_MAGIC.to_vec();
+        bytes.extend_from_slice(&compressed);
+        std::fs::write(&path, &bytes).expect("write forged bundle");
+
+        // The trust loader fails closed.
+        assert!(matches!(
+            CertBundle::load(&path),
+            Err(CertBundleError::InvalidManifest(ref reason))
+                if reason.contains("has no proof term")
+        ));
+
+        // The diagnostic loader says *what* is wrong, with no authority.
+        let bundle = CertBundle::load_for_inspection(&path).expect("diagnostic read");
+        let report = bundle.inspect();
+        assert_eq!(report.ready_count, 0);
+        assert_eq!(report.incomplete_count, 1);
+        let entry = &report.entries[0];
+        assert_eq!(entry.name, "Test.assumed");
+        assert_eq!(entry.declaration_kind, Some("axiom"));
+        assert!(!entry.has_proof_term);
+        assert_eq!(entry.issues, vec![BundleInspectIssue::MissingProofTerm]);
+        assert_eq!(
+            entry.trust_level,
+            TrustLevel::Unverified,
+            "a forged manifest claim must never survive a quarantined read"
+        );
+        assert_eq!(bundle.manifest().trust_level, TrustLevel::Unverified);
+
+        // The digests are attacker-chosen too, and they LOOK like evidence in a
+        // way `trust_level` does not: rendering the forged `11..` beside
+        // `has_proof_term: false` would invite a reader to believe some proof
+        // was hashed. Nothing validated them on this path, so they must not
+        // reach the report at all. The fixture forges both, so this fails if
+        // either is echoed.
+        assert_eq!(
+            entry.proof_hash, None,
+            "a quarantined read must not present an unvalidated proof_hash as fact"
+        );
+        assert_eq!(
+            entry.type_hash, None,
+            "a quarantined read must not present an unvalidated type_hash as fact"
+        );
+        assert!(
+            bundle
+                .manifest()
+                .theorems
+                .iter()
+                .all(|e| e.type_hash.is_empty() && e.proof_hash.is_empty()),
+            "the quarantined manifest itself must carry no unvalidated digest"
+        );
+
+        assert!(bundle.verify_all().is_err());
     }
 
     #[test]

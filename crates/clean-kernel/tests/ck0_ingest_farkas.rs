@@ -748,10 +748,7 @@ fn faithful_int_mul_distrib_r_type_matches_clean() {
 
     let mut clean_consts: HashSet<KName> = HashSet::new();
     collect_consts(&ci.type_, &mut clean_consts);
-    let clean_const_strs: HashSet<String> = clean_consts
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
+    let clean_const_strs: HashSet<String> = clean_consts.iter().map(ToString::to_string).collect();
     let mut raw_consts: HashSet<String> = HashSet::new();
     collect_raw_consts(&ty_raw, &mut raw_consts);
     assert_eq!(
@@ -996,10 +993,7 @@ fn faithful_m5_unsat_concrete_head_is_real_unsat() {
     // REAL Unsat + diff-pair Int (NOT a stub).
     let mut clean_consts: HashSet<KName> = HashSet::new();
     collect_consts(&ci.type_, &mut clean_consts);
-    let clean_const_strs: HashSet<String> = clean_consts
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
+    let clean_const_strs: HashSet<String> = clean_consts.iter().map(ToString::to_string).collect();
     let mut raw_consts: HashSet<String> = HashSet::new();
     collect_raw_consts(&ty_raw, &mut raw_consts);
     assert_eq!(
@@ -1294,10 +1288,7 @@ fn faithful_translated_type_matches_clean() {
     // type and the raw type and require they coincide.
     let mut clean_consts: HashSet<KName> = HashSet::new();
     collect_consts(&ci.type_, &mut clean_consts);
-    let clean_const_strs: HashSet<String> = clean_consts
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
+    let clean_const_strs: HashSet<String> = clean_consts.iter().map(ToString::to_string).collect();
     let mut raw_consts: HashSet<String> = HashSet::new();
     collect_raw_consts(&ty_raw, &mut raw_consts);
     assert_eq!(

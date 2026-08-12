@@ -116,9 +116,30 @@ impl Parser {
     /// closing brackets). Returns an empty vec if no tactics are found.
     pub(super) fn tactic_seq(&mut self) -> Result<Vec<SurfaceTactic>, ParseError> {
         let mut tactics = Vec::new();
+        // Lead token of the last tactic in this sequence that parsed cleanly.
+        // When the NEXT `tactic()` fails on a token that is not itself a tactic
+        // (`:=` after `set x`, `with` after an unsupported form), the honest
+        // attribution is the tactic that under-consumed its arguments, not the
+        // punctuation it stopped at — so prepend it to the failure chain.
+        let mut prev_lead: Option<String> = None;
+        // Where THIS sequence's contribution to the failure chain starts, so a
+        // prepend lands inside our own frame rather than ahead of the enclosing
+        // tactics.
+        let chain_base = self.tactic_chain.len();
 
         while !self.at_tactic_end(0) {
-            let mut tac = self.tactic()?;
+            let lead = self.tactic_lead_text();
+            let mut tac = match self.tactic() {
+                Ok(tac) => tac,
+                Err(err) => {
+                    if let Some(prev) = prev_lead {
+                        let at = chain_base.min(self.tactic_chain.len());
+                        self.tactic_chain.insert(at, prev);
+                    }
+                    return Err(err);
+                }
+            };
+            prev_lead = Some(lead);
 
             // Check for `<;>` sequential focus combinator: `tac1 <;> tac2`
             // applies tac2 to every goal produced by tac1
@@ -137,10 +158,42 @@ impl Parser {
         Ok(tactics)
     }
 
+    /// Exact source spelling of the token that *leads* a tactic (diagnostics
+    /// only). Falls back to the `TokenKind` debug name if the span is empty.
+    pub(super) fn tactic_lead_text(&self) -> String {
+        let span = self.current_span();
+        let text = self
+            .source
+            .get(span.start..span.end)
+            .map(str::trim)
+            .unwrap_or("");
+        if text.is_empty() {
+            format!("<{:?}>", self.current_kind())
+        } else {
+            text.to_owned()
+        }
+    }
+
     /// Parse a single tactic.
     ///
     /// Dispatches on the current token to the appropriate tactic parser.
+    ///
+    /// Pushes the leading token onto `tactic_chain` for the duration of the
+    /// dispatch (T0, measurement integrity) and pops it on success: if the
+    /// tactic's own grammar fails, the chain survives and `by_body`'s recovery
+    /// names the tactics — outermost first — instead of degrading the
+    /// declaration to an unattributable synthetic sorry.
     pub(super) fn tactic(&mut self) -> Result<SurfaceTactic, ParseError> {
+        let lead = self.tactic_lead_text();
+        self.tactic_chain.push(lead);
+        let result = self.tactic_dispatch();
+        if result.is_ok() {
+            self.tactic_chain.pop();
+        }
+        result
+    }
+
+    fn tactic_dispatch(&mut self) -> Result<SurfaceTactic, ParseError> {
         let span = self.current_span();
 
         match self.current_kind().clone() {

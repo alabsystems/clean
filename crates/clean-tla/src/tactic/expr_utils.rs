@@ -408,33 +408,6 @@ impl TlaTacticEngine {
         false
     }
 
-    /// Check if expression is 2 (in various forms)
-    pub(super) fn is_two(&self, expr: &Expr) -> bool {
-        // Literal 2
-        if let ExprKind::Lit(clean_kernel::Literal::Nat(n)) = expr.kind() {
-            return n.to_u64() == Some(2);
-        }
-        // Int.ofNat 2
-        if let ExprKind::App(f, arg) = expr.kind() {
-            if let ExprKind::Const(name, _) = f.kind() {
-                if name.to_string() == "Int.ofNat" || name.to_string() == "TLA.int" {
-                    if let ExprKind::Lit(clean_kernel::Literal::Nat(n)) = arg.kind() {
-                        return n.to_u64() == Some(2);
-                    }
-                }
-            }
-        }
-        // Nat.succ (Nat.succ Nat.zero)
-        if let ExprKind::App(f, arg) = expr.kind() {
-            if let ExprKind::Const(name, _) = f.kind() {
-                if name.to_string() == "Nat.succ" {
-                    return self.is_one(arg);
-                }
-            }
-        }
-        false
-    }
-
     /// Check if type is Nat
     pub(super) fn is_nat_type(&self, ty: &Expr) -> bool {
         if let ExprKind::Const(name, _) = ty.kind() {

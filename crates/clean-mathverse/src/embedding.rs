@@ -1641,7 +1641,6 @@ mod tests {
     fn test_find_semantic_mode() {
         // Simulates what `mathverse find --semantic` would do: BM25 search via
         // the library's search_semantic() method.
-        use crate::types::{AxiomProfile, ContentDomain, ImportConfidence, SourceSystem, NO_VALUE};
 
         let strings = vec![
             "Nat.add_comm".into(),

@@ -7,7 +7,7 @@
 //! Part of #3242.
 
 use super::chain::{CertificateChain, CertificateEntry, ChainTrustLevel, VerificationMethod};
-use super::network_sound::{verify_network_cert_sound, NetworkSoundnessResult, T71_PROOF_STATUS};
+use super::network_sound::{verify_network_cert_sound, T71_PROOF_STATUS};
 use crate::spec::ProofStatus;
 
 // ---------------------------------------------------------------------------

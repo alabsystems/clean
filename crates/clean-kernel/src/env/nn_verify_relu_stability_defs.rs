@@ -34,6 +34,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Shared constants for C012 theorem construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct C012Consts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -58,6 +59,7 @@ pub(super) struct C012Consts {
     pub(super) crown_exact_under_stable_core: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl C012Consts {
     pub(super) fn new() -> Self {
         Self {
@@ -400,6 +402,7 @@ pub(super) fn build_lp_reduction_type(c: &C012Consts) -> Expr {
 ///   crown_exact_under_stable_core n net x0 eps h
 /// ```
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) fn build_crown_exact_under_stable_proof(c: &C012Consts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (n_id, n) = b.fresh_local(c.nat.clone());

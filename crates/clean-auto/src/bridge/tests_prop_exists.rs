@@ -57,11 +57,7 @@ fn test_build_exists_proof_fails_without_witness() {
             Expr::const_(Name::from_string("Exists"), vec![Level::zero()]),
             a_ty.clone(),
         ),
-        Expr::lam(
-            clean_kernel::BinderInfo::Default,
-            a_ty.clone(),
-            body.clone(),
-        ),
+        Expr::lam(BinderInfo::Default, a_ty.clone(), body.clone()),
     );
 
     let result = bridge.build_exists_proof(&goal, &a_ty, &body, 0);
@@ -97,7 +93,7 @@ fn test_extract_exists_universe_from_well_formed_exists() {
             Expr::const_(Name::from_string("Exists"), vec![Level::zero()]),
             nat_ty.clone(),
         ),
-        Expr::lam(clean_kernel::BinderInfo::Default, nat_ty, body),
+        Expr::lam(BinderInfo::Default, nat_ty, body),
     );
 
     let form = classify_for_proof_translation(&exists_expr);

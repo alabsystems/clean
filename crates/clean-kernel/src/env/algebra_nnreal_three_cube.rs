@@ -69,6 +69,8 @@ struct ThreeCubeConsts {
     and_c: Expr,
     and_intro: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     exists_c: Expr,
     exists_intro: Expr,
     nat_le: Expr,
@@ -231,6 +233,7 @@ impl ThreeCubeConsts {
         Expr::apps(self.and_intro.clone(), [p.clone(), q.clone(), hp, hq])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn equiv(&self, a: &Expr, b: &Expr) -> Expr {
         Expr::apps(self.causeq_equiv.clone(), [a.clone(), b.clone()])
     }

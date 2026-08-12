@@ -70,8 +70,8 @@ impl OleanExporter {
         self.write_constant_info_with_definition_safety(info, DefinitionSafety::Safe)
     }
 
-    /// Serialize a constant while preserving an environment-supplied
-    /// `DefinitionSafety` for definition values.
+    /// Serialize a constant while preserving environment-supplied declaration
+    /// safety for definitions, axioms, and opaques.
     ///
     /// The plain `ConstantInfo` model does not carry this metadata, so
     /// standalone callers remain explicitly safe-by-construction. Environment
@@ -80,8 +80,36 @@ impl OleanExporter {
     pub(crate) fn write_constant_info_with_definition_safety(
         &mut self,
         info: &ConstantInfo,
-        definition_safety: DefinitionSafety,
+        declaration_safety: DefinitionSafety,
     ) -> OleanResult<u64> {
+        match (info.kind, info.value.is_some()) {
+            (ConstantKind::Axiom, false)
+            | (ConstantKind::Definition, true)
+            | (ConstantKind::Theorem, true)
+            | (ConstantKind::Opaque, true) => {}
+            _ => {
+                return Err(crate::error::OleanError::Region(format!(
+                    "{} has an inconsistent constant kind/value shape ({:?}, value={})",
+                    info.name,
+                    info.kind,
+                    info.value.is_some()
+                )));
+            }
+        }
+        if info.kind == ConstantKind::Theorem && declaration_safety != DefinitionSafety::Safe {
+            return Err(crate::error::OleanError::Region(format!(
+                "theorem {} cannot encode non-safe declaration authority",
+                info.name
+            )));
+        }
+        if declaration_safety == DefinitionSafety::Partial && info.kind != ConstantKind::Definition
+        {
+            return Err(crate::error::OleanError::Region(format!(
+                "{:?} {} cannot encode partial definition safety",
+                info.kind, info.name
+            )));
+        }
+
         let name_offset = self.write_kernel_name(&info.name);
         let name_ptr = self.offset_to_ptr(name_offset);
 
@@ -104,9 +132,11 @@ impl OleanExporter {
                 // (AxiomVal extends ConstantVal with isUnsafe field)
                 self.align8();
                 let val_offset = self.current_offset();
-                self.write_header(0, 2, 0); // 2 fields: ConstantVal ptr + isUnsafe
+                // Real Lean ABI: one boxed field followed by one raw Bool byte;
+                // total compact size rounds to 24 bytes.
+                self.write_header(0, 1, 24);
                 self.write_u64(const_val_ptr);
-                self.write_u64(Self::scalar_ptr(0)); // isUnsafe = false
+                self.write_u64(u64::from(declaration_safety == DefinitionSafety::Unsafe));
                 let val_ptr = self.offset_to_ptr(val_offset);
 
                 // ConstantInfo.axiomInfo wrapper (tag 0, 1 field)
@@ -133,14 +163,21 @@ impl OleanExporter {
                     ConstantKind::Theorem => {
                         Ok(self.write_theorem_inner(info, const_val_ptr, value_ptr))
                     }
-                    ConstantKind::Opaque => {
-                        Ok(self.write_opaque_inner(info, const_val_ptr, value_ptr))
+                    ConstantKind::Opaque => Ok(self.write_opaque_inner(
+                        info,
+                        const_val_ptr,
+                        value_ptr,
+                        declaration_safety == DefinitionSafety::Unsafe,
+                    )),
+                    ConstantKind::Definition => Ok(self.write_definition_inner(
+                        info,
+                        const_val_ptr,
+                        value_ptr,
+                        declaration_safety,
+                    )),
+                    ConstantKind::Axiom => {
+                        unreachable!("kind/value consistency is validated before serialization")
                     }
-                    // Definition is the common case. An Axiom carrying a value
-                    // is anomalous (axioms have no value); fall through to the
-                    // definition encoding so the value is not silently lost.
-                    ConstantKind::Definition | ConstantKind::Axiom => Ok(self
-                        .write_definition_inner(info, const_val_ptr, value_ptr, definition_safety)),
                 }
             }
         }
@@ -234,23 +271,25 @@ impl OleanExporter {
     /// via `read_constant_value`. Layout:
     ///   +8:  ConstantVal ptr
     ///   +16: value (Expr)
-    ///   +24: isUnsafe (Bool scalar; `false = 0`)
-    ///   +32: all (List Name)
+    ///   +24: all (List Name)
+    ///   +32: isUnsafe (raw Bool byte)
     fn write_opaque_inner(
         &mut self,
         info: &ConstantInfo,
         const_val_ptr: u64,
         value_ptr: u64,
+        is_unsafe: bool,
     ) -> u64 {
         let all_ptr = self.write_name_list(std::slice::from_ref(&info.name));
 
         self.align8();
         let val_offset = self.current_offset();
-        self.write_header(0, 4, 0); // 4 fields: ConstantVal ptr + value + isUnsafe + all
+        // Real Lean ABI pointer-reorders `all` before the trailing raw Bool.
+        self.write_header(0, 3, 40);
         self.write_u64(const_val_ptr);
         self.write_u64(value_ptr);
-        self.write_u64(Self::scalar_ptr(0)); // isUnsafe = false
         self.write_u64(all_ptr);
+        self.write_u64(u64::from(is_unsafe));
         let val_ptr = self.offset_to_ptr(val_offset);
 
         // ConstantInfo.opaqueInfo wrapper (tag 3, 1 field)
@@ -367,6 +406,17 @@ impl OleanExporter {
     /// - Returns Ok(pointer) for use in constants array.
     /// - Returns Err(UnsupportedBigNat) if a type expression contains BigNat > u64.
     pub(crate) fn write_inductive_info(&mut self, ind: &InductiveVal) -> OleanResult<u64> {
+        self.write_inductive_info_with_unsafe(ind, false)
+    }
+
+    /// Write an inductive while preserving `InductiveVal.isUnsafe` supplied by
+    /// the owning environment. A bare kernel `InductiveVal` has no such field,
+    /// so standalone callers remain safe by construction.
+    pub(crate) fn write_inductive_info_with_unsafe(
+        &mut self,
+        ind: &InductiveVal,
+        is_unsafe: bool,
+    ) -> OleanResult<u64> {
         let name_offset = self.write_kernel_name(&ind.name);
         let name_ptr = self.offset_to_ptr(name_offset);
 
@@ -406,7 +456,7 @@ impl OleanExporter {
         // field and silently dropped `numNested`/`isReflexive` on read.
         self.align8();
         let val_offset = self.current_offset();
-        self.write_header(0, 7, 0);
+        self.write_header(0, 6, 64);
         self.write_u64(const_val_ptr);
         self.write_u64(Self::scalar_ptr(ind.num_params as u64));
         self.write_u64(Self::scalar_ptr(ind.num_indices as u64));
@@ -416,7 +466,11 @@ impl OleanExporter {
         // kernel's `is_nested` flag as 1 (nested) or 0 (not nested).
         self.write_u64(Self::scalar_ptr(u64::from(ind.is_nested)));
         // Packed trailing booleans (isRec, isUnsafe, isReflexive).
-        self.write_u64(Self::pack_bools3(ind.is_recursive, false, ind.is_reflexive));
+        self.write_u64(Self::pack_bools3(
+            ind.is_recursive,
+            is_unsafe,
+            ind.is_reflexive,
+        ));
         let val_ptr = self.offset_to_ptr(val_offset);
 
         // ConstantInfo.inductInfo wrapper (tag 5, 1 field)
@@ -443,6 +497,16 @@ impl OleanExporter {
     /// - Returns Ok(pointer) for use in constants array.
     /// - Returns Err(UnsupportedBigNat) if the type contains BigNat > u64.
     pub(crate) fn write_constructor_info(&mut self, ctor: &ConstructorVal) -> OleanResult<u64> {
+        self.write_constructor_info_with_unsafe(ctor, false)
+    }
+
+    /// Write a constructor while preserving `ConstructorVal.isUnsafe` supplied
+    /// by the owning environment.
+    pub(crate) fn write_constructor_info_with_unsafe(
+        &mut self,
+        ctor: &ConstructorVal,
+        is_unsafe: bool,
+    ) -> OleanResult<u64> {
         let name_offset = self.write_kernel_name(&ctor.name);
         let name_ptr = self.offset_to_ptr(name_offset);
 
@@ -461,16 +525,16 @@ impl OleanExporter {
         self.write_u64(type_ptr);
         let const_val_ptr = self.offset_to_ptr(const_val_offset);
 
-        // ConstructorVal: ConstantVal ptr + extra fields (6 fields total)
+        // Real Lean ABI: five boxed fields plus one trailing raw Bool byte.
         self.align8();
         let val_offset = self.current_offset();
-        self.write_header(0, 6, 0);
+        self.write_header(0, 5, 56);
         self.write_u64(const_val_ptr);
         self.write_u64(induct_ptr);
         self.write_u64(Self::scalar_ptr(ctor.constructor_idx as u64));
         self.write_u64(Self::scalar_ptr(ctor.num_params as u64));
         self.write_u64(Self::scalar_ptr(ctor.num_fields as u64));
-        self.write_u64(Self::scalar_ptr(0)); // isUnsafe = false
+        self.write_u64(u64::from(is_unsafe));
         let val_ptr = self.offset_to_ptr(val_offset);
 
         // ConstantInfo.ctorInfo wrapper (tag 6, 1 field)
@@ -500,6 +564,16 @@ impl OleanExporter {
     /// - Returns Ok(pointer) for use in constants array.
     /// - Returns Err(UnsupportedBigNat) if the type or rules contain BigNat > u64.
     pub(crate) fn write_recursor_info(&mut self, rec: &RecursorVal) -> OleanResult<u64> {
+        self.write_recursor_info_with_unsafe(rec, false)
+    }
+
+    /// Write a recursor while preserving `RecursorVal.isUnsafe` supplied by
+    /// the owning environment.
+    pub(crate) fn write_recursor_info_with_unsafe(
+        &mut self,
+        rec: &RecursorVal,
+        is_unsafe: bool,
+    ) -> OleanResult<u64> {
         let name_offset = self.write_kernel_name(&rec.name);
         let name_ptr = self.offset_to_ptr(name_offset);
 
@@ -521,10 +595,11 @@ impl OleanExporter {
         self.write_u64(type_ptr);
         let const_val_ptr = self.offset_to_ptr(const_val_offset);
 
-        // RecursorVal: ConstantVal ptr + extra fields (9 fields total)
+        // Real Lean ABI: seven boxed fields followed by the raw `k` and
+        // `isUnsafe` bytes at +64/+65; total compact size rounds to 72.
         self.align8();
         let val_offset = self.current_offset();
-        self.write_header(0, 9, 0);
+        self.write_header(0, 7, 72);
         self.write_u64(const_val_ptr);
         self.write_u64(all_ptr);
         self.write_u64(Self::scalar_ptr(rec.num_params as u64));
@@ -532,8 +607,7 @@ impl OleanExporter {
         self.write_u64(Self::scalar_ptr(rec.num_motives as u64));
         self.write_u64(Self::scalar_ptr(rec.num_minors as u64));
         self.write_u64(rules_ptr);
-        self.write_u64(Self::scalar_ptr(u64::from(rec.is_k)));
-        self.write_u64(Self::scalar_ptr(0)); // isUnsafe = false
+        self.write_u64(Self::pack_bools3(rec.is_k, is_unsafe, false));
         let val_ptr = self.offset_to_ptr(val_offset);
 
         // ConstantInfo.recInfo wrapper (tag 7, 1 field)

@@ -21,9 +21,7 @@ fn test_elab_prop() {
 #[test]
 fn test_elab_nat_lit() {
     let expr = elab("42").unwrap();
-    assert!(
-        matches!(expr.kind(), ExprKind::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(42))
-    );
+    assert!(matches!(expr.kind(), ExprKind::Lit(Literal::Nat(n)) if n.to_u64() == Some(42)));
 }
 
 #[test]

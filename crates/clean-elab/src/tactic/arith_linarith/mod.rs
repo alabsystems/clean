@@ -43,7 +43,10 @@ pub(crate) use trusted_arith::{arith_locations, enable_arith_location_tracking};
 pub(crate) use super::arith_linarith_proof::build_linarith_proof;
 
 use super::smt::AyConfig;
-use super::{decide, ProofState, TacticError, TacticResult};
+// Kernel-evaluating `decide` ladder, not the `smt::decide` re-exported from
+// `super` — see the note in `norm_num.rs`.
+use super::decide::eval_decide as decide;
+use super::{ProofState, TacticError, TacticResult};
 
 fn certified_unsat_without_kernel_proof(reason: impl Into<String>) -> TacticResult {
     Err(TacticError::ArithmeticFailed {

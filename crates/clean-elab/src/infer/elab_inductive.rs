@@ -323,6 +323,73 @@ impl<'a> ElabCtx<'a> {
             raw_ctors.push((ctor_name, ctor_ty_raw, ctor_auto_implicits));
         }
 
+        // U2 rung 5: result-sort inference, BEFORE decl-level-param collection
+        // so an inferred fresh level is already solved (and instantiated away)
+        // when ctor Consts bake in the level-param list. When the result
+        // sort's level still contains an ASSIGNABLE fresh param (the parser's
+        // `.{u}`-with-omitted-sort TypeImplicit default), solve it as the max
+        // of the raw constructor-field sorts with a Sort-1 floor (enums land
+        // on Type 0) — Lean's `inferResultingUniverse` minimality. Field
+        // sorts mentioning the target param (recursive fields) are excluded;
+        // closed domains only (dependent fields approximated away —
+        // conservative: a too-small max fails LOUDLY in add_inductive below,
+        // never unsoundly).
+        // Gate on the SURFACE shape: only the `TypeImplicit` result form (the
+        // parser's omitted-sort default for `.{u}` inductives, or a literal
+        // `Type*`) is inferred. An EXPLICIT sort mentioning auto-bound params
+        // (`: β → Type (max u v)`) must keep its params — they are the
+        // declaration's universe parameters, not inference targets (#796
+        // regression pin).
+        let result_sort_is_implicit = matches!(
+            ty,
+            SurfaceExpr::Universe(_, clean_parser::UniverseExpr::TypeImplicit)
+        );
+        if result_sort_is_implicit {
+            let result_level_inst = {
+                let mut sort = self.metas.instantiate(&ind_ty);
+                sort = self.metas.instantiate_levels(&sort);
+                while let clean_kernel::ExprKind::Pi(_, _, body) = sort.kind() {
+                    sort = body.as_ref().clone();
+                }
+                match sort.kind() {
+                    clean_kernel::ExprKind::Sort(l) => Some(self.metas.instantiate_level(l)),
+                    _ => None,
+                }
+            };
+            if let Some(rl) = result_level_inst {
+                let mut rl_params = Vec::new();
+                rl.collect_params(&mut rl_params);
+                let assignable: Vec<_> = rl_params
+                    .iter()
+                    .filter(|p| !self.metas.is_rigid_level_param(p))
+                    .cloned()
+                    .collect();
+                if !assignable.is_empty() {
+                    let mut target = Level::succ(Level::zero());
+                    for (_n, ctor_ty_raw, _ai) in &raw_ctors {
+                        let mut walk = self.metas.instantiate(ctor_ty_raw);
+                        while let clean_kernel::ExprKind::Pi(_, dom, body) = walk.kind() {
+                            if !dom.has_loose_bvars() {
+                                if let Ok(l) = self.infer_sort(dom) {
+                                    let l = self.metas.instantiate_level(&l);
+                                    let mut ps = Vec::new();
+                                    l.collect_params(&mut ps);
+                                    if !ps.iter().any(|p| assignable.contains(p)) {
+                                        target = Level::max(target, l);
+                                    }
+                                }
+                            }
+                            let next = body.as_ref().clone();
+                            walk = next;
+                        }
+                    }
+                    let target = target.normalize();
+                    let _ =
+                        crate::unify::level_solve::solve_level_eq(&mut self.metas, &rl, &target);
+                }
+            }
+        }
+
         let mut decl_level_params = Vec::new();
         let ind_ty_levels = self.metas.instantiate_levels(&ind_ty);
         collect_expr_level_params(&ind_ty_levels, &mut decl_level_params);
@@ -599,6 +666,11 @@ impl<'a> ElabCtx<'a> {
             // parent declaration's parameter set is already complete, so restore
             // this mutable elaborator state on both success and failure.
             let ind_universe_params_len = self.universe_params.len();
+            let filtered_deriving: Vec<String> = deriving
+                .iter()
+                .filter(|c| c.as_str() != "DeepInduction")
+                .cloned()
+                .collect();
             let result = self.generate_derived_instances_inductive(
                 &registered_candidate,
                 &ind_name,
@@ -606,7 +678,7 @@ impl<'a> ElabCtx<'a> {
                 binders,
                 ctors,
                 &ind_ty,
-                deriving,
+                &filtered_deriving,
             );
             self.universe_params.truncate(ind_universe_params_len);
             result?
@@ -623,6 +695,7 @@ impl<'a> ElabCtx<'a> {
             ty: ind_ty,
             constructors,
             derived_instances,
+            wants_deep_induction: deriving.iter().any(|c| c.as_str() == "DeepInduction"),
             modifiers: *modifiers,
         })
     }

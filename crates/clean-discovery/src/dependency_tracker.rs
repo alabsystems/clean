@@ -29,7 +29,7 @@ impl ExprVisitor for ConstDependencyCollector {
 
 /// Extract the set of constant names referenced by an expression.
 #[must_use]
-pub(crate) fn extract_dependencies(expr: &Expr) -> HashSet<String> {
+pub fn extract_dependencies(expr: &Expr) -> HashSet<String> {
     let mut collector = ConstDependencyCollector;
     collector.visit_expr(expr)
 }
@@ -40,19 +40,19 @@ fn serialization_error(error: serde_json::Error) -> DiscoveryError {
 
 /// Maps proof names to the kernel constants they reference.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct DependencyGraph {
+pub struct DependencyGraph {
     proof_dependencies: HashMap<String, HashSet<String>>,
 }
 
 impl DependencyGraph {
     /// Create an empty dependency graph.
     #[must_use]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
     /// Add or replace a proof entry by scanning its proof term.
-    pub(crate) fn add_proof(&mut self, proof_name: impl Into<String>, proof_term: &Expr) {
+    pub fn add_proof(&mut self, proof_name: impl Into<String>, proof_term: &Expr) {
         let dependencies = extract_dependencies(proof_term);
         self.proof_dependencies
             .insert(proof_name.into(), dependencies);
@@ -60,13 +60,13 @@ impl DependencyGraph {
 
     /// Remove a proof entry if it exists.
     #[must_use]
-    pub(crate) fn remove_proof(&mut self, proof_name: &str) -> bool {
+    pub fn remove_proof(&mut self, proof_name: &str) -> bool {
         self.proof_dependencies.remove(proof_name).is_some()
     }
 
     /// Return the proofs that reference any changed constant.
     #[must_use]
-    pub(crate) fn affected_proofs<I, S>(&self, changed_consts: I) -> HashSet<String>
+    pub fn affected_proofs<I, S>(&self, changed_consts: I) -> HashSet<String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -89,22 +89,22 @@ impl DependencyGraph {
 
     /// Return the dependency set for a named proof.
     #[must_use]
-    pub(crate) fn get_dependencies(&self, proof_name: &str) -> Option<&HashSet<String>> {
+    pub fn get_dependencies(&self, proof_name: &str) -> Option<&HashSet<String>> {
         self.proof_dependencies.get(proof_name)
     }
 
     /// Iterate over every proof tracked by the graph.
-    pub(crate) fn all_proofs(&self) -> impl Iterator<Item = &str> + '_ {
+    pub fn all_proofs(&self) -> impl Iterator<Item = &str> + '_ {
         self.proof_dependencies.keys().map(String::as_str)
     }
 
     /// Serialize the graph to JSON.
-    pub(crate) fn serialize(&self) -> Result<String, DiscoveryError> {
+    pub fn serialize(&self) -> Result<String, DiscoveryError> {
         serde_json::to_string_pretty(self).map_err(serialization_error)
     }
 
     /// Deserialize a graph from JSON.
-    pub(crate) fn deserialize(json: &str) -> Result<Self, DiscoveryError> {
+    pub fn deserialize(json: &str) -> Result<Self, DiscoveryError> {
         serde_json::from_str(json).map_err(serialization_error)
     }
 }

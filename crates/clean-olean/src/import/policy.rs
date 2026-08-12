@@ -71,6 +71,26 @@ pub struct OleanImportPolicy {
     /// families eagerly and leaves the definitional kinds to the lazy
     /// `ConstantSource`. See [`ImportKinds`].
     import_kinds: ImportKinds,
+    /// Defer the O(env) HEURISTIC instance/structure-field backfill passes
+    /// (`register_class_typed_definitions_as_instances`,
+    /// `register_structure_fields_from_projections`) so they run ONCE after the
+    /// whole import closure is loaded instead of after EVERY module.
+    ///
+    /// PERF: those two passes each re-scan the entire growing environment. Run
+    /// per-module across an N-module closure (e.g. `Init` ≈ 320 modules / 57K
+    /// constants) that is O(N × env) — a quadratic that dominates the `Init`
+    /// pre-load. Deferring collapses it to a single O(env) pass.
+    ///
+    /// SOUNDNESS/BEHAVIOR: both passes are additive, idempotent, and
+    /// order-insensitive w.r.t. the DECODED real-`@[class]`/`@[instance]`
+    /// registrations (which still run per-module BEFORE the deferred passes, so
+    /// first-writer-wins is preserved). The final registry is identical to the
+    /// per-module schedule; only WHEN the heuristic runs changes. Default
+    /// `false` keeps the historical per-module schedule for every existing
+    /// caller. Only the closure entry [`load_module_with_deps_with_import_policy`]
+    /// honours it (it runs the single end-pass), so it is safe to set only on
+    /// that path.
+    defer_global_instance_backfill: bool,
 }
 
 impl OleanImportPolicy {
@@ -81,6 +101,7 @@ impl OleanImportPolicy {
             unpinned_external,
             proof_elision: ProofValueElision::None,
             import_kinds: ImportKinds::All,
+            defer_global_instance_backfill: false,
         }
     }
 
@@ -123,6 +144,26 @@ impl OleanImportPolicy {
     #[must_use]
     pub const fn import_kinds(self) -> ImportKinds {
         self.import_kinds
+    }
+
+    /// Return a copy of this policy that DEFERS the O(env) heuristic
+    /// instance/structure-field backfill passes to a single end-of-closure run.
+    ///
+    /// See [`defer_global_instance_backfill`](Self::defer_global_instance_backfill).
+    /// Only [`load_module_with_deps_with_import_policy`] acts on this (it runs the
+    /// single deferred pass after the closure loads); set it only on that path.
+    #[must_use]
+    pub const fn with_deferred_global_instance_backfill(mut self) -> Self {
+        self.defer_global_instance_backfill = true;
+        self
+    }
+
+    /// Whether the O(env) heuristic instance/structure-field backfill is deferred
+    /// to a single end-of-closure pass (see
+    /// [`with_deferred_global_instance_backfill`](Self::with_deferred_global_instance_backfill)).
+    #[must_use]
+    pub const fn defer_global_instance_backfill(self) -> bool {
+        self.defer_global_instance_backfill
     }
 
     /// Whether this policy registers only inductive-family kinds (the eager leg

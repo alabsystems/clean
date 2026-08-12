@@ -98,6 +98,7 @@ struct IntAbsNegConsts {
     int_abs: Expr,
     int_neg: Expr,
     int_of_nat: Expr,
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     int_neg_succ: Expr,
     int_rec: Expr,
     nat_rec: Expr,
@@ -149,6 +150,7 @@ impl IntAbsNegConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }

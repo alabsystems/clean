@@ -128,10 +128,18 @@ impl TlaTacticEngine {
         let mut ctx = TlaContext::new();
 
         // Ensure core logical connectives exist so tauto/cases/by_cases can run.
-        let _ = ctx.env.init_true_false();
-        let _ = ctx.env.init_and();
-        let _ = ctx.env.init_iff();
-        let _ = ctx.env.init_classical();
+        ctx.env
+            .init_true_false()
+            .expect("fresh TLA engine should initialize True and False");
+        ctx.env
+            .init_and()
+            .expect("fresh TLA engine should initialize And");
+        ctx.env
+            .init_iff()
+            .expect("fresh TLA engine should initialize Iff");
+        ctx.env
+            .init_classical()
+            .expect("fresh TLA engine should initialize classical logic");
 
         Self {
             env: ctx.env.clone(),
@@ -146,10 +154,14 @@ impl TlaTacticEngine {
     /// Create with a pre-configured environment
     pub fn with_env(mut env: Environment) -> Self {
         // Make sure the passed env supports propositional tactics too.
-        let _ = env.init_true_false();
-        let _ = env.init_and();
-        let _ = env.init_iff();
-        let _ = env.init_classical();
+        env.init_true_false()
+            .expect("TLA engine environment should initialize True and False");
+        env.init_and()
+            .expect("TLA engine environment should initialize And");
+        env.init_iff()
+            .expect("TLA engine environment should initialize Iff");
+        env.init_classical()
+            .expect("TLA engine environment should initialize classical logic");
 
         let mut ctx = TlaContext::new();
         ctx.env = env.clone();
@@ -180,6 +192,7 @@ impl TlaTacticEngine {
     pub fn prove(&mut self, obligation: &TlaObligation) -> ObligationResult {
         let start = Instant::now();
         let mut tactics_tried = Vec::new();
+        self.ctx.reset_for_obligation();
 
         // Choose tactic based on hint or heuristics
         let tactic = obligation.tactic_hint.as_deref().unwrap_or_else(|| {

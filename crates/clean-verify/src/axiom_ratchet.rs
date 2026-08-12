@@ -51,13 +51,11 @@
 //! injected straight into the env via `env_mut().add_decl` have no
 //! `SpecDefinition` at all (M1). The env census subsumes both.
 //!
-//! NOTE (out of scope here; a parallel agent owns
-//! `axiom_refutation_gate.rs`): that gate's axiom enumeration
-//! (`axiom_refutation_gate.rs:558`) still filters on the `is_axiom` flag
-//! (`def.is_axiom`). For the same C1 reason it should switch to value-presence
-//! (`value_src.is_none() && elaborated_value.is_none()`) — otherwise a value-less
-//! `is_axiom:false` kernel axiom is never refuted-tested. Left as a TODO for the
-//! gate owner; not edited here.
+//! The definitional-disagreement gate uses the same live
+//! [`ConstantKind::Axiom`] source of truth. It cross-checks every spec-marked
+//! axiom one-to-one against that census, fails closed on metadata/kind/type
+//! divergence, and separately reports environment-only kernel foundations and
+//! trust-marker tripwires.
 
 use std::collections::BTreeSet;
 
@@ -85,9 +83,11 @@ pub fn category_label(category: AxiomCategory) -> &'static str {
         AxiomCategory::FoundationalRule => "FoundationalRule",
         AxiomCategory::DerivedLemma => "DerivedLemma",
         AxiomCategory::HelperAxiom => "HelperAxiom",
-        // `AxiomCategory` is `#[non_exhaustive]`; treat any future variant as an
-        // explicit "other" rather than panicking in a guard path.
-        _ => "Other",
+        // `AxiomCategory` is `#[non_exhaustive]` for DOWNSTREAM crates only; in
+        // its defining crate the match is exhaustive, so a catch-all arm here is
+        // unreachable. Adding a variant therefore fails to compile at this site
+        // — which is what the former `_ => "Other"` arm was trying to buy, only
+        // now it is checked instead of silently mislabelling the new variant.
     }
 }
 
@@ -152,8 +152,10 @@ pub fn origin_label(origin: AxiomOrigin) -> &'static str {
         AxiomOrigin::FlagAxiom => "FlagAxiom",
         AxiomOrigin::PendingLeaf => "PendingLeaf",
         AxiomOrigin::EnvInjected => "EnvInjected",
-        // `AxiomOrigin` is `#[non_exhaustive]`; never panic in a guard path.
-        _ => "Other",
+        // `AxiomOrigin` is `#[non_exhaustive]` for DOWNSTREAM crates only; in its
+        // defining crate this match is exhaustive, so a catch-all arm is
+        // unreachable. A new variant fails to compile here rather than being
+        // silently labelled "Other".
     }
 }
 

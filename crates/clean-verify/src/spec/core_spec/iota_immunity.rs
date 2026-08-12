@@ -68,7 +68,7 @@ use crate::spec::Specification;
 /// `par_reduces_cd`'s constructor order (`par_reduces_cd.rs:187-198`).
 /// `Some(i)` indexes `CD_STRUCTURAL_ARMS`; `None` marks the three arms this
 /// module handles specially.
-const ARM_ORDER: [Option<usize>; 11] = [
+pub(super) const ARM_ORDER: [Option<usize>; 11] = [
     None,    // refl
     Some(0), // beta
     Some(1), // app
@@ -110,7 +110,10 @@ impl Specification {
     }
 
     /// `kexpr_const_name (kapp_fn {e}) = some nm`. A **Prop**, since `Eq` is.
-    fn head_is(e: &str) -> String {
+    ///
+    /// Shared with `wh_neutral_stuck`, which needs the identical predicate; it
+    /// is exported rather than restated there.
+    pub(super) fn head_is(e: &str) -> String {
         format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (OptionType.some Name nm)")
     }
 

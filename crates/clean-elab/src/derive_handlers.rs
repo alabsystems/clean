@@ -194,6 +194,7 @@ pub(crate) fn wrap_param_lambdas(body: Expr, num_params: u32) -> Expr {
 }
 
 /// Build the instance type: `ClassName IndType` (applied to params).
+#[allow(dead_code)] // 2026-08-10: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn mk_instance_type(class_name: &str, ind: &InductiveVal) -> Expr {
     let ind_applied = mk_ind_type_applied(ind);
     Expr::app(Expr::const_str(class_name), ind_applied)

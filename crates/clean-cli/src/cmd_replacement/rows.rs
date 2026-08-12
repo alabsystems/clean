@@ -109,6 +109,7 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
     ]
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn python_tool_row(
     id: &'static str,
     command: &'static str,

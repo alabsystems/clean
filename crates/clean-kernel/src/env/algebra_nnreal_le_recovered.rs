@@ -87,6 +87,8 @@ pub(crate) struct NNLeConsts {
     pub(crate) propext: Expr,
     // Eq.{1} over Rat.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) eq_rat: Expr,
     pub(crate) eq_trans: Expr,
     pub(crate) eq_subst: Expr,

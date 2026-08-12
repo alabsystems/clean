@@ -55,6 +55,15 @@ pub struct LocalContext {
     #[cfg(kani)]
     used_ids: BTreeSet<FVarId>,
     next_id: u64,
+    /// Monotone lower bound for `push_low_local`'s free-id scan. `used_ids`
+    /// is permanent, so every id below the cursor is known-used and the scan
+    /// may start here instead of re-probing the dense range from
+    /// `decls.len()` on every push — that re-probe made long unifier
+    /// sessions QUADRATIC in cumulative allocations (measured: a 2.55M-push
+    /// corec-spine elaboration spent ~6.6e10 hash probes; with the cursor,
+    /// 340). Uniqueness is still enforced by the unchanged `used_ids` scan
+    /// loop and insert below — the cursor only moves the scan's start.
+    low_cursor: u64,
 }
 
 impl LocalContext {
@@ -148,7 +157,7 @@ impl LocalContext {
         const META_TAG: u64 = 1u64 << 63;
         // Smallest free id below the tag region. `used_ids` is permanent (never
         // cleared except in tests), so this never reuses a popped id.
-        let mut candidate = self.decls.len() as u64;
+        let mut candidate = (self.decls.len() as u64).max(self.low_cursor);
         if candidate >= META_TAG {
             candidate = 0;
         }
@@ -156,6 +165,7 @@ impl LocalContext {
             candidate += 1;
             debug_assert!(candidate < META_TAG, "exhausted low FVarId range");
         }
+        self.low_cursor = candidate + 1;
         let id = FVarId(candidate);
         self.used_ids.insert(id);
         self.index_by_id.insert(id, self.decls.len());
@@ -280,6 +290,7 @@ impl LocalContext {
     #[cfg(test)]
     pub(crate) fn clear_reuse_history(&mut self) {
         self.used_ids.clear();
+        self.low_cursor = 0;
     }
 
     /// Push a binding with a specific FVarId (used by elaborator)

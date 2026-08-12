@@ -5,7 +5,6 @@
 //! Dedicated tests for certificate composition (`composition.rs`).
 
 use super::composition::*;
-use super::*;
 use clean_elab::cert::external::{
     ConstraintKind, ExternalEntailmentCert, ExternalLinearConstraint, ExternalRational,
 };
@@ -608,6 +607,8 @@ fn test_compose_error_non_exhaustive_match() {
         CompositionError::DimensionMismatch(_) => panic!("wrong variant"),
         CompositionError::VerificationFailed(_) => panic!("wrong variant"),
         CompositionError::ComposedVerificationFailed(_) => panic!("wrong variant"),
-        _ => {} // non_exhaustive wildcard
+        // No catch-all: `CompositionError` is `#[non_exhaustive]` for DOWNSTREAM
+        // crates only, so in-crate this match is exhaustive and a wildcard is
+        // unreachable. A new variant fails to compile here instead.
     }
 }

@@ -154,10 +154,11 @@ impl Specification {
         })?;
 
         // infer_sound_at_let: KExpr.rec let_-case handler for the InferSoundAt
-        // motive. KernelInferAccepts has NO let_ constructor — the real kernel's
-        // Let arm is outside the core KExpr fragment the infer model covers
-        // (sort/bvar/app/lam/pi/const only), so an acceptance witness at a let is
-        // uninhabited, exactly like the bvar case. The master inversion
+        // motive. KernelInferAccepts has NO let_ constructor — not because
+        // `let_` is outside KExpr (it IS a KExpr constructor, and the deployed
+        // kernel has a successful Let arm) but because the fragment this infer
+        // model covers stops at sort/bvar/app/lam/pi/const. So an acceptance
+        // witness at a let is uninhabited, exactly like the bvar case. The master inversion
         // kernel_infer_inversion at a let reduces InferInversionAt to Empty (the
         // let_ minor of that semireducible motive returns Empty, mirroring bvar),
         // so the case is discharged by Empty.rec — the vacuous/reject shape, with
@@ -189,11 +190,16 @@ impl Specification {
             is_axiom: false,
             description: concat!(
                 "KExpr.rec let_-case handler for the InferSoundAt motive. ",
-                "KernelInferAccepts has no let_ constructor (Let is outside the ",
-                "core KExpr fragment the infer model covers), so an acceptance ",
+                "KernelInferAccepts has no let_ constructor, so an acceptance ",
                 "witness at a let is uninhabited — the master inversion reduces ",
                 "InferInversionAt to Empty at a let, discharging the case by ",
-                "Empty.rec (the same vacuous shape as the bvar case). Part of #461."
+                "Empty.rec (the same vacuous shape as the bvar case, though NOT ",
+                "the same justification: bvar is uninhabited faithfully, since the ",
+                "release body errors unconditionally at tc/infer.rs:350, whereas ",
+                "the release body INFERS Let successfully at :584 and KExpr.let_ ",
+                "has existed since the genuine-let rung — so this arm is a coverage ",
+                "gap in the model, not a boundary of the reflected syntax). ",
+                "Part of #461."
             )
             .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -214,9 +220,9 @@ impl Specification {
         })?;
 
         // infer_sound_at_proj / infer_sound_at_lit: KExpr.rec proj/lit-case
-        // handlers. Proj and lit are outside the core KExpr fragment the infer
-        // model covers (like let_/bvar), so KernelInferAccepts has no proj/lit
-        // constructor — kernel_infer_inversion reduces InferInversionAt to Empty
+        // handlers. Proj and lit ARE KExpr constructors (the proj/lit rung);
+        // what they are outside is the fragment this infer model covers (like
+        // let_), so KernelInferAccepts has no proj/lit constructor — kernel_infer_inversion reduces InferInversionAt to Empty
         // at proj/lit, discharging both cases by Empty.rec (proj/lit rung).
         self.add_definition(SpecDefinition {
             name: "infer_sound_at_proj".to_string(),
@@ -239,7 +245,7 @@ impl Specification {
                 .to_string(),
             ),
             is_axiom: false,
-            description: "KExpr.rec proj-case handler for InferSoundAt. KernelInferAccepts has no proj constructor (outside the core infer fragment), so acceptance is uninhabited — kernel_infer_inversion reduces to Empty, discharged by Empty.rec. Proj/lit rung.".to_string(),
+            description: "KExpr.rec proj-case handler for InferSoundAt. KernelInferAccepts has no proj constructor, so acceptance is uninhabited — kernel_infer_inversion reduces to Empty, discharged by Empty.rec. A coverage gap, not a fragment boundary: KExpr.proj exists (proj/lit rung) and the release body infers Proj successfully at tc/infer.rs:651 via infer_proj_type. Proj/lit rung.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,

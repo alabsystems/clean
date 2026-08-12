@@ -292,6 +292,7 @@ pub(crate) struct CertConsts {
     pub rat: Expr,
     pub fin: Expr,
     pub nn_vec: Expr,
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub ib: Expr,
     pub ib_mk: Expr,
     pub ib_subset: Expr,
@@ -819,6 +820,7 @@ fn normalize(constraint: &EntailConstraint) -> Result<Vec<NormConstraint>, CertP
 /// constraint and the (single, normalized) conclusion it was checked against.
 #[derive(Debug, Clone)]
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct EntailmentResult {
     /// Derived (combined) coefficient map == conclusion coefficient map.
     pub coeffs: std::collections::BTreeMap<String, ExactRat>,

@@ -538,7 +538,7 @@ impl NestedElimCtx<'_> {
 }
 
 /// Strip exactly `n` Pi binders, or `None` if there are fewer.
-fn strip_pi_binders(e: &Expr, n: usize) -> Option<Expr> {
+pub(super) fn strip_pi_binders(e: &Expr, n: usize) -> Option<Expr> {
     let mut cursor = e;
     for _ in 0..n {
         match &cursor.kind {

@@ -98,7 +98,7 @@ fn assert_axiom_free(env: &Environment, names: &[&str]) {
             .axiom_deps(&Name::from_string(name))
             .unwrap_or_else(|| panic!("{name} should be registered"))
             .iter()
-            .map(std::string::ToString::to_string)
+            .map(ToString::to_string)
             .collect();
         assert!(
             closure.is_empty(),
@@ -501,7 +501,7 @@ open scoped Foo
     );
     // `namespace Foo` → Multiple, `open scoped Foo` → Skipped; none Err.
     assert!(
-        results.iter().all(std::result::Result::is_ok),
+        results.iter().all(Result::is_ok),
         "`open scoped Foo` must not over-reject a valid Lean program: {results:?}"
     );
     assert!(
@@ -561,7 +561,7 @@ theorem pin16 : Foo.x = 3 := rfl
 fn test_open_unknown_namespace_is_tolerated_noop() {
     let results = elaborate_results("open ThisNamespaceDoesNotExist\n");
     assert!(
-        results.iter().all(std::result::Result::is_ok),
+        results.iter().all(Result::is_ok),
         "empty/unknown simple open must be a tolerated no-op: {results:?}"
     );
 }

@@ -836,9 +836,12 @@ impl<'a> ElabCtx<'a> {
 
         // Positional args fill the remaining EXPLICIT binders in order (Lean
         // `ElabAppArgs`). Slots with unknown kind are treated as explicit.
+        // Under `@` every binder is consumed positionally, so positionals fill
+        // ANY unfilled slot in declaration order (`@two Nat 1 (B := Nat) 2`).
         let mut pos_iter = positional_queue.into_iter();
         for (i, slot) in positioned.iter_mut().enumerate() {
-            let explicit = matches!(slots[i].1, Some(BinderInfo::Default) | None);
+            let explicit =
+                self.explicit_mode || matches!(slots[i].1, Some(BinderInfo::Default) | None);
             if slot.is_none() && explicit {
                 if let Some(arg) = pos_iter.next() {
                     *slot = Some(arg.clone());
@@ -1039,9 +1042,7 @@ impl<'a> ElabCtx<'a> {
             if let Some((_bi, expected_arg_ty, _body_ty)) = type_info {
                 let expected_arg_ty = self.metas.instantiate(&expected_arg_ty);
 
-                let final_arg = if let SurfaceExpr::Lit(_, clean_parser::SurfaceLit::Nat(n)) =
-                    &arg.expr
-                {
+                let final_arg = if let SurfaceExpr::Lit(_, SurfaceLit::Nat(n)) = &arg.expr {
                     // Coerce the bare literal to `Int.ofNat n` WITHOUT first
                     // elaborating it against the expected type. For a homogeneous
                     // binop (`LE.le`/`Eq : α → α → …`) both operands share the SAME

@@ -7,6 +7,15 @@
 //! state does not leak across goals. Goals are processed in chunks bounded by
 //! `batch_size`, which limits how many solver workers run concurrently.
 
+// 2026-07-31: the whole module is staged infrastructure with no caller yet —
+// `BatchSmtSearch` is the batching front end the `ay-smt` tactic path will call
+// once multi-goal dispatch lands. Kept (not deleted) because it is a complete,
+// self-consistent subsystem (fresh-solver-per-goal isolation, scoped-thread
+// chunking, panic-payload capture) built against the live `create_smt_backend`
+// API, not orphaned scaffolding. Module-scoped because every item in the file
+// is dead for the same single reason.
+#![allow(dead_code)]
+
 use super::ay_solver::{create_smt_backend, SmtProveOutcome};
 use super::ay_types::AyConfig;
 use crate::tactic::LocalDecl;

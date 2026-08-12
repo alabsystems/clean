@@ -11,8 +11,6 @@
 use super::*;
 use crate::types::{AxiomProfile, TrustLevel};
 
-use super::*;
-
 #[test]
 fn test_classify_constructive_declaration() {
     let summary = classify_declaration(

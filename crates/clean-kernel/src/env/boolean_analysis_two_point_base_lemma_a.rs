@@ -388,6 +388,7 @@ impl LemmaAConsts {
 
     /// `a·p = a·q` from `h : p = q` (NNReal), via `Eq.subst` on the right factor.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn congr_mul_right(
         &self,
         parent: &EnvDeclBuilder,

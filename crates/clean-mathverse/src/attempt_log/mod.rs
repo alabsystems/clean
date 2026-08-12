@@ -1065,7 +1065,7 @@ pub fn iter_from(
 }
 
 /// Return a JSON-safe attempt query report for all matches.
-pub(crate) fn query_attempts(
+pub fn query_attempts(
     root: impl AsRef<Path>,
     filter: AttemptFilter,
 ) -> MathverseResult<AttemptQueryReport> {
@@ -1181,7 +1181,7 @@ pub fn read_artifact(root: impl AsRef<Path>, artifact: &ArtifactRef) -> Mathvers
 }
 
 /// Prepare an attempt replay by capturing the live environment.
-pub(crate) fn prepare_replay_attempt(
+pub fn prepare_replay_attempt(
     root: impl AsRef<Path>,
     attempt_id: &AttemptId,
     options: ReplayOptions,
@@ -1239,7 +1239,7 @@ pub fn prepare_replay_attempt_with_env(
 }
 
 /// Prepare replay and append a replay attempt only when `result` is supplied.
-pub(crate) fn prepare_replay_attempt_with_result(
+pub fn prepare_replay_attempt_with_result(
     root: impl AsRef<Path>,
     attempt_id: &AttemptId,
     options: ReplayOptions,

@@ -1597,7 +1597,7 @@ mod tests {
         // With 2 substitution values: BVar(0) bound by lambda (unchanged),
         // BVar(1) → vals[0] lifted by 1, BVar(2) → vals[1] lifted by 1
         let inner = Expr::lam(
-            crate::expr::BinderData::default(),
+            BinderData::default(),
             Expr::prop(),
             Expr::app(
                 Expr::from_kind(ExprKind::BVar(2)),

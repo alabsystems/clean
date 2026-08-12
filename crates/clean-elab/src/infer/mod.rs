@@ -282,7 +282,7 @@ pub struct ElabCtx<'a> {
     /// does for top-level marker-form `variable` commands. Before B03 these
     /// references only worked by falling through to body auto-implicits —
     /// removing body auto-bind required making the binders real.
-    section_binder_stack: Vec<clean_parser::SurfaceBinder>,
+    section_binder_stack: Vec<SurfaceBinder>,
     /// Expected type for bidirectional type checking (#172)
     /// Used by anonymous constructor syntax `⟨...⟩` to determine which structure to construct.
     /// Set when elaborating definition bodies with type annotations.

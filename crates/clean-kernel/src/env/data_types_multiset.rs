@@ -648,6 +648,96 @@ impl Environment {
         })?;
 
         // ════════════════════════════════════════════════════════════════
+        // List.mem_cons {α} {a b : α} {l : List α} :
+        //     a ∈ b :: l ↔ a = b ∨ a ∈ l
+        // ════════════════════════════════════════════════════════════════
+        // Lean 4 v4.30.0-rc2 (`Init/Data/List/Basic.lean`) states `mem_cons`
+        // through the `Membership` instance (`a ∈ …` desugars to
+        // `Membership.mem … a`, collection-first since Lean v4.9) with a, b, l
+        // ALL IMPLICIT — distinct from the hand-rolled `List.mem_cons_iff`
+        // above, which is raw-`List.Mem` with EXPLICIT `(a x : α) (l)`. AY's
+        // LRAT soundness proofs cite the genuine core `List.mem_cons`, so it
+        // must carry Lean's exact statement form or a positional application
+        // would bind the wrong arguments.
+        //
+        // The proof reuses `List.mem_cons_iff`: its inferred type is the raw
+        // `List.Mem` iff, and the kernel converges it to the `Membership.mem`
+        // statement above via the reducible `List.instMembership` (the identical
+        // convergence that lets `List.mem_cons_self`/`mem_cons_of_mem` be stated
+        // in `Membership.mem` form yet proved with raw `List.Mem` constructors).
+        // Constructive — closure is `List.mem_cons_iff` + `List.instMembership`,
+        // no domain axiom.
+        {
+            let inst_membership_const = Expr::const_(
+                Name::from_string("List.instMembership"),
+                vec![u_level.clone()],
+            );
+            let membership_mem_const = Expr::const_(
+                Name::from_string("Membership.mem"),
+                vec![u_level.clone(), u_level.clone()],
+            );
+            // `@Membership.mem α (List α) (@List.instMembership α) l a`
+            let mem_via_inst = |alpha: &Expr, a: Expr, l: Expr| {
+                Expr::apps(
+                    membership_mem_const.clone(),
+                    [
+                        alpha.clone(),
+                        Expr::app(list_const.clone(), alpha.clone()),
+                        Expr::app(inst_membership_const.clone(), alpha.clone()),
+                        l,
+                        a,
+                    ],
+                )
+            };
+            let mem_cons_iff_c = Expr::const_(
+                Name::from_string("List.mem_cons_iff"),
+                vec![u_level.clone()],
+            );
+
+            let mem_cons_type = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let (a_id, a) = b.fresh_local(alpha.clone());
+                let (bb_id, bb) = b.fresh_local(alpha.clone());
+                let (l_id, l) = b.fresh_local(list_of(&alpha));
+                let lhs = mem_via_inst(&alpha, a.clone(), cons_of(&alpha, bb.clone(), l.clone()));
+                let rhs = or_(
+                    eq_(&alpha, a.clone(), bb.clone()),
+                    mem_via_inst(&alpha, a.clone(), l.clone()),
+                );
+                let concl = iff(lhs, rhs);
+                let e = b.mk_pi(l_id, BinderInfo::Implicit, list_of(&alpha), concl);
+                let e = b.mk_pi(bb_id, BinderInfo::Implicit, alpha.clone(), e);
+                let e = b.mk_pi(a_id, BinderInfo::Implicit, alpha.clone(), e);
+                let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            let mem_cons_value = {
+                let mut b = EnvDeclBuilder::new();
+                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                let (a_id, a) = b.fresh_local(alpha.clone());
+                let (bb_id, bb) = b.fresh_local(alpha.clone());
+                let (l_id, l) = b.fresh_local(list_of(&alpha));
+                // @List.mem_cons_iff α a b l  (explicit `(a x l)` ← `a b l`)
+                let body = Expr::apps(
+                    mem_cons_iff_c.clone(),
+                    [alpha.clone(), a.clone(), bb.clone(), l.clone()],
+                );
+                let e = b.mk_lam(l_id, BinderInfo::Implicit, list_of(&alpha), body);
+                let e = b.mk_lam(bb_id, BinderInfo::Implicit, alpha.clone(), e);
+                let e = b.mk_lam(a_id, BinderInfo::Implicit, alpha.clone(), e);
+                let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                b.finish(e)
+            };
+            self.add_decl(Declaration::Theorem {
+                name: Name::from_string("List.mem_cons"),
+                level_params: vec![u.clone()],
+                type_: mem_cons_type,
+                value: mem_cons_value,
+            })?;
+        }
+
+        // ════════════════════════════════════════════════════════════════
         // Small reusable Or-congruence helpers (registered as theorems so the
         // Perm recursion below stays compact). Both are constructive.
         // ════════════════════════════════════════════════════════════════
@@ -1555,6 +1645,54 @@ mod multiset_tests {
                 "{name} must have an empty domain-axiom closure (⊆ FOUNDATIONAL), got {deps:?}"
             );
         }
+    }
+
+    /// `List.mem_cons` is the genuine core Lean-4 statement — `Membership.mem`
+    /// form with a, b, l IMPLICIT (`a ∈ b :: l ↔ a = b ∨ a ∈ l`) — proved via
+    /// the raw `List.mem_cons_iff`, with an empty domain-axiom closure. A
+    /// concrete `Nat` instantiation type-checks to the `Membership.mem` iff,
+    /// confirming the kernel converges the `Membership.mem` statement to the
+    /// raw `List.Mem` proof through the reducible `List.instMembership`.
+    #[test]
+    fn test_list_mem_cons_genuine_membership_form() {
+        let env = env_with_multiset();
+        let tc = TypeChecker::new(&env);
+        let info = env
+            .get_const(&Name::from_string("List.mem_cons"))
+            .expect("List.mem_cons should be registered");
+        assert_eq!(info.kind, ConstantKind::Theorem);
+        let value = info.value.clone().expect("theorem retains its value");
+        let inferred = tc
+            .infer_type(&value)
+            .unwrap_or_else(|e| panic!("List.mem_cons value should type-check: {e:?}"));
+        assert!(
+            tc.is_def_eq(&inferred, &info.type_),
+            "List.mem_cons inferred type must match its declared Membership.mem form"
+        );
+        let deps = env
+            .axiom_deps(&Name::from_string("List.mem_cons"))
+            .expect("axiom_deps for List.mem_cons");
+        assert!(
+            deps.is_empty(),
+            "List.mem_cons must have an empty domain-axiom closure, got {deps:?}"
+        );
+
+        // Concrete instance: @List.mem_cons.{0} Nat (a:=0) (b:=0) (l:=[]) must
+        // type-check to the `Membership.mem` iff `0 ∈ [0] ↔ 0 = 0 ∨ 0 ∈ []`.
+        let lvl0 = Level::zero();
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+        let nil = Expr::app(
+            Expr::const_(Name::from_string("List.nil"), vec![lvl0.clone()]),
+            nat.clone(),
+        );
+        let inst = Expr::apps(
+            Expr::const_(Name::from_string("List.mem_cons"), vec![lvl0.clone()]),
+            [nat.clone(), zero.clone(), zero.clone(), nil.clone()],
+        );
+        let _ty = tc
+            .infer_type(&inst)
+            .expect("concrete List.mem_cons instance should type-check");
     }
 
     /// Faithfulness witness #2: `Multiset.mem_cons_self` gives a real proof of

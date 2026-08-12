@@ -447,9 +447,7 @@ pub fn translate_type(ty: &RustType, ctx: &TranslationContext) -> LeanExpr {
 
         RustType::Array { element, len } => {
             let elem_ty = translate_type(element, ctx);
-            let len = len
-                .as_usize(&std::collections::HashMap::new())
-                .unwrap_or_default();
+            let len = len.as_usize(&HashMap::new()).unwrap_or_default();
             // Array T n becomes Array T n in Lean
             LeanExpr::app(
                 LeanExpr::app(const_expr("Array", vec![LeanLevel::zero()]), elem_ty),
@@ -518,7 +516,7 @@ pub fn translate_type(ty: &RustType, ctx: &TranslationContext) -> LeanExpr {
             let mut result = translate_type(ret, ctx);
             for param in params.iter().rev() {
                 let param_ty = translate_type(param, ctx);
-                result = LeanExpr::pi(clean_kernel::expr::BinderInfo::Default, param_ty, result);
+                result = LeanExpr::pi(BinderInfo::Default, param_ty, result);
             }
             result
         }

@@ -71,7 +71,7 @@ use clean_kernel::env::{Declaration, DeclarationTrustSummary, Environment};
 use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level, Name, RecursorArgOrder, TypeChecker};
 
-use clean_elab::tactic::{simp, Goal, ProofState, SimpConfig};
+use clean_elab::tactic::{simp, ProofState, SimpConfig};
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_parser::parse_file;
 

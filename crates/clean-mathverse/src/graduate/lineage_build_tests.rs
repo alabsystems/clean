@@ -6,14 +6,10 @@
 
 use std::path::Path;
 
-use clean_kernel::{BinderInfo, Declaration, Expr, Name};
+use clean_kernel::{Declaration, Expr, Name};
 
 use super::build_corpus_lineage;
 use crate::export::kernel_export::KernelShardBuilder;
-
-fn bd() -> BinderInfo {
-    BinderInfo::Default
-}
 
 fn theorem(name: &str, type_: Expr, value: Expr) -> Declaration {
     Declaration::Theorem {

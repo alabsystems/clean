@@ -196,6 +196,7 @@ impl IntMulAssocConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_nat(&self, lhs: Expr, rhs: Expr) -> Expr {
         let type1 = Level::succ(Level::zero());
         let eqn = Expr::const_(Name::from_string("Eq"), vec![type1]);

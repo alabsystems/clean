@@ -203,7 +203,7 @@ fn drive_all_modes(thm: &IsaProvenTheorem) -> Vec<String> {
                 let mut env = Environment::with_prelude();
                 let accepted = env
                     .add_decl(Declaration::Theorem {
-                        name: clean_kernel::name::Name::from_string("ConversepReject.probe"),
+                        name: Name::from_string("ConversepReject.probe"),
                         level_params: Vec::new(),
                         type_,
                         value,

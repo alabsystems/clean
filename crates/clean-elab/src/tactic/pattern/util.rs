@@ -282,6 +282,9 @@ pub(crate) fn try_extract_eq(expr: &Expr) -> Option<(Expr, Expr)> {
 /// Simple type inference for instance resolution
 ///
 /// ENSURES: Returns only literal-based builtin types currently recognized by this heuristic
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn infer_simple_type(expr: &Expr) -> Option<Expr> {
     match expr.kind() {
         ExprKind::Lit(lit) => {

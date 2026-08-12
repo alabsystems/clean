@@ -132,7 +132,7 @@ impl ProofState {
             false,
         );
 
-        if let Err(err) = self.close_goal(&goal, proof) {
+        if let Err(err) = self.close_goal_with_bound_locals(&goal, proof, &[(new_fvar, 1)]) {
             snapshot.restore(self);
             return Err(err);
         }
@@ -308,7 +308,7 @@ fn replace_local_decl_core(
         false,
     );
 
-    if let Err(err) = state.close_goal(goal, proof) {
+    if let Err(err) = state.close_goal_with_bound_locals(goal, proof, &[(new_fvar, 1)]) {
         snapshot.restore(state);
         return Err(err);
     }

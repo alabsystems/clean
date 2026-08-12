@@ -16,9 +16,8 @@
 //! The actual LLM calls are external (pluggable via trait).
 
 use super::error_categories::{ErrorCategory, ErrorDistribution};
-use super::formalize::{AdmissionTier, FormalizationResult, PaperFormalization};
+use super::formalize::AdmissionTier;
 use super::importer::{ArxivImportConfig, ArxivImportResult, ArxivImporter};
-use super::parser;
 use super::validation::{self, ValidationReport};
 use serde::{Deserialize, Serialize};
 
@@ -207,7 +206,7 @@ impl PipelineStats {
     }
 
     /// Record a formalization attempt result.
-    pub(crate) fn record_formalization(&mut self, tier: &AdmissionTier) {
+    pub fn record_formalization(&mut self, tier: &AdmissionTier) {
         match tier {
             AdmissionTier::Candidate => self.tier_counts.candidate += 1,
             AdmissionTier::TypeChecked => self.tier_counts.type_checked += 1,
@@ -261,7 +260,7 @@ pub(crate) fn import_paper(
 ///
 /// This is the no-LLM validation that can be run locally.
 #[must_use]
-pub(crate) fn validate_formalization(
+pub fn validate_formalization(
     lean_code: &str,
     original_latex: &str,
     kind: &str,

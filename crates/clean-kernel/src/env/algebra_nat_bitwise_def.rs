@@ -68,6 +68,8 @@ struct BW {
     nat: Expr,
     zero: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     succ: Expr,
     one: Expr,
     add: Expr,

@@ -42,7 +42,7 @@ fn setup_env_decidable() -> Environment {
 #[test]
 fn test_infer_instance_registered_as_nullary() {
     let mut registry = TacticRegistry::new();
-    crate::tactic::builtins::register_builtin_tactics(&mut registry);
+    builtins::register_builtin_tactics(&mut registry);
 
     let entry = registry
         .get("infer_instance")

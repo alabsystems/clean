@@ -14,7 +14,6 @@ use super::translate::{
     translate_tptp_formula, TptpConstantKind, TptpImportedConstant, TptpTranslateError,
     TptpTranslationContext,
 };
-use super::types::TptpRole;
 use std::path::Path;
 use thiserror::Error;
 

@@ -24,8 +24,7 @@ use crate::types::{
 };
 
 use super::types::{
-    program_vc_axiom_profile, program_vc_trust_level, ProgramVerifyStats, VcStatus,
-    VerificationCondition,
+    program_vc_axiom_profile, program_vc_trust_level, VcStatus, VerificationCondition,
 };
 
 // ---------------------------------------------------------------------------

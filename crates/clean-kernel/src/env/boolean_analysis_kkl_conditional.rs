@@ -252,6 +252,7 @@ impl CondConsts {
 
     // ── Eq.{1} plumbing over Rat ──────────────────────────────────────────────
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.u1.clone()]),

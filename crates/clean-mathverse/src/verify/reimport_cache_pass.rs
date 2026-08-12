@@ -238,16 +238,12 @@ mod tests {
     use super::*;
     use crate::verify::fingerprint::decl_verified_hash;
     use clean_kernel::expr::{Expr, ExprKind};
-    use std::sync::Arc;
 
     fn bv0() -> Expr {
         Expr::from_kind(ExprKind::BVar(0)) // a leaf with no constant dependencies
     }
     fn cst(s: &str) -> Expr {
         Expr::from_kind(ExprKind::Const(Name::from_string(s), Default::default()))
-    }
-    fn app(f: Expr, a: Expr) -> Expr {
-        Expr::from_kind(ExprKind::App(Arc::new(f), Arc::new(a)))
     }
     fn axiom(name: &str, type_: Expr) -> ResolvedDecl {
         ResolvedDecl {

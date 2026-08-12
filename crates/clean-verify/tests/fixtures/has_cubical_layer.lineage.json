@@ -1,0 +1,19 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "def_path": "mode::CleanMode::has_cubical_layer",
+ "lineage": "sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119",
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "7 canonical line(s) identical",
+  "markers_exact": true
+ },
+ "unsupported": [],
+ "flip_event": {
+  "fired": true,
+  "lineage": "sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119",
+  "matches_artifact_lineage": true,
+  "raw": "rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17897 ~ clean_kernel[c15e]::mode::{impl#0}::has_cubical_layer), asserts=0, lineage=sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119, flipped_so_far=36"
+ },
+ "trustc": "rustc 1.99.0-dev (2634d314d 2026-08-10) (trustc 0.1.0)",
+ "measured": "2026-08-11"
+}

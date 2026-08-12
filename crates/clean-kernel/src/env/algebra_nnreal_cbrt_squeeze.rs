@@ -42,6 +42,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the cube squeeze (lower half).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct CbrtSqueezeConsts {
     nat: Expr,
     nat_zero: Expr,
@@ -103,6 +104,7 @@ pub(crate) struct CbrtSqueezeConsts {
     iff_mp: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl CbrtSqueezeConsts {
     pub(crate) fn new() -> Self {
         let l1 = Level::succ(Level::zero());

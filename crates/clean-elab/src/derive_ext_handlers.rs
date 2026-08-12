@@ -35,6 +35,9 @@ pub(crate) struct ConstructorInfo {
 
 /// A derived declaration ready for registration.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct DerivedDecl {
     pub(crate) name: Name,
     pub(crate) type_: Expr,
@@ -212,7 +215,7 @@ impl ExtDeriveHandler for DeriveBEqExt {
         _type_expr: &Expr,
         ctors: &[ConstructorInfo],
         num_params: u32,
-        level_params: &[Name],
+        _level_params: &[Name],
     ) -> Result<Vec<DerivedDecl>, DeriveError> {
         reject_recursive(ctors, "BEq", type_name)?;
         let ind_ty = mk_applied_type(type_name, num_params);

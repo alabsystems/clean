@@ -12,7 +12,7 @@
 //!
 //! Reference: Handbook of Satisfiability (2nd ed.), Chapter 4, Section 4.4.
 
-use super::{negate, var_of, CdclError, CdclState, Clause, Literal};
+use super::{var_of, CdclError, CdclState, Clause, Literal};
 
 /// Result of conflict analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]

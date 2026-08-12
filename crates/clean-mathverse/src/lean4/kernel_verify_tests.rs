@@ -153,10 +153,7 @@ fn test_kernel_verify_real_init_definition() {
 
     let mut picked: Option<&str> = None;
     for name in &candidates {
-        if env
-            .get_const(&clean_kernel::name::Name::from_string(name))
-            .is_some()
-        {
+        if env.get_const(&Name::from_string(name)).is_some() {
             picked = Some(name);
             break;
         }
@@ -209,10 +206,7 @@ fn test_kernel_verify_specific_init_lemma_add_decl_equivalent() {
     let mut last_err: Option<String> = None;
 
     for &name in &targets {
-        if env
-            .get_const(&clean_kernel::name::Name::from_string(name))
-            .is_none()
-        {
+        if env.get_const(&Name::from_string(name)).is_none() {
             continue;
         }
         match kernel_verify_const(&env, name) {
@@ -259,10 +253,7 @@ fn test_kernel_verify_confidence_matches_constant_kind() {
     // confirm their confidence assignments diverge correctly.
     //
     // `propext` is a canonical Lean 4 axiom present in Init.
-    if env
-        .get_const(&clean_kernel::name::Name::from_string("propext"))
-        .is_some()
-    {
+    if env.get_const(&Name::from_string("propext")).is_some() {
         let ok =
             kernel_verify_const(&env, "propext").expect("propext axiom should verify structurally");
         assert_eq!(ok.confidence, ImportConfidence::Axiomatized);
@@ -281,7 +272,7 @@ fn test_kernel_verify_confidence_matches_constant_kind() {
 
     // Classical.choice should also be recognized and profiled.
     if env
-        .get_const(&clean_kernel::name::Name::from_string("Classical.choice"))
+        .get_const(&Name::from_string("Classical.choice"))
         .is_some()
     {
         let ok = kernel_verify_const(&env, "Classical.choice")

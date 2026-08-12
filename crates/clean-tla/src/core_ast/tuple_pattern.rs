@@ -130,7 +130,7 @@ pub(super) fn desugar_quantifier_bounds(
                     let projection = core_ast::Expr::FuncApply(
                         Box::new(Spanned::dummy(core_ast::Expr::Ident(
                             fresh.clone(),
-                            crate::tla_core::intern_name(&fresh),
+                            tla_core::intern_name(&fresh),
                         ))),
                         Box::new(Spanned::dummy(core_ast::Expr::Int(
                             ((idx + 1) as i64).into(),
@@ -451,7 +451,7 @@ fn substitute_subs(
 /// bound), used to choose a fresh element variable that cannot be captured.
 fn collect_names(expr: &Spanned<core_ast::Expr>, out: &mut HashSet<String>) {
     use core_ast::Expr;
-    let mut recur = |e: &Spanned<Expr>, out: &mut HashSet<String>| collect_names(e, out);
+    let recur = |e: &Spanned<Expr>, out: &mut HashSet<String>| collect_names(e, out);
     let each = |es: &[Spanned<Expr>], out: &mut HashSet<String>| {
         for e in es {
             collect_names(e, out);

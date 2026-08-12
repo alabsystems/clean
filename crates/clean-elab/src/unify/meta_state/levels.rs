@@ -100,8 +100,26 @@ impl MetaState {
                 }
             }
             _ => {
-                // Level contains params but isn't just a param - store in legacy map only
-                // (e.g., Succ(Param(u_0)) - these are less common)
+                // Compound level (contains params, not a bare param):
+                // `?u := Succ(?v)`, `?u := Max(?v, w)`. U2 rung-1a: stored
+                // FIRST-CLASS at the canonical root (`level_bound`) so the
+                // assignment survives later re-rooting unions — the legacy
+                // map above only ever resolved when the param stayed its own
+                // root (the measured-dominant rung-0b histogram class).
+                // Cyclic values are defended by `instantiate_level`'s chain
+                // guard, exactly as for the legacy path.
+                let root = self.level_find(&param_name);
+                let old_bound = self.level_bound.get(&root).cloned();
+                self.record_undo(UndoRecord::LevelBound {
+                    name: root.clone(),
+                    old_level: old_bound,
+                });
+                self.level_bound.insert(root, level.clone());
+                crate::u2_histogram::u2_hist(
+                    "compound-bound",
+                    "add-constraint",
+                    &format!("{param_name:?} := {level:?}"),
+                );
             }
         }
         Ok(())
@@ -196,7 +214,8 @@ impl MetaState {
                     name: root2.clone(),
                     old_parent,
                 });
-                self.level_parent.insert(root2.clone(), root1);
+                self.level_parent.insert(root2.clone(), root1.clone());
+                self.migrate_level_bound(&root2, &root1);
             }
             _ => {
                 // root2 is canonical (or both have concrete, or neither)
@@ -207,6 +226,7 @@ impl MetaState {
                     old_parent,
                 });
                 self.level_parent.insert(root1.clone(), root2.clone());
+                self.migrate_level_bound(&root1, &root2);
 
                 // If root1 had concrete, propagate to root2
                 if let Some(concrete) = concrete1 {
@@ -223,6 +243,28 @@ impl MetaState {
             }
         }
         Ok(())
+    }
+
+    /// Migrate a compound (bound) level assignment from a root that just LOST
+    /// canonicity to the new root (U2 rung-1a). The winner's existing bound is
+    /// kept when both classes carried one (matching the legacy map's
+    /// last-writer-wins tolerance; the produced term is kernel-rechecked).
+    fn migrate_level_bound(&mut self, old_root: &Name, new_root: &Name) {
+        let Some(bound) = self.level_bound.get(old_root).cloned() else {
+            return;
+        };
+        self.record_undo(UndoRecord::LevelBound {
+            name: old_root.clone(),
+            old_level: Some(bound.clone()),
+        });
+        self.level_bound.remove(old_root);
+        if !self.level_bound.contains_key(new_root) {
+            self.record_undo(UndoRecord::LevelBound {
+                name: new_root.clone(),
+                old_level: None,
+            });
+            self.level_bound.insert(new_root.clone(), bound);
+        }
     }
 
     /// Substitute level constraints into a level
@@ -280,6 +322,17 @@ impl MetaState {
                     return resolved;
                 }
 
+                // Compound (bound) assignment at the root (U2 rung-1a): unlike
+                // the legacy fallback below, this resolves REGARDLESS of
+                // whether `name` is its own root, so `?u := Succ(?v)` survives
+                // a later union that re-roots `?u`'s class.
+                if let Some(bound) = self.level_bound.get(&root) {
+                    chain.push(root);
+                    let resolved = self.instantiate_level_guarded(&bound.clone(), chain);
+                    chain.pop();
+                    return resolved;
+                }
+
                 // No concrete assignment - return canonical param
                 // This ensures u_0 and u_1 both become the same param if unified
                 if &root != name {
@@ -314,6 +367,7 @@ impl MetaState {
         if self.level_constraints.is_empty()
             && self.level_parent.is_empty()
             && self.level_concrete.is_empty()
+            && self.level_bound.is_empty()
         {
             return expr.clone();
         }

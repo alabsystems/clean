@@ -180,7 +180,8 @@ impl<'a> ElabCtx<'a> {
         use crate::instances::extract_class_app;
 
         // Extract the class name and arguments from the goal type
-        let (class_name, goal_args) = extract_class_app(&goal_ty)?;
+        let (class_name, goal_levels, goal_args) =
+            crate::instances::extract_class_app_with_levels(&goal_ty)?;
 
         // decEq bridge: `Decidable (@Eq α a b)` is inhabited by `DecidableEq α`
         // applied to `a b`, since `DecidableEq α` is definitionally
@@ -201,10 +202,7 @@ impl<'a> ElabCtx<'a> {
                     let a = eq_args[1].clone();
                     let b = eq_args[2].clone();
                     let dec_eq_goal = Expr::app(
-                        Expr::const_(
-                            clean_kernel::name::Name::from_string("DecidableEq"),
-                            eq_levels.to_vec(),
-                        ),
+                        Expr::const_(Name::from_string("DecidableEq"), eq_levels.to_vec()),
                         alpha,
                     );
                     if let Some(inst) =
@@ -417,10 +415,41 @@ impl<'a> ElabCtx<'a> {
             }
 
             // Extract class name and args from instance type after applying implicit binders
-            if let Some((inst_class, inst_args)) = extract_class_app(&inst_type) {
+            if let Some((inst_class, inst_levels, inst_args)) =
+                crate::instances::extract_class_app_with_levels(&inst_type)
+            {
                 if inst_class != class_name {
                     self.metas.pop_scope();
                     continue;
+                }
+
+                // Unify the CLASS CONSTANT's universe levels, not just its
+                // arguments. A class whose level does not appear in any
+                // argument — `HasEquiv.{u,v} (α : Sort u)`, where `v` lives
+                // only in the `Equiv` field — otherwise leaves that level an
+                // unsolved metavariable in the goal (`HasEquiv {1, ?v} Nat`)
+                // that argument unification can never pin, and synthesis
+                // fails even though the candidate matches. The candidate's
+                // levels are freshened above, so this only ever SOLVES goal
+                // metavariables or rejects a genuinely level-mismatched
+                // candidate; the produced term is kernel-rechecked.
+                if inst_levels.len() == goal_levels.len() {
+                    let mut levels_ok = true;
+                    for (inst_lvl, goal_lvl) in inst_levels.iter().zip(goal_levels.iter()) {
+                        let ctx = self.build_local_ctx();
+                        let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
+                        if !matches!(
+                            unifier.unify_levels(inst_lvl, goal_lvl),
+                            UnifyResult::Success
+                        ) {
+                            levels_ok = false;
+                            break;
+                        }
+                    }
+                    if !levels_ok {
+                        self.metas.pop_scope();
+                        continue;
+                    }
                 }
 
                 // Try to unify the instance arguments with the goal arguments
@@ -871,8 +900,8 @@ impl<'a> ElabCtx<'a> {
     /// residual metavariables are the goal's own (allowed — solved later by the
     /// caller) or freshly leaked binder holes (rejected). DAG-aware for the
     /// same measured reason as [`Self::has_metavars`].
-    fn collect_meta_fvars(&self, e: &Expr) -> std::collections::HashSet<FVarId> {
-        let mut out: std::collections::HashSet<FVarId> = std::collections::HashSet::new();
+    fn collect_meta_fvars(&self, e: &Expr) -> HashSet<FVarId> {
+        let mut out: HashSet<FVarId> = HashSet::new();
         let mut visited: HashSet<*const Expr> = HashSet::new();
         let mut stack: Vec<&Expr> = vec![e];
         while let Some(cur) = stack.pop() {
@@ -1172,7 +1201,7 @@ fn bare_unassigned_meta(metas: &MetaState, e: &Expr) -> Option<MetaId> {
 /// Short-circuiting companion to `ElabCtx::collect_meta_fvars` for the
 /// candidate-hygiene check: `allowed` holds the goal's own metavariables, so a
 /// hit means the candidate leaked a binder hole the goal does not determine.
-fn has_meta_fvar_outside(e: &Expr, allowed: &std::collections::HashSet<FVarId>) -> bool {
+fn has_meta_fvar_outside(e: &Expr, allowed: &HashSet<FVarId>) -> bool {
     // DAG-aware iterative walk — same measured rationale as
     // `ElabCtx::has_metavars` (tree recursion is path-exponential on the
     // Arc-shared DAGs sharing-preserving instantiation produces).

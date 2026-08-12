@@ -51,6 +51,12 @@ struct CrossValidationCase {
     /// FVar IDs for constants and functions, used by AyBackend registration.
     fvar_ids: Vec<FVarId>,
     /// FVar IDs for uninterpreted functions (subset of fvar_ids).
+    ///
+    /// Populated by every case row (the UF rows carry real ids) but not yet
+    /// consumed by the AyBackend registration helper, which currently registers
+    /// from `fvar_ids` alone. Kept so the UF rows stay declarative — awaiting
+    /// production wiring — 2026-07-31.
+    #[allow(dead_code)]
     func_ids: Vec<FVarId>,
     hypotheses: Vec<(Expr, FVarId)>,
     goal: Expr,

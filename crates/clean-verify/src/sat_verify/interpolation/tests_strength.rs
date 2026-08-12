@@ -6,7 +6,7 @@
 
 use super::strength::{
     compare_interpolants, interpolant_depth, interpolant_size, interpolant_variables,
-    is_stronger_interpolant, simplify_interpolant, InterpolantComparison, I09_INTERPOLANT_STRENGTH,
+    is_stronger_interpolant, simplify_interpolant, I09_INTERPOLANT_STRENGTH,
 };
 use super::PropFormula;
 use crate::spec::ProofStatus;

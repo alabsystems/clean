@@ -51,8 +51,7 @@
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_kernel::env::Environment;
 use clean_kernel::{
-    BinderInfo, Constructor, Declaration, Expr, ExprKind, InductiveDecl, InductiveType, Name,
-    TypeChecker,
+    BinderInfo, Constructor, Declaration, Expr, InductiveDecl, InductiveType, Name, TypeChecker,
 };
 use clean_parser::parse_file;
 

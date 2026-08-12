@@ -60,6 +60,9 @@ fn mk_const_with_params(
 
 #[derive(Debug, Clone, Error)]
 #[non_exhaustive]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) enum ExtendExtError {
     #[error("inheritance error: {0}")]
     Inherit(#[from] InheritError),
@@ -111,6 +114,9 @@ pub(crate) enum DiagnosticKind {
     DiamondDetected,
     FieldOverride,
     DefaultPropagated,
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     DepthWarning,
     CoercionGenerated,
 }

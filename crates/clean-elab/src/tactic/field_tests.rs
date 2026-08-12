@@ -20,7 +20,7 @@ use super::field_denom::{
 };
 use super::field_tactic::field_normalize_tactic;
 use super::ring_helpers::make_eq;
-use super::{ring, ProofState, TacticError};
+use super::{ProofState, TacticError};
 use clean_kernel::env::{Declaration, Environment};
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, Level};

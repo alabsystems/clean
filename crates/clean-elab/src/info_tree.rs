@@ -21,6 +21,9 @@
 //! `query_at_position` performs a depth-first search returning all `InfoData`
 //! leaves whose enclosing node span contains the given byte offset.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![allow(dead_code)]
 use clean_kernel::{Expr, Name};
 use clean_parser::{Span, SurfaceExpr};
 

@@ -345,9 +345,9 @@ mod tests {
         let writer = ConvertOutputWriter::new(cfg).expect("create writer");
 
         let mut meta = ShardMetadata::new("Lean4");
-        meta.push(crate::shard_metadata::MetadataEntry {
+        meta.push(shard_metadata::MetadataEntry {
             name: "Nat.zero".to_string(),
-            kind: Some(crate::shard_metadata::DeclKind::Definition),
+            kind: Some(shard_metadata::DeclKind::Definition),
             type_signature: Some("Nat".to_string()),
             source_file: None,
             line_number: None,

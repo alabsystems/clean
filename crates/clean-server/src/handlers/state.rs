@@ -401,6 +401,7 @@ impl ServerState {
     /// Used by the widget RPC endpoints (and by tests / future
     /// elaboration-time registration) to make a source retrievable via
     /// `getWidgetSource`.
+    #[cfg(test)]
     pub(crate) async fn register_widget_source(&self, hash: String, source: String) {
         self.widgets.write().await.register_source(hash, source);
     }
@@ -410,6 +411,7 @@ impl ServerState {
     /// The metadata is the JSON shape consumed by
     /// [`crate::rpc_widgets::parse_widget_registrations`] (a `"widgets"`
     /// array). Replaces any prior registration for the same URI.
+    #[cfg(test)]
     pub(crate) async fn register_document_widgets(&self, uri: String, metadata: serde_json::Value) {
         self.widgets
             .write()

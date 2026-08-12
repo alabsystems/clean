@@ -96,6 +96,8 @@ struct HighDegreeConsts {
     nat_pow: Expr,
     nat_le: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     u1: Level,
 }
 

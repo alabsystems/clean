@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::spec::ProofStatus;
 
-use super::{negate, var_of, AssignValue, CdclState};
+use super::{negate, var_of, CdclState};
 
 /// Statistics comparing original and preprocessed CNF formulae.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

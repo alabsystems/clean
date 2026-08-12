@@ -46,7 +46,7 @@
 use crate::env::data_list_get::ListGetElemConsts;
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{
-    Declaration, EnvError, Environment, KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
+    Declaration, EnvError, Environment, KernelInstanceInfo, LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
@@ -190,7 +190,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: inst_name,
             class_name: Name::from_string("GetElem"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -310,7 +310,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: inst_name,
             class_name: Name::from_string("GetElem"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -491,7 +491,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: inst_name,
             class_name: Name::from_string("GetElem?"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -625,7 +625,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: inst_name,
             class_name: Name::from_string("GetElem?"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });

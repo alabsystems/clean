@@ -63,7 +63,7 @@ fn axiom_closure(env: &Environment, name: &str) -> Vec<String> {
     env.axiom_deps(&Name::from_string(name))
         .unwrap_or_else(|| panic!("{name} should be registered"))
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect()
 }
 

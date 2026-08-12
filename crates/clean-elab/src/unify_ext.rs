@@ -5,7 +5,9 @@
 //! Extended unification: Miller patterns, postponed constraints, eta expansion,
 //! first-order approximation, and unification trace.
 
-use clean_kernel::name::Name;
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![allow(dead_code)]
 use clean_kernel::{Expr, ExprKind, Level};
 
 use crate::unify::{MetaId, MetaState, UnifyResult};
@@ -160,55 +162,11 @@ impl<'a> UnifyExt<'a> {
     }
 
     pub(crate) fn unify_levels(&mut self, l1: &Level, l2: &Level) -> UnifyResult {
-        let l1 = self.metas.instantiate_level(l1);
-        let l2 = self.metas.instantiate_level(l2);
-        if l1 == l2 {
-            return UnifyResult::Success;
-        }
-
-        let add_constraint = |metas: &mut MetaState, name: Name, level: Level| match metas
-            .add_level_constraint(name, level)
-        {
-            Ok(()) => UnifyResult::Success,
-            Err(msg) => UnifyResult::Failure(msg),
-        };
-
-        // Only an *assignable* param (a universe metavariable) may be solved. A
-        // RIGID declared param (`def f.{u}`) is fixed — never unify-assigned —
-        // so when one side is rigid and the other an assignable metavar we must
-        // solve the metavar, and when BOTH are rigid/concrete-and-unequal we
-        // fail loudly (Lean-faithful; GAP_SWEEP universes/p16). With an empty
-        // rigid set (the common case) every arm below reduces exactly to the
-        // prior behavior.
-        let l1_assignable = matches!(&l1, Level::Param(n) if !self.metas.is_rigid_level_param(n));
-        let l2_assignable = matches!(&l2, Level::Param(n) if !self.metas.is_rigid_level_param(n));
-
-        match (&l1, &l2) {
-            // param =?= param: solve whichever side is an assignable metavar,
-            // preferring the left (matches the prior left-biased assignment).
-            (Level::Param(n), Level::Param(_)) if l1_assignable => {
-                add_constraint(self.metas, n.clone(), l2.clone())
-            }
-            (Level::Param(_), Level::Param(n)) if l2_assignable => {
-                add_constraint(self.metas, n.clone(), l1.clone())
-            }
-            // assignable param =?= concrete level
-            (Level::Param(n), _) if l1_assignable && !l2.has_params() => {
-                add_constraint(self.metas, n.clone(), l2.clone())
-            }
-            (_, Level::Param(n)) if l2_assignable && !l1.has_params() => {
-                add_constraint(self.metas, n.clone(), l1.clone())
-            }
-            (Level::Succ(a), Level::Succ(b)) => self.unify_levels(a, b),
-            (Level::Param(n), Level::Succ(_)) if l1_assignable => {
-                add_constraint(self.metas, n.clone(), l2.clone())
-            }
-            (Level::Succ(_), Level::Param(n)) if l2_assignable => {
-                add_constraint(self.metas, n.clone(), l1.clone())
-            }
-            _ if Level::is_def_eq(&l1, &l2) => UnifyResult::Success,
-            _ => UnifyResult::Failure(format!("level mismatch: {l1:?} vs {l2:?}")),
-        }
+        // Delegates to THE shared level solver (`unify::level_solve`, U2
+        // rung 3a): this secondary site previously maintained a WEAKER arm
+        // subset (no rigid-preference direction, no Miller Max/IMax slice,
+        // no occurs-checks) — one behavior, two entry points.
+        crate::unify::level_solve::solve_level_eq(self.metas, l1, l2)
     }
 
     // ========================================================================

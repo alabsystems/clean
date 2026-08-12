@@ -76,6 +76,11 @@ use trust::{
     SmtVerifyError, SmtVerifyResult, SmtVerifyStats, StepTrustLevel, StepVerdict, TrustLedger,
 };
 
+// `AletheVerifyError::Parse` carries this type, and `AletheVerifyError` is
+// public, so the payload has to be reachable from outside the crate too. The
+// parser module itself stays `pub(crate)` — only the error type is re-exported.
+pub use alethe_parser::AletheParseError;
+
 /// Error type for end-to-end Alethe proof verification.
 ///
 /// Combines parse errors from the Alethe parser with verification errors
@@ -84,7 +89,7 @@ use trust::{
 #[non_exhaustive]
 pub enum AletheVerifyError {
     /// Failed to parse the Alethe proof text.
-    Parse(alethe_parser::AletheParseError),
+    Parse(AletheParseError),
     /// Proof parsed but verification failed.
     Verify(SmtVerifyError),
     /// Proof parsed and verified, but is not valid (e.g., no empty clause).
@@ -116,8 +121,8 @@ impl std::error::Error for AletheVerifyError {
     }
 }
 
-impl From<alethe_parser::AletheParseError> for AletheVerifyError {
-    fn from(e: alethe_parser::AletheParseError) -> Self {
+impl From<AletheParseError> for AletheVerifyError {
+    fn from(e: AletheParseError) -> Self {
         AletheVerifyError::Parse(e)
     }
 }

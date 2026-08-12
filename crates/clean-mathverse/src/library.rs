@@ -457,8 +457,7 @@ impl MathverseLibrary {
         // system. A dep with no same-system definition is dropped rather than
         // mapped to a foreign-system homonym. Keys borrow `self.strings`, so no
         // name is cloned.
-        let mut by_name_system: hashbrown::HashMap<(&str, u8), ConstantIdx> =
-            hashbrown::HashMap::with_capacity(num);
+        let mut by_name_system: HashMap<(&str, u8), ConstantIdx> = HashMap::with_capacity(num);
         for (idx, header) in self.constants.iter().enumerate() {
             if let Some(name) = self.strings.get(header.name_idx as usize) {
                 by_name_system.insert((name.as_str(), header.source_system), idx as ConstantIdx);
@@ -1671,7 +1670,7 @@ impl MathverseVerify for MathverseLibrary {
 /// Attempt to parse raw bytes as a FlatDb and reconstruct the last expression
 /// as a kernel Expr. The convention is that the "root" expression is the last
 /// one in the arena (highest index), matching FlatBuilder's output ordering.
-fn parse_flat_bytes_to_expr(bytes: &[u8]) -> Result<clean_kernel::expr::Expr, String> {
+fn parse_flat_bytes_to_expr(bytes: &[u8]) -> Result<Expr, String> {
     let db = FlatDb::from_bytes(bytes).map_err(|e| format!("FlatDb parse: {e}"))?;
     let count = db.expr_count();
     if count == 0 {
@@ -1685,20 +1684,9 @@ fn parse_flat_bytes_to_expr(bytes: &[u8]) -> Result<clean_kernel::expr::Expr, St
 // Dependency extraction
 // ---------------------------------------------------------------------------
 
-/// Extract all `Const` name_idx references reachable from `root` in the
-/// expression arena. Uses iterative DFS to avoid stack overflow on deeply
-/// nested expressions (e.g. large proof terms).
-fn extract_const_refs(exprs: &[FlatExpr], root: u32, out: &mut Vec<u32>) {
-    let mut stack = Vec::new();
-    let mut visited = hashbrown::HashSet::new();
-    extract_const_refs_into(exprs, root, out, &mut stack, &mut visited);
-}
-
-/// Like [`extract_const_refs`] but uses caller-provided scratch `stack`/`visited`,
-/// reused across the per-constant `build_deps` loop to avoid allocating a fresh
-/// worklist + visited set on every call. Both are cleared on entry, so prior
-/// contents are irrelevant and the appended `out` (sorted+deduped here) is
-/// byte-identical to the fresh-allocation version.
+/// Extract all `Const` name references reachable from `root`, reusing the
+/// caller-provided worklist and visited set across constants. Both scratch
+/// collections are cleared on entry.
 fn extract_const_refs_into(
     exprs: &[FlatExpr],
     root: u32,
@@ -3191,7 +3179,7 @@ mod tests {
 
     #[test]
     fn test_verify_foreign_with_valid_flatdb_theorem() {
-        use clean_kernel::expr::{BinderInfo, Expr};
+        use clean_kernel::expr::Expr;
         use clean_kernel::flat::FlatBuilder;
         use clean_kernel::level::Level;
 

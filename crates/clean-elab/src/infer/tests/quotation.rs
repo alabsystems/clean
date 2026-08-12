@@ -547,7 +547,7 @@ fn test_elaborate_q_value_quotation_literal() {
     assert!(result.is_ok(), "q(42) should elaborate: {result:?}");
     let expr = result.unwrap();
     assert!(
-        matches!(expr.kind(), ExprKind::Lit(clean_kernel::Literal::Nat(ref n)) if n.to_u64() == Some(42)),
+        matches!(expr.kind(), ExprKind::Lit(Literal::Nat(ref n)) if n.to_u64() == Some(42)),
         "q(42) should be Nat literal 42, got {expr:?}"
     );
 }

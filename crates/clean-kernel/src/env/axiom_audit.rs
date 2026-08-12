@@ -636,6 +636,18 @@ pub enum CertificationIssue {
     TrustMarker { name: Name },
     /// A reachable axiom is not part of the certification foundation.
     NonFoundationalAxiom { name: Name },
+    /// A reachable constant is a PROVISIONAL HEADER staged by header-first
+    /// elaboration (Trust I1) — a signature installed so later declarations
+    /// resolve names independently of source order, with no value behind it.
+    ///
+    /// It is reported ahead of the axiom classification because a header is not
+    /// an axiom the user wrote: grading it `Trusted` with the header disclosed
+    /// in the closure would read as "the author assumed this", which is exactly
+    /// the misreading staging exists to prevent. Header-first elaboration also
+    /// keeps headers structurally out of the environment declarations are
+    /// registered into, so reaching this arm means a staging environment
+    /// escaped its batch.
+    Staged { name: Name },
     /// A foundation-shaped name did not exactly match the canonical kind,
     /// universe arity, or statement installed by the kernel.
     NonCanonicalFoundation { name: Name, detail: String },
@@ -1184,6 +1196,15 @@ impl Environment {
                     // `NeedsRecheck`, which remains blocking.
                     rechecked_unknown.insert(name.clone());
                 }
+            }
+
+            // Provisional headers are classified BEFORE the axiom arm below:
+            // a staged header is axiom-SHAPED but is not an assumption the
+            // author made, so it must not be reported as one. Blocking.
+            if self.is_staged_header(&name) {
+                audit
+                    .issues
+                    .push(CertificationIssue::Staged { name: name.clone() });
             }
 
             if info.kind == ConstantKind::Axiom {

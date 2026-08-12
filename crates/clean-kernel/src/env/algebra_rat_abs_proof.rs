@@ -78,6 +78,8 @@ pub(super) struct RatAbsConsts {
     add_assoc: Expr,
     add_comm: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     add_zero: Expr,
     zero_add: Expr,
     // Logic.

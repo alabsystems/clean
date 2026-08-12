@@ -83,7 +83,7 @@ impl Specification {
             )
         };
 
-        // rigid_app_head declaration order: sort, pi, lit, app, proj.
+        // rigid_app_head declaration order: sort, pi, lit, app, proj, bvar.
         let rigid_app_form = "(KExpr.app raf raa)";
         let rigid_arms = format!(
             "{sort} {pi} {lit} \
@@ -94,11 +94,12 @@ impl Specification {
              rigid_app_leg_inv f a w \
              {rig} \
              {leg}) \
-             {proj}",
+             {proj} {bvar}",
             sort = kill("(KExpr.sort rn)"),
             pi = kill("(KExpr.pi rpty rpbody)"),
             lit = kill("(KExpr.lit rv)"),
             proj = kill("(KExpr.proj rs ri rsub)"),
+            bvar = kill("(KExpr.bvar rbi)"),
             ih = motive("raf"),
             rig = onto(
                 "rigid_app_head z",
@@ -126,6 +127,11 @@ impl Specification {
                 "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.proj rs ri rsub)",
                 "(fun (rs : Name) (ri : Nat) (rsub : KExpr) (f : KExpr) (a : KExpr) \
                  (heq : Eq KExpr (KExpr.proj rs ri rsub)",
+                1,
+            )
+            .replacen(
+                "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.bvar rbi)",
+                "(fun (rbi : Nat) (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.bvar rbi)",
                 1,
             );
 
@@ -158,6 +164,11 @@ impl Specification {
              (_hs : par_reduces_cd_star the_red_env (KExpr.const cn cus) w) => \
              kexpr_discr_t ({goal}) (KExpr.const cn cus) (KExpr.app f a) heq \
              (Eq.refl Bool Bool.false)) \
+             (fun (bi : Nat) (f : KExpr) (a : KExpr) \
+             (heq : Eq KExpr (KExpr.bvar bi) (KExpr.app f a)) \
+             (_hs : par_reduces_cd_star the_red_env (KExpr.bvar bi) w) => \
+             kexpr_discr_t ({goal}) (KExpr.bvar bi) (KExpr.app f a) heq \
+             (Eq.refl Bool Bool.false)) \
              e hn",
             m = motive("e"),
             mz = motive("z"),
@@ -171,9 +182,9 @@ impl Specification {
 mod tests {
     use super::*;
 
-    /// `nf_head` has four constructors, so `nf_head.rec` takes a motive plus
-    /// four minor premises — five top-level lambdas, not four. The `rigid` arm
-    /// then fans out to `rigid_app_head`'s five, giving eight leaves in total.
+    /// `nf_head` has FIVE constructors, so `nf_head.rec` takes a motive plus
+    /// five minor premises — six top-level lambdas. The `rigid` arm then fans out
+    /// to `rigid_app_head`'s five, giving nine leaves in total.
     ///
     /// (The first version of this test forgot the MOTIVE is also a top-level
     /// lambda and expected four. Counting recursor arguments means counting the
@@ -197,27 +208,27 @@ mod tests {
             }
         }
         assert_eq!(
-            top, 5,
-            "nf_head.rec takes a motive plus four minor premises; found {top} top-level lambdas"
+            top, 6,
+            "nf_head.rec takes a motive plus five minor premises; found {top} top-level lambdas"
         );
         assert_eq!(
             src.matches("rigid_app_head.rec").count(),
             1,
-            "the rigid arm fans out via its own recursor, giving eight leaves in total"
+            "the rigid arm fans out via its own recursor, giving nine leaves in total"
         );
     }
 
-    /// Exactly two leaves can be applications; the other six are impossible and
-    /// must be discriminated. If a substantive leaf were ever discriminated
+    /// Exactly two leaves can be applications; the other seven are impossible
+    /// and must be discriminated. If a substantive leaf were ever discriminated
     /// away, the lemma would still typecheck and quietly cover less.
     #[test]
-    fn test_six_leaves_are_impossible_and_two_are_real() {
+    fn test_seven_leaves_are_impossible_and_two_are_real() {
         let src = Specification::nf_app_leg_src();
         assert_eq!(
             src.matches("kexpr_discr_t (StuckAppRedWitness").count(),
-            6,
-            "lam, rigid/sort, rigid/pi, rigid/lit, rigid/proj and constdead cannot be \
-             applications"
+            8,
+            "lam, rigid/sort, rigid/pi, rigid/lit, rigid/proj, rigid/bvar, constdead and bvar \
+             cannot be applications"
         );
         assert_eq!(
             src.matches("rigid_app_leg_inv f a w").count(),

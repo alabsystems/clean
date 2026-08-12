@@ -14,7 +14,7 @@ use crate::env::nn_verify_cert_complexity::{
     CertComplexityMetrics,
 };
 use crate::env::Environment;
-use crate::expr::{Expr, ExprKind};
+use crate::expr::Expr;
 use crate::name::Name;
 
 // =============================================================================

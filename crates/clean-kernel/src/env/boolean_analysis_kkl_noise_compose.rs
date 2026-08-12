@@ -104,6 +104,8 @@ pub(super) struct ComposeConsts {
     pub(super) subset_sum_smul: Expr,
     pub(super) fin: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fin_sum: Expr,
     pub(super) fin_sum_congr: Expr,
     pub(super) eq1: Expr,

@@ -179,15 +179,46 @@ fn emit_verify_human(
 // ─── inspect ────────────────────────────────────────────────────────────────
 
 fn inspect(path: &Path, json: bool) -> anyhow::Result<()> {
-    let bundle = load_bundle(path)?;
+    // `verify` is the trust verb and fails closed. `inspect` is the *diagnostic*
+    // verb: when the trust loader refuses a bundle, the user still needs to be
+    // told WHAT is not ready (e.g. "theorem X has no proof term") rather than
+    // only that something is. The quarantined read pins every recorded trust
+    // claim to `unverified`, and the command still exits non-zero, so no gate
+    // is loosened by producing the report.
+    let strict_error = match CertBundle::load(path) {
+        Ok(bundle) => {
+            let report = bundle.inspect();
+            if json {
+                emit_inspect_json(path, &bundle, &report)?;
+            } else {
+                emit_inspect_human(path, &bundle, &report);
+            }
+            return Ok(());
+        }
+        Err(error) => error,
+    };
+
+    let bundle = CertBundle::load_for_inspection(path).map_err(|diagnostic_error| {
+        anyhow!(
+            "loading bundle {}: {strict_error} \
+             (quarantined read also failed: {diagnostic_error})",
+            path.display()
+        )
+    })?;
     let report = bundle.inspect();
 
     if json {
-        emit_inspect_json(path, &bundle, &report)?;
+        let mut output = build_inspect_json(path, &bundle, &report);
+        output["rejected"] = serde_json::Value::Bool(true);
+        output["rejection_reason"] = serde_json::Value::String(strict_error.to_string());
+        println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
+        println!("REJECTED by the trust loader: {strict_error}");
+        println!("Quarantined readiness diagnostics follow; nothing in this bundle is verified.");
+        println!();
         emit_inspect_human(path, &bundle, &report);
     }
-    Ok(())
+    bail!("loading bundle {}: {strict_error}", path.display())
 }
 
 fn emit_inspect_json(
@@ -472,8 +503,12 @@ mod tests {
             },
         );
 
-        CertBundle::build("test-project", "0.1.0", env, certs, HashMap::new(), None)
-            .expect("build bundle")
+        // `CertBundle::build` deliberately refuses this fixture: a manifest
+        // entry is a claim of proof authority and `Test.assumed` has none.
+        // `for_inspection` is the quarantined view that lets the readiness
+        // renderers describe exactly that deficiency.
+        CertBundle::for_inspection("test-project", "0.1.0", env, certs, HashMap::new())
+            .expect("assemble diagnostics view")
     }
 
     #[test]
@@ -504,5 +539,37 @@ mod tests {
         assert!(human.contains("type:       True"));
         assert!(human.contains("decl_kind:  axiom"));
         assert!(human.contains("cert:       present, env: present, proof: missing"));
+    }
+
+    /// The readiness renderers exist to say what is *not* ready; they must
+    /// never launder an assumed theorem into a proved or certified one.
+    #[test]
+    fn inspect_renderers_never_present_an_assumed_theorem_as_proved() {
+        let bundle = axiom_bundle();
+        let report = bundle.inspect();
+        let json = build_inspect_json(Path::new("fixture.cleancert"), &bundle, &report);
+
+        assert_eq!(json["trust_level"], trust_level_str(TrustLevel::Unverified));
+        assert_eq!(
+            json["theorems"][0]["trust_level"],
+            trust_level_str(TrustLevel::Unverified)
+        );
+        // No proof term exists, so no proof hash may be published for it.
+        assert!(json["theorems"][0].get("proof_hash").is_none());
+
+        let human = render_inspect_human(Path::new("fixture.cleancert"), &bundle, &report);
+        for forbidden in ["kernel-verified", "smt-backed", "proof: present"] {
+            assert!(
+                !human.contains(forbidden),
+                "quarantined diagnostics leaked `{forbidden}`:\n{human}"
+            );
+        }
+
+        // And the diagnostics view is not a route to a trust verdict: the
+        // verify path still refuses it outright.
+        assert!(
+            bundle.verify_all().is_err(),
+            "an assumed theorem must never reach a verification verdict"
+        );
     }
 }

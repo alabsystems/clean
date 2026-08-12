@@ -16,9 +16,7 @@ use clean_mathverse::coq::alpha::{CoqImporter, Sexp};
 use clean_mathverse::shard::ShardWriter;
 
 use crate::listing::{self, Candidate};
-use crate::recon::{
-    self, is_path_atom, DumpNameIndex, FormEntry, NameScope, PrintHeader, RunOverlay,
-};
+use crate::recon::{self, is_path_atom, DumpNameIndex, FormEntry, NameScope, RunOverlay};
 use crate::report::{Counts, ModuleMeta, SkipEntry, Toolchain, ValidateStats};
 use crate::sertop::{QueryObj, Sertop, SertopErr};
 use crate::sexp_io::quote_string;
@@ -362,7 +360,13 @@ fn dump_candidate(
             }
         },
         QueryObj::MInd(objs) => dump_inductive(session, cand, &objs, minds_seen, buf, counts),
-        QueryObj::Empty | QueryObj::Exn(_) | QueryObj::Other(_) => {
+        definition_failure @ (QueryObj::Empty | QueryObj::Exn(_) | QueryObj::Other(_)) => {
+            let definition_reason = match definition_failure {
+                QueryObj::Empty => "empty definition answer".to_string(),
+                QueryObj::Exn(reason) => format!("definition exception: {reason}"),
+                QueryObj::Other(kind) => format!("unsupported definition answer: {kind}"),
+                QueryObj::Constr(_) | QueryObj::MInd(_) => unreachable!(),
+            };
             // No definition object: a genuine axiom/parameter (or a
             // section-discharged alias). TypeOf decides; statement-only.
             match session.client()?.query_obj("TypeOf", name)? {
@@ -374,7 +378,10 @@ fn dump_candidate(
                 _ => {
                     counts.skipped.push(SkipEntry {
                         name: name.to_string(),
-                        reason: format!("no-definition-no-typeof ({})", cand.keyword),
+                        reason: format!(
+                            "no-definition-no-typeof ({}; {definition_reason})",
+                            cand.keyword
+                        ),
                     });
                     Ok(())
                 }
@@ -1037,7 +1044,7 @@ fn dump_inductive(
             Err(reason) => {
                 counts.skipped.push(SkipEntry {
                     name: block_name,
-                    reason: format!("arity: {reason}"),
+                    reason: format!("packet {} arity: {reason}", packet.typename),
                 });
                 continue;
             }
@@ -1058,7 +1065,10 @@ fn dump_inductive(
                             continue;
                         }
                     }
-                    ctor_failure = Some(format!("ctor-typeof-failed: {ctor_qualified}"));
+                    ctor_failure = Some(format!(
+                        "packet {} ctor-typeof-failed: {ctor_qualified}",
+                        packet.typename
+                    ));
                     break;
                 }
             }

@@ -5,29 +5,9 @@
 //! Tests for item source ingestion: higher-ranked trait bounds and
 //! block-scoped type aliases.
 
-use super::super::parser::Parser;
 use super::super::SourceProgram;
 use crate::expr::{Expr, Stmt};
 use crate::item::Item;
-
-/// The quantified lifetimes of a higher-ranked trait bound are recoverable as
-/// an ordered list, while a plain bound yields an empty list.
-#[test]
-fn test_hrtb_bound_lifetimes_extracts_quantified_lifetimes() {
-    let hrtb: syn::TraitBound =
-        syn::parse_str("for<'a, 'b> Fn(&'a i32, &'b i32)").expect("valid HRTB syntax");
-    assert_eq!(
-        Parser::hrtb_bound_lifetimes(&hrtb),
-        vec!["a".to_string(), "b".to_string()],
-        "bound lifetimes should be returned in source order"
-    );
-
-    let plain: syn::TraitBound = syn::parse_str("Clone").expect("valid trait bound syntax");
-    assert!(
-        Parser::hrtb_bound_lifetimes(&plain).is_empty(),
-        "a non-higher-ranked bound has no quantified lifetimes"
-    );
-}
 
 /// A higher-ranked trait bound (`for<'a> Fn(&'a i32)`) on a generic type
 /// parameter is accepted and simplified to the underlying trait obligation.

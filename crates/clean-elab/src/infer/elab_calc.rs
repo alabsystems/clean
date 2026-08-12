@@ -31,7 +31,7 @@
 use super::*;
 use crate::tactic::calc::CalcRel;
 use crate::tactic::calc_trans::lookup_trans_rule;
-use crate::tactic::calc_trans_match::match_goal_rel;
+use crate::tactic::calc_trans_match::{calc_endpoints, calc_relation_head, match_goal_rel};
 use clean_parser::{SurfaceCalcJustification, SurfaceCalcStep};
 
 impl<'a> ElabCtx<'a> {
@@ -94,7 +94,14 @@ impl<'a> ElabCtx<'a> {
 
         // Decompose the relation into (lhs, rhs) and, when chaining, connect the
         // chain by unifying this step's LHS with the previous step's RHS.
-        let (_rel, _ty, lhs, _rhs, _levels) = match_goal_rel(&rel_type).ok_or_else(|| {
+        //
+        // `calc_endpoints` is Lean's `getCalcRelation?`: the dedicated
+        // seven-relation matcher first, then the generic "last two arguments"
+        // rule. Gating on the dedicated matcher alone rejected every relation
+        // outside {Eq, Ne, LE.le, LT.lt, GE.ge, GT.gt, Iff} — `List.Sublist`,
+        // `List.Perm`, a user's own inductive relation — with "relation
+        // expected", before any transitivity lemma was ever consulted.
+        let (lhs, fallback_rhs) = calc_endpoints(&rel_type).ok_or_else(|| {
             ElabError::NotImplemented(format!("calc step: relation expected, got {rel_type:?}"))
         })?;
 
@@ -160,9 +167,9 @@ impl<'a> ElabCtx<'a> {
         // Recompute the relation type and RHS after the proof has been checked,
         // so the threaded RHS reflects any metavariable assignments.
         let rel_type = self.metas.instantiate(&rel_type);
-        let rhs = match match_goal_rel(&rel_type) {
-            Some((_, _, _, rhs, _)) => self.metas.instantiate(&rhs),
-            None => self.metas.instantiate(&_rhs),
+        let rhs = match calc_endpoints(&rel_type) {
+            Some((_, rhs)) => self.metas.instantiate(&rhs),
+            None => self.metas.instantiate(&fallback_rhs),
         };
 
         Ok((proof, rel_type, rhs))
@@ -204,11 +211,16 @@ impl<'a> ElabCtx<'a> {
         // proof along the equality (and symmetrically for `a = b` with `b R c`).
         // Both-`=` is left to the `Eq.trans` rule below. The transport result is
         // kernel-re-checked by `close_goal`.
-        if let (Some((rel_a, _, _, _, _)), Some((rel_b, _, _, _, _))) = (&result_match, &step_match)
+        //
+        // Only ONE side has to be a recognized `Eq`: the other may be any
+        // relation at all (`List.Sublist`, a user relation, …), because
+        // transporting a proof along an equality is relation-agnostic. Gating
+        // both sides on the dedicated matcher kept `a = b` followed by
+        // `MyR b c` out of this path even though `Eq.rec` handles it.
         {
-            let a_is_eq = matches!(rel_a, CalcRel::Eq);
-            let b_is_eq = matches!(rel_b, CalcRel::Eq);
-            if a_is_eq ^ b_is_eq {
+            let a_is_eq = matches!(result_match, Some((CalcRel::Eq, ..)));
+            let b_is_eq = matches!(step_match, Some((CalcRel::Eq, ..)));
+            if a_is_eq != b_is_eq {
                 // step is `=` → cast the result proof along the step equality;
                 // result is `=` → cast the step proof along the result equality.
                 let (heq, h) = if b_is_eq {
@@ -223,7 +235,7 @@ impl<'a> ElabCtx<'a> {
                     // (multi-step `a = b ≤ c < d` chains). `close_goal` re-checks
                     // the `@Eq.rec` term against the goal (fail-closed).
                     let cast_ty = self.metas.instantiate(&cast_ty);
-                    if match_goal_rel(&cast_ty).is_some() {
+                    if calc_endpoints(&cast_ty).is_some() {
                         return Ok((cast, cast_ty));
                     }
                 }
@@ -288,6 +300,43 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        // Relation-native transitivity: when both steps carry the SAME relation
+        // head `R`, use that relation's own transitivity lemma `R.trans`
+        // (`List.Sublist.trans`, `List.Perm.trans`, a user's `MyR.trans`, …).
+        //
+        // This is not a heuristic detour around the `Trans` class — it is the
+        // very term Lean's `Trans` instances are built from
+        // (`instance : Trans (@Sublist α) Sublist Sublist := ⟨Sublist.trans⟩`),
+        // so it composes the identical proof. It is tried before the class
+        // route because Clean's built-in three-universe `Trans` stub
+        // (`clean-kernel/src/env/order_structures.rs`) shadows Lean's real
+        // six-universe `Trans` on import, so no imported `Trans` instance is
+        // currently synthesizable at all — see `data/prelude_collision_census.json`.
+        // When that collision is retired this route simply becomes a fast path.
+        //
+        // Read-only: it looks a constant up and applies it. The applied term is
+        // type-checked by `apply_lemma_to_proofs` (`infer_type`) and re-checked
+        // by the kernel through `add_decl`/`close_goal`, so a relation whose
+        // `.trans` has an unrelated shape fails loudly rather than over-accepts.
+        let same_head = match (
+            calc_relation_head(&result_type),
+            calc_relation_head(&step_type),
+        ) {
+            (Some(head_a), Some(head_b)) if head_a == head_b => Some(head_a),
+            _ => None,
+        };
+        if let Some(head) = same_head {
+            let cand = format!("{head}.trans");
+            if self.env.get_const(&Name::from_string(&cand)).is_some() {
+                let lemma = self.mk_const_str(&cand);
+                if let Ok((proof, lty)) = self.apply_lemma_to_proofs(lemma, &result, &step) {
+                    if calc_endpoints(&lty).is_some() {
+                        return Ok((proof, lty));
+                    }
+                }
+            }
+        }
+
         // Fallback: compose via the `Trans` typeclass, mirroring Lean's
         // `mkCalcTrans`. Insert the implicit `{α β γ r s t}` + instance
         // `[Trans r s t]` arguments BEFORE applying the two proofs so that no
@@ -296,8 +345,10 @@ impl<'a> ElabCtx<'a> {
         let (proof, ty) = self.apply_lemma_to_proofs(trans, &result, &step)?;
 
         // The composed result must itself be a relation, otherwise the chain is
-        // ill-formed (Lean errors with "step result is not a relation").
-        if match_goal_rel(&ty).is_none() {
+        // ill-formed (Lean errors with "step result is not a relation"). Uses
+        // the same generic decomposition Lean applies here (`getCalcRelation?`),
+        // so a `Trans` instance producing a non-enum output relation is accepted.
+        if calc_endpoints(&ty).is_none() {
             return Err(ElabError::NotImplemented(format!(
                 "calc: composed step result is not a relation: {ty:?}"
             )));

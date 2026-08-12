@@ -693,6 +693,7 @@ fn free_ram_bytes_estimate() -> Option<u64> {
 /// Parse `vm_stat` output into a conservative free-bytes estimate:
 /// `page_size × (Pages free + Pages inactive + Pages speculative)`. Returns `None`
 /// if the page size or the `Pages free:` line cannot be parsed.
+#[cfg(any(target_os = "macos", test, doc))]
 fn parse_vm_stat_free_bytes(output: &str) -> Option<u64> {
     let page_size = output
         .lines()
@@ -721,6 +722,7 @@ fn parse_vm_stat_free_bytes(output: &str) -> Option<u64> {
 }
 
 /// Parse one `Pages <kind>:                 <count>.` line into its page count.
+#[cfg(any(target_os = "macos", test, doc))]
 fn vm_stat_pages(line: &str, key: &str) -> Option<u64> {
     line.trim()
         .strip_prefix(key)?
@@ -732,6 +734,11 @@ fn vm_stat_pages(line: &str, key: &str) -> Option<u64> {
 }
 
 /// Parse `/proc/meminfo` for `MemAvailable:` (in kB) → bytes.
+///
+/// Mirror of the [`parse_vm_stat_free_bytes`] gate: the sole production caller is
+/// the non-macOS arm of [`free_ram_bytes_estimate`], so on macOS this is reachable
+/// only from tests and the doc link above — 2026-07-31.
+#[cfg(any(not(target_os = "macos"), test, doc))]
 fn parse_meminfo_available_bytes(output: &str) -> Option<u64> {
     output
         .lines()

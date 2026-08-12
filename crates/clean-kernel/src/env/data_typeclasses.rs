@@ -100,7 +100,7 @@ impl Environment {
             types: vec![InductiveType {
                 name: Name::from_string("Inhabited"),
                 type_: Expr::pi(
-                    BinderInfo::Implicit,
+                    BinderInfo::Default,
                     sort_u.clone(),
                     // Lean fidelity: `Inhabited (α : Sort u) : Sort (max 1 u)` —
                     // `max`, NOT `imax`. `imax 1 u` collapses to 0 at u=0, which is
@@ -439,7 +439,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string(inst_name),
                 class_name: Name::from_string("Inhabited"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -503,7 +503,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (alpha_id, _alpha) = b.fresh_local(sort_u.clone());
             let r = Expr::sort(Level::max(u_level.clone(), Level::succ(Level::zero())));
-            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, sort_u.clone(), r);
+            let r = b.mk_pi(alpha_id, BinderInfo::Default, sort_u.clone(), r);
             b.finish(r)
         };
 
@@ -701,7 +701,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instDecidableEqNat"),
                 class_name: Name::from_string("DecidableEq"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -727,7 +727,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instDecidableEqBool"),
             class_name: Name::from_string("DecidableEq"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -808,7 +808,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instDecidableEqChar"),
                 class_name: Name::from_string("DecidableEq"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -858,7 +858,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instDecidableEqString"),
                 class_name: Name::from_string("DecidableEq"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -911,7 +911,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string(&inst_name),
                 class_name: Name::from_string("DecidableEq"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: None,
                 value: None,
             });
@@ -1068,7 +1068,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instDecidableNot"),
             class_name: Name::from_string("Decidable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -1250,7 +1250,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instDecidableAnd"),
             class_name: Name::from_string("Decidable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -1434,7 +1434,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instDecidableOr"),
             class_name: Name::from_string("Decidable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });

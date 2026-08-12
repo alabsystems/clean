@@ -29,6 +29,9 @@ use super::core::{Goal, ProofState, TacticError};
 #[derive(Debug, Clone)]
 pub(crate) struct VerifiedProofCertificate {
     /// The kernel proof certificate from type inference.
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(crate) kernel_cert: ProofCert,
     /// The verified proof term (fully instantiated, no unresolved metas).
     pub(crate) proof_term: Expr,

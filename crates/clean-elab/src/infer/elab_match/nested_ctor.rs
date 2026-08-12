@@ -19,7 +19,7 @@ impl<'a> ElabCtx<'a> {
     fn inaccessible_expr_ctor_name(&self, expr: &SurfaceExpr) -> Option<String> {
         match expr {
             SurfaceExpr::Ident(_, name) => Some(name.clone()),
-            SurfaceExpr::Proj(_, base, clean_parser::Projection::Named(field)) => {
+            SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                 if let SurfaceExpr::Ident(_, namespace) = base.as_ref() {
                     Some(format!("{namespace}.{field}"))
                 } else {
@@ -38,7 +38,7 @@ impl<'a> ElabCtx<'a> {
         let pattern = match expr {
             SurfaceExpr::Lit(_, SurfaceLit::Nat(k)) => Some(desugar_nonzero_nat_lit(*k)),
             SurfaceExpr::Ident(_, name) => Some(SurfacePattern::Var(name.clone())),
-            SurfaceExpr::Proj(_, base, clean_parser::Projection::Named(field)) => {
+            SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                 if let SurfaceExpr::Ident(_, namespace) = base.as_ref() {
                     Some(SurfacePattern::Var(format!("{namespace}.{field}")))
                 } else {

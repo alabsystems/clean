@@ -8,6 +8,12 @@
 //! module expands the sum of squares and checks exact polynomial equality
 //! with the target using the NRA polynomial arithmetic.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use crate::smt_verify::nra::Polynomial;
 
 use super::parse::SageSosCertificate;
@@ -25,6 +31,7 @@ pub(crate) enum SosVerdict {
 /// Errors during SOS certificate verification.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
+#[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
 pub(crate) enum SosVerifyError {
     #[error("SOS decomposition does not equal target polynomial: residual is non-zero")]
     DecompositionMismatch,

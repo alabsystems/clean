@@ -398,8 +398,8 @@ impl TlaTacticEngine {
     /// Nothing else is accepted here. In particular, a currently-true *state
     /// predicate* Q (not the literal `TRUE`) does NOT discharge `P ~> Q`,
     /// because the leads-to still needs the box; that case is intentionally
-    /// excluded (it was one of the removed unsound accepts in
-    /// `try_lattice_decomposition`).
+    /// excluded (it was one of the removed unsound lattice-decomposition
+    /// accepts).
     fn try_leads_to_trivial(&self, p: &Expr, q: &Expr) -> Option<String> {
         if self.is_trivially_false(p) {
             if self.trace {

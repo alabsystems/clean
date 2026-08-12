@@ -252,6 +252,9 @@ fn dsimp_expr(expr: &Expr, env: &Environment, config: &DsimpConfig, depth: usize
 ///
 /// REQUIRES: `expr` is a well-formed expression
 /// ENSURES: Returns `true` iff `bvar(idx)` occurs free (at depth 0) in `expr`
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn occurs_bvar_dsimp(expr: &Expr, idx: u32) -> bool {
     expr.has_loose_bvar(idx)
 }
@@ -269,6 +272,9 @@ pub(crate) fn occurs_bvar_dsimp(expr: &Expr, idx: u32) -> bool {
 /// REQUIRES: For negative `delta`, every affected `bvar(i)` satisfies `i >= cutoff + |delta|`
 /// ENSURES: Every `bvar(i)` with `i >= cutoff` is replaced by `bvar(i + delta)`
 /// ENSURES: Binder bodies recurse with `cutoff + 1`, preserving de Bruijn scoping
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn shift_bvars_dsimp(expr: &Expr, delta: i32, cutoff: u32) -> Expr {
     if delta == 0 {
         return expr.clone();

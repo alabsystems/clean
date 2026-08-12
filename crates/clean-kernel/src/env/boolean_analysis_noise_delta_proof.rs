@@ -2023,6 +2023,7 @@ impl Environment {
 // ===========================================================================
 
 /// Const set for the inductive ρ-delta (mirrors `DeltaIndConsts`).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct DeltaIndRhoConsts {
     c: NoiseConsts,
     fin: Expr,

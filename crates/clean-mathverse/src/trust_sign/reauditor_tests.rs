@@ -67,7 +67,7 @@ fn req() -> GraduationRequest {
 /// `.mathverse` shard path. This is a GENUINE green: the shard is produced
 /// by the real intake gate (kernel re-check + digest binding).
 fn graduate_foundational(out_dir: &Path) -> PathBuf {
-    let mut env = clean_kernel::Environment::new();
+    let mut env = Environment::new();
     env.add_decl(Declaration::Theorem {
         name: Name::from_string(FOUND_THM),
         level_params: vec![],

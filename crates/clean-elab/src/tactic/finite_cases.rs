@@ -8,9 +8,11 @@
 //! `PUnit`. For integer interval splitting, see `interval_cases.rs`.
 
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprKind, FVarId};
+use clean_kernel::{Expr, ExprKind, FVarId, Level};
 
-use super::{Goal, ProofState, TacticError, TacticResult};
+use super::interval_cases::make_equality_type;
+use super::nat_expr_eval::read_nat_numeral;
+use super::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 use crate::stack_safe;
 
 use super::finite_cases_proof::build_fin_cases_proof;
@@ -79,18 +81,65 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 
     // Create new goals for each case
     let mut new_goals = Vec::new();
-    let preserve_dependent_target = uses_or_rec_fallback(&hyp.ty, inhabitants.len())
-        && goal.target.abstract_fvar(hyp.fvar) != goal.target;
+    let uses_fallback = uses_or_rec_fallback(&hyp.ty, inhabitants.len());
+    let preserve_dependent_target =
+        uses_fallback && goal.target.abstract_fvar(hyp.fvar) != goal.target;
 
-    for inhabitant in &inhabitants {
-        // Create a new context where hyp is replaced with its value
+    // Bool/PUnit recursors eliminate the discriminant from each minor-premise
+    // context. Supporting later declarations that depend on it requires
+    // generalizing those declarations into the motive; do not silently retype
+    // them in place until that proof construction exists.
+    if !uses_fallback {
+        let hyp_idx = goal
+            .local_ctx
+            .iter()
+            .position(|decl| decl.fvar == hyp.fvar)
+            .expect("invariant: hyp was selected from goal.local_ctx");
+        let dependent_suffix = goal.local_ctx.iter().skip(hyp_idx + 1).any(|decl| {
+            decl.ty.abstract_fvar(hyp.fvar) != decl.ty
+                || decl
+                    .value
+                    .as_ref()
+                    .is_some_and(|value| value.abstract_fvar(hyp.fvar) != *value)
+        });
+        if dependent_suffix {
+            return Err(TacticError::InvalidTarget {
+                tactic: "fin_cases".into(),
+                detail: format!(
+                    "later local declarations depend on {hyp_name}; dependent-context generalization is not yet available"
+                ),
+            });
+        }
+    }
+
+    for (case_idx, inhabitant) in inhabitants.iter().enumerate() {
         let mut new_ctx = goal.local_ctx.clone();
 
-        // Find and update the hypothesis
-        for decl in &mut new_ctx {
-            if decl.name == hyp_name {
-                decl.value = Some(inhabitant.clone());
+        if uses_fallback {
+            // The Or.rec fallback proves equality only in its non-final true
+            // branches. Give precisely those goals the matching equality
+            // local, allocated in binder order. The final branch must remain
+            // generic: no proof of its would-be equality exists in this
+            // fallback, so adding one would be unsound.
+            if case_idx + 1 < inhabitants.len() {
+                new_ctx.push(LocalDecl {
+                    fvar: state.fresh_fvar(),
+                    name: format!("{hyp_name}_eq"),
+                    ty: make_equality_type(
+                        &hyp.ty,
+                        &Expr::fvar(hyp.fvar),
+                        inhabitant,
+                        Level::succ(Level::zero()),
+                    ),
+                    value: None,
+                });
             }
+        } else {
+            // Proper dependent recursor minors no longer have the eliminated
+            // discriminant in scope. Removing it is stricter than attaching a
+            // synthetic `value`, which would let branch checking exploit an
+            // equality that is not represented in the final proof term.
+            new_ctx.retain(|decl| decl.fvar != hyp.fvar);
         }
 
         // Bool/PUnit use proper dependent recursors, so they can keep the
@@ -103,7 +152,7 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
             substitute_fvar(&goal.target, hyp.fvar, inhabitant)
         };
 
-        let new_meta_id = state.fresh_meta(new_target.clone());
+        let new_meta_id = state.fresh_meta_in_context(new_target.clone(), &new_ctx);
         new_goals.push(Goal {
             meta_id: new_meta_id,
             target: new_target,
@@ -214,42 +263,20 @@ pub(crate) fn get_finite_inhabitants(ty: &Expr) -> Result<Vec<Expr>, TacticError
 
 /// Extract a natural number from an expression
 ///
+/// Delegates to the shared `nat_expr_eval::read_nat_numeral` reader so the
+/// `@OfNat.ofNat Nat k inst` form the elaborator builds for a source numeral is
+/// recognized. Before that (RC-H), this handled only `Nat.zero` / a `Nat.succ`
+/// chain / a raw `Lit(Nat)`, so `fin_cases h` on `h : Fin 3` reported
+/// "not a recognized finite type" while the `Nat.succ`-spelled bound worked.
+///
 /// REQUIRES: `expr` is a well-formed Lean expression
 ///
-/// ENSURES: returns `Some(n)` when `expr` is a Nat literal, `Nat.zero`,
-/// a numeric constant name, or a `Nat.succ` chain
-/// ENSURES: returns `None` for non-Nat expressions
+/// ENSURES: returns `Some(n)` when `expr` denotes the Nat numeral `n` and `n`
+/// fits in a `usize`
+/// ENSURES: returns `None` for non-numeral expressions
 /// ENSURES: recursive descent runs under `stack_safe`
 pub(crate) fn extract_nat_literal(expr: &Expr) -> Option<usize> {
-    stack_safe(|| match expr.kind() {
-        ExprKind::Const(name, _) => {
-            let name_str = name.to_string();
-            if name_str == "Nat.zero" {
-                return Some(0);
-            }
-            // Try to parse as a number
-            name_str.parse().ok()
-        }
-        ExprKind::Lit(lit) => {
-            if let clean_kernel::expr::Literal::Nat(n) = lit {
-                n.to_u64().and_then(|v| usize::try_from(v).ok())
-            } else {
-                None
-            }
-        }
-        ExprKind::App(f, arg) => {
-            // Check for Nat.succ
-            if let ExprKind::Const(name, _) = f.kind() {
-                if name.to_string() == "Nat.succ" {
-                    if let Some(n) = extract_nat_literal(arg) {
-                        return Some(n + 1);
-                    }
-                }
-            }
-            None
-        }
-        _ => None,
-    })
+    read_nat_numeral(expr).and_then(|v| usize::try_from(v).ok())
 }
 
 /// Make a natural number literal expression

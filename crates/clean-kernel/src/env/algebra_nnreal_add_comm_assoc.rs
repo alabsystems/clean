@@ -85,6 +85,8 @@ pub(crate) struct AddAlgConsts {
     and_c: Expr,
     and_intro: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     exists_c: Expr,
     exists_intro: Expr,
     // Eq.{1} over Rat / NNRat.
@@ -179,6 +181,7 @@ impl AddAlgConsts {
     }
     /// `@Eq.{1} Rat a b`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_rat(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }

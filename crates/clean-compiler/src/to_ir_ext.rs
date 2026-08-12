@@ -20,6 +20,10 @@ pub(crate) struct ExtLowerConfig {
     pub(crate) enable_string_literals: bool,
     pub(crate) enable_foreign_calls: bool,
     pub(crate) enable_closure_alloc: bool,
+    // Debug-only post-lowering IR validation, defaulted from
+    // `cfg!(debug_assertions)`. Read only by `lower_extended`, which has no
+    // caller yet (see the note there) — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) enable_validation: bool,
 }
 
@@ -73,6 +77,10 @@ impl LoweringStats {
 pub(crate) struct ExtLowerCtx {
     pub(crate) config: ExtLowerConfig,
     pub(crate) stats: LoweringStats,
+    // The base `to_ir` state this extension threads through `lower_code`.
+    // Read only by `lower_extended`, which has no caller yet (see the note
+    // there) — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) state: ToIRState,
 }
 
@@ -289,6 +297,16 @@ pub(crate) fn validate_ir_decl(decl: &IRDecl) -> Result<(), CompilerError> {
     Ok(())
 }
 
+/// L5CNF -> L5IR lowering with the extended rewrites (jump tables, string and
+/// scientific literals, foreign calls, closure allocation) layered on top of
+/// the base `to_ir` pass.
+// The extended lowering entry point, with no caller anywhere yet — the
+// pipeline still goes straight to `to_ir::lower_code`, and the tests in
+// `to_ir_ext_tests` cover the pieces (config, stats, validation) rather than
+// this composition. Kept whole: it is the only thing that gives
+// `rewrite_body`/`rewrite_expr` and the `ExtLowerConfig` knobs a purpose, and
+// deleting it would discard the staged switch-over — 2026-07-31.
+#[allow(dead_code)]
 pub(crate) fn lower_extended(ctx: &mut ExtLowerCtx, code: &Code) -> Result<IRBody, CompilerError> {
     let lowered = lower_code(code, &mut ctx.state)?;
     let body = rewrite_body(ctx, &lowered)?;
@@ -298,6 +316,8 @@ pub(crate) fn lower_extended(ctx: &mut ExtLowerCtx, code: &Code) -> Result<IRBod
     Ok(body)
 }
 
+// Reachable only from `lower_extended`; see the note there — 2026-07-31.
+#[allow(dead_code)]
 fn rewrite_body(ctx: &mut ExtLowerCtx, body: &IRBody) -> Result<IRBody, CompilerError> {
     Ok(match body {
         IRBody::VDecl {
@@ -406,6 +426,9 @@ fn rewrite_body(ctx: &mut ExtLowerCtx, body: &IRBody) -> Result<IRBody, Compiler
     })
 }
 
+// Reachable only from `rewrite_body`; see the note on `lower_extended`
+// — 2026-07-31.
+#[allow(dead_code)]
 fn rewrite_expr(ctx: &mut ExtLowerCtx, expr: &IRExpr) -> Result<IRExpr, CompilerError> {
     match expr {
         IRExpr::String(_) => {

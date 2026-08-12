@@ -10,14 +10,6 @@
 //! out of the original single-file module purely for readability — the code is
 //! moved verbatim, the behaviour is byte-identical.
 
-use std::collections::BTreeMap;
-
-use clean_kernel::expr::FVarId;
-use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
-
-use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
 use super::*;
 
 mod classical;
@@ -37,6 +29,7 @@ pub(crate) use conj_bundle::*;
 pub(crate) use elim::*;
 pub(crate) use eqshape::*;
 pub(crate) use hilbert::*;
+#[cfg(test)]
 pub(crate) use pointfree::*;
 pub(crate) use proofs::*;
 pub(crate) use reprove_elim::*;

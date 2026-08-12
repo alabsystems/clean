@@ -43,6 +43,66 @@ fn require_ac1_lean() -> Option<PathBuf> {
     get_lean_lib_path()
 }
 
+/// Independent real-Lean authority oracle for declaration safety. This is
+/// deliberately not behind the expensive AC1 sweep gate: it loads only the
+/// pinned `Init.Util` closure and checks declarations whose source forms cover
+/// unsafe axiom, unsafe opaque, unsafe definition, and an ordinary safe
+/// definition. The strict kernel checker must reject every imported unsafe
+/// reference when unsafe authority is disabled.
+#[test]
+fn test_pinned_lean_declaration_safety_authority_oracle() {
+    use clean_kernel::env::ConstantKind;
+    use clean_kernel::expr::Expr;
+    use clean_kernel::level::Level;
+    use clean_kernel::tc::{TypeChecker, TypeError};
+
+    let Some(lib_path) = get_lean_lib_path() else {
+        eprintln!("Skipping test: pinned Lean toolchain not installed");
+        return;
+    };
+    let mut env = Environment::default();
+    load_module_with_deps(&mut env, "Init.Util", std::slice::from_ref(&lib_path))
+        .expect("load pinned Init.Util closure");
+
+    for (name_str, expected_kind) in [
+        ("lcProof", ConstantKind::Axiom),
+        ("ptrAddrUnsafe", ConstantKind::Opaque),
+        ("ptrEqList", ConstantKind::Definition),
+    ] {
+        let name = Name::from_string(name_str);
+        let info = env
+            .get_const(&name)
+            .unwrap_or_else(|| panic!("missing pinned declaration {name_str}"));
+        assert_eq!(info.kind, expected_kind, "{name_str} kind drifted");
+        assert!(env.is_unsafe(&name), "{name_str} lost Lean isUnsafe");
+        assert!(!env.is_partial(&name), "{name_str} became partial");
+
+        let levels: Vec<_> = info
+            .level_params
+            .iter()
+            .cloned()
+            .map(Level::param)
+            .collect();
+        let term = Expr::const_(name.clone(), levels);
+        let mut checker = TypeChecker::new(&env);
+        checker.set_level_params(info.level_params.clone());
+        checker.set_allow_unsafe(false);
+        let result = checker.check_type(&term, &info.type_);
+        assert!(
+            matches!(result, Err(TypeError::UnsafeDeclaration { ref name }) if name == &Name::from_string(name_str)),
+            "strict checker accepted imported unsafe {name_str}: {result:?}"
+        );
+    }
+
+    let safe_name = Name::from_string("id");
+    assert!(
+        env.get_const(&safe_name).is_some(),
+        "missing pinned safe id"
+    );
+    assert!(!env.is_unsafe(&safe_name));
+    assert!(!env.is_partial(&safe_name));
+}
+
 /// All 8 top-level Std modules in Lean 4.28.0.
 const STD_MODULES: &[&str] = &[
     "Std.Data",

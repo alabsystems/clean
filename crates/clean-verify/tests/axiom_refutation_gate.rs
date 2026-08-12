@@ -2,12 +2,11 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integration tests for the axiom refutation gate
+//! Integration tests for the axiom definitional-disagreement gate
 //! (`clean_verify::axiom_refutation_gate`).
 //!
-//! THE NON-NEGOTIABLE DELIVERABLE is the regression test
-//! [`gate_refutes_both_retired_false_micro_whnf_statements`]: it reconstructs the
-//! two FALSE axioms that were retired by hand in commit `11e047bd` —
+//! The primary regression reconstructs the two false axioms retired by hand in
+//! commit `11e047bd` —
 //!
 //! - `micro_whnf_beta`:
 //!   `forall ty body arg, Eq MicroExpr (micro_whnf (app (lam ty body) arg))
@@ -15,19 +14,22 @@
 //! - `micro_whnf_idempotent`:
 //!   `forall e, Eq MicroExpr (micro_whnf (micro_whnf e)) (micro_whnf e)`
 //!
-//! — and DEMONSTRATES the gate REFUTES them via a real kernel evaluation (NOT a
-//! hardcoded assert). The witnesses are exactly the "contractum is itself a
-//! redex" shapes from the retirement diagnosis: a one-step `micro_whnf` leaves
-//! an inner redex un-reduced, so it differs from the (recursively-`whnf`-ed or
-//! fully-substituted) right-hand side.
+//! — and demonstrates that the gate finds a real kernel definitional
+//! disagreement (not a hardcoded assertion). The witnesses are exactly the
+//! "contractum is itself a redex" shapes from the retirement diagnosis: a
+//! one-step `micro_whnf` leaves an inner redex un-reduced, so it is not
+//! definitionally equal to the recursively-`whnf`-ed or fully-substituted side.
 //!
-//! If the gate could not refute these, it would not work — these tests are the
-//! proof that the engine genuinely reduces terms via the kernel and compares.
+//! Non-convertibility is not, by itself, a proof of propositional inequality.
+//! These tests pin the stricter admission policy: tested computable equations
+//! must close by definitional equality.
 
 use std::collections::BTreeSet;
 
 use clean_verify::axiom_ratchet::live_env_axioms;
-use clean_verify::axiom_refutation_gate::{refute_statement, run_gate, ExclusionReason};
+use clean_verify::axiom_refutation_gate::{
+    check_statement_for_definitional_disagreement, run_gate,
+};
 use clean_verify::spec::ProofStatus;
 use clean_verify::test_utils::run_with_stack;
 use clean_verify::Specification;
@@ -42,77 +44,72 @@ const OLD_FALSE_MICRO_WHNF_BETA: &str =
 const OLD_FALSE_MICRO_WHNF_IDEMPOTENT: &str =
     "forall (e : MicroExpr), Eq MicroExpr (micro_whnf (micro_whnf e)) (micro_whnf e)";
 
-/// THE non-negotiable regression: the gate genuinely refutes BOTH retired FALSE
-/// `micro_whnf` statements, with a concrete witness on which the two sides are
-/// NOT definitionally equal.
+/// The gate detects a definitional disagreement in both retired false
+/// `micro_whnf` statements.
 #[test]
-fn gate_refutes_both_retired_false_micro_whnf_statements() {
+fn gate_detects_both_retired_micro_whnf_definitional_disagreements() {
     run_with_stack(|| {
         let spec = Specification::new().expect("spec builds");
 
         // ── micro_whnf_beta (FALSE form) ─────────────────────────────────
-        let beta = refute_statement(
+        let beta = check_statement_for_definitional_disagreement(
             &spec,
             "micro_whnf_beta_OLD_FALSE",
             OLD_FALSE_MICRO_WHNF_BETA,
         )
         .expect("statement elaborates");
-        let beta_refutation = beta
+        let beta_disagreement = beta
             .expect("micro_whnf_beta (false form) must be IN-SCOPE (a computable equation)")
-            .expect(
-                "micro_whnf_beta (false form) MUST be refuted — the gate found no \
-                 counterexample, so it does not work",
-            );
+            .expect("micro_whnf_beta (retired form) must exhibit a definitional disagreement");
         eprintln!(
-            "REFUTED micro_whnf_beta(FALSE) on witness [{}]:\n  lhs(whnf) = {}\n  rhs(whnf) = {}",
-            beta_refutation.witness.join("; "),
-            beta_refutation.lhs_whnf,
-            beta_refutation.rhs_whnf,
+            "DEFINITIONAL DISAGREEMENT micro_whnf_beta on witness [{}]:\n  lhs(whnf) = {}\n  rhs(whnf) = {}",
+            beta_disagreement.witness.join("; "),
+            beta_disagreement.lhs_whnf,
+            beta_disagreement.rhs_whnf,
         );
         assert_ne!(
-            beta_refutation.lhs_whnf, beta_refutation.rhs_whnf,
-            "the refuting witness must make the two reduced sides genuinely differ"
+            beta_disagreement.lhs_whnf, beta_disagreement.rhs_whnf,
+            "the witness must make the two reduced sides structurally differ"
         );
 
         // ── micro_whnf_idempotent (FALSE form) ───────────────────────────
-        let idem = refute_statement(
+        let idem = check_statement_for_definitional_disagreement(
             &spec,
             "micro_whnf_idempotent_OLD_FALSE",
             OLD_FALSE_MICRO_WHNF_IDEMPOTENT,
         )
         .expect("statement elaborates");
-        let idem_refutation = idem
+        let idem_disagreement = idem
             .expect("micro_whnf_idempotent (false form) must be IN-SCOPE (a computable equation)")
             .expect(
-                "micro_whnf_idempotent (false form) MUST be refuted — the gate found no \
-                 counterexample, so it does not work",
+                "micro_whnf_idempotent (retired form) must exhibit a definitional disagreement",
             );
         eprintln!(
-            "REFUTED micro_whnf_idempotent(FALSE) on witness [{}]:\n  lhs(whnf) = {}\n  rhs(whnf) = {}",
-            idem_refutation.witness.join("; "),
-            idem_refutation.lhs_whnf,
-            idem_refutation.rhs_whnf,
+            "DEFINITIONAL DISAGREEMENT micro_whnf_idempotent on witness [{}]:\n  lhs(whnf) = {}\n  rhs(whnf) = {}",
+            idem_disagreement.witness.join("; "),
+            idem_disagreement.lhs_whnf,
+            idem_disagreement.rhs_whnf,
         );
         assert_ne!(
-            idem_refutation.lhs_whnf, idem_refutation.rhs_whnf,
-            "the refuting witness must make the two reduced sides genuinely differ"
+            idem_disagreement.lhs_whnf, idem_disagreement.rhs_whnf,
+            "the witness must make the two reduced sides structurally differ"
         );
     });
 }
 
 /// The TRUE single-step replacements (the forms that ACTUALLY landed at
-/// `11e047bd`) must NOT be refuted — the gate must not produce false positives.
+/// `11e047bd`) must have no definitional disagreement in the battery.
 ///
 /// - `micro_whnf (app (lam ty body) arg) = micro_instantiate body arg`
 ///   (ONE beta step, no re-normalization) — genuinely true.
 /// - `micro_whnf (micro_whnf (lam ty body)) = micro_whnf (lam ty body)`
 ///   (idempotence restricted to a weak-head-normal value) — genuinely true.
 #[test]
-fn gate_does_not_refute_the_true_single_step_replacements() {
+fn gate_accepts_the_definitionally_equal_single_step_replacements() {
     run_with_stack(|| {
         let spec = Specification::new().expect("spec builds");
 
-        let true_beta = refute_statement(
+        let true_beta = check_statement_for_definitional_disagreement(
             &spec,
             "micro_whnf_beta_TRUE",
             "forall (ty : MicroExpr) (body : MicroExpr) (arg : MicroExpr), \
@@ -122,11 +119,13 @@ fn gate_does_not_refute_the_true_single_step_replacements() {
         .expect("elaborates");
         match true_beta {
             Ok(None) => {}
-            Ok(Some(r)) => panic!("TRUE single-step beta wrongly refuted: {r:?}"),
+            Ok(Some(disagreement)) => {
+                panic!("single-step beta unexpectedly disagreed: {disagreement:?}")
+            }
             Err(reason) => panic!("TRUE single-step beta wrongly excluded: {reason:?}"),
         }
 
-        let true_idem = refute_statement(
+        let true_idem = check_statement_for_definitional_disagreement(
             &spec,
             "micro_whnf_idempotent_TRUE",
             "forall (ty : MicroExpr) (body : MicroExpr), \
@@ -136,15 +135,16 @@ fn gate_does_not_refute_the_true_single_step_replacements() {
         .expect("elaborates");
         match true_idem {
             Ok(None) => {}
-            Ok(Some(r)) => panic!("TRUE restricted idempotence wrongly refuted: {r:?}"),
+            Ok(Some(disagreement)) => {
+                panic!("restricted idempotence unexpectedly disagreed: {disagreement:?}")
+            }
             Err(reason) => panic!("TRUE restricted idempotence wrongly excluded: {reason:?}"),
         }
     });
 }
 
-/// The live gate over the current (post-`11e047bd`) spec PASSES: NONE of the
-/// currently-admitted computable axioms is refuted. (If this ever fails, it is a
-/// REAL FINDING — a live false axiom — not a flake; the message says so.)
+/// The live gate over the current (post-`11e047bd`) spec passes: there is no
+/// definitional disagreement or census/setup failure.
 ///
 /// It also asserts the coverage boundary is fully accounted-for and printed.
 #[test]
@@ -156,18 +156,23 @@ fn live_spec_gate_passes_and_accounts_for_every_axiom() {
 
         assert!(
             report.passed(),
-            "a currently-LIVE computable axiom was REFUTED — REAL soundness finding, \
-             not a flake: {:?}",
-            report.refutations
+            "live gate rejected: disagreements={:?}, setup={:?}",
+            report.definitional_disagreements,
+            report.setup_errors
         );
 
         // Every admitted axiom is accounted for: evaluated XOR excluded-with-reason.
         assert_eq!(
-            report.total_axioms,
+            report.total_live_axioms
+                - report.ambient_foundational_axioms.len()
+                - report.ambient_trust_markers.len(),
             report.evaluated.len() + report.excluded.len(),
             "coverage boundary must be exhaustive (no silent skips)"
         );
-        assert!(report.total_axioms > 0, "the spec must admit some axioms");
+        assert!(
+            report.total_live_axioms > 0,
+            "the live environment must admit some axioms"
+        );
 
         // The two retired FALSE micro_whnf axioms are gone (drained to
         // DerivedProved): they must NOT appear as live admitted axioms.
@@ -194,8 +199,7 @@ fn live_spec_gate_passes_and_accounts_for_every_axiom() {
 ///   (1) the spec definition is `DerivedProved`, `is_axiom:false`, carries a proof
 ///       term, and is ABSENT from the live `ConstantKind::Axiom` census; and
 ///   (2) the equation it proves is STILL evaluated on the KExpr battery and
-///       SURVIVES refutation — a truth cross-check that the proof and the gate's
-///       independent reduction agree (a refutation here would be a real finding).
+///       has no definitional disagreement — an independent reduction cross-check.
 #[test]
 fn kernel_to_micro_instantiate_is_proved_and_survives() {
     run_with_stack(|| {
@@ -224,7 +228,7 @@ fn kernel_to_micro_instantiate_is_proved_and_survives() {
         );
 
         // (2) Truth cross-check: the proved equation still SURVIVES the battery.
-        let outcome = refute_statement(
+        let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "kernel_to_micro_instantiate",
             "forall (b : KExpr) (a : KExpr), \
@@ -235,13 +239,12 @@ fn kernel_to_micro_instantiate_is_proved_and_survives() {
         match outcome {
             // In-scope and survived — the expected, correct outcome.
             Ok(None) => {}
-            // A refutation here would mean the proof and the battery DISAGREE.
-            Ok(Some(r)) => panic!(
-                "kernel_to_micro_instantiate REFUTED after being PROVED — the proof and the \
-                 battery DISAGREE (a real finding). witness=[{}] lhs={} rhs={}",
-                r.witness.join("; "),
-                r.lhs_whnf,
-                r.rhs_whnf
+            Ok(Some(disagreement)) => panic!(
+                "kernel_to_micro_instantiate has a definitional disagreement after being \
+                 proved. witness=[{}] lhs={} rhs={}",
+                disagreement.witness.join("; "),
+                disagreement.lhs_whnf,
+                disagreement.rhs_whnf
             ),
             // The equation must remain IN-SCOPE on the KExpr battery.
             Err(reason) => panic!(
@@ -255,12 +258,12 @@ fn kernel_to_micro_instantiate_is_proved_and_survives() {
 /// A TRUE KExpr-quantified unfolding identity (`kapp_fn (app f a) = kapp_fn f`,
 /// the proven `kapp_fn_app` lemma) is EVALUATED on the KExpr battery and SURVIVES
 /// — confirming the KExpr battery really builds closed terms, really reduces, and
-/// does not produce a false positive on a genuinely-true KExpr equation.
+/// reports no definitional disagreement on a definitionally valid KExpr equation.
 #[test]
 fn kexpr_quantified_true_unfolding_survives() {
     run_with_stack(|| {
         let spec = Specification::new().expect("spec builds");
-        let outcome = refute_statement(
+        let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "kapp_fn_app_probe",
             "forall (f : KExpr) (a : KExpr), \
@@ -269,7 +272,9 @@ fn kexpr_quantified_true_unfolding_survives() {
         .expect("statement elaborates");
         match outcome {
             Ok(None) => { /* in-scope, survived — correct */ }
-            Ok(Some(r)) => panic!("TRUE KExpr equation wrongly refuted: {r:?}"),
+            Ok(Some(disagreement)) => {
+                panic!("KExpr unfolding unexpectedly disagreed: {disagreement:?}")
+            }
             Err(reason) => panic!(
                 "TRUE KExpr equation wrongly excluded — KExpr battery missing/empty: {reason:?}"
             ),
@@ -278,19 +283,19 @@ fn kexpr_quantified_true_unfolding_survives() {
 }
 
 /// The KExpr battery genuinely BITES: an arg-swapped (de-Bruijn-wrong) KExpr
-/// substitution identity is REFUTED by a concrete witness. This proves the new
-/// battery is not a stub — a future arg-swapped KExpr equation can no longer hide
-/// behind `UngeneratableBinder("KExpr")`.
+/// substitution identity has a concrete definitional disagreement. This proves
+/// the new battery is not a stub — a future arg-swapped KExpr equation can no
+/// longer hide behind `UngeneratableBinder("KExpr")`.
 ///
 /// `instantiate` substitutes `val` for BVar(0); the FALSE form below claims
 /// `instantiate (app f a') val = app (instantiate a' val) (instantiate f val)`
 /// (the two app operands swapped), which fails whenever `f` and `a'` differ after
 /// substitution.
 #[test]
-fn arg_swapped_kexpr_instantiate_is_refuted() {
+fn arg_swapped_kexpr_instantiate_has_definitional_disagreement() {
     run_with_stack(|| {
         let spec = Specification::new().expect("spec builds");
-        let outcome = refute_statement(
+        let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "kexpr_instantiate_app_argswap_FALSE",
             "forall (f : KExpr) (a : KExpr) (val : KExpr), \
@@ -298,36 +303,32 @@ fn arg_swapped_kexpr_instantiate_is_refuted() {
              (KExpr.app (instantiate a val) (instantiate f val))",
         )
         .expect("statement elaborates");
-        let refutation = outcome
+        let disagreement = outcome
             .expect("arg-swapped KExpr instantiate must be IN-SCOPE (a computable equation)")
-            .expect(
-                "arg-swapped KExpr instantiate MUST be refuted — if not, the KExpr battery \
-                 does not genuinely reduce/compare KExpr terms",
-            );
+            .expect("arg-swapped KExpr instantiate must exhibit a definitional disagreement");
         eprintln!(
-            "REFUTED kexpr_instantiate_app_argswap(FALSE) on witness [{}]:\n  lhs={}\n  rhs={}",
-            refutation.witness.join("; "),
-            refutation.lhs_whnf,
-            refutation.rhs_whnf,
+            "DEFINITIONAL DISAGREEMENT kexpr_instantiate_app_argswap on witness [{}]:\n  lhs={}\n  rhs={}",
+            disagreement.witness.join("; "),
+            disagreement.lhs_whnf,
+            disagreement.rhs_whnf,
         );
         assert_ne!(
-            refutation.lhs_whnf, refutation.rhs_whnf,
-            "the refuting witness must make the two reduced sides genuinely differ"
+            disagreement.lhs_whnf, disagreement.rhs_whnf,
+            "the disagreement witness must make the reduced sides structurally differ"
         );
     });
 }
 
 /// After the micro-band drain (Brick 3) `micro_def_eq` has a COMPUTABLE body, so
 /// the reflexivity probe (`micro_def_eq e e = true`) is no longer excluded as
-/// `NonComputable`: it is now IN-SCOPE and, being genuinely reflexive, is NOT
-/// refuted. This pins that the classifier tracks the drain (a formerly-abstract
-/// `-> Bool` token became evaluatable) AND that the gate raises no false positive
-/// on a true equation.
+/// `NonComputable`: it is now in scope and has no definitional disagreement.
+/// This pins that the classifier tracks the drain (a formerly abstract
+/// `-> Bool` token became evaluatable).
 #[test]
-fn micro_def_eq_refl_probe_is_in_scope_and_not_refuted() {
+fn micro_def_eq_refl_probe_is_in_scope_and_agrees_definitionally() {
     run_with_stack(|| {
         let spec = Specification::new().expect("spec builds");
-        let outcome = refute_statement(
+        let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "micro_def_eq_refl_probe",
             "forall (e : MicroExpr), Eq Bool (micro_def_eq e e) Bool.true",
@@ -335,8 +336,8 @@ fn micro_def_eq_refl_probe_is_in_scope_and_not_refuted() {
         .expect("elaborates");
         match outcome {
             Ok(None) => {}
-            Ok(Some(r)) => {
-                panic!("micro_def_eq reflexivity is TRUE and must not be refuted, got {r:?}")
+            Ok(Some(disagreement)) => {
+                panic!("micro_def_eq reflexivity unexpectedly disagreed: {disagreement:?}")
             }
             Err(reason) => panic!(
                 "micro_def_eq now has a computable body; the reflexivity probe must be \

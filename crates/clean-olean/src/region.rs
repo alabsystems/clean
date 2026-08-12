@@ -213,6 +213,25 @@ pub struct CompactedRegion<'a> {
     pub(crate) data: &'a [u8],
     /// Base address the region was compiled with (corresponds to file offset 0)
     base_addr: u64,
+    /// Memoization cache: file offset of a `Name` object → its fully-resolved
+    /// dotted string.
+    ///
+    /// The region bytes are IMMUTABLE, so a `Name` object at a given offset
+    /// always decodes to the same string. `.olean` names are heavily shared —
+    /// every `Expr::const` reference to e.g. `Nat.succ` points at the same name
+    /// object, and a large module has hundreds of thousands of such references.
+    /// Without memoization [`read_name_rc_at_depth`](Self::read_name_rc_at_depth)
+    /// re-walks each name's entire parent chain from raw bytes (with repeated
+    /// header parsing, UTF-8 validation, and `format!` allocations) on EVERY
+    /// reference — the dominant cost of the `Init` pre-load. Caching per offset
+    /// collapses that to one parse per distinct name object.
+    ///
+    /// `Rc<str>` (cheap ref-count clone on hit, single owning allocation) rather
+    /// than `String` (a fresh heap copy per hit). `RefCell` gives the interior
+    /// mutability the `&self` reader API needs; the region is only ever used
+    /// single-threaded during conversion (one region per module, converted
+    /// sequentially), so no synchronization is required.
+    name_cache: std::cell::RefCell<hashbrown::HashMap<usize, std::rc::Rc<str>>>,
 }
 
 impl<'a> CompactedRegion<'a> {
@@ -229,7 +248,11 @@ impl<'a> CompactedRegion<'a> {
     /// - `len() == data.len()`
     /// - Pointer `P` maps to file offset `P - base_addr`
     pub fn new(data: &'a [u8], base_addr: u64) -> Self {
-        Self { data, base_addr }
+        Self {
+            data,
+            base_addr,
+            name_cache: std::cell::RefCell::new(hashbrown::HashMap::new()),
+        }
     }
 
     /// Get the size of the data in bytes
@@ -511,14 +534,37 @@ impl<'a> CompactedRegion<'a> {
     /// - Returns the name in dotted string form.
     /// - Returns `OleanError::InvalidObjectTag` if the tag is not a Name ctor.
     pub fn read_name_at(&self, offset: usize) -> OleanResult<String> {
-        self.read_name_at_depth(offset, 0)
+        self.read_name_rc_at_depth(offset, 0)
+            .map(|rc| rc.to_string())
     }
 
-    fn read_name_at_depth(&self, offset: usize, depth: usize) -> OleanResult<String> {
+    /// Resolve a `Name` object to a shared `Rc<str>`, memoized per file offset.
+    ///
+    /// This is the cached core of [`read_name_at`](Self::read_name_at): the first
+    /// resolution of an offset walks the parent chain and stores the result; every
+    /// later reference to the same offset (including as a PARENT of a longer name)
+    /// returns a cheap `Rc` clone. See [`name_cache`](Self::name_cache) for why
+    /// this is the dominant cost of loading a large `.olean`.
+    fn read_name_rc_at_depth(&self, offset: usize, depth: usize) -> OleanResult<std::rc::Rc<str>> {
+        if let Some(cached) = self.name_cache.borrow().get(&offset) {
+            return Ok(std::rc::Rc::clone(cached));
+        }
         if depth > 100 {
             return Err(OleanError::Region("Name depth limit exceeded".into()));
         }
 
+        let resolved = self.read_name_uncached(offset, depth)?;
+        let rc: std::rc::Rc<str> = std::rc::Rc::from(resolved.as_str());
+        self.name_cache
+            .borrow_mut()
+            .insert(offset, std::rc::Rc::clone(&rc));
+        Ok(rc)
+    }
+
+    /// Uncached single-object name decode (recurses through the cached
+    /// [`read_name_rc_at_depth`](Self::read_name_rc_at_depth) for parents, so a
+    /// shared parent chain is still resolved only once).
+    fn read_name_uncached(&self, offset: usize, depth: usize) -> OleanResult<String> {
         let header = self.read_header_at(offset)?;
 
         match (header.tag, header.other) {
@@ -530,15 +576,16 @@ impl<'a> CompactedRegion<'a> {
                 let parent_ptr = self.read_u64_at(offset + 8)?;
                 let string_ptr = self.read_u64_at(offset + 16)?;
 
-                // Read parent name
-                let parent = if is_scalar(parent_ptr) {
+                // Read parent name (cached rc — a shared parent chain such as
+                // `Nat`/`List`/`Option` is decoded once and reused).
+                let parent: std::rc::Rc<str> = if is_scalar(parent_ptr) {
                     // Scalar 0 = Name.anonymous
-                    String::new()
+                    std::rc::Rc::from("")
                 } else if is_ptr(parent_ptr) {
                     let parent_off = self.ptr_to_offset(parent_ptr)?;
-                    self.read_name_at_depth(parent_off, depth + 1)?
+                    self.read_name_rc_at_depth(parent_off, depth + 1)?
                 } else {
-                    String::new()
+                    std::rc::Rc::from("")
                 };
 
                 // Read string component
@@ -561,14 +608,14 @@ impl<'a> CompactedRegion<'a> {
                 let parent_ptr = self.read_u64_at(offset + 8)?;
                 let num = self.read_u64_at(offset + 16)?;
 
-                // Read parent name
-                let parent = if is_scalar(parent_ptr) {
-                    String::new()
+                // Read parent name (cached rc).
+                let parent: std::rc::Rc<str> = if is_scalar(parent_ptr) {
+                    std::rc::Rc::from("")
                 } else if is_ptr(parent_ptr) {
                     let parent_off = self.ptr_to_offset(parent_ptr)?;
-                    self.read_name_at_depth(parent_off, depth + 1)?
+                    self.read_name_rc_at_depth(parent_off, depth + 1)?
                 } else {
-                    String::new()
+                    std::rc::Rc::from("")
                 };
 
                 if parent.is_empty() {
@@ -621,6 +668,80 @@ impl<'a> CompactedRegion<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: `read_name_at` memoizes each `Name` object by file offset, so
+    /// a `Name` shared as the PARENT of several children is decoded exactly once.
+    /// This is the fix for the `Init` pre-load hot path, where every `Expr::const`
+    /// re-resolved the same deep names from raw bytes. The test asserts both
+    /// correctness (identical dotted strings) and that the shared parent lands in
+    /// the cache after the first child is read.
+    #[test]
+    fn test_read_name_at_memoizes_shared_parent() {
+        // base_addr = 0 ⇒ pointer value == file offset. Objects are 8-byte
+        // aligned so every offset is even and non-zero (a valid `is_ptr`).
+        fn push_string(buf: &mut Vec<u8>, s: &str) -> u64 {
+            while !buf.len().is_multiple_of(8) {
+                buf.push(0);
+            }
+            let off = buf.len() as u64;
+            // header: rc(4)=0, cs_sz(2)=0, other(1)=0, tag(1)=STRING
+            buf.extend_from_slice(&0u32.to_le_bytes());
+            buf.extend_from_slice(&0u16.to_le_bytes());
+            buf.push(0);
+            buf.push(tags::STRING);
+            let m_size = (s.len() + 1) as u64; // includes null terminator
+            buf.extend_from_slice(&m_size.to_le_bytes()); // m_size
+            buf.extend_from_slice(&m_size.to_le_bytes()); // m_capacity
+            buf.extend_from_slice(&(s.len() as u64).to_le_bytes()); // m_length
+            buf.extend_from_slice(s.as_bytes());
+            buf.push(0); // null terminator
+            off
+        }
+        fn push_name_str(buf: &mut Vec<u8>, parent_ptr: u64, string_ptr: u64) -> u64 {
+            while !buf.len().is_multiple_of(8) {
+                buf.push(0);
+            }
+            let off = buf.len() as u64;
+            // header: rc=0, cs_sz=0, other=2 (2 fields), tag=1 (Name.str)
+            buf.extend_from_slice(&0u32.to_le_bytes());
+            buf.extend_from_slice(&0u16.to_le_bytes());
+            buf.push(2);
+            buf.push(1);
+            buf.extend_from_slice(&parent_ptr.to_le_bytes());
+            buf.extend_from_slice(&string_ptr.to_le_bytes());
+            off
+        }
+
+        let mut buf: Vec<u8> = Vec::new();
+        buf.extend_from_slice(&[0u8; 8]); // reserve offset 0 as the null slot
+
+        let s_nat = push_string(&mut buf, "Nat");
+        let s_succ = push_string(&mut buf, "succ");
+        let s_add = push_string(&mut buf, "add");
+        const ANON: u64 = 1; // scalar-boxed Name.anonymous
+        let n_nat = push_name_str(&mut buf, ANON, s_nat);
+        let n_succ = push_name_str(&mut buf, n_nat, s_succ);
+        let n_add = push_name_str(&mut buf, n_nat, s_add);
+
+        let region = CompactedRegion::new(&buf, 0);
+        assert!(region.name_cache.borrow().is_empty(), "cache starts empty");
+
+        // Reading a child decodes and caches BOTH the child and its parent.
+        assert_eq!(region.read_name_at(n_succ as usize).unwrap(), "Nat.succ");
+        assert!(
+            region.name_cache.borrow().contains_key(&(n_nat as usize)),
+            "shared parent `Nat` cached after first child read"
+        );
+        assert!(region.name_cache.borrow().contains_key(&(n_succ as usize)));
+
+        // A sibling reuses the cached parent yet yields its own distinct name.
+        assert_eq!(region.read_name_at(n_add as usize).unwrap(), "Nat.add");
+        assert_eq!(region.read_name_at(n_nat as usize).unwrap(), "Nat");
+
+        // Idempotent: a repeat read hits the cache and is byte-identical.
+        assert_eq!(region.read_name_at(n_succ as usize).unwrap(), "Nat.succ");
+        assert_eq!(region.read_name_at(n_add as usize).unwrap(), "Nat.add");
+    }
 
     #[test]
     fn test_object_header_parse() {

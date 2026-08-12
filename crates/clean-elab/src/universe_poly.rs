@@ -27,6 +27,8 @@
 //! - Lean 4: `src/Lean/Elab/Level.lean`, `src/Lean/Level.lean`
 //! - de Moura & Ullrich, "The Lean 4 Theorem Prover and Programming Language"
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 mod expr_ops;
 
 use std::collections::HashMap;
@@ -54,6 +56,8 @@ pub(crate) enum UniversePolyError {
 
     /// An unknown universe parameter was referenced.
     #[error("unknown universe parameter: {0}")]
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     UnknownParam(String),
 }
 
@@ -61,6 +65,8 @@ pub(crate) enum UniversePolyError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UniverseConstraint {
     /// `lhs` must be less than or equal to `rhs`.
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     Le(Level, Level),
     /// `lhs` must equal `rhs`.
     Eq(Level, Level),
@@ -70,6 +76,8 @@ pub(crate) enum UniverseConstraint {
 #[derive(Debug, Clone)]
 pub(crate) struct UniverseParams {
     /// Declared parameter names (in declaration order).
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) names: Vec<Name>,
     /// Constraints accumulated during elaboration.
     pub(crate) constraints: Vec<UniverseConstraint>,
@@ -78,6 +86,7 @@ pub(crate) struct UniverseParams {
 impl UniverseParams {
     /// Create empty universe parameters.
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn new() -> Self {
         Self {
             names: Vec::new(),
@@ -102,6 +111,8 @@ impl UniverseParams {
 #[derive(Debug)]
 pub(crate) struct UniverseInferCtx {
     /// Known universe parameter names (from declaration header).
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     params: Vec<Name>,
     /// Counter for generating fresh universe metavariable names.
     fresh_counter: u32,
@@ -138,6 +149,7 @@ impl UniverseInferCtx {
     /// Generate a fresh universe metavariable.
     ///
     /// Returns a `Level::Param` with a synthetic name like `_u.0`.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn fresh_universe(&mut self) -> Level {
         let name = Name::from_string(&format!("_u.{}", self.fresh_counter));
         self.fresh_counter += 1;
@@ -145,6 +157,7 @@ impl UniverseInferCtx {
     }
 
     /// Record a universe constraint.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn add_constraint(&mut self, constraint: UniverseConstraint) {
         self.constraints.push(constraint);
     }
@@ -155,24 +168,28 @@ impl UniverseInferCtx {
     }
 
     /// Record a less-than-or-equal constraint.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn add_le(&mut self, lhs: Level, rhs: Level) {
         self.constraints.push(UniverseConstraint::Le(lhs, rhs));
     }
 
     /// Get the current constraints.
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn constraints(&self) -> &[UniverseConstraint] {
         &self.constraints
     }
 
     /// Get the declared parameter names.
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn params(&self) -> &[Name] {
         &self.params
     }
 
     /// Get the current solutions map.
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn solutions(&self) -> &HashMap<Name, Level> {
         &self.solutions
     }
@@ -227,11 +244,13 @@ impl UniverseInferCtx {
     }
 
     /// Apply the current solution map to a level.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn apply_solutions_to_level(&self, level: &Level) -> Level {
         apply_subst_to_level(level, &self.solutions)
     }
 
     /// Apply the solution map to all universe levels in an expression.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn apply_solution(&self, expr: &clean_kernel::Expr) -> clean_kernel::Expr {
         if self.solutions.is_empty() {
             return expr.clone();
@@ -275,6 +294,7 @@ fn level_contains_param(level: &Level, name: &Name) -> bool {
 
 /// Collect universe parameters from a surface declaration.
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn collect_universe_params(decl: &SurfaceDecl) -> UniverseParams {
     let names: &[String] = match decl {
         SurfaceDecl::Def {
@@ -298,6 +318,7 @@ pub(crate) fn collect_universe_params(decl: &SurfaceDecl) -> UniverseParams {
 }
 
 /// Convert a surface `LevelExpr` to a kernel `Level`.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn level_expr_to_level(expr: &LevelExpr) -> Level {
     match expr {
         LevelExpr::Lit(n) => {
@@ -316,6 +337,7 @@ pub(crate) fn level_expr_to_level(expr: &LevelExpr) -> Level {
 }
 
 /// Convert a surface `UniverseExpr` to a kernel `Level`.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn universe_expr_to_level(expr: &UniverseExpr, ctx: &mut UniverseInferCtx) -> Level {
     match expr {
         UniverseExpr::Prop => Level::zero(),

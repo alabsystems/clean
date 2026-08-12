@@ -75,6 +75,17 @@ fn beta_reduces_wrapper_bridge_is_proved() {
         .dependencies
         .as_ref()
         .expect("beta_reduces_preserves_def_eq should record dependencies");
+    // The DefEq constructors the proof term actually routes through, verified
+    // against its `value_src` rather than remembered.
+    //
+    // `DefEq.trans` USED to be on this list and is deliberately not any more.
+    // It was dropped by 2bcef0713 ("proj/lit fragment rung COMPLETE — KExpr
+    // 7→9 constructors"), which restructured the proof so every `beta_reduces`
+    // constructor maps to exactly ONE DefEq step — a congruence or a reduction
+    // rule — with no chaining left to do. `DefEq.trans` appears zero times in
+    // the term today, so demanding it asserted a routing that does not exist.
+    // The same commit added the `let_cong` / `zeta` / `proj_cong` arms, which
+    // are pinned here in its place.
     for expected in [
         "beta_reduces.rec",
         "beta_reduces_def_eq_goal",
@@ -82,9 +93,11 @@ fn beta_reduces_wrapper_bridge_is_proved() {
         "DefEq.app_cong",
         "DefEq.lam_cong",
         "DefEq.pi_cong",
+        "DefEq.let_cong",
+        "DefEq.zeta",
         "DefEq.iota",
+        "DefEq.proj_cong",
         "DefEq.refl",
-        "DefEq.trans",
     ] {
         assert!(
             deps.contains(expected),

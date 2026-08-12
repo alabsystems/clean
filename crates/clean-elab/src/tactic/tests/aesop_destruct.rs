@@ -59,15 +59,16 @@ fn test_destruct_basic() {
     // Goal: R (something we can't prove)
     // Context: hp : P
     let r = Expr::const_(Name::from_string("R"), vec![]);
-    let mut state = ProofState::new(env, r);
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        r,
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Verify initial state: has P, no Q
     let goal = state.current_goal().unwrap();
@@ -142,15 +143,16 @@ fn test_destruct_no_infinite_loop() {
     // Goal: R (something we can't prove)
     // Context: hp : P
     let r = Expr::const_(Name::from_string("R"), vec![]);
-    let mut state = ProofState::new(env, r);
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        r,
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Run aesop with limited iterations
     let config = AesopConfig {
@@ -221,23 +223,24 @@ fn test_destruct_preserves_other_hyps() {
 
     // Goal: S (something we can't prove)
     let s = Expr::const_(Name::from_string("S"), vec![]);
-    let mut state = ProofState::new(env, s);
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
-
-    // Add hq : Q to context (should be preserved)
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(101),
-        name: "hq".to_string(),
-        ty: q.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        s,
+        vec![
+            LocalDecl {
+                fvar: FVarId::new(100),
+                name: "hp".to_string(),
+                ty: p.clone(),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(101),
+                name: "hq".to_string(),
+                ty: q.clone(),
+                value: None,
+            },
+        ],
+    );
 
     // Run aesop — goal S is unprovable
     let result = aesop(&mut state);
@@ -292,14 +295,16 @@ fn setup_builder_test(builder: AesopRuleBuilder) -> ProofState {
         transparency: clean_kernel::TransparencyMode::default(),
     });
     let r = Expr::const_(Name::from_string("R"), vec![]);
-    let mut state = ProofState::new(env, r);
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p,
-        value: None,
-    });
-    state
+    ProofState::with_context(
+        env,
+        r,
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p,
+            value: None,
+        }],
+    )
 }
 
 /// Test: Both forward and destruct preserve state after failed search

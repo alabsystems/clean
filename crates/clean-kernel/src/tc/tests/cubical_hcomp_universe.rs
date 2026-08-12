@@ -43,6 +43,7 @@ fn cst(s: &str) -> Expr {
 fn interval() -> Expr {
     Expr::from_kind(ExprKind::CubicalInterval)
 }
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn i0() -> Expr {
     Expr::from_kind(ExprKind::CubicalI0)
 }

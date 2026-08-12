@@ -468,7 +468,7 @@ fn load_retry_seed_from_env() -> Result<Option<BTreeSet<i64>>, StreamError> {
     let Some(path) = std::env::var_os("ISA_RETRY_SEED") else {
         return Ok(None);
     };
-    let path = std::path::PathBuf::from(path);
+    let path = PathBuf::from(path);
     if path.as_os_str().is_empty() {
         return Ok(None);
     }

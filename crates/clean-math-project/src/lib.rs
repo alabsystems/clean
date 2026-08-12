@@ -5611,9 +5611,8 @@ mod tests {
         );
         write_obligation(temp.path(), "obligations/pilot.json", &sample_obligation());
 
-        let report =
-            crate::task_lifecycle::list_tasks(&temp.path().join("project.json"), &manifest)
-                .expect("list tasks");
+        let report = task_lifecycle::list_tasks(&temp.path().join("project.json"), &manifest)
+            .expect("list tasks");
         let task = report
             .tasks
             .iter()

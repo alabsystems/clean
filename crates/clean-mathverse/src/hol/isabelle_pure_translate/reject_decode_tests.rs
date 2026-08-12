@@ -204,9 +204,9 @@ fn has_schematic_tvar_tyinst(p: &IsaProof) -> bool {
     fn walk(p: &IsaProof, found: &mut bool) {
         match p {
             IsaProof::Thm { tyinst, .. }
-                if tyinst.iter().any(|ti| {
-                    matches!(&ti.ty, super::super::isabelle_pure::IsaType::TVar { .. })
-                }) =>
+                if tyinst
+                    .iter()
+                    .any(|ti| matches!(&ti.ty, IsaType::TVar { .. })) =>
             {
                 *found = true;
             }
@@ -272,7 +272,7 @@ fn drive_all_modes(thm: &IsaProvenTheorem) -> Vec<String> {
                 let mut env = Environment::with_prelude();
                 let accepted = env
                     .add_decl(Declaration::Theorem {
-                        name: clean_kernel::name::Name::from_string("Reject.probe"),
+                        name: Name::from_string("Reject.probe"),
                         level_params: Vec::new(),
                         type_,
                         value,
@@ -618,9 +618,9 @@ fn kernel_verifies_s110344_via_pin_and_ofclass_projection() {
     let (kv_off, rej_off) = crate::process_env::with_serialized_env_vars(
         &[("ISA_DUMP_REJECTS", &dump.to_string_lossy())],
         || {
-            let prev = super::set_ofclass_proj_enabled(false);
+            let prev = set_ofclass_proj_enabled(false);
             let r = kv_counts_raw(&thms);
-            super::set_ofclass_proj_enabled(prev);
+            set_ofclass_proj_enabled(prev);
             r
         },
     );
@@ -657,11 +657,11 @@ fn kernel_verifies_ofclass_family_s163466_s164374() {
         let thms = parse_closure(closure);
         let n = thms.len();
 
-        let prev = super::set_ofclass_proj_enabled(true);
+        let prev = set_ofclass_proj_enabled(true);
         let (kv_on, rej_on) = kv_counts(&thms);
-        super::set_ofclass_proj_enabled(false);
+        set_ofclass_proj_enabled(false);
         let (kv_off, _rej_off) = kv_counts(&thms);
-        super::set_ofclass_proj_enabled(prev);
+        set_ofclass_proj_enabled(prev);
 
         assert_eq!(
             kv_on, n,
@@ -692,11 +692,11 @@ fn ofclass_projection_no_preemption_anchors() {
     ] {
         let thms = parse_closure(closure);
 
-        let prev = super::set_ofclass_proj_enabled(false);
+        let prev = set_ofclass_proj_enabled(false);
         let off = kv_counts(&thms);
-        super::set_ofclass_proj_enabled(true);
+        set_ofclass_proj_enabled(true);
         let on = kv_counts(&thms);
-        super::set_ofclass_proj_enabled(prev);
+        set_ofclass_proj_enabled(prev);
 
         assert_eq!(
             on, off,
@@ -750,11 +750,11 @@ fn class_operand_align_flips_corpus_orderings_family() {
         let n = thms.len();
 
         let off = {
-            let _g = super::AlignOverrideGuard::set(false);
+            let _g = AlignOverrideGuard::set(false);
             kv_counts(&thms)
         };
         let on = {
-            let _g = super::AlignOverrideGuard::set(true);
+            let _g = AlignOverrideGuard::set(true);
             kv_counts(&thms)
         };
 
@@ -790,7 +790,7 @@ fn class_operand_align_off_equals_default() {
     let default_counts = kv_counts(&thms);
 
     let explicit_off = {
-        let _g = super::AlignOverrideGuard::set(false);
+        let _g = AlignOverrideGuard::set(false);
         kv_counts(&thms)
     };
 
@@ -827,11 +827,11 @@ fn class_operand_align_no_preemption_anchors() {
         let thms = parse_closure(closure);
 
         let off = {
-            let _g = super::AlignOverrideGuard::set(false);
+            let _g = AlignOverrideGuard::set(false);
             kv_counts(&thms)
         };
         let on = {
-            let _g = super::AlignOverrideGuard::set(true);
+            let _g = AlignOverrideGuard::set(true);
             kv_counts(&thms)
         };
 
@@ -882,7 +882,7 @@ fn class_operand_align_recursion_is_node_budget_bounded() {
     // single op is the next link — so `embed_poly_inst_use(cᵢ)` re-embeds `cᵢ₊₁`
     // and re-enters the align arm. Embedding `c0` thus does K align-arm entries.
     const K: usize = 200;
-    let mut registry: super::PolyInstRegistry = std::collections::BTreeMap::new();
+    let mut registry: PolyInstRegistry = BTreeMap::new();
     for i in 0..K {
         let ops = if i + 1 < K {
             vec![(format!("Test.class.c{}", i + 1), tau.clone())]
@@ -891,7 +891,7 @@ fn class_operand_align_recursion_is_node_budget_bounded() {
         };
         registry.insert(
             format!("Test.class.c{i}"),
-            super::PolyInstInfo {
+            PolyInstInfo {
                 def_name: format!("test.polyinst.c{i}"),
                 fn_ty: tau.clone(),
                 obj_tvars: Vec::new(),
@@ -908,19 +908,19 @@ fn class_operand_align_recursion_is_node_budget_bounded() {
         t: tau.clone(),
     };
 
-    let embed = |budget: Option<u64>, align: bool| -> Result<(), super::TranslateError> {
+    let embed = |budget: Option<u64>, align: bool| -> Result<(), TranslateError> {
         let cfg = crate::hol::isabelle_verify_config::VerifyConfig {
             translate_node_budget: budget,
             class_operand_align: align,
             ..Default::default()
         };
         let _g = cfg.install();
-        super::reset_translate_steps();
-        let mut ctx = super::Ctx {
+        reset_translate_steps();
+        let mut ctx = Ctx {
             poly_inst_registry: registry.clone(),
             ..Default::default()
         };
-        let mut binders: Vec<super::Binder> = Vec::new();
+        let mut binders: Vec<Binder> = Vec::new();
         ctx.embed_term(&c0, &mut binders).map(|_| ())
     };
 
@@ -932,7 +932,7 @@ fn class_operand_align_recursion_is_node_budget_bounded() {
     // pass-after: a per-line budget < K CUTS the align recursion to a bounded reject.
     let cut = embed(Some((K / 2) as u64), true);
     assert!(
-        matches!(cut, Err(super::TranslateError::BudgetExceeded(_))),
+        matches!(cut, Err(TranslateError::BudgetExceeded(_))),
         "flag-ON with budget {} must bound the align recursion to BudgetExceeded; got {cut:?}",
         K / 2
     );
@@ -1276,7 +1276,7 @@ fn dict_methods_register_from_zproof_equal_elim_rewrite() {
             .find(|(n, _, _)| n == method)
             .unwrap_or_else(|| panic!("s{serial}: register_method_defs must yield {method}"));
         let mut env = Environment::with_prelude();
-        super::register_datatype_inductives(&mut env);
+        register_datatype_inductives(&mut env);
         assert!(
             env.add_decl(decl.clone()).is_ok(),
             "s{serial}: the kernel must accept the {method} method Definition (faithful registration)"

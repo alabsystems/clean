@@ -580,12 +580,12 @@ fn test_nested_by_dedent_terminates_inner_block() {
             assert!(
                 matches!(&tactics[0], SurfaceTactic::Have(..)),
                 "first tactic should be Have, got {:?}",
-                &tactics[0]
+                tactics[0]
             );
             assert!(
                 matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
                 "second tactic should be Exact, got {:?}",
-                &tactics[1]
+                tactics[1]
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),
@@ -619,7 +619,7 @@ fn test_have_term_proof_dedent_terminates_outer_tactic() {
             assert!(
                 matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
                 "second tactic should be exact, got {:?}",
-                &tactics[1]
+                tactics[1]
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),
@@ -653,7 +653,7 @@ fn test_tactic_let_value_dedent_terminates_outer_tactic() {
             assert!(
                 matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
                 "second tactic should be exact, got {:?}",
-                &tactics[1]
+                tactics[1]
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),
@@ -695,7 +695,7 @@ fn test_suffices_inline_by_type_not_swallowed() {
             assert!(
                 matches!(&proof_tacs[0], SurfaceTactic::Named { name, .. } if name == "exact"),
                 "suffices proof tactic should be `exact`, got {:?}",
-                &proof_tacs[0]
+                proof_tacs[0]
             );
         }
         other => panic!("Expected Suffices, got {other:?}"),
@@ -703,7 +703,7 @@ fn test_suffices_inline_by_type_not_swallowed() {
     assert!(
         matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
         "second outer tactic should be `exact`, got {:?}",
-        &tactics[1]
+        tactics[1]
     );
 }
 
@@ -735,7 +735,7 @@ fn test_suffices_from_term_dedent_terminates_outer_tactic() {
             assert!(
                 matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
                 "second tactic should be exact, got {:?}",
-                &tactics[1]
+                tactics[1]
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),
@@ -770,7 +770,7 @@ fn test_repeat_dedent_terminates_sub_block() {
             assert!(
                 matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
                 "second tactic should be Exact, got {:?}",
-                &tactics[1]
+                tactics[1]
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),

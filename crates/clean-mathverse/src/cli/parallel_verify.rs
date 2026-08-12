@@ -192,10 +192,6 @@ fn persist_incrementally(
 /// One worker's outcome, carrying the verdict plus the cache bookkeeping needed
 /// to rebuild the on-disk cache after the parallel join.
 struct JobResult {
-    olean: PathBuf,
-    /// `Some` iff incremental caching is active (the module's current closure
-    /// hash); `None` when caching is off, so nothing is persisted.
-    closure_hash: Option<String>,
     verdicts: ModuleVerdicts,
     cache_hit: bool,
 }
@@ -447,11 +443,11 @@ fn build_lazy_base(
     // shard-served) into `base_env`. Used for both the shard-unconvertible
     // modules and the bounded coverage repair. Best-effort: a load failure leaves
     // the module's names uncovered and lets the coverage gate decide.
-    let mut eager_full_load = |module: &str,
-                               base_env: &mut Environment,
-                               visited_b: &mut HashSet<String>,
-                               loaded_modules: &mut BTreeSet<String>,
-                               base_constants: &mut usize| {
+    let eager_full_load = |module: &str,
+                           base_env: &mut Environment,
+                           visited_b: &mut HashSet<String>,
+                           loaded_modules: &mut BTreeSet<String>,
+                           base_constants: &mut usize| {
         match load_module_with_deps_shared_with_policy(
             base_env,
             module,
@@ -1226,8 +1222,6 @@ fn verify_one_job(
                 // hash to keep the on-disk cache self-consistent on the next flush.
                 persist_incrementally(live_cache, incremental, olean, h, &cached.verdicts);
                 return Some(JobResult {
-                    olean: olean.to_path_buf(),
-                    closure_hash: cur_hash,
                     verdicts: cached.verdicts.clone(),
                     cache_hit: true,
                 });
@@ -1248,8 +1242,6 @@ fn verify_one_job(
                 persist_incrementally(live_cache, incremental, olean, h, &verdicts);
             }
             Some(JobResult {
-                olean: olean.to_path_buf(),
-                closure_hash: cur_hash,
                 verdicts,
                 cache_hit: false,
             })
@@ -1943,7 +1935,7 @@ mod tests {
             type_: Expr::const_(Name::from_string("R"), vec![]),
         })
         .expect("register r : R");
-        let base = std::sync::Arc::new(env);
+        let base = Arc::new(env);
 
         // GOOD: `good : R := r` — value has its declared type.
         let good = base.check_decl_readonly(&Declaration::Theorem {
@@ -2022,7 +2014,7 @@ mod tests {
             type_: Expr::const_(Name::from_string("R"), vec![]),
         })
         .expect("r : R");
-        let base = std::sync::Arc::new(env);
+        let base = Arc::new(env);
 
         let oks: usize = (0..16usize)
             .into_par_iter()

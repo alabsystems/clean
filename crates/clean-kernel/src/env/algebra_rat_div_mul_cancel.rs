@@ -40,6 +40,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles for `Rat.div_mul_cancel_pos`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct DivMulConsts {
     rat: Expr,
     rat_zero: Expr,
@@ -146,6 +147,7 @@ impl DivMulConsts {
         Expr::app(self.le_refl.clone(), a)
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_symm(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.rat.clone(), a, b, h])
     }

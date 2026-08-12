@@ -59,8 +59,8 @@ pub enum AttestError {
     Digest(String),
 
     /// The kernel re-check rejected the declaration (the trust core's verdict).
-    #[error(transparent)]
-    Recheck(#[from] RecheckError),
+    #[error("kernel re-check failed: {0}")]
+    Recheck(String),
 
     /// The declaration kind cannot be attested (only value-bearing
     /// declarations — theorems and definitions — have a proof digest).
@@ -87,7 +87,8 @@ pub fn attest(
         expr_canonical_digest(value).map_err(|e| AttestError::Digest(e.to_string()))?;
 
     // The one honest path to a kernel verdict. Consumes `decl`.
-    let verdict = recheck_and_classify(env, decl)?;
+    let verdict = recheck_and_classify(env, decl)
+        .map_err(|error: RecheckError| AttestError::Recheck(error.to_string()))?;
 
     Ok(KernelAttestation {
         name,

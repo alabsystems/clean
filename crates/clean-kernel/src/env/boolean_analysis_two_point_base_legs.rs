@@ -63,6 +63,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Cached carrier atoms + smart-constructors for leg (B) and the assembly.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct TwoPointLegConsts {
     // Nat / Int (literal `Rat.mk` fractions).
     nat_zero: Expr,
@@ -123,6 +124,7 @@ struct TwoPointLegConsts {
     nnreal_le_trans: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl TwoPointLegConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

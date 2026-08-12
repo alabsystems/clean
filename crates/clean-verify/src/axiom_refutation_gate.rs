@@ -2,7 +2,7 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Refutation gate for computable / equational admitted axioms.
+//! Definitional-disagreement gate for computable / equational admitted axioms.
 //!
 //! ## What this is
 //!
@@ -23,30 +23,43 @@
 //! *single-step* `micro_whnf`. Nothing ever evaluated them, so the falsehood
 //! went unnoticed.
 //!
-//! This module is the complementary TRUTH check to the name ratchet
+//! This module is a conservative executable check complementary to the name ratchet
 //! (`crate::axiom_ratchet`, `data/clean_verify_axiom_ratchet.json`): the ratchet
-//! pins the *set* of admitted axioms; this gate checks the *statements* of the
-//! computable ones. It EVALUATES every in-scope (computable, equational) admitted
-//! axiom on a battery of concrete adversarial inputs and FAILS if any axiom is
-//! falsified by a witnessed counterexample.
+//! pins the *set* of admitted axioms; this gate probes the *statements* of the
+//! computable ones. It evaluates every in-scope (computable, equational) admitted
+//! axiom on a battery of concrete adversarial inputs and conservatively REJECTS
+//! an axiom when the instantiated sides are not definitionally equal.
 //!
 //! ## Honest scope (the gate's guarantee)
 //!
-//! Refutation by counterexample is SOUND: a witnessed instantiation on which the
-//! two sides of an `Eq` are NOT definitionally equal is a real disproof of the
-//! universally-quantified axiom. The gate CANNOT prove the universal direction
-//! (that an axiom is *true* for all inputs) — that is the kernel's job, via a
-//! checked proof term. So the gate's guarantee is precisely:
+//! Kernel non-convertibility is **not** a proof of propositional inequality.
+//! Distinct normal forms can still be propositionally equal, so this gate never
+//! calls a non-definitionally-equal pair a logical refutation or a proof that an
+//! axiom is false. Instead it enforces the deliberately stricter admission policy:
 //!
-//! > No FALSE computable axiom survives a finite, adversarial battery of
-//! > concrete instantiations.
+//! > Every tested concrete instance of a computable equational axiom must close
+//! > by definitional equality.
 //!
-//! That is a strictly negative ("find a witness") guarantee. It does NOT claim
-//! the surviving axioms are true.
+//! A disagreement is therefore sufficient to reject an admission at this gate,
+//! but it is only a [`DefinitionalDisagreement`], not a theorem of negation.
+//! Conversely, agreement on a finite battery does not prove the universal axiom.
 //!
 //! ## Coverage boundary (reported, never silent)
 //!
-//! Every admitted axiom is partitioned into:
+//! The source of truth is the live kernel [`clean_kernel::ConstantKind::Axiom`]
+//! census, cross-checked against [`Specification::definitions`]. Every
+//! spec-owned axiom must map one-to-one to a live kernel axiom with matching
+//! cached type metadata. Missing metadata, kind mismatches, type mismatches, and
+//! unexpected environment-only domain axioms are fatal setup errors.
+//!
+//! Environment-only kernel foundations and the default trust-marker constants
+//! are counted separately only after the kernel validates their exact canonical
+//! signatures, value-less payloads, full-check provenance, safe/total origin,
+//! and a fresh strict declaration recheck. They are ambient declarations rather
+//! than spec-owned admissions, so this gate does not pretend to evaluate their
+//! propositions; the kernel soundness and trust-marker audits own reachability.
+//!
+//! Every non-ambient live axiom is partitioned into:
 //!
 //! - **in-scope** — the elaborated type is `forall (xs...), Eq T lhs rhs` and,
 //!   for at least one battery instantiation, BOTH `lhs` and `rhs` reduce (via the
@@ -63,14 +76,23 @@
 //!     battery has no closed witnesses (so we cannot instantiate it). The axiom
 //!     is reported, not silently skipped.
 //!
-//! The gate REPORTS its coverage (`in_scope` evaluated, `excluded` with reasons)
-//! so the boundary is explicit and honest.
+//! The gate reports its coverage (`in_scope` evaluated, `excluded` with reasons)
+//! so the boundary is explicit and honest. The historical module/file name is
+//! retained for API stability; its result vocabulary is intentionally not
+//! “refutation”.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use clean_kernel::{Expr, ExprKind, TypeChecker};
+use clean_kernel::{
+    canonical_ambient_axiom_kind, CanonicalAmbientAxiomKind, ConstantInfo, ConstantKind,
+    Declaration, DeclarationVerification, Environment, Expr, ExprKind, TypeChecker,
+};
 
-use crate::spec::Specification;
+use crate::red_env_reflect::{
+    committed_name_atom, fidelity_check, COMMITTED_DEF_SCRIPT, COMMITTED_INTERNING_TSV,
+    COMMITTED_SKIP_LEDGER,
+};
+use crate::spec::{SpecDefinition, Specification};
 
 /// Why an admitted axiom is outside the gate's evaluatable scope.
 ///
@@ -113,13 +135,14 @@ impl ExclusionReason {
     }
 }
 
-/// A single witnessed refutation — the fail-closed evidence.
+/// A concrete instance whose two sides are not definitionally equal.
 ///
-/// `axiom` is FALSE: instantiating its `forall` binders with `witness` makes the
-/// two sides of the `Eq` reduce to NON-def-eq normal forms.
+/// This is sufficient for this gate's conservative rejection policy, but it is
+/// not a proof that the instantiated proposition (or its universal closure) is
+/// false.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Refutation {
-    /// The refuted axiom's spec name.
+pub struct DefinitionalDisagreement {
+    /// The probed axiom's spec name.
     pub axiom: String,
     /// Human-readable rendering of the instantiation (one `Debug` per binder).
     pub witness: Vec<String>,
@@ -132,26 +155,51 @@ pub struct Refutation {
 /// The verdict of one gate run over a spec's admitted axioms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GateReport {
-    /// Total admitted axioms (`is_axiom: true`) considered.
-    pub total_axioms: usize,
+    /// Total live kernel constants whose kind is [`ConstantKind::Axiom`].
+    pub total_live_axioms: usize,
+    /// Total spec definitions marked `is_axiom: true`.
+    pub total_spec_axioms: usize,
+    /// Environment-only kernel-foundational axioms, counted but owned by the
+    /// kernel soundness audit rather than this spec admission gate.
+    pub ambient_foundational_axioms: Vec<String>,
+    /// Environment-only default trust-marker constants. Their mere ambient
+    /// presence is not a spec-census mismatch; reachability is owned by the
+    /// trust-marker audit.
+    pub ambient_trust_markers: Vec<String>,
     /// Axioms that were EVALUATED (in-scope: computable equations).
     pub evaluated: Vec<String>,
     /// Axioms excluded from evaluation, with their reason.
     pub excluded: BTreeMap<String, ExclusionReason>,
-    /// Witnessed refutations. NON-EMPTY ⇒ the gate must FAIL.
-    pub refutations: Vec<Refutation>,
+    /// Witnessed definitional disagreements. NON-EMPTY ⇒ conservative reject.
+    pub definitional_disagreements: Vec<DefinitionalDisagreement>,
+    /// Census, metadata, battery-construction, or elaboration failures.
+    /// NON-EMPTY ⇒ fail closed rather than silently evaluate a smaller corpus.
+    pub setup_errors: Vec<String>,
 }
 
 impl GateReport {
-    /// The gate verdict: `true` iff NO axiom was refuted.
+    /// Whether every live kernel axiom is represented exactly once by an
+    /// ambient classification or a spec-gate evaluation/exclusion.
+    #[must_use]
+    pub fn coverage_complete(&self) -> bool {
+        self.ambient_foundational_axioms.len()
+            + self.ambient_trust_markers.len()
+            + self.evaluated.len()
+            + self.excluded.len()
+            == self.total_live_axioms
+    }
+
+    /// The gate verdict: `true` iff there was no definitional disagreement and
+    /// the complete live/spec census plus battery setup was valid.
     ///
-    /// This is the fail-closed condition: a single witnessed counterexample
-    /// makes it `false`. (An empty in-scope set still PASSES — the gate is
-    /// genuine but vacuous on that spec; the regression test proves the engine
-    /// actually bites.)
+    /// This is a conservative admission condition, not a logical truth verdict.
+    /// An empty in-scope set still passes if the census and metadata are sound;
+    /// the coverage report makes that vacuity visible.
     #[must_use]
     pub fn passed(&self) -> bool {
-        self.refutations.is_empty()
+        self.definitional_disagreements.is_empty()
+            && self.setup_errors.is_empty()
+            && self.coverage_complete()
     }
 
     /// Histogram of exclusion reasons (label → count).
@@ -169,8 +217,29 @@ impl GateReport {
     pub fn report(&self) -> String {
         use std::fmt::Write as _;
         let mut s = String::new();
-        let _ = writeln!(s, "── axiom refutation gate ───────────────────────");
-        let _ = writeln!(s, "  total admitted axioms     = {}", self.total_axioms);
+        let _ = writeln!(s, "── axiom definitional-disagreement gate ────────");
+        let _ = writeln!(
+            s,
+            "  live kernel axioms        = {}",
+            self.total_live_axioms
+        );
+        let _ = writeln!(
+            s,
+            "  spec-marked axioms        = {}",
+            self.total_spec_axioms
+        );
+        let _ = writeln!(
+            s,
+            "  ambient foundations       = {} [{}]",
+            self.ambient_foundational_axioms.len(),
+            self.ambient_foundational_axioms.join(", ")
+        );
+        let _ = writeln!(
+            s,
+            "  ambient trust markers     = {} [{}]",
+            self.ambient_trust_markers.len(),
+            self.ambient_trust_markers.join(", ")
+        );
         let _ = writeln!(
             s,
             "  in-scope (evaluated)      = {} [{}]",
@@ -183,19 +252,32 @@ impl GateReport {
         }
         let _ = writeln!(
             s,
-            "  refutations (fail-closed) = {}",
-            self.refutations.len()
+            "  definitional disagreements (reject) = {}",
+            self.definitional_disagreements.len()
         );
-        for r in &self.refutations {
+        for disagreement in &self.definitional_disagreements {
             let _ = writeln!(
                 s,
-                "      REFUTED {} on [{}]: lhs={} =/= rhs={}",
-                r.axiom,
-                r.witness.join("; "),
-                r.lhs_whnf,
-                r.rhs_whnf
+                "      DEFINITIONAL DISAGREEMENT {} on [{}]: lhs={} =/= rhs={}",
+                disagreement.axiom,
+                disagreement.witness.join("; "),
+                disagreement.lhs_whnf,
+                disagreement.rhs_whnf
             );
         }
+        let _ = writeln!(
+            s,
+            "  setup errors (fail-closed) = {}",
+            self.setup_errors.len()
+        );
+        for error in &self.setup_errors {
+            let _ = writeln!(s, "      SETUP ERROR: {error}");
+        }
+        let _ = writeln!(
+            s,
+            "  complete live coverage     = {}",
+            self.coverage_complete()
+        );
         let _ = writeln!(
             s,
             "  VERDICT: {}",
@@ -214,16 +296,19 @@ impl GateReport {
 /// The map key is the head type-constant name (`"MicroExpr"`, `"KExpr"`,
 /// `"Nat"`, `"MicroLevel"`, `"Bool"`); the values are clean source strings that
 /// elaborate to CLOSED terms of that type in the spec environment.
-#[must_use]
-fn battery() -> BTreeMap<&'static str, Vec<&'static str>> {
-    let mut m: BTreeMap<&'static str, Vec<&'static str>> = BTreeMap::new();
+fn source_terms<const N: usize>(sources: [&str; N]) -> Vec<String> {
+    sources.into_iter().map(str::to_string).collect()
+}
+
+fn battery() -> Result<BTreeMap<&'static str, Vec<String>>, String> {
+    let mut m: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
 
     // ── MicroExpr battery ──────────────────────────────────────────────
     // Includes the canonical "contractum is itself a redex" shape and nested
     // / chained redexes — the gap the prompt requires us to fill.
     m.insert(
         "MicroExpr",
-        vec![
+        source_terms([
             // atoms / values (already weak-head-normal)
             "MicroExpr.sort MicroLevel.zero",
             "MicroExpr.bvar Nat.zero",
@@ -246,98 +331,105 @@ fn battery() -> BTreeMap<&'static str, Vec<&'static str>> {
             "MicroExpr.pi (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)",
             // an opaque value
             "MicroExpr.opaque_ (MicroExpr.sort MicroLevel.zero)",
-        ],
+        ]),
     );
 
     // ── KExpr battery ──────────────────────────────────────────────────
-    // KExpr is the kernel-expression model (`expr_model.rs`): a pure
-    // 6-constructor inductive — sort/bvar/app/lam/pi/const — and the PRIMARY
-    // object type of the kernel↔micro spec. Before this entry existed the gate
-    // was BLIND to it: every `forall (… : KExpr), Eq …` axiom (e.g.
+    // KExpr is the kernel-expression model (`expr_model.rs`), now a
+    // 9-constructor inductive (sort/bvar/app/lam/pi/const/let_/proj/lit), and the
+    // PRIMARY object type of the kernel↔micro spec. The battery contains at
+    // least one term headed by every live KExpr constructor. Before this entry
+    // existed the gate was BLIND to KExpr entirely: every
+    // `forall (… : KExpr), Eq …` axiom (e.g.
     // `kernel_to_micro_instantiate`, the `instantiate`/`lift` identities) was
     // excluded as `UngeneratableBinder("KExpr")` and never evaluated.
     //
-    // NOTE the constructor signatures differ from MicroExpr: `KExpr.sort` and
-    // `KExpr.bvar` both take a raw `Nat` (not a MicroLevel); `KExpr.const` takes
-    // a `Name` and a `ListType Level`. We mirror the MicroExpr battery's
+    // NOTE the constructor signatures differ from MicroExpr: `KExpr.sort`
+    // takes `Level`, `KExpr.bvar` takes `Nat`, and `KExpr.const` takes a `Name`
+    // and a `ListType Level`. We mirror the MicroExpr battery's
     // adversarial shapes — a beta redex and a redex whose one-step contractum is
     // ITSELF a redex (the shape that exposed the retired micro_whnf falsity).
+    let kexpr = committed_name_atom("KExpr")
+        .map_err(|e| format!("cannot resolve semantic battery name KExpr: {e}"))?;
+    let nat_add = committed_name_atom("Nat.add")
+        .map_err(|e| format!("cannot resolve semantic battery name Nat.add: {e}"))?;
+    let nat_zero = committed_name_atom("Nat.zero")
+        .map_err(|e| format!("cannot resolve semantic battery name Nat.zero: {e}"))?;
     m.insert(
         "KExpr",
         vec![
             // atoms / values (already weak-head-normal)
-            "KExpr.sort Level.zero",
-            "KExpr.sort (Level.succ Level.zero)",
-            "KExpr.bvar Nat.zero",
-            "KExpr.bvar (Nat.succ Nat.zero)",
+            "KExpr.sort Level.zero".to_string(),
+            "KExpr.sort (Level.succ Level.zero)".to_string(),
+            "KExpr.bvar Nat.zero".to_string(),
+            "KExpr.bvar (Nat.succ Nat.zero)".to_string(),
             // a const with a literal Name (anonymous) + empty universe list
-            "KExpr.const Name.anonymous (ListType.nil Level)",
-            // a const with a non-anonymous literal Name (str anonymous 0). Under
-            // the Front #1 Stage-3 swap this is the interned image of a REAL name
-            // (tag 0 = "KExpr", an inductive type name: delta/iota-inert).
-            "KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.nil Level)",
-            // a const that DELTA-FIRES in the swapped the_red_env: tag 14 is the
-            // interned image of `Nat.add`, a reflected DefEnv entry (see
-            // generated/kernel_core_red_env.interning.tsv) — keeps the gate's
-            // delta-reduction shapes live over the real env.
-            "KExpr.const (Name.str Name.anonymous (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))))))))))) (ListType.nil Level)",
-            // a const that is a REAL reflected constructor name: tag 15 is the
-            // interned image of `Nat.zero` (an iota-relevant major head over the
-            // swapped env).
-            "KExpr.const (Name.str Name.anonymous (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))))))))))))) (ListType.nil Level)",
+            "KExpr.const Name.anonymous (ListType.nil Level)".to_string(),
+            // A real reflected inductive name (delta/iota-inert), resolved
+            // semantically because frequency-ordered tags can move.
+            format!("KExpr.const {kexpr} (ListType.nil Level)"),
+            // Semantic atoms are resolved through the fully validated committed
+            // interning table, never copied numeric tags.
+            format!("KExpr.const {nat_add} (ListType.nil Level)"),
+            format!("KExpr.const {nat_zero} (ListType.nil Level)"),
             // a plain lambda value: λ (sort 0). bvar0
-            "KExpr.lam (KExpr.sort Nat.zero) (KExpr.bvar Nat.zero)",
+            "KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)".to_string(),
             // a plain pi value: Π (sort 0). bvar0
-            "KExpr.pi (KExpr.sort Nat.zero) (KExpr.bvar Nat.zero)",
+            "KExpr.pi (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)".to_string(),
             // a plain app over atoms: app (bvar0) (sort 0)
-            "KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort Nat.zero)",
+            "KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort Level.zero)".to_string(),
             // a single beta redex: (λ (sort 0). bvar0) (sort 0)
-            "KExpr.app (KExpr.lam (KExpr.sort Nat.zero) (KExpr.bvar Nat.zero)) (KExpr.sort Nat.zero)",
+            "KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.sort Level.zero)".to_string(),
             // ADVERSARIAL: a redex whose one-step contractum is ITSELF a redex.
             //   app (lam _ (app (lam _ (bvar 1)) (sort 0))) (sort 0):
             //   one beta step substitutes (sort 0) for bvar0, leaving the INNER
             //   redex (app (lam _ (bvar 1)) (sort 0)) un-reduced. A second step
             //   reduces further — the de-Bruijn-correct nested-redex shape.
-            "KExpr.app (KExpr.lam (KExpr.sort Nat.zero) (KExpr.app (KExpr.lam (KExpr.sort Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.sort Nat.zero))) (KExpr.sort Nat.zero)",
+            "KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.sort Level.zero))) (KExpr.sort Level.zero)".to_string(),
             // depth-3 nest: a lambda whose body is an app of a const onto a bvar,
             // wrapped in another lambda — exercises instantiate/lift under two
             // binders without being a redex itself.
-            "KExpr.lam (KExpr.sort Level.zero) (KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))",
+            "KExpr.lam (KExpr.sort Level.zero) (KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))".to_string(),
+            // The remaining live constructors: genuine dependent let, field
+            // projection syntax, and natural literal.
+            "KExpr.let_ (KExpr.sort Level.zero) (KExpr.lit Nat.zero) (KExpr.bvar Nat.zero)".to_string(),
+            "KExpr.proj Name.anonymous Nat.zero (KExpr.lit Nat.zero)".to_string(),
+            "KExpr.lit (Nat.succ Nat.zero)".to_string(),
         ],
     );
 
     // ── Nat battery ────────────────────────────────────────────────────
     m.insert(
         "Nat",
-        vec![
+        source_terms([
             "Nat.zero",
             "Nat.succ Nat.zero",
             "Nat.succ (Nat.succ Nat.zero)",
             "Nat.succ (Nat.succ (Nat.succ Nat.zero))",
-        ],
+        ]),
     );
 
     // ── MicroLevel battery ─────────────────────────────────────────────
     m.insert(
         "MicroLevel",
-        vec![
+        source_terms([
             "MicroLevel.zero",
             "MicroLevel.succ MicroLevel.zero",
             "MicroLevel.max MicroLevel.zero (MicroLevel.succ MicroLevel.zero)",
             "MicroLevel.imax MicroLevel.zero (MicroLevel.succ MicroLevel.zero)",
-        ],
+        ]),
     );
 
     // ── Bool battery ───────────────────────────────────────────────────
-    m.insert("Bool", vec!["Bool.true", "Bool.false"]);
+    m.insert("Bool", source_terms(["Bool.true", "Bool.false"]));
 
-    m
+    Ok(m)
 }
 
 /// Maximum battery tuples to try per axiom (caps the combinatorial product so a
 /// 3-binder axiom over the 10-element MicroExpr battery does not blow up). The
-/// first refuting tuple short-circuits, so the cap only bounds the *non*-refuting
-/// (exhaustive-within-budget) search.
+/// first disagreeing tuple short-circuits, so the cap only bounds the
+/// no-disagreement (exhaustive-within-budget) search.
 const MAX_TUPLES_PER_AXIOM: usize = 4096;
 
 /// Peel `forall`/`Pi` binders off an elaborated type, returning the list of
@@ -372,43 +464,23 @@ fn as_eq(body: &Expr) -> Option<(Expr, Expr, Expr)> {
 /// The head-symbol name of an expression's WHNF, for stuck-ness diagnosis.
 /// Returns `None` when the WHNF is constructor- / sort- / lambda- / pi-headed
 /// (i.e. a ground value), `Some(name)` when it is stuck on a `Const`.
-fn stuck_head(e: &Expr) -> Option<String> {
+fn stuck_head(env: &Environment, e: &Expr) -> Option<String> {
     match e.get_app_fn().kind() {
         ExprKind::Const(name, _) => {
             // A ground constructor application (e.g. `MicroExpr.lam …`) has a
             // `Const` head too, but it is a CONSTRUCTOR — not a stuck function.
-            // We treat any `Foo.bar` whose prefix is a known battery type as a
-            // value head, everything else as stuck.
-            let n = name.to_string();
-            if is_value_head(&n) {
+            // Constructor identity comes from the live environment, not a
+            // namespace convention: ordinary definitions/axioms can legally be
+            // named under `Nat.*`, `KExpr.*`, etc.
+            if env.get_constructor(name).is_some() {
                 None
             } else {
-                Some(n)
+                Some(name.to_string())
             }
         }
         // Sorts / binders / bound vars / literals are values, not stuck.
         _ => None,
     }
-}
-
-/// Whether a `Const` head name denotes a (ground) constructor of a battery type,
-/// rather than a stuck reducible/abstract function. This is the value-vs-stuck
-/// discriminator used by [`stuck_head`].
-fn is_value_head(name: &str) -> bool {
-    const VALUE_PREFIXES: &[&str] = &[
-        "MicroExpr.",
-        "MicroLevel.",
-        "KExpr.",
-        "Name.",
-        "Level.",
-        "ListType.",
-        "Nat.",
-        "Bool.",
-        "MicroCert.",
-        "ProdType.mk",
-        "Eq.refl",
-    ];
-    VALUE_PREFIXES.iter().any(|p| name.starts_with(p))
 }
 
 /// Instantiate the (de Bruijn) body of a fully-peeled `forall` with a tuple of
@@ -425,10 +497,10 @@ fn instantiate_body(body: &Expr, witnesses_innermost_first: &[Expr]) -> Expr {
 
 /// Result of attempting to evaluate one axiom against the battery.
 enum AxiomOutcome {
-    /// In-scope and refuted: a witnessed counterexample.
-    Refuted(Refutation),
-    /// In-scope, evaluated, and survived the battery (no counterexample found).
-    Survived,
+    /// In-scope and conservatively rejected: a witnessed non-convertible pair.
+    Disagreed(DefinitionalDisagreement),
+    /// In-scope, evaluated, and had no disagreement in the bounded battery.
+    AgreedWithinBattery,
     /// Out of scope, with the reason.
     Excluded(ExclusionReason),
 }
@@ -506,8 +578,8 @@ fn evaluate_axiom(
         let lhs_w = tc.whnf(&lhs_inst);
         let rhs_w = tc.whnf(&rhs_inst);
 
-        let lhs_stuck = stuck_head(&lhs_w);
-        let rhs_stuck = stuck_head(&rhs_w);
+        let lhs_stuck = stuck_head(env, &lhs_w);
+        let rhs_stuck = stuck_head(env, &rhs_w);
 
         if lhs_stuck.is_none() && rhs_stuck.is_none() {
             // Both sides reduced to ground value heads: a genuine computable
@@ -515,7 +587,7 @@ fn evaluate_axiom(
             any_computable = true;
             if !tc.is_def_eq(&lhs_inst, &rhs_inst) {
                 let witness = witnesses_outer_first.iter().map(format_expr).collect();
-                return AxiomOutcome::Refuted(Refutation {
+                return AxiomOutcome::Disagreed(DefinitionalDisagreement {
                     axiom: name.to_string(),
                     witness,
                     lhs_whnf: format_expr(&lhs_w),
@@ -553,12 +625,12 @@ fn evaluate_axiom(
     finish(any_computable, last_stuck_head)
 }
 
-/// Decide the final outcome for an axiom that survived the battery without a
-/// refutation: in-scope-and-survived if at least one tuple was computable,
-/// otherwise excluded as non-computable.
+/// Decide the final outcome for an axiom with no observed disagreement:
+/// in-scope-and-agreed if at least one tuple was computable, otherwise excluded
+/// as non-computable.
 fn finish(any_computable: bool, last_stuck_head: Option<String>) -> AxiomOutcome {
     if any_computable {
-        AxiomOutcome::Survived
+        AxiomOutcome::AgreedWithinBattery
     } else {
         AxiomOutcome::Excluded(ExclusionReason::NonComputable(
             last_stuck_head.unwrap_or_else(|| "no-ground-reduction".to_string()),
@@ -566,72 +638,415 @@ fn finish(any_computable: bool, last_stuck_head: Option<String>) -> AxiomOutcome
     }
 }
 
-/// Render an `Expr` compactly for witness / counterexample reporting.
+/// Render an `Expr` compactly for disagreement-witness reporting.
 fn format_expr(e: &Expr) -> String {
     // The kernel `Debug` is verbose but stable and unambiguous; trim to keep
     // the report readable while preserving the structural identity.
     let s = format!("{e:?}");
-    if s.len() > 240 {
-        format!("{}…", &s[..240])
+    let mut chars = s.chars();
+    let prefix: String = chars.by_ref().take(240).collect();
+    if chars.next().is_some() {
+        format!("{prefix}…")
     } else {
         s
     }
 }
 
+/// Require the committed semantic-name table and its sibling generated
+/// artifacts to be the exact reflection of this live environment before any
+/// battery source consumes those semantic atoms.
+fn ensure_committed_reflection_is_fresh(env: &Environment) -> Result<(), String> {
+    fidelity_check(
+        env,
+        COMMITTED_DEF_SCRIPT,
+        COMMITTED_INTERNING_TSV,
+        COMMITTED_SKIP_LEDGER,
+    )
+    .map(|_| ())
+    .map_err(|error| {
+        format!(
+            "kernel_core_red_env artifacts drift from the live environment; \
+             semantic battery atoms are unsafe: {error}"
+        )
+    })
+}
+
+/// Return live `KExpr` constructors not exercised by the resolved KExpr
+/// battery. Constructor names come from the live inductive metadata; no
+/// hard-coded constructor count or namespace list participates.
+fn missing_live_kexpr_constructors(
+    env: &Environment,
+    kexpr_terms: &[Expr],
+) -> Result<Vec<String>, String> {
+    let inductive = env
+        .get_inductive(&clean_kernel::Name::from_string("KExpr"))
+        .ok_or_else(|| "live environment has no KExpr inductive metadata".to_string())?;
+    let exercised: BTreeSet<_> = kexpr_terms
+        .iter()
+        .filter_map(|term| match term.get_app_fn().kind() {
+            ExprKind::Const(name, _) if env.get_constructor(name).is_some() => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+    Ok(inductive
+        .constructor_names
+        .iter()
+        .filter(|constructor| !exercised.contains(*constructor))
+        .map(ToString::to_string)
+        .collect())
+}
+
 /// Resolve battery source strings into closed kernel `Expr`s in the spec
-/// environment. Any string that fails to elaborate is dropped from that type's
-/// battery (it cannot be a witness), but at least one MicroExpr witness must
-/// survive or the gate would be vacuous — the caller asserts that.
-fn resolve_battery(spec: &Specification) -> BTreeMap<&'static str, Vec<Expr>> {
+/// environment. Resolution is fail-closed: all declared samples are checked,
+/// and any construction or elaboration failure rejects the entire battery
+/// instead of silently shrinking the tested corpus.
+fn resolve_battery(spec: &Specification) -> Result<BTreeMap<&'static str, Vec<Expr>>, Vec<String>> {
+    ensure_committed_reflection_is_fresh(spec.env()).map_err(|error| vec![error])?;
+
     let mut out: BTreeMap<&'static str, Vec<Expr>> = BTreeMap::new();
-    for (ty, srcs) in battery() {
+    let source_battery = battery().map_err(|error| vec![error])?;
+    let mut errors = Vec::new();
+    let tc = TypeChecker::new(spec.env());
+    for (ty, srcs) in source_battery {
         let mut terms = Vec::new();
+        let expected_type = Expr::const_str(ty);
         for src in srcs {
-            match spec.elaborate_source(src, &format!("battery {ty}")) {
-                Ok(e) => terms.push(e),
-                Err(err) => {
-                    eprintln!("axiom_refutation_gate: battery term '{src}' dropped: {err}");
+            match spec.elaborate_source(&src, &format!("battery {ty}")) {
+                Ok(e) => {
+                    if e.has_fvar_quick()
+                        || e.has_expr_mvar_quick()
+                        || e.has_level_mvar_quick()
+                        || e.has_level_param_quick()
+                        || e.has_loose_bvars_quick()
+                    {
+                        errors.push(format!(
+                            "{ty} sample {src:?} elaborated to a non-closed expression"
+                        ));
+                        continue;
+                    }
+                    match tc.infer_type(&e) {
+                        Ok(actual_type) if tc.is_def_eq(&actual_type, &expected_type) => {
+                            terms.push(e);
+                        }
+                        Ok(actual_type) => errors.push(format!(
+                            "{ty} sample {src:?} has type {}, expected {ty}",
+                            format_expr(&actual_type)
+                        )),
+                        Err(err) => {
+                            errors
+                                .push(format!("{ty} sample {src:?} type inference failed: {err}"));
+                        }
+                    }
                 }
+                Err(err) => errors.push(format!("{ty} sample {src:?} failed: {err}")),
             }
         }
         out.insert(ty, terms);
     }
-    out
+
+    match out.get("KExpr") {
+        Some(kexpr_terms) => match missing_live_kexpr_constructors(spec.env(), kexpr_terms) {
+            Ok(missing) => errors.extend(missing.into_iter().map(|constructor| {
+                format!("KExpr battery does not exercise live constructor {constructor:?}")
+            })),
+            Err(error) => errors.push(error),
+        },
+        None => errors.push("resolved battery has no KExpr entry".to_string()),
+    }
+
+    if errors.is_empty() {
+        Ok(out)
+    } else {
+        Err(errors)
+    }
 }
 
-/// Run the refutation gate over a built spec's LIVE admitted axioms.
-///
-/// This reuses the spec's own definition census (`Specification::definitions`) —
-/// it does NOT re-parse source — so it evaluates exactly the axioms the running
-/// system admits, against the live (reducible) kernel environment.
-#[must_use]
-pub fn run_gate(spec: &Specification) -> GateReport {
-    let battery = resolve_battery(spec);
+/// Complete, deterministic census used before any battery evaluation.
+struct AxiomCensus {
+    total_live_axioms: usize,
+    total_spec_axioms: usize,
+    ambient_foundational_axioms: Vec<String>,
+    ambient_trust_markers: Vec<String>,
+    /// Every non-ambient live axiom, including unexpected/mismatched ones.
+    /// Mismatches remain here so the gate still classifies their live type while
+    /// the accompanying setup error makes the overall verdict fail closed.
+    candidates: Vec<(String, Expr)>,
+    setup_errors: Vec<String>,
+}
 
-    let mut report = GateReport {
-        total_axioms: 0,
-        evaluated: Vec::new(),
-        excluded: BTreeMap::new(),
-        refutations: Vec::new(),
+/// Validate the trust-relevant payload shared by every live axiom, including
+/// spec-owned candidates. Ambient axioms go through the stricter canonical
+/// validator below, which includes this same floor plus exact signature checks.
+fn live_axiom_integrity_errors(env: &Environment, constant: &ConstantInfo) -> Vec<String> {
+    let name = constant.name.to_string();
+    let mut errors = Vec::new();
+    if constant.kind != ConstantKind::Axiom {
+        errors.push(format!(
+            "live axiom census entry {name:?} has kernel kind {:?}",
+            constant.kind
+        ));
+    }
+    if constant.value.is_some() {
+        errors.push(format!(
+            "live kernel axiom {name:?} carries a value in its kernel payload"
+        ));
+    }
+    if env.declaration_verification(&constant.name)
+        != Some(DeclarationVerification::FullKernelCheck)
+    {
+        errors.push(format!(
+            "live kernel axiom {name:?} lacks FullKernelCheck provenance"
+        ));
+    }
+    if env.is_unsafe(&constant.name) {
+        errors.push(format!("live kernel axiom {name:?} is marked unsafe"));
+    }
+    if env.is_partial(&constant.name) {
+        errors.push(format!("live kernel axiom {name:?} is marked partial"));
+    }
+    if env.constant_needs_recheck(&constant.name) {
+        errors.push(format!(
+            "live kernel axiom {name:?} is marked as needing recheck"
+        ));
+    }
+    let declaration = Declaration::Axiom {
+        name: constant.name.clone(),
+        level_params: constant.level_params.clone(),
+        type_: constant.type_.clone(),
+    };
+    if let Err(error) = env.check_decl_readonly_strict(&declaration) {
+        errors.push(format!(
+            "live kernel axiom {name:?} failed strict declaration recheck: {error}"
+        ));
+    }
+    errors
+}
+
+/// Cross-check the live kernel axiom census against the spec-definition census.
+///
+/// The environment is authoritative for what the kernel actually assumes.
+/// Spec metadata is authoritative for which of those assumptions this gate
+/// claims to own. Any divergence is recorded as a fatal setup error.
+fn census_axioms(env: &Environment, definitions: &HashMap<String, SpecDefinition>) -> AxiomCensus {
+    let mut live: Vec<_> = env
+        .constants()
+        .filter(|constant| constant.kind == ConstantKind::Axiom)
+        .collect();
+    live.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut census = AxiomCensus {
+        total_live_axioms: live.len(),
+        total_spec_axioms: definitions.values().filter(|def| def.is_axiom).count(),
+        ambient_foundational_axioms: Vec::new(),
+        ambient_trust_markers: Vec::new(),
+        candidates: Vec::new(),
+        setup_errors: Vec::new(),
     };
 
-    // Deterministic order: sort axiom names.
-    let mut axioms: Vec<(&String, &Expr)> = spec
-        .definitions()
-        .values()
-        .filter(|def| def.is_axiom)
-        .filter_map(|def| def.elaborated_type.as_ref().map(|t| (&def.name, t)))
-        .collect();
-    axioms.sort_by(|a, b| a.0.cmp(b.0));
+    // `is_axiom` describes the installed live declaration, while proof status
+    // describes the best candidate known to the promotion pipeline. A
+    // DerivedPending candidate may therefore legitimately sit over either a
+    // live axiom (the candidate has not been installed because it still has
+    // axiom debt) or a value-bearing theorem (whose proof closure has debt).
+    // Reject only terminal contradictions before considering kernel ownership.
+    let mut metadata: Vec<_> = definitions.iter().collect();
+    metadata.sort_by(|a, b| a.0.cmp(b.0));
+    for (key, definition) in metadata {
+        if definition.is_axiom && definition.proof_status == crate::spec::ProofStatus::DerivedProved
+        {
+            census.setup_errors.push(format!(
+                "spec definition {key:?} is marked is_axiom=true but has impossible \
+                 proof_status={}",
+                definition.proof_status
+            ));
+        } else if !definition.is_axiom && definition.proof_status == crate::spec::ProofStatus::Axiom
+        {
+            census.setup_errors.push(format!(
+                "spec definition {key:?} is marked is_axiom=false but has impossible \
+                 proof_status=axiom"
+            ));
+        }
+    }
 
-    for (name, ty) in axioms {
-        report.total_axioms += 1;
-        match evaluate_axiom(spec, name, ty, &battery) {
-            AxiomOutcome::Refuted(r) => {
-                report.evaluated.push(name.clone());
-                report.refutations.push(r);
+    for constant in live {
+        let name = constant.name.to_string();
+        if let Some(expected_kind) = canonical_ambient_axiom_kind(&constant.name) {
+            if definitions.contains_key(&name) {
+                census.setup_errors.push(format!(
+                    "kernel-owned ambient axiom {name:?} must not be claimed by \
+                     SpecDefinition metadata"
+                ));
             }
-            AxiomOutcome::Survived => report.evaluated.push(name.clone()),
+            match env.validate_canonical_ambient_axiom(&constant.name) {
+                Ok(validated_kind) if validated_kind == expected_kind => {}
+                Ok(validated_kind) => census.setup_errors.push(format!(
+                    "kernel-owned ambient axiom {name:?} classified as {validated_kind:?}, \
+                     expected {expected_kind:?}"
+                )),
+                Err(error) => census.setup_errors.push(format!(
+                    "kernel-owned ambient axiom {name:?} failed exact validation: {error}"
+                )),
+            }
+            match expected_kind {
+                CanonicalAmbientAxiomKind::CertificationFoundation => {
+                    census.ambient_foundational_axioms.push(name);
+                }
+                CanonicalAmbientAxiomKind::TrustMarker => {
+                    census.ambient_trust_markers.push(name);
+                }
+            }
+            continue;
+        }
+
+        census
+            .setup_errors
+            .extend(live_axiom_integrity_errors(env, constant));
+        match definitions.get(&name) {
+            Some(definition) => {
+                if definition.name != name {
+                    census.setup_errors.push(format!(
+                        "live axiom {name:?} is stored under matching map key but its \
+                         SpecDefinition.name is {:?}",
+                        definition.name
+                    ));
+                }
+                if !definition.is_axiom {
+                    census.setup_errors.push(format!(
+                        "live kernel axiom {name:?} is backed by a SpecDefinition with \
+                         is_axiom=false"
+                    ));
+                }
+                if definition.value_src.is_some() || definition.elaborated_value.is_some() {
+                    census.setup_errors.push(format!(
+                        "live kernel axiom {name:?} has value/proof metadata in its \
+                         SpecDefinition"
+                    ));
+                }
+                match &definition.elaborated_type {
+                    Some(cached_type) if cached_type == &constant.type_ => {}
+                    Some(_) => census.setup_errors.push(format!(
+                        "live kernel axiom {name:?} has a cached elaborated type that does \
+                         not exactly match the kernel declaration type"
+                    )),
+                    None => census.setup_errors.push(format!(
+                        "live kernel axiom {name:?} is missing its cached elaborated type"
+                    )),
+                }
+                census.candidates.push((name, constant.type_.clone()));
+            }
+            None => {
+                census.setup_errors.push(format!(
+                    "live non-foundational kernel axiom {name:?} has no backing \
+                     SpecDefinition"
+                ));
+                // Still classify the live statement so the coverage report never
+                // silently drops the unexpected axiom.
+                census.candidates.push((name, constant.type_.clone()));
+            }
+        }
+    }
+
+    // The reverse direction closes the old flag-only blind spot: every
+    // spec-marked axiom must lower to exactly one live ConstantKind::Axiom.
+    let mut spec_axioms: Vec<_> = definitions
+        .iter()
+        .filter(|(_, definition)| definition.is_axiom)
+        .collect();
+    spec_axioms.sort_by(|a, b| a.0.cmp(b.0));
+    let mut seen_definition_names = BTreeSet::new();
+    for (key, definition) in spec_axioms {
+        if !seen_definition_names.insert(definition.name.clone()) {
+            census.setup_errors.push(format!(
+                "multiple spec axiom entries claim SpecDefinition.name {:?}",
+                definition.name
+            ));
+        }
+        if key != &definition.name {
+            census.setup_errors.push(format!(
+                "spec axiom map key {key:?} does not match SpecDefinition.name {:?}",
+                definition.name
+            ));
+        }
+        if definition.value_src.is_some() || definition.elaborated_value.is_some() {
+            census.setup_errors.push(format!(
+                "spec axiom {:?} carries value/proof metadata",
+                definition.name
+            ));
+        }
+        match env.get_const(&clean_kernel::Name::from_string(&definition.name)) {
+            Some(constant) if constant.kind == ConstantKind::Axiom => {
+                match &definition.elaborated_type {
+                    Some(cached_type) if cached_type == &constant.type_ => {}
+                    Some(_) => census.setup_errors.push(format!(
+                        "spec axiom {:?} has a cached elaborated type that does not exactly \
+                         match the live kernel axiom type",
+                        definition.name
+                    )),
+                    None => census.setup_errors.push(format!(
+                        "spec axiom {:?} is missing its cached elaborated type",
+                        definition.name
+                    )),
+                }
+            }
+            Some(constant) => census.setup_errors.push(format!(
+                "spec axiom {:?} lowered to kernel kind {:?}, expected ConstantKind::Axiom",
+                definition.name, constant.kind
+            )),
+            None => census.setup_errors.push(format!(
+                "spec axiom {:?} has no live kernel declaration",
+                definition.name
+            )),
+        }
+    }
+
+    census.ambient_foundational_axioms.sort();
+    census.ambient_trust_markers.sort();
+    census.candidates.sort_by(|a, b| a.0.cmp(&b.0));
+    census.setup_errors.sort();
+    census.setup_errors.dedup();
+    census
+}
+
+/// Run the definitional-disagreement gate over a built spec's live axioms.
+///
+/// The kernel environment is the source of truth. The gate cross-checks it
+/// bidirectionally against the spec-definition census before evaluating every
+/// non-ambient live axiom against the live reducible environment.
+#[must_use]
+pub fn run_gate(spec: &Specification) -> GateReport {
+    let census = census_axioms(spec.env(), spec.definitions());
+    let mut report = GateReport {
+        total_live_axioms: census.total_live_axioms,
+        total_spec_axioms: census.total_spec_axioms,
+        ambient_foundational_axioms: census.ambient_foundational_axioms,
+        ambient_trust_markers: census.ambient_trust_markers,
+        evaluated: Vec::new(),
+        excluded: BTreeMap::new(),
+        definitional_disagreements: Vec::new(),
+        setup_errors: census.setup_errors,
+    };
+
+    let battery = match resolve_battery(spec) {
+        Ok(battery) => battery,
+        Err(errors) => {
+            report.setup_errors.extend(
+                errors
+                    .into_iter()
+                    .map(|error| format!("battery setup failed: {error}")),
+            );
+            report.setup_errors.sort();
+            report.setup_errors.dedup();
+            return report;
+        }
+    };
+
+    for (name, ty) in census.candidates {
+        match evaluate_axiom(spec, &name, &ty, &battery) {
+            AxiomOutcome::Disagreed(disagreement) => {
+                report.evaluated.push(name.clone());
+                report.definitional_disagreements.push(disagreement);
+            }
+            AxiomOutcome::AgreedWithinBattery => report.evaluated.push(name.clone()),
             AxiomOutcome::Excluded(reason) => {
                 report.excluded.insert(name.clone(), reason);
             }
@@ -642,50 +1057,50 @@ pub fn run_gate(spec: &Specification) -> GateReport {
     report
 }
 
-/// Evaluate a SINGLE explicit statement (given as a clean `forall …, Eq …` type
-/// source string) against the battery, returning a refutation if one exists.
+/// Evaluate one explicit statement against the battery, returning a witnessed
+/// definitional disagreement if one exists.
 ///
-/// This is the engine the REGRESSION test drives to reconstruct the two retired
-/// FALSE `micro_whnf` statements and demonstrate the gate genuinely refutes them
-/// — it elaborates the supplied type in the live spec env and runs the exact
-/// same kernel evaluation as [`run_gate`]. It is NOT a hardcoded assertion: the
-/// refutation, if any, is a real kernel `is_def_eq` disagreement on a concrete
-/// witness.
+/// The supplied source must elaborate to a `forall …, Eq …` type to be
+/// evaluatable. A returned disagreement records only kernel non-convertibility;
+/// it does not prove propositional inequality.
 ///
 /// Returns:
-/// - `Ok(Ok(Some(Refutation)))` — a witnessed counterexample (statement FALSE).
-/// - `Ok(Ok(None))` — in-scope, no counterexample within the battery budget.
+/// - `Ok(Ok(Some(DefinitionalDisagreement)))` — a witnessed non-convertible pair.
+/// - `Ok(Ok(None))` — in-scope, no disagreement within the battery budget.
 /// - `Ok(Err(reason))` — the statement is out of evaluatable scope (with reason).
 /// - `Err(text)` — elaboration of the statement failed.
 ///
 /// # Errors
 /// Returns `Err(String)` if the supplied `type_src` fails to elaborate in the
 /// spec environment.
-pub fn refute_statement(
+pub fn check_statement_for_definitional_disagreement(
     spec: &Specification,
     name: &str,
     type_src: &str,
-) -> Result<Result<Option<Refutation>, ExclusionReason>, String> {
-    let battery = resolve_battery(spec);
+) -> Result<Result<Option<DefinitionalDisagreement>, ExclusionReason>, String> {
+    let battery = resolve_battery(spec)
+        .map_err(|errors| format!("battery resolution failed: {}", errors.join("; ")))?;
     let elaborated = spec
-        .elaborate_source(type_src, &format!("refute_statement {name}"))
+        .elaborate_source(
+            type_src,
+            &format!("check_statement_for_definitional_disagreement {name}"),
+        )
         .map_err(|e| format!("elaboration of '{name}' failed: {e}"))?;
     match evaluate_axiom(spec, name, &elaborated, &battery) {
-        AxiomOutcome::Refuted(r) => Ok(Ok(Some(r))),
-        AxiomOutcome::Survived => Ok(Ok(None)),
+        AxiomOutcome::Disagreed(disagreement) => Ok(Ok(Some(disagreement))),
+        AxiomOutcome::AgreedWithinBattery => Ok(Ok(None)),
         AxiomOutcome::Excluded(reason) => Ok(Err(reason)),
     }
 }
 
-/// Convenience: build a default spec and run the gate. Intended for an audit
-/// lane / CLI: print `report.report()` and use `report.passed()` as the verdict.
+/// Convenience: build a default spec and run the disagreement gate.
 ///
-/// Fail-closed: `report.passed()` is `false` iff some in-scope computable axiom
-/// was refuted by a concrete witness.
+/// Fail-closed: `report.passed()` is `false` on a definitional disagreement or
+/// any census, metadata, or battery setup error.
 ///
 /// # Errors
 /// Returns `SpecError` if the specification fails to build.
-pub fn audit_axiom_refutation() -> Result<GateReport, crate::spec::SpecError> {
+pub fn audit_axiom_definitional_disagreement() -> Result<GateReport, crate::spec::SpecError> {
     let spec = Specification::new()?;
     Ok(run_gate(&spec))
 }
@@ -693,6 +1108,478 @@ pub fn audit_axiom_refutation() -> Result<GateReport, crate::spec::SpecError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    use clean_kernel::env::TrustedEnvExt;
+    use clean_kernel::{ConstantInfo, Declaration, Name, Reducibility};
+
+    use crate::spec::{AxiomCategory, ProofStatus};
+
+    fn tracked_axiom(name: &str, elaborated_type: Option<Expr>) -> SpecDefinition {
+        SpecDefinition {
+            name: name.to_string(),
+            type_src: "Prop".to_string(),
+            value_src: None,
+            is_axiom: true,
+            category: AxiomCategory::HelperAxiom,
+            proof_status: ProofStatus::Axiom,
+            description: "focused census fixture".to_string(),
+            elaborated_type,
+            elaborated_value: None,
+            dependencies: None,
+            axiom_deps: HashSet::new(),
+        }
+    }
+
+    fn env_with_axiom(name: &str, type_: Expr) -> Environment {
+        let mut env = Environment::new();
+        env.add_decl(Declaration::Axiom {
+            name: Name::from_string(name),
+            level_params: Vec::new(),
+            type_,
+        })
+        .expect("focused axiom declaration should be well formed");
+        env
+    }
+
+    #[test]
+    fn test_kexpr_battery_covers_every_live_constructor() {
+        crate::test_utils::run_with_stack(|| {
+            let spec = Specification::new().expect("spec builds");
+            let resolved = resolve_battery(&spec)
+                .unwrap_or_else(|errors| panic!("battery must resolve: {errors:?}"));
+            let kexpr_terms = resolved.get("KExpr").expect("KExpr battery should exist");
+            let live = spec
+                .env()
+                .get_inductive(&Name::from_string("KExpr"))
+                .expect("KExpr must have live inductive metadata");
+            assert!(
+                !live.constructor_names.is_empty(),
+                "live KExpr must expose constructor metadata"
+            );
+            let missing = missing_live_kexpr_constructors(spec.env(), kexpr_terms)
+                .expect("live KExpr metadata should be available");
+            assert!(
+                missing.is_empty(),
+                "KExpr battery misses live constructors: {missing:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn test_stuck_head_uses_live_constructor_metadata_not_namespace_prefixes() {
+        let mut env = Environment::new();
+        env.init_nat().expect("Nat should initialize");
+        let ordinary_nat_name = Name::from_string("Nat.notAConstructor");
+        env.add_decl(Declaration::Axiom {
+            name: ordinary_nat_name.clone(),
+            level_params: Vec::new(),
+            type_: Expr::const_str("Nat"),
+        })
+        .expect("ordinary Nat-namespaced constant should register");
+
+        assert!(
+            env.get_constructor(&ordinary_nat_name).is_none(),
+            "fixture must be an ordinary constant, not constructor metadata"
+        );
+        assert_eq!(
+            stuck_head(&env, &Expr::const_(ordinary_nat_name, Vec::new())),
+            Some("Nat.notAConstructor".to_string()),
+            "a Nat.* namespace prefix must not masquerade as a value"
+        );
+        assert_eq!(
+            stuck_head(&env, &Expr::const_str("Nat.zero")),
+            None,
+            "the live Nat.zero constructor is a ground value"
+        );
+    }
+
+    #[test]
+    fn test_gate_report_rejects_setup_errors() {
+        let report = GateReport {
+            total_live_axioms: 0,
+            total_spec_axioms: 0,
+            ambient_foundational_axioms: Vec::new(),
+            ambient_trust_markers: Vec::new(),
+            evaluated: Vec::new(),
+            excluded: BTreeMap::new(),
+            definitional_disagreements: Vec::new(),
+            setup_errors: vec!["malformed sample".to_string()],
+        };
+        assert!(!report.passed(), "setup errors must fail the gate closed");
+    }
+
+    #[test]
+    fn test_gate_report_rejects_incomplete_live_coverage() {
+        let report = GateReport {
+            total_live_axioms: 1,
+            total_spec_axioms: 0,
+            ambient_foundational_axioms: Vec::new(),
+            ambient_trust_markers: Vec::new(),
+            evaluated: Vec::new(),
+            excluded: BTreeMap::new(),
+            definitional_disagreements: Vec::new(),
+            setup_errors: Vec::new(),
+        };
+        assert!(!report.coverage_complete());
+        assert!(
+            !report.passed(),
+            "an unaccounted live kernel axiom must fail the gate closed"
+        );
+    }
+
+    #[test]
+    fn test_census_missing_cached_type_fails_closed() {
+        let env = env_with_axiom("GateFixture.missingType", Expr::prop());
+        let definitions = HashMap::from([(
+            "GateFixture.missingType".to_string(),
+            tracked_axiom("GateFixture.missingType", None),
+        )]);
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census
+                .setup_errors
+                .iter()
+                .any(|error| error.contains("missing its cached elaborated type")),
+            "missing cached type must be a fatal census error: {:?}",
+            census.setup_errors
+        );
+        assert!(
+            census
+                .candidates
+                .iter()
+                .any(|(name, _)| name == "GateFixture.missingType"),
+            "the malformed live axiom must still be classified, not filtered away"
+        );
+    }
+
+    #[test]
+    fn test_census_untracked_live_domain_axiom_fails_closed() {
+        let env = env_with_axiom("GateFixture.envOnly", Expr::prop());
+        let census = census_axioms(&env, &HashMap::new());
+        assert!(
+            census
+                .setup_errors
+                .iter()
+                .any(|error| error.contains("GateFixture.envOnly")
+                    && error.contains("no backing SpecDefinition")),
+            "unexpected environment-only domain axiom must fail closed: {:?}",
+            census.setup_errors
+        );
+        assert!(
+            census
+                .candidates
+                .iter()
+                .any(|(name, _)| name == "GateFixture.envOnly"),
+            "unexpected live axiom must remain in the evaluation census"
+        );
+    }
+
+    #[test]
+    fn test_census_type_mismatch_fails_closed() {
+        let env = env_with_axiom("GateFixture.typeMismatch", Expr::prop());
+        let definitions = HashMap::from([(
+            "GateFixture.typeMismatch".to_string(),
+            tracked_axiom(
+                "GateFixture.typeMismatch",
+                Some(Expr::sort(clean_kernel::Level::succ(
+                    clean_kernel::Level::zero(),
+                ))),
+            ),
+        )]);
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census
+                .setup_errors
+                .iter()
+                .any(|error| error.contains("does not exactly match the kernel declaration type")),
+            "cached/live type mismatch must fail closed: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_live_axiom_with_non_axiom_spec_flag_fails_closed() {
+        let env = env_with_axiom("GateFixture.flagMismatch", Expr::prop());
+        let mut definition = tracked_axiom("GateFixture.flagMismatch", Some(Expr::prop()));
+        definition.is_axiom = false;
+        let definitions = HashMap::from([("GateFixture.flagMismatch".to_string(), definition)]);
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census
+                .setup_errors
+                .iter()
+                .any(|error| error.contains("is_axiom=false")),
+            "live kind/spec flag mismatch must fail closed: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_rejects_impossible_proof_status_metadata() {
+        let name = "GateFixture.statusMismatch";
+        let env = env_with_axiom(name, Expr::prop());
+        let mut definition = tracked_axiom(name, Some(Expr::prop()));
+        definition.proof_status = ProofStatus::DerivedProved;
+        let definitions = HashMap::from([(name.to_string(), definition)]);
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census.setup_errors.iter().any(|error| {
+                error.contains("is_axiom=true") && error.contains("proof_status=proved")
+            }),
+            "a live axiom cannot carry a proved proof status: {:?}",
+            census.setup_errors
+        );
+
+        let mut non_axiom = tracked_axiom("GateFixture.inverseStatus", None);
+        non_axiom.is_axiom = false;
+        let inverse = census_axioms(
+            &Environment::new(),
+            &HashMap::from([(non_axiom.name.clone(), non_axiom)]),
+        );
+        assert!(
+            inverse.setup_errors.iter().any(|error| {
+                error.contains("is_axiom=false") && error.contains("proof_status=axiom")
+            }),
+            "a non-axiom cannot carry axiom proof status: {:?}",
+            inverse.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_accepts_pending_candidate_over_live_axiom() {
+        let name = "GateFixture.pendingCandidate";
+        let env = env_with_axiom(name, Expr::prop());
+        let mut definition = tracked_axiom(name, Some(Expr::prop()));
+        definition.proof_status = ProofStatus::DerivedPending;
+        definition.axiom_deps =
+            HashSet::from(["GateFixture.pendingCandidateDependency".to_string()]);
+        let definitions = HashMap::from([(name.to_string(), definition)]);
+
+        let census = census_axioms(&env, &definitions);
+
+        assert!(
+            census.setup_errors.is_empty(),
+            "a pending proof candidate may remain uninstalled over a live axiom: {:?}",
+            census.setup_errors
+        );
+        assert_eq!(
+            census.candidates,
+            vec![(name.to_string(), Expr::prop())],
+            "the live axiom must remain in the executable gate census"
+        );
+    }
+
+    #[test]
+    fn test_census_rejects_counterfeit_ambient_signature() {
+        let mut env = Environment::new();
+        env.add_decl(Declaration::Axiom {
+            name: Name::from_string("propext"),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+        })
+        .expect("well-formed counterfeit foundation");
+
+        let census = census_axioms(&env, &HashMap::new());
+        assert!(
+            census.setup_errors.iter().any(|error| {
+                error.contains("propext")
+                    && error.contains("failed exact validation")
+                    && error.contains("statement differs")
+            }),
+            "ambient names require exact canonical signatures: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_rejects_ambient_without_live_provenance() {
+        let encoded = Environment::new()
+            .to_bincode()
+            .expect("serialize focused ambient environment");
+        let env =
+            Environment::from_bincode(&encoded).expect("deserialize focused ambient environment");
+
+        let census = census_axioms(&env, &HashMap::new());
+        assert!(
+            census.setup_errors.iter().any(|error| {
+                error.contains("\"sorry\"") && error.contains("FullKernelCheck provenance")
+            }),
+            "deserialization must not mint ambient trust authority: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_rejects_value_bearing_live_axiom() {
+        let name = "GateFixture.valueBearing";
+        let mut env = Environment::default();
+        // SOUNDNESS: inside #[cfg(test)] mod tests. Fabricates a deliberately
+        // ill-formed VALUE-BEARING "axiom" that the kernel would refuse to admit,
+        // precisely so the census can be asserted to REJECT it. The bypass is what
+        // makes the negative fixture constructible; it is compiled out of every
+        // non-test build and never touches a trust-bearing environment.
+        env.extend_constants_unchecked(
+            [ConstantInfo::new_with_reducibility(
+                Name::from_string(name),
+                Vec::new(),
+                Expr::prop(),
+                Some(Expr::prop()),
+                Reducibility::Regular(0),
+                ConstantKind::Axiom,
+            )]
+            .into_iter(),
+        );
+        let definitions =
+            HashMap::from([(name.to_string(), tracked_axiom(name, Some(Expr::prop())))]);
+
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census.setup_errors.iter().any(|error| {
+                error.contains(name) && error.contains("carries a value in its kernel payload")
+            }),
+            "an Axiom-kind constant must be value-less: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_rejects_structural_provenance_on_spec_axiom() {
+        let name = "GateFixture.structural";
+        let mut env = Environment::default();
+        // SOUNDNESS: inside #[cfg(test)] mod tests. Admits an axiom via the STRUCTURAL
+        // path specifically to give it structural (non-kernel-checked) provenance, so
+        // the census can be asserted to REJECT that provenance on a spec axiom. The
+        // rejection under test is the whole point; compiled out of non-test builds.
+        env.add_decl_structural(Declaration::Axiom {
+            name: Name::from_string(name),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+        })
+        .expect("structural axiom fixture");
+        let definitions =
+            HashMap::from([(name.to_string(), tracked_axiom(name, Some(Expr::prop())))]);
+
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census.setup_errors.iter().any(|error| {
+                error.contains(name) && error.contains("lacks FullKernelCheck provenance")
+            }),
+            "every spec-owned live axiom needs full kernel provenance: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_census_spec_axiom_lowered_to_definition_fails_closed() {
+        let name = "GateFixture.kindMismatch";
+        let mut env = Environment::new();
+        let sort_one = Expr::sort(clean_kernel::Level::succ(clean_kernel::Level::zero()));
+        env.add_decl(Declaration::Definition {
+            name: Name::from_string(name),
+            level_params: Vec::new(),
+            type_: sort_one.clone(),
+            value: Expr::prop(),
+            is_reducible: true,
+        })
+        .expect("focused definition declaration should be well formed");
+        let definitions = HashMap::from([(name.to_string(), tracked_axiom(name, Some(sort_one)))]);
+        let census = census_axioms(&env, &definitions);
+        assert!(
+            census
+                .setup_errors
+                .iter()
+                .any(|error| error.contains("lowered to kernel kind Definition")),
+            "spec axiom lowered to a non-axiom kind must fail closed: {:?}",
+            census.setup_errors
+        );
+    }
+
+    #[test]
+    fn test_non_def_eq_result_is_named_only_as_definitional_disagreement() {
+        let report = GateReport {
+            total_live_axioms: 1,
+            total_spec_axioms: 1,
+            ambient_foundational_axioms: Vec::new(),
+            ambient_trust_markers: Vec::new(),
+            evaluated: vec!["probe".to_string()],
+            excluded: BTreeMap::new(),
+            definitional_disagreements: vec![DefinitionalDisagreement {
+                axiom: "probe".to_string(),
+                witness: vec!["w".to_string()],
+                lhs_whnf: "Nat.zero".to_string(),
+                rhs_whnf: "Nat.succ Nat.zero".to_string(),
+            }],
+            setup_errors: Vec::new(),
+        };
+        let rendered = report.report();
+        assert!(!report.passed());
+        assert!(rendered.contains("DEFINITIONAL DISAGREEMENT"));
+        assert!(!rendered.contains("REFUTED"));
+        assert!(!rendered.contains("FALSE"));
+    }
+
+    /// The witness renderer must cut on CHARACTER boundaries: slicing the
+    /// `Debug` string at a fixed BYTE offset panics whenever that offset lands
+    /// inside a multi-byte character.
+    ///
+    /// The kernel's `Name` `Debug` truncates each component to 32 characters, so
+    /// a single very long name no longer overruns the budget on its own; the
+    /// fixture nests multi-byte-named constants until the rendering genuinely
+    /// exceeds it. The ASCII head pad (one byte per step) and the application
+    /// nesting depth (four bytes per step) together scan the fixed byte cut
+    /// across a window wider than the rendering's repeat period, and the final
+    /// assertion pins that some iteration really does split a character — the
+    /// case a byte slice panics on.
+    #[test]
+    fn test_format_expr_truncates_unicode_on_char_boundaries() {
+        let unicode_name = format!("GateFixture.{}", "λ".repeat(48));
+        let atom = Expr::const_(Name::from_string(&unicode_name), Vec::new());
+
+        let mut exercised_a_split_character = false;
+        for depth in 6..46usize {
+            for pad in 0..4usize {
+                let mut expr = Expr::const_str(&format!("GateFixture.head{}", "x".repeat(pad)));
+                for _ in 0..depth {
+                    expr = Expr::app(expr, atom.clone());
+                }
+
+                let raw = format!("{expr:?}");
+                assert!(
+                    raw.chars().count() > 240,
+                    "depth {depth} pad {pad}: fixture must exceed the truncation budget, \
+                     got {} chars",
+                    raw.chars().count()
+                );
+                assert!(
+                    raw.contains('λ'),
+                    "depth {depth} pad {pad}: fixture must be multi-byte"
+                );
+                exercised_a_split_character |= !raw.is_char_boundary(240);
+
+                let rendered = format_expr(&expr);
+                assert!(
+                    rendered.ends_with('…'),
+                    "depth {depth} pad {pad}: must be truncated"
+                );
+                assert_eq!(
+                    rendered.chars().count(),
+                    241,
+                    "depth {depth} pad {pad}: 240 characters plus the ellipsis"
+                );
+                let prefix = rendered.trim_end_matches('…');
+                assert!(
+                    raw.starts_with(prefix),
+                    "depth {depth} pad {pad}: the cut must be a character-boundary prefix"
+                );
+            }
+        }
+        assert!(
+            exercised_a_split_character,
+            "the sweep must straddle a multi-byte character at the byte cut, \
+             otherwise it does not regress the panic this renderer avoids"
+        );
+    }
 
     /// `as_eq` recognizes an `Eq`-headed body and rejects non-`Eq` ones, by
     /// elaborating two small statements.
@@ -720,15 +1607,16 @@ mod tests {
         });
     }
 
-    /// A TRUE computable equation survives the battery (no false positive): the
+    /// A computable equation with definitionally equal instances has no
+    /// disagreement in the battery: the
     /// retired-but-now-true single-step beta contract
     /// `micro_whnf (app (lam ty body) arg) = micro_instantiate body arg`
-    /// must NOT be refuted (it is genuinely true).
+    /// must not be rejected by this check.
     #[test]
     fn test_true_single_step_beta_survives() {
         crate::test_utils::run_with_stack(|| {
             let spec = Specification::new().expect("spec builds");
-            let outcome = refute_statement(
+            let outcome = check_statement_for_definitional_disagreement(
                 &spec,
                 "true_single_step_beta",
                 "forall (ty : MicroExpr) (body : MicroExpr) (arg : MicroExpr), \
@@ -737,15 +1625,17 @@ mod tests {
             )
             .expect("elaborates");
             match outcome {
-                Ok(None) => { /* in-scope, survived — correct */ }
-                Ok(Some(r)) => panic!("TRUE equation wrongly refuted: {r:?}"),
-                Err(reason) => panic!("TRUE equation wrongly excluded: {reason:?}"),
+                Ok(None) => { /* in-scope, no disagreement — correct */ }
+                Ok(Some(disagreement)) => {
+                    panic!("definitionally equal equation disagreed: {disagreement:?}")
+                }
+                Err(reason) => panic!("computable equation wrongly excluded: {reason:?}"),
             }
         });
     }
 
-    /// The gate over the live spec PASSES (no currently-admitted computable
-    /// axiom is refuted) and the coverage boundary is reported.
+    /// The gate over the live spec passes and reports the complete live/spec
+    /// census plus its explicit ambient boundary.
     #[test]
     fn test_live_gate_passes_and_reports_coverage() {
         crate::test_utils::run_with_stack(|| {
@@ -754,20 +1644,55 @@ mod tests {
             eprintln!("{}", report.report());
             assert!(
                 report.passed(),
-                "a currently-LIVE computable axiom was REFUTED — this is a real \
-                 soundness finding, not a test flake: {:?}",
-                report.refutations
+                "live disagreement gate failed: disagreements={:?}, setup={:?}",
+                report.definitional_disagreements,
+                report.setup_errors
             );
-            // The boundary must be explicit: every axiom is accounted for as
-            // either evaluated or excluded-with-reason.
+            // Every non-ambient live axiom is evaluated or explicitly excluded.
             assert_eq!(
-                report.total_axioms,
+                report.total_live_axioms
+                    - report.ambient_foundational_axioms.len()
+                    - report.ambient_trust_markers.len(),
                 report.evaluated.len() + report.excluded.len(),
-                "every admitted axiom must be either evaluated or excluded"
+                "every non-ambient live axiom must be evaluated or excluded"
             );
             assert!(
-                report.total_axioms > 0,
-                "the live spec must admit some axioms"
+                report.total_live_axioms > 0,
+                "the live environment must admit some axioms"
+            );
+        });
+    }
+
+    #[test]
+    fn test_full_gate_exercises_a_spec_owned_candidate() {
+        crate::test_utils::run_with_stack(|| {
+            let mut spec = Specification::new().expect("spec builds");
+            let name = "GateFixture.syntheticRefl";
+            spec.add_definition(SpecDefinition {
+                name: name.to_string(),
+                type_src: "Eq Nat Nat.zero Nat.zero".to_string(),
+                value_src: None,
+                is_axiom: true,
+                category: AxiomCategory::HelperAxiom,
+                proof_status: ProofStatus::Axiom,
+                description: "non-vacuous full-gate regression".to_string(),
+                elaborated_type: None,
+                elaborated_value: None,
+                dependencies: None,
+                axiom_deps: HashSet::new(),
+            })
+            .expect("synthetic spec-owned axiom should register");
+
+            let report = run_gate(&spec);
+            assert!(
+                report.passed(),
+                "synthetic full gate failed: {}",
+                report.report()
+            );
+            assert!(
+                report.evaluated.iter().any(|candidate| candidate == name),
+                "the full gate must actually evaluate its spec-owned candidate: {}",
+                report.report()
             );
         });
     }

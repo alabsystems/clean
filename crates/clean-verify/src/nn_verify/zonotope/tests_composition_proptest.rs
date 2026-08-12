@@ -10,7 +10,6 @@
 
 use super::affine_relu::{compare_zonotope_ibp, zonotope_affine_relu, zonotope_forward_pass};
 use super::concrete::ConcreteZonotope;
-use super::relu::zonotope_relu;
 
 const TOL: f64 = 1e-9;
 
@@ -111,11 +110,13 @@ fn relu_vec(x: &[f64]) -> Vec<f64> {
     x.iter().map(|&v| v.max(0.0)).collect()
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
 fn hull_width(z: &ConcreteZonotope) -> Vec<f64> {
     let (lo, hi) = z.to_interval();
     lo.iter().zip(hi.iter()).map(|(&l, &h)| h - l).collect()
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
 fn total_width(z: &ConcreteZonotope) -> f64 {
     hull_width(z).iter().sum()
 }
@@ -525,7 +526,7 @@ fn test_composition_relu_output_non_negative() {
         let (layers, _dims) = random_network(&mut rng, d_in, n_layers);
 
         let z_out = zonotope_forward_pass(&z, &layers);
-        let (lo, _hi) = z_out.to_interval();
+        let (_lo, _hi) = z_out.to_interval();
 
         // The zonotope hull is an overapproximation, so its lower bound can
         // be slightly negative due to ReLU relaxation. But any sampled

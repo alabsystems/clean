@@ -52,6 +52,8 @@ pub enum TokenKind {
     Instance,
     Inductive,
     Coinductive, // Lean 4.25+ coinductive predicates (greatest fixpoint)
+    Codata,      // Rocq-style Type-level codata (observation record, M-type encoded)
+    Codef,       // copattern definition into a codata type (compiles to <C>.corec)
     Deriving,
     Namespace,
     Section,
@@ -332,6 +334,8 @@ impl TokenKind {
             TokenKind::Instance => Some("instance"),
             TokenKind::Inductive => Some("inductive"),
             TokenKind::Coinductive => Some("coinductive"),
+            TokenKind::Codata => Some("codata"),
+            TokenKind::Codef => Some("codef"),
             TokenKind::Deriving => Some("deriving"),
             TokenKind::Namespace => Some("namespace"),
             TokenKind::Section => Some("section"),
@@ -1999,6 +2003,8 @@ impl<'a> Lexer<'a> {
             "instance" => TokenKind::Instance,
             "inductive" => TokenKind::Inductive,
             "coinductive" => TokenKind::Coinductive,
+            "codata" => TokenKind::Codata,
+            "codef" => TokenKind::Codef,
             "deriving" => TokenKind::Deriving,
             "namespace" => TokenKind::Namespace,
             "section" => TokenKind::Section,

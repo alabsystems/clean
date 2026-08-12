@@ -56,7 +56,7 @@ pub(crate) fn register(env: &mut Environment, ctx: &EqCtx) -> Result<(), EnvErro
             ),
             x_var,
         );
-        let r = b.mk_pi(x_id, BinderInfo::Implicit, a_var.clone(), r);
+        let r = b.mk_pi(x_id, BinderInfo::Default, a_var.clone(), r);
         let r = b.mk_pi(a_id, BinderInfo::Implicit, ctx.sort_u.clone(), r);
         b.finish(r)
     };

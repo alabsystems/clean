@@ -20,6 +20,7 @@ pub(crate) struct GoalContext {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct LemmaInfo {
     pub(crate) name: Name,
     pub(crate) type_pretty: String,
@@ -36,9 +37,13 @@ pub(crate) struct VerificationRequest {
 
 #[derive(Debug, Clone)]
 pub(crate) enum VerificationDiagnostic {
-    TypeMismatch { expected: String, inferred: String },
+    TypeMismatch {
+        expected: String,
+        inferred: String,
+    },
     NotAFunction(String),
     UnknownConst(String),
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     InferenceError(String),
     DeclRegistrationError(String),
     Success,
@@ -49,6 +54,7 @@ pub(crate) struct VerificationResult {
     pub(crate) request_name: String,
     pub(crate) accepted: bool,
     pub(crate) diagnostic: VerificationDiagnostic,
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) elapsed_ns: u64,
 }
 

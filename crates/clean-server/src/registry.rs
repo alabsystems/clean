@@ -626,6 +626,37 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
             item_field: None,
         },
     },
+    // Lean 4 editor infoview compatibility endpoints (Part of #1245)
+    MethodInfo {
+        name: "Lean.Widget.getInteractiveDiagnostics",
+        supports_progress: false,
+        batch_safe: true,
+        aliases: &[],
+        outcome_contract: OutcomeContract {
+            top_level_field: None,
+            item_field: None,
+        },
+    },
+    MethodInfo {
+        name: "Lean.Widget.getInteractiveGoals",
+        supports_progress: false,
+        batch_safe: true,
+        aliases: &[],
+        outcome_contract: OutcomeContract {
+            top_level_field: None,
+            item_field: None,
+        },
+    },
+    MethodInfo {
+        name: "getPlainGoal",
+        supports_progress: false,
+        batch_safe: true,
+        aliases: &[],
+        outcome_contract: OutcomeContract {
+            top_level_field: None,
+            item_field: None,
+        },
+    },
     // Widget RPC endpoints for infoview parity (Part of #1193)
     MethodInfo {
         name: "getWidgets",
@@ -760,6 +791,8 @@ mod tests {
 
     /// All canonical method names that appear in dispatch match arms.
     const DISPATCH_METHODS: &[&str] = &[
+        "Lean.Widget.getInteractiveDiagnostics",
+        "Lean.Widget.getInteractiveGoals",
         "Widget_event",
         "addDecl",
         "applyTactic",
@@ -781,6 +814,7 @@ mod tests {
         "getConfig",
         "getEnvironment",
         "getMetrics",
+        "getPlainGoal",
         "getPremises",
         "getProofState",
         "getType",

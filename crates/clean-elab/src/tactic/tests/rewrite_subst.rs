@@ -1294,7 +1294,7 @@ fn test_rewrite_at_with_proof_applied_lemma_rewrites_hyp_and_checks() {
 
     // Proof term `gx x : g x = x` — an application, NOT a bare identifier.
     let gx_x = Expr::app(Expr::const_(Name::from_string("gx"), vec![]), x.clone());
-    crate::tactic::rewrite_at_with_proof(&mut state, gx_x.clone(), "h", false)
+    rewrite_at_with_proof(&mut state, gx_x.clone(), "h", false)
         .expect("rw [gx x] at h should rewrite P (g x) -> P x");
 
     let goal_after = state.current_goal().unwrap().clone();
@@ -1363,7 +1363,7 @@ fn test_rewrite_at_with_proof_reverse_uses_eq_symm_and_checks() {
     let orig_goal = state.current_goal().unwrap().clone();
 
     let gx_x = Expr::app(Expr::const_(Name::from_string("gx"), vec![]), x.clone());
-    crate::tactic::rewrite_at_with_proof(&mut state, gx_x.clone(), "h", true)
+    rewrite_at_with_proof(&mut state, gx_x.clone(), "h", true)
         .expect("rw [← gx x] at h should rewrite P x -> P (g x)");
 
     let goal_after = state.current_goal().unwrap().clone();
@@ -1445,7 +1445,7 @@ fn test_rewrite_at_with_proof_no_match_errors_clean_and_preserves_hyp() {
     );
 
     let proof = Expr::app(Expr::const_(Name::from_string("gx"), vec![]), x.clone());
-    let result = crate::tactic::rewrite_at_with_proof(&mut state, proof, "h", false);
+    let result = rewrite_at_with_proof(&mut state, proof, "h", false);
     assert!(
         matches!(result, Err(TacticError::RewriteNoMatch { .. })),
         "rw [gx x] at h with no occurrence of `g x` in h should be a clean \

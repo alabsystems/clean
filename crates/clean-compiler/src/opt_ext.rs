@@ -19,12 +19,20 @@ use crate::opt::OptConfig;
 /// Errors from the extended optimization module.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OptExtError {
+    // Registry-shaped rejections. `ExtOptConfig::validate` only checks
+    // priorities today; lookup, uniqueness, and non-emptiness are enforced by
+    // `pass_manager_ext` against its own error type, and this enum keeps the
+    // matching contract for when `ExtOptConfig` grows a registry of its own
+    // — 2026-07-31.
+    #[allow(dead_code)]
     #[error("pass `{name}` not found in registry")]
     PassNotFound { name: String },
     #[error("invalid priority {priority} for pass `{name}`: must be > 0")]
     InvalidPriority { name: String, priority: u32 },
+    #[allow(dead_code)]
     #[error("duplicate pass name: `{0}`")]
     DuplicatePass(String),
+    #[allow(dead_code)]
     #[error("empty pipeline: no passes configured")]
     EmptyPipeline,
 }
@@ -253,6 +261,10 @@ pub(crate) fn batch_code_size(decls: &[Decl]) -> usize {
 // ---------------------------------------------------------------------------
 
 /// Result of a single optimization iteration.
+// The per-iteration record for a fixpoint driver. `detect_fixpoint` /
+// `detect_fixpoint_batch` below answer the yes/no question the driver needs,
+// but no driver yet loops and logs these — 2026-07-31.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct IterationResult {
     pub(crate) iteration: u32,
@@ -374,7 +386,12 @@ impl PassConfig {
 pub(crate) struct ExtOptConfig {
     pub(crate) base: OptConfig,
     pub(crate) pass_configs: Vec<PassConfig>,
+    // Knobs for the pipeline driver: emit per-pass timings, and warn when a
+    // pass grows IR by more than this percentage. Both are settable and
+    // defaulted; the driver that reads them is not wired — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) profiling: bool,
+    #[allow(dead_code)]
     pub(crate) bloat_warn_percent: f64,
 }
 

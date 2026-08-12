@@ -130,6 +130,8 @@ mod structure_tests;
 mod suffices_tactic;
 #[path = "tests/tactic_error_boundary.rs"]
 mod tactic_error_boundary;
+#[path = "tests/trans_class.rs"]
+mod trans_class;
 #[path = "tests/traversal_regressions.rs"]
 mod traversal_regressions;
 #[path = "tests/universe_inst.rs"]

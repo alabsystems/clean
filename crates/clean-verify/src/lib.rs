@@ -41,12 +41,11 @@ pub mod artifact;
 /// admitted-axiom names against a checked-in golden so a new admitted axiom
 /// fails closed (subset semantics — drains still pass). See module docs.
 pub mod axiom_ratchet;
-/// Refutation gate for computable / equational admitted axioms: evaluates every
-/// in-scope `forall …, Eq lhs rhs` axiom over a battery of adversarial closed
-/// terms and FAILS on any witnessed counterexample (the truth-check that the
-/// retired FALSE `micro_whnf_beta` / `micro_whnf_idempotent` axioms slipped
-/// past). Complements the name ratchet: the ratchet pins the SET, this checks
-/// the STATEMENTS. See module docs for the honest (refutation-only) scope.
+/// Conservative definitional-disagreement gate for computable / equational
+/// admitted axioms. It evaluates in-scope `forall …, Eq lhs rhs` statements on
+/// adversarial closed terms and rejects a witnessed non-convertible pair. Such a
+/// pair is not, by itself, a proof of propositional inequality; see the module
+/// docs for the exact admission policy and live-census boundary.
 pub mod axiom_refutation_gate;
 pub mod bootstrap;
 pub mod bootstrap_checker;
@@ -55,6 +54,11 @@ pub mod bootstrap_checker;
 /// `crates/clean-verify/src/cli/mod.rs` and Epic #3436 / issue #3511.
 #[cfg(feature = "sat-verify")]
 pub mod cli;
+/// Production constructor for the dependency-scoped EvalIR kernel
+/// environment.  Consumers use this environment to certify literal TrustIR
+/// transition systems against the same `ir_step` semantics exercised by the
+/// crystal witnesses.
+pub mod eval_ir;
 pub mod external_checker;
 pub mod ffi;
 /// Differential model↔kernel fidelity gate: a large-corpus, fail-closed check
@@ -76,6 +80,7 @@ pub mod promotion_report;
 pub mod proof_artifact_v1;
 pub mod proofs;
 pub mod props;
+pub mod qbf_verify;
 pub mod red_env_reflect;
 pub mod research_manifest;
 pub mod sat_verify;
@@ -97,6 +102,12 @@ pub mod test_utils;
 #[cfg(test)]
 mod tmir_case_study;
 pub mod upir;
+/// Vacuity firewall for generated execution relations (crystal job C2): a
+/// kernel-env transitive walker that adds the inductive→constructor edge the
+/// kernel's own `axiom_deps` lacks, and denies any reach from a relation's
+/// constructor fields to `Typing` / `has_type` / `TypingCtx*`. See module docs
+/// for the trap it exists to catch and for what it does NOT check.
+pub mod vacuity_firewall;
 pub mod validate;
 pub mod vc_api;
 pub mod vc_artifact;

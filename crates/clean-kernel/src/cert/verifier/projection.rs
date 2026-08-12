@@ -85,7 +85,9 @@ impl<'env> CertVerifier<'env> {
     ///
     /// Mirrors the logic in `TypeChecker::infer_proj_type_from_impl`
     /// (tc/infer.rs) but uses only verifier-available infrastructure.
-    fn derive_proj_field_type(
+    /// Also used by the equality engine's fail-closed `infer_for_eq`
+    /// (cert/def_eq.rs) to type `Proj` subterms for the type-directed rules.
+    pub(in crate::cert) fn derive_proj_field_type(
         &self,
         struct_name: &Name,
         idx: u32,

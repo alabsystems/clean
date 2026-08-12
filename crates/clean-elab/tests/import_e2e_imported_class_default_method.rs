@@ -78,7 +78,7 @@
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_kernel::env::Environment;
 use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
-use clean_kernel::{BinderInfo, Declaration, Expr, ExprKind, KernelClassInfo, Name, TypeChecker};
+use clean_kernel::{BinderInfo, Declaration, Expr, KernelClassInfo, Name, TypeChecker};
 use clean_parser::parse_file;
 
 fn const_(name: &str) -> Expr {

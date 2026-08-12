@@ -28,7 +28,7 @@
 //! admission goes through a real kernel check; a faithfulness gap is a reported
 //! bug, never a silent pass.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use clean_ck0::rawexpr::{BinderInfo as CkBinderInfo, RawLevel};
 use clean_ck0::{

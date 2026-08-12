@@ -10,7 +10,9 @@
 
 use crate::equivalence::normalize_name;
 use crate::library::MathverseLibrary;
-use crate::types::{ContentDomain, SourceSystem};
+#[cfg(test)]
+use crate::types::ContentDomain;
+use crate::types::SourceSystem;
 
 /// The reason a result was considered similar.
 #[derive(Clone, Debug, PartialEq)]
@@ -233,6 +235,7 @@ fn jaccard_similarity(a: &[String], b: &[String]) -> f64 {
 }
 
 /// Levenshtein edit distance between two strings.
+#[cfg(test)]
 fn edit_distance(a: &str, b: &str) -> usize {
     let mut prev = Vec::new();
     let mut curr = Vec::new();

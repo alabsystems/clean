@@ -283,7 +283,7 @@ fn test_apply_replacements_to_fresh_env() {
     // at all, and every axiom failed type-checking with "Unknown constant:
     // Nat".
     let mut target_env = Environment::default();
-    let init_result = crate::lean4::mathlib_import::load_init_modules(&mut target_env, &lib_path);
+    let init_result = load_init_modules(&mut target_env, &lib_path);
     assert!(
         !init_result.loaded_modules.is_empty(),
         "target env must load at least one Init module before apply_replacements"
@@ -479,7 +479,7 @@ fn test_extended_table_from_init_resolves_more_via_typeclass_instances() {
 
     // Build an Init environment
     let mut env = Environment::default();
-    let result = super::load_init_modules(&mut env, &lib_path);
+    let result = load_init_modules(&mut env, &lib_path);
     if result.loaded_modules.is_empty() {
         eprintln!("Skipping test: Init modules failed to load");
         return;
@@ -529,7 +529,7 @@ fn test_extended_table_stats_sum_to_total() {
     };
 
     let mut env = Environment::default();
-    let result = super::load_init_modules(&mut env, &lib_path);
+    let result = load_init_modules(&mut env, &lib_path);
     if result.loaded_modules.is_empty() {
         return;
     }
@@ -610,7 +610,7 @@ fn test_apply_mathlib_replacements_rat_axioms() {
         return;
     };
 
-    let mathlib_paths = super::find_mathlib_search_paths();
+    let mathlib_paths = find_mathlib_search_paths();
     if mathlib_paths.is_empty() {
         eprintln!("Skipping test: Mathlib not found");
         return;
@@ -618,8 +618,8 @@ fn test_apply_mathlib_replacements_rat_axioms() {
 
     // Load Init + Mathlib.Data.Rat.Basic
     let mut env = Environment::default();
-    let _ = super::load_init_modules(&mut env, &lib_path);
-    let _ = super::load_mathlib_modules(
+    let _ = load_init_modules(&mut env, &lib_path);
+    let _ = load_mathlib_modules(
         &mut env,
         &["Mathlib.Data.Rat.Basic"],
         &lib_path,

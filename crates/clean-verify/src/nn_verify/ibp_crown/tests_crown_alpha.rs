@@ -10,7 +10,7 @@
 use super::crown_alpha::*;
 use super::crown_backward::verify_crown_bounds;
 use super::ibp::Interval;
-use super::tightness::{best_possible_bounds, eval_network};
+use super::tightness::best_possible_bounds;
 use crate::spec::ProofStatus;
 
 const EPS: f64 = 1e-8;

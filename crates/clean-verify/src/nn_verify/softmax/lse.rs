@@ -22,6 +22,12 @@
 //! - Boyd & Vandenberghe, "Convex Optimization" (2004), Section 3.1.5
 //! - Shi et al., "Robustness Verification for Transformers" (ICLR 2020)
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 /// Compute `softmax(x)` with numerical stability via max-shift.
 ///
 /// `softmax(x)_i = exp(x_i - max(x)) / sum_j exp(x_j - max(x))`

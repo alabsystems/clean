@@ -206,6 +206,7 @@ impl NoisePeelConsts {
     }
     /// `@Eq Bool l r`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_bool(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(
             Expr::const_(Name::from_string("Eq"), vec![self.l1.clone()]),

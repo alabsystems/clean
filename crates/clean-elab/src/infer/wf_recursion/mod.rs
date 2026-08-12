@@ -55,8 +55,14 @@
 //!
 //! Reference: Lean 4 `src/Lean/Elab/PreDefinition/WF/`
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod decreasing;
 pub(super) mod encoding;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod equation_lemmas;
 pub(crate) mod mutual;
 pub(super) mod pre_definition;
@@ -119,6 +125,42 @@ impl<'a> ElabCtx<'a> {
         // First, elaborate the full type by processing binders
         let (func_ty, func_body, func_fvar, binder_fvars) =
             self.elab_wf_pre_definition(name, binders, ty, val)?;
+
+        // Phase 1b: FAIL CLOSED on genuine recursion.
+        //
+        // Every recursive call site `f arg` must become `rec arg h` where
+        // `h : measure arg < measure x`. Nothing in this module synthesises
+        // `h`: `transform_rec_calls` rewrites `f ↦ rec` and drops the proof
+        // argument entirely, and the obligation machinery in `decreasing.rs`
+        // has no caller. So for a body that really recurses we cannot build a
+        // correct `WellFounded.fix` term — and we must not emit an incorrect
+        // one and let the kernel reject it with an internal message that names
+        // an implementation constant (`invImage`) instead of the construct the
+        // user wrote.
+        //
+        // SOUNDNESS: this path returns an error. It never emits `sorry`, an
+        // axiom, or an unchecked declaration — a rejected `def` stays rejected.
+        //
+        // A `termination_by` whose recursion is STRUCTURAL never reaches here:
+        // `elab_termination_hints` routes it to the structural path. This
+        // guard therefore only fires for genuinely non-structural recursion,
+        // which is exactly the class that cannot type-check today.
+        if encoding::contains_fvar(&func_body, func_fvar) {
+            // Restore the local context before reporting (LIFO).
+            self.pop_local();
+            for _ in binders {
+                self.pop_local();
+            }
+            return Err(ElabError::Unsupported {
+                feature: format!(
+                    "well-founded recursion for '{name}': `termination_by` with a \
+                     non-structural recursive call. Compiling it requires synthesising \
+                     a decreasing proof `measure(arg) < measure(param)` at each \
+                     recursive call site, which is not implemented. A `termination_by` \
+                     whose recursion is structural is supported."
+                ),
+            });
+        }
 
         // Phase 2: Elaborate the termination measure.
         // The measure expression is elaborated in a context where
@@ -301,7 +343,13 @@ impl<'a> ElabCtx<'a> {
         let measure_lambda = Expr::lam(BinderInfo::Default, first_ty.clone(), measure_body);
 
         // Build WellFoundedRelation via invImage
-        let inv_image = Expr::const_(Name::from_string("invImage"), vec![u_level.clone()]);
+        // `invImage.{u, v} {α : Sort u} {β : Sort v} (f : α → β)
+        //    (h : WellFoundedRelation β) : WellFoundedRelation α`
+        // takes TWO universe params. β is `Nat : Type 0 = Sort 1`, so v = 1.
+        let inv_image = Expr::const_(
+            Name::from_string("invImage"),
+            vec![u_level.clone(), Level::succ(Level::zero())],
+        );
         let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
         let nat_lt_wfrel = Expr::const_(Name::from_string("Nat.lt_wfRel"), vec![]);
         let wfr = Expr::app(inv_image, first_ty.clone());

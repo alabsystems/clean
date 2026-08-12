@@ -17,7 +17,7 @@
 //! Reference: ~/lean4-ref/src/Lean/Elab/Do/BuiltinDo/For.lean
 
 use super::*;
-use clean_kernel::{BinderInfo, Expr, FVarId, Level, Name};
+use clean_kernel::{BinderInfo, Expr, FVarId, Name};
 
 impl<'a> ElabCtx<'a> {
     /// Build the accumulator value for break/continue inside a for-loop.

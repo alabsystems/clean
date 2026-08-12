@@ -38,6 +38,9 @@ impl Default for MutualIndConfig {
 
 /// Info for one type in a mutual block.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct InductiveTypeInfo {
     pub(crate) name: Name,
     pub(crate) type_expr: Expr,
@@ -59,6 +62,9 @@ pub(crate) struct MutualInductiveBlock {
     pub(crate) types: Vec<InductiveTypeInfo>,
     pub(crate) universe_params: Vec<Name>,
     pub(crate) num_params: u32,
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(crate) is_unsafe: bool,
 }
 

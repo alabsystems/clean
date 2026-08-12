@@ -930,7 +930,7 @@ fn foundational_ingest_no_axiom_no_unchecked() {
         .axiom_deps(&KName::from_string(TARGET))
         .expect("checkRefutes3_sound registered")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     domain.sort();
     assert!(
@@ -1010,10 +1010,7 @@ fn faithful_translated_type_matches_clean() {
     // `checkRefutes3` / `initialTrie` / `listLen` in the hypothesis.
     let mut consts: HashSet<KName> = HashSet::new();
     collect_consts(&ci.type_, &mut consts);
-    let strs: HashSet<String> = consts
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
+    let strs: HashSet<String> = consts.iter().map(ToString::to_string).collect();
     for needed in [
         "Clean.Res.resConsistent",
         "Clean.Res.resExclusive",

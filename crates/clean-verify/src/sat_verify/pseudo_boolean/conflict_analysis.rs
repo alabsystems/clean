@@ -9,6 +9,12 @@
 //! constraint is derived by replayable PB proof steps, while local arithmetic
 //! helpers mirror the same transformations to keep the analysis logic simple.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use std::collections::HashMap;
 
 use super::{verify_rule, PbConstraint, PbError, PbFormula, PbRule};
@@ -126,6 +132,7 @@ impl PbTrail {
 
     /// Return the decision level for an assigned variable.
     #[must_use]
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn level_of(&self, var: u32) -> Option<u32> {
         self.trail
             .iter()
@@ -135,6 +142,7 @@ impl PbTrail {
 
     /// Return the trail position for an assigned variable.
     #[must_use]
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn trail_index_of(&self, var: u32) -> Option<usize> {
         self.trail
             .iter()
@@ -248,6 +256,7 @@ impl<'a> PbConflictAnalyzer<'a> {
 
     /// Create a conflict analyzer with explicit rounding policy.
     #[must_use]
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn with_rounding(formula: &'a PbFormula, use_rounding: bool) -> Self {
         Self {
             formula,

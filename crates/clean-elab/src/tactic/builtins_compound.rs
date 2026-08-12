@@ -472,8 +472,21 @@ fn name_prefix_match(goal_tag: &str, tag: &str) -> bool {
 /// auto-generated hypotheses are ignored (matching the lenient positional
 /// renaming used by `eval_induction_alts`). Operates on `ps.goals[0]` (the goal
 /// already focused by the `case` handler); a no-op when there is no focused goal.
-fn rename_case_binders(ps: &mut ProofState, binders: &[String]) {
-    let Some(goal) = ps.goals.front_mut() else {
+///
+/// The focused goal is taken through [`ProofState::current_goal_mut`], not
+/// `ps.goals.front_mut()`, so the context mutation goes through the accessor
+/// that invalidates the TypeChecker cache — the invariant every other
+/// context-mutating tactic in this crate follows.
+///
+/// Scope, stated honestly: today this rename is name-only, and `TcCaches` is
+/// keyed by `Expr`/`FVarId` (+ transparency), neither of which a rename
+/// changes, while `build_local_ctx` re-reads the names on every `with_tc` call.
+/// So no cached answer is actually stale — this restores the invariant rather
+/// than fixing an observed miscomputation. It stops being free the moment this
+/// function does anything more than rename (change a type, insert or drop a
+/// decl), which is exactly when a silent stale-cache bug would appear.
+pub(crate) fn rename_case_binders(ps: &mut ProofState, binders: &[String]) {
+    let Some(goal) = ps.current_goal_mut() else {
         return;
     };
     let goal_tag = goal.tag.clone().unwrap_or_default();

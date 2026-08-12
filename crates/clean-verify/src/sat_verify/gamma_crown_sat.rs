@@ -1013,7 +1013,7 @@ mod tests {
         // Then add a "violation" clause: force neuron 1 into a contradictory
         // state: q1 ∧ r1 (both active and inactive simultaneously).
         // The full formula should be UNSAT.
-        let mut clauses = vec![
+        let clauses = vec![
             // Neuron 1 obligation
             vec![-1, 2],  // ¬p1 ∨ q1
             vec![1, 3],   // p1 ∨ r1

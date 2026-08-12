@@ -405,38 +405,54 @@ async fn test_import_module_nonexistent() {
     );
 }
 
-fn get_lean_lib_path() -> std::path::PathBuf {
-    clean_olean::default_search_paths()
-        .into_iter()
-        .find(|path| path.join("Init/Prelude.olean").exists())
-        .unwrap_or_else(|| panic!("expected Lean 4 Init/Prelude.olean in default search paths"))
-}
-
 #[tokio::test]
 async fn test_import_module_success_adds_constants_to_environment() {
-    use clean_kernel::Name;
+    use clean_kernel::{Declaration, Expr, Name};
 
-    let lib_path = get_lean_lib_path();
+    // Build a dependency-free module in a temporary search root so this RPC
+    // integration test is deterministic even when no external Lean toolchain
+    // is installed. The clean-olean crate separately tests real checked-in
+    // Lean fixtures and dependency traversal.
+    let fixture_root = tempfile::tempdir().expect("create import-module fixture directory");
+    let fixture_name = Name::from_string("ServerFixture.imported");
+    let mut fixture_env = clean_kernel::Environment::default();
+    fixture_env.add_decl_unchecked(Declaration::Axiom {
+        name: fixture_name.clone(),
+        level_params: vec![],
+        type_: Expr::prop(),
+    });
+    let fixture_bytes = clean_olean::OleanExporter::export_with_env(
+        &fixture_env,
+        &[],
+        &[],
+        "c0de000000000000000000000000000000000001",
+    )
+    .expect("export import-module fixture");
+    std::fs::write(
+        fixture_root.path().join("ServerFixture.olean"),
+        fixture_bytes,
+    )
+    .expect("write import-module fixture");
 
     let state = ServerState::new();
     let baseline_constants = {
         let env = state.env.read().await;
         assert!(
-            env.get_const(&Name::from_string("Nat.zero")).is_none(),
-            "Nat.zero should not be present before importing Init.Prelude"
+            env.get_const(&fixture_name).is_none(),
+            "fixture declaration should not be present before import"
         );
         env.num_constants()
     };
 
     let params = ImportModuleParams {
-        module: "Init.Prelude".to_string(),
-        search_paths: vec![lib_path.to_string_lossy().to_string()],
+        module: "ServerFixture".to_string(),
+        search_paths: vec![fixture_root.path().to_string_lossy().to_string()],
     };
 
     let response = handle_import_module(&state, RequestId::Number(2), params).await;
     assert!(
         response.error.is_none(),
-        "importModule should succeed for Init.Prelude, got: {:?}",
+        "importModule should succeed for the generated fixture, got: {:?}",
         response.error
     );
 
@@ -451,13 +467,13 @@ async fn test_import_module_success_adds_constants_to_environment() {
         result
             .modules_loaded
             .iter()
-            .any(|module| module == "Init.Prelude"),
-        "expected Init.Prelude in loaded modules, got: {:?}",
+            .any(|module| module == "ServerFixture"),
+        "expected ServerFixture in loaded modules, got: {:?}",
         result.modules_loaded
     );
     assert!(
         result.constants_added > 0,
-        "expected Init.Prelude import to add constants, got {}",
+        "expected fixture import to add constants, got {}",
         result.constants_added
     );
 
@@ -469,8 +485,8 @@ async fn test_import_module_success_adds_constants_to_environment() {
         env.num_constants()
     );
     assert!(
-        env.get_const(&Name::from_string("Nat.zero")).is_some(),
-        "Nat.zero should be queryable after importing Init.Prelude"
+        env.get_const(&fixture_name).is_some(),
+        "fixture declaration should be queryable after import"
     );
 }
 

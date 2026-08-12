@@ -10,14 +10,11 @@
 //! Int instances are in algebra_basic_instances_int.rs.
 //! Split from algebra_basic.rs for #307.
 
-use crate::env::Environment;
-#[cfg(test)]
-use crate::env::{Declaration, EnvError};
-#[cfg(test)]
+use crate::env::{
+    Declaration, EnvError, Environment, KernelInstanceInfo, LEAN_DEFAULT_INSTANCE_PRIORITY,
+};
 use crate::expr::Expr;
-#[cfg(test)]
 use crate::level::Level;
-#[cfg(test)]
 use crate::name::Name;
 
 impl Environment {
@@ -131,8 +128,17 @@ impl Environment {
     /// ENSURES: On success, `self.nat_add_inst_init == true`
     /// ENSURES: On success, required dependencies (`add`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
-    #[cfg(test)]
     pub(crate) fn init_nat_add_inst(&mut self) -> Result<(), EnvError> {
+        // IMPORT MODE (`suppress_lossy_structure_stubs`): `instAddNat` wraps
+        // the import-gated `Nat.add` seed (Nat core arithmetic cluster, see
+        // data_types_nat.rs::init_nat), so the instance is gated with it —
+        // the same discipline as `init_nat_hadd_inst`. Imported oleans carry
+        // Lean's genuine `instAddNat`. SOUNDNESS: withholds a Clean-native
+        // seed in the import-only prelude; default lane byte-identical.
+        if self.suppress_lossy_structure_stubs {
+            self.nat_add_inst_init = true;
+            return Ok(());
+        }
         if self.nat_add_inst_init {
             return Ok(());
         }
@@ -160,6 +166,25 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // Register with the kernel instance table so a direct `Add.add a b`
+        // over `Nat` resolves its `[Add Nat]` argument instead of failing
+        // synthesis (mirrors `instNegInt`). The heterogeneous `instHAddNat`
+        // chain only covers the `a + b` spelling.
+        self.register_instance(KernelInstanceInfo {
+            name: Name::from_string("instAddNat"),
+            class_name: Name::from_string("Add"),
+            // Lean's default for an unannotated `instance` is 1000, NOT
+            // Clean's DEFAULT_INSTANCE_PRIORITY (100 = Lean's `low`, reserved
+            // for GUESSED priorities so a fabrication ranks below a real
+            // registration). These three mirror real Lean instances, so their
+            // priority is known — using 100 is exactly the defect
+            // data/prelude_instance_priority_census.json measures, and it
+            // caught this one (3 mismatched rows).
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
+            type_: None,
+            value: None,
+        });
+
         self.nat_add_inst_init = true;
         Ok(())
     }
@@ -178,8 +203,17 @@ impl Environment {
     /// ENSURES: On success, `self.nat_mul_inst_init == true`
     /// ENSURES: On success, required dependencies (`mul`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
-    #[cfg(test)]
     pub(crate) fn init_nat_mul_inst(&mut self) -> Result<(), EnvError> {
+        // IMPORT MODE (`suppress_lossy_structure_stubs`): `instMulNat` wraps
+        // the import-gated `Nat.mul` seed (Nat core arithmetic cluster, see
+        // data_types_nat.rs::init_nat), so the instance is gated with it —
+        // the same discipline as `init_nat_hadd_inst`. Imported oleans carry
+        // Lean's genuine `instMulNat`. SOUNDNESS: withholds a Clean-native
+        // seed in the import-only prelude; default lane byte-identical.
+        if self.suppress_lossy_structure_stubs {
+            self.nat_mul_inst_init = true;
+            return Ok(());
+        }
         if self.nat_mul_inst_init {
             return Ok(());
         }
@@ -207,6 +241,25 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // Register with the kernel instance table so a direct `Mul.mul a b`
+        // over `Nat` resolves its `[Mul Nat]` argument instead of failing
+        // synthesis (mirrors `instNegInt`). The heterogeneous `instHAddNat`
+        // chain only covers the `a + b` spelling.
+        self.register_instance(KernelInstanceInfo {
+            name: Name::from_string("instMulNat"),
+            class_name: Name::from_string("Mul"),
+            // Lean's default for an unannotated `instance` is 1000, NOT
+            // Clean's DEFAULT_INSTANCE_PRIORITY (100 = Lean's `low`, reserved
+            // for GUESSED priorities so a fabrication ranks below a real
+            // registration). These three mirror real Lean instances, so their
+            // priority is known — using 100 is exactly the defect
+            // data/prelude_instance_priority_census.json measures, and it
+            // caught this one (3 mismatched rows).
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
+            type_: None,
+            value: None,
+        });
+
         self.nat_mul_inst_init = true;
         Ok(())
     }
@@ -225,8 +278,17 @@ impl Environment {
     /// ENSURES: On success, `self.nat_sub_inst_init == true`
     /// ENSURES: On success, required dependencies (`sub`, `nat`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
-    #[cfg(test)]
     pub(crate) fn init_nat_sub_inst(&mut self) -> Result<(), EnvError> {
+        // IMPORT MODE (`suppress_lossy_structure_stubs`): `instSubNat` wraps
+        // the import-gated `Nat.sub` seed (Nat core arithmetic cluster, see
+        // data_types_nat.rs::init_nat), so the instance is gated with it —
+        // the same discipline as `init_nat_hadd_inst`. Imported oleans carry
+        // Lean's genuine `instSubNat`. SOUNDNESS: withholds a Clean-native
+        // seed in the import-only prelude; default lane byte-identical.
+        if self.suppress_lossy_structure_stubs {
+            self.nat_sub_inst_init = true;
+            return Ok(());
+        }
         if self.nat_sub_inst_init {
             return Ok(());
         }
@@ -253,6 +315,25 @@ impl Environment {
             value: inst_value,
             is_reducible: true,
         })?;
+
+        // Register with the kernel instance table so a direct `Sub.sub a b`
+        // over `Nat` resolves its `[Sub Nat]` argument instead of failing
+        // synthesis (mirrors `instNegInt`). The heterogeneous `instHAddNat`
+        // chain only covers the `a + b` spelling.
+        self.register_instance(KernelInstanceInfo {
+            name: Name::from_string("instSubNat"),
+            class_name: Name::from_string("Sub"),
+            // Lean's default for an unannotated `instance` is 1000, NOT
+            // Clean's DEFAULT_INSTANCE_PRIORITY (100 = Lean's `low`, reserved
+            // for GUESSED priorities so a fabrication ranks below a real
+            // registration). These three mirror real Lean instances, so their
+            // priority is known — using 100 is exactly the defect
+            // data/prelude_instance_priority_census.json measures, and it
+            // caught this one (3 mismatched rows).
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
+            type_: None,
+            value: None,
+        });
 
         self.nat_sub_inst_init = true;
         Ok(())

@@ -43,6 +43,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for `IsCauchy_mul`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct IsCauchyMulConsts {
     nat: Expr,
     rat: Expr,
@@ -98,6 +99,7 @@ pub(crate) struct IsCauchyMulConsts {
     congr_arg: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl IsCauchyMulConsts {
     pub(crate) fn new() -> Self {
         let lvl1 = Level::succ(Level::zero());

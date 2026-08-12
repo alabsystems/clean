@@ -455,7 +455,7 @@ mod tests {
     /// This guards against future regressions of audit item 1.
     #[test]
     fn test_parse_real_mathlib_fixture() {
-        let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join("fixtures")
             .join("lake-manifest-v1_2_0.json");

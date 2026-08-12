@@ -876,8 +876,9 @@ fn build_constant_info_region(wrapper_tag: u8, val_other: u8) -> (Vec<u8>, u64) 
     // load-bearing as long as it is large enough.
     let mut data = vec![0u8; 1024];
 
-    let write_header = |data: &mut [u8], off: usize, other: u8, tag: u8| {
+    let write_header = |data: &mut [u8], off: usize, cs_sz: u16, other: u8, tag: u8| {
         // rc(4) + cs_sz(2) + other(1) + tag(1)
+        data[off + 4..off + 6].copy_from_slice(&cs_sz.to_le_bytes());
         data[off + 6] = other;
         data[off + 7] = tag;
     };
@@ -894,7 +895,7 @@ fn build_constant_info_region(wrapper_tag: u8, val_other: u8) -> (Vec<u8>, u64) 
     let cval_off = val_off + 8 + 9 * 8; // 144
 
     // 1-element ConstantInfo array.
-    write_header(&mut data, array_off, 0, crate::region::tags::ARRAY);
+    write_header(&mut data, array_off, 0, 0, crate::region::tags::ARRAY);
     put_u64(&mut data, array_off + 8, 1); // size
     put_u64(&mut data, array_off + 16, 1); // capacity
     put_u64(
@@ -904,20 +905,27 @@ fn build_constant_info_region(wrapper_tag: u8, val_other: u8) -> (Vec<u8>, u64) 
     );
 
     // ConstantInfo wrapper (1 field -> XxxVal).
-    write_header(&mut data, wrapper_off, 1, wrapper_tag);
+    write_header(&mut data, wrapper_off, 0, 1, wrapper_tag);
     put_u64(&mut data, wrapper_off + 8, CONST_TEST_BASE + val_off as u64);
 
     // XxxVal: header advertises `val_other` slots. Slot +8 -> ConstantVal ptr;
     // remaining slots are nil-list (scalar 1) so list reads yield empty and
     // scalar reads yield 0/false.
-    write_header(&mut data, val_off, val_other, 0);
+    let val_cs_sz = match (wrapper_tag, val_other) {
+        (0, 1) => 24,
+        (5, 6) => 64,
+        (6, 5) => 56,
+        (7, 7) => 72,
+        _ => 0,
+    };
+    write_header(&mut data, val_off, val_cs_sz, val_other, 0);
     put_u64(&mut data, val_off + 8, CONST_TEST_BASE + cval_off as u64);
     for slot in 1..=9usize {
         put_u64(&mut data, val_off + 8 + slot * 8, 1); // nil list / scalar 0
     }
 
     // ConstantVal base (name, levelParams, type).
-    write_header(&mut data, cval_off, 3, 0);
+    write_header(&mut data, cval_off, 0, 3, 0);
     put_u64(&mut data, cval_off + 8, 1); // name = anonymous (scalar)
     put_u64(&mut data, cval_off + 16, 1); // levelParams = nil
     put_u64(&mut data, cval_off + 24, 1); // type = scalar (=> None)
@@ -963,18 +971,21 @@ fn test_read_recursor_val_real_field_count_parses() {
     assert!(rec.rules.is_empty(), "nil rules list decodes to empty");
 }
 
-/// A `RecursorVal` declaring exactly its three boxed pointers (the guard's
-/// minimum) parses; the boundary value must not be rejected.
+/// A `RecursorVal` declaring only the old pointer-reader minimum is rejected by
+/// the stricter authority layout gate: it cannot supply the exact `isUnsafe`
+/// representation and therefore must not be treated as safe.
 #[test]
-fn test_read_recursor_val_minimum_field_count_parses() {
+fn test_read_recursor_val_minimum_field_count_fails_authority_gate() {
     let (data, array_ptr) = build_constant_info_region(7, 3);
     let region = CompactedRegion::new(&data, CONST_TEST_BASE);
-    let constants = region
+    let err = region
         .read_constant_array_v2(array_ptr)
-        .expect("RecursorVal at the boxed-field minimum must parse");
-    assert_eq!(constants.len(), 1);
-    assert_eq!(constants[0].kind, ConstantKind::Recursor);
-    assert!(constants[0].recursor_val.is_some());
+        .expect_err("RecursorVal without an exact Bool layout must fail closed");
+    assert!(
+        matches!(&err, crate::error::OleanError::Region(msg)
+            if msg.contains("RecursorVal Bool layout")),
+        "expected authority-layout Region error, got {err:?}"
+    );
 }
 
 /// `ConstructorVal` dereferences two boxed pointers (`toConstantVal`,
@@ -1098,4 +1109,19 @@ fn test_read_axiom_val_minimum_field_count_parses() {
         .expect("AxiomVal at the boxed-field minimum must parse");
     assert_eq!(constants.len(), 1);
     assert_eq!(constants[0].kind, ConstantKind::Axiom);
+    assert_eq!(
+        constants[0].definition_safety,
+        Some(DefinitionSafety::Unsafe),
+        "the synthetic raw Bool byte is 1 and must decode as unsafe"
+    );
+}
+
+#[test]
+fn test_unknown_constant_info_wrapper_tag_fails_closed() {
+    let (data, array_ptr) = build_constant_info_region(8, 1);
+    let region = CompactedRegion::new(&data, CONST_TEST_BASE);
+    assert!(matches!(
+        region.read_constant_array_v2(array_ptr),
+        Err(crate::error::OleanError::InvalidObjectTag { tag: 8, .. })
+    ));
 }

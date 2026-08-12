@@ -58,7 +58,7 @@ use clean_kernel::level::Level;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, FVarId};
 
-use super::arith_linarith_chain::{detect_sort, extract_le_args_full, CmpOp};
+use super::arith_linarith_chain::{detect_sort, extract_le_args_full};
 use super::arith_linarith_close::try_close_contradictory_le_generic;
 use super::arith_linarith_proof::find_hyp_type;
 use super::arith_linarith_scale::SortLeAcc;
@@ -548,6 +548,9 @@ fn linear_diff(lhs: &Expr, rhs: &Expr) -> Option<NatDiff> {
 
 struct NatDiff {
     coeffs: std::collections::HashMap<Expr, i128>,
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     constant: i128,
 }
 

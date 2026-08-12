@@ -310,6 +310,9 @@ fn default_registry() -> Vec<PatternRegistryEntry> {
 /// Result of a successful `nn_verify` invocation, recording which pattern
 /// and sub-tactic closed the goal.
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct NnVerifyResult {
     /// Name of the matched pattern (or "auto_cascade" for fallback).
     pub(crate) pattern: String,
@@ -369,6 +372,9 @@ pub fn nn_verify(state: &mut ProofState) -> TacticResult {
 ///
 /// REQUIRES: `state.goals` is non-empty.
 /// ENSURES: Same as `nn_verify`, plus returns the pattern name on success.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn nn_verify_with_info(state: &mut ProofState) -> Result<NnVerifyResult, TacticError> {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);

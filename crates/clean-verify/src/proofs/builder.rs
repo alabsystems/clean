@@ -27,6 +27,12 @@
 //! The builder automatically resolves `var("x")` to `bvar(0)` and
 //! `var("A")` to `bvar(1)` based on binding depth.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use clean_kernel::{BinderInfo, Expr, Level, Name};
 
 /// Builder for constructing proof term `Expr` trees with automatic
@@ -56,6 +62,7 @@ impl ProofBuilder {
     }
 
     /// Sort expression from a universe level.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn sort(&self, level: Level) -> Expr {
         Expr::sort(level)
     }
@@ -76,6 +83,7 @@ impl ProofBuilder {
     }
 
     /// Constant reference with explicit universe levels.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn const_levels(&self, name: &str, levels: Vec<Level>) -> Expr {
         Expr::const_str_levels(name, levels)
     }
@@ -226,6 +234,7 @@ impl ProofBuilder {
     /// `@congrArg alpha beta f a b proof` -- congruence in the argument position.
     ///
     /// Given `proof : a = b`, produces `f a = f b`.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn congr_arg(
         &self,
         alpha: Expr,
@@ -239,6 +248,7 @@ impl ProofBuilder {
     }
 
     /// `@Nat.rec motive zero_case succ_case n` -- Nat recursor application.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn nat_rec(&self, motive: Expr, zero_case: Expr, succ_case: Expr, n: Expr) -> Expr {
         Expr::apps(
             self.const_expr("Nat.rec"),
@@ -247,6 +257,7 @@ impl ProofBuilder {
     }
 
     /// `@Bool.casesOn motive b true_case false_case` -- Bool case split.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn bool_cases(
         &self,
         motive: Expr,

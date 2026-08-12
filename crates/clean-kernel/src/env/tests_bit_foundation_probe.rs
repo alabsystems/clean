@@ -164,7 +164,7 @@ fn fixf_iota_reduces_on_acc_intro() {
     };
     // acc0 := Acc.intro {Nat} emptyRel 0 (fun y (p : emptyRel y 0) => False.elim (Acc emptyRel y) p)
     let acc0 = {
-        let mut b = EnvDeclBuilder::new();
+        let b = EnvDeclBuilder::new();
         let h = {
             let mut s = EnvDeclBuilder::child_of(&b);
             let (y_id, y) = s.fresh_local(nat.clone());

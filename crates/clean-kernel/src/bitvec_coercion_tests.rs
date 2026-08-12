@@ -101,7 +101,7 @@ fn domain_axioms(env: &Environment, name: &str) -> Vec<String> {
         .axiom_deps(&Name::from_string(name))
         .unwrap_or_else(|| panic!("{name} should be registered"))
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     v.sort();
     v
@@ -449,7 +449,7 @@ fn test_bvshifts_are_faithful_real_shifts() {
 #[test]
 fn test_beq_is_zero_bridge_wrong_no_bvnot_is_rejected() {
     use crate::env::decl_builder::EnvDeclBuilder;
-    use crate::expr::BinderInfo;
+
     let mut env = env();
     let bt = Expr::const_str("Bool.true");
     let cons = |h: Expr, t: Expr| {
@@ -967,7 +967,7 @@ fn test_bvult_computes_real_unsigned_lt() {
     // GENUINELY-COMPUTING check: bvUlt [false,true] [true,false] (LSB-first: 2 vs 1)
     // should be FALSE (2 < 1 is false); bvUlt [true,false] [false,true] (1 vs 2) TRUE.
     let env = env();
-    let tc = crate::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     let bt = Expr::const_str("Bool.true");
     let bf = Expr::const_str("Bool.false");
     let cons = |h: Expr, t: Expr| {
@@ -1029,7 +1029,7 @@ fn test_bvsltreal_computes_real_signed_lt() {
     //  [true,true,true] = -1 (LSB-first: 1+2+4=7 unsigned, MSB set -> -1 signed)
     //  [false,false,false] = 0 ;  [true,false,true]=5u=-3s ; [false,true,false]=2
     let env = env();
-    let tc = crate::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     let bt = Expr::const_str("Bool.true");
     let bf = Expr::const_str("Bool.false");
     let cons = |h: Expr, t: Expr| {
@@ -1166,7 +1166,7 @@ fn test_slt_bridge_wrong_drops_overflow_xor_is_rejected() {
     });
     assert!(res.is_err(), "WRONG slt bridge (= N, no overflow XOR) must be kernel-REJECTED at the 0 vs -2 witness (false != true)");
     // sanity: the TRUE value bvSLtReal a b = false reduces by refl (faithfulness).
-    let tc = crate::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     assert!(
         tc.check_type(&refl(bf.clone()), &eqb(slt(a, b), bf))
             .is_ok(),
@@ -1267,7 +1267,7 @@ fn test_div_guard_bridge_dropping_precondition_is_rejected() {
         ite(iz(zero1.clone()), z_t.clone(), dv_f.clone()),
         dv_f.clone(),
     );
-    let tc = crate::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     assert!(tc.check_type(&refll(dv_f.clone()), &wrong_ty).is_err(),
         "guard at b=[false] picks z=[true]≠dv=[false]; the unconditional claim must be kernel-REJECTED");
 }
@@ -1543,7 +1543,7 @@ fn test_select_store_same_wrong_address_is_rejected() {
             [lb(), x],
         )
     };
-    let tc = crate::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     // const array m = λ _ => [false]
     let const_f = {
         use crate::env::decl_builder::EnvDeclBuilder;
@@ -1590,7 +1590,7 @@ fn test_bvmul_computes_real_multiply() {
     // Differential vs a Rust reference multiplier over a sweep of widths/values; the
     // kernel checks each product by Eq.refl (bvMul reduces to the literal product list).
     let env = env();
-    let tc = crate::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     let bt = Expr::const_str("Bool.true");
     let bf = Expr::const_str("Bool.false");
     let cons = |h: Expr, t: Expr| {

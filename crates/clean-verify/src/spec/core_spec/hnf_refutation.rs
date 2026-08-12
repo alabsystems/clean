@@ -287,13 +287,15 @@ impl Specification {
                  (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) \
                  (OptionType.none KExpr)) \
                  (heq : Eq KExpr (KExpr.const cn cus) cx_stuck) => {constdead}) \
+                 (fun (bi : Nat) (heq : Eq KExpr (KExpr.bvar bi) cx_stuck) => {bvararm}) \
                  cx_stuck h (Eq.refl KExpr cx_stuck)",
                 lam = discriminate("(KExpr.lam lty lbody)"),
                 constdead = discriminate("(KExpr.const cn cus)"),
+                bvararm = discriminate("(KExpr.bvar bi)"),
             ),
-            "cx_not_nf_head: cx_stuck has NO normal-form head — all four nf_head arms fail. \
+            "cx_not_nf_head: cx_stuck has NO normal-form head — all FIVE nf_head arms fail. \
              \
-             lam and constdead die by generic discrimination (an application is neither), which is \
+             lam, constdead and bvar die by generic discrimination (an application is none of them), which is \
              arithmetic because kexpr_tag computes. rigid dies because rigid_app_head has NO const \
              arm by design: rigid_app_head_no_const turns the transported witness into \
              kexpr_const_name (kapp_fn cx_stuck) = none, while that head computes to some Nat.rec \

@@ -76,6 +76,8 @@ pub(crate) struct OfRatInjConsts {
     iff_mp: Expr,
     iff_mpr: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     not_c: Expr,
     classical_em: Expr,
     false_c: Expr,

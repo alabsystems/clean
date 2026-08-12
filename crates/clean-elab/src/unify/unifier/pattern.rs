@@ -274,8 +274,11 @@ impl<'a> Unifier<'a> {
             .metas
             .fresh_with_locals(Expr::type_(), h_locals.clone());
         let mut h_ty = meta_fvar_expr(result_ty);
+        // Interleaved abstraction (see try_solve_pattern): later binder types
+        // may mention earlier common args and must be closed over them.
         for arg in common.iter().rev() {
-            h_ty = Expr::pi(BinderData::default(), arg.ty.clone(), h_ty);
+            h_ty = h_ty.abstract_fvar(arg.fvar);
+            h_ty = Expr::pi(BinderData::default(), self.metas.instantiate(&arg.ty), h_ty);
         }
         let h = self.metas.fresh_with_locals(h_ty, h_locals);
 
@@ -599,25 +602,42 @@ impl<'a> Unifier<'a> {
 
         // All conditions hold: build `λ x₁ … xₙ. rhs`.
         //
-        // `abstract_fvar` replaces its target with `BVar(0)` and shifts every
-        // other `BVar` up by one. Abstracting the arguments in *source* order
-        // (x₁, then x₂, …) therefore leaves xᵢ at de Bruijn index `n - 1 - i`:
-        // x₁ at the deepest index `n-1` and xₙ at `0`. That matches binders
-        // wrapped with x₁ outermost (`λ x₁ … λ xₙ. body`). Capture each binder
-        // type *before* abstraction, while the FVar's type is still resolvable.
+        // `abstract_fvar` replaces its target with `BVar(depth)` under
+        // `depth` binders and shifts loose bvars up by one. Capture each
+        // binder type *before* abstraction, while the FVar's type is still
+        // resolvable; the interleaved loop below then leaves xᵢ at de Bruijn
+        // index `n - 1 - i` in the body (x₁ outermost) AND closes earlier-arg
+        // occurrences inside later binders' types at their telescope indices.
         let binder_tys: Vec<Expr> = arg_fvars
             .iter()
             .map(|fv| self.fvar_binder_type(*fv))
             .collect();
+        // Interleave abstraction with lambda wrapping, innermost (last arg)
+        // first: abstracting the ACCUMULATED term at each step also closes
+        // occurrences of earlier arguments inside later binders' TYPES — the
+        // dependent-binder case the previous three-phase construction left
+        // verbatim, committing solutions whose binder annotations carried a
+        // stale free variable (kernel-rejected; the flip-on-fix pin was
+        // data/graduation/clean-mtype/proof/elab_fvar_hygiene_regression.lean,
+        // flipped to a passing regression lock on this fix).
+        // Same recipe as `contextually_lift_meta`'s telescope construction.
         let mut body = rhs;
-        for fv in &arg_fvars {
+        for (fv, ty) in arg_fvars.iter().zip(binder_tys).rev() {
             body = body.abstract_fvar(*fv);
-        }
-        // Wrap binders from innermost (last arg) to outermost (first arg), so
-        // the outermost lambda binds x₁.
-        for ty in binder_tys.into_iter().rev() {
             body = Expr::lam(BinderData::default(), ty, body);
         }
+
+        // Eta-contract the constructed solution. Solving `?m x =?= h x` builds
+        // `?m := λ x. h x`, an eta-expansion of `h`. Committing the expanded
+        // form snowballs: the next constraint mentioning `?m` sees the
+        // un-beta-reduced `(λ x. h x) y` in its rhs, wraps ANOTHER layer, and
+        // repeated stored-constant application grows an eta/beta tower whose
+        // WHNF cost is exponential (observed: heartbeat exhaustion followed by
+        // a spurious FVar-vs-Lam shape mismatch). Contraction is sound: with
+        // eta in the definitional equality, `λ x. h x ≡ h` whenever `h` does
+        // not use `x`, so the assignment denotes the same solution — and the
+        // kernel re-checks the final term regardless.
+        body = eta_contract_solution(body);
 
         // After abstracting every pattern argument, the solution may mention
         // only locals captured by the metavariable at creation time. This is a
@@ -670,12 +690,12 @@ impl<'a> Unifier<'a> {
     /// We infer the local's type from the type checker when available and fall
     /// back to a placeholder sort otherwise.
     ///
-    /// PIN (dependent binder types): the inferred type is used verbatim, so a
-    /// genuinely *dependent* local context — where an earlier pattern argument
-    /// occurs in the type of a later one — is not abstracted across binders.
-    /// Such a lambda would be rejected by the kernel during final checking
-    /// (a spurious failure, never an unsound acceptance). This dependent case
-    /// is rare in real Lean elaboration and is intentionally left for follow-up.
+    /// Dependent binder types: the caller's interleaved construction
+    /// abstracts earlier pattern arguments out of later binder types (fixed
+    /// 2026-08-07 — the former verbatim wrapping committed solutions whose
+    /// binder annotations carried a stale free variable; indexed-family
+    /// signatures like `{B : (i : I) → A i → Type}` hit it on every
+    /// non-`@` helper application).
     fn fvar_binder_type(&self, id: FVarId) -> Expr {
         let tc_cache = self.tc_cache.borrow();
         if let Some(tc) = tc_cache.as_ref() {
@@ -703,6 +723,31 @@ enum PatternOutcome {
 /// meta tag), used to construct the body of an intersection-rule assignment.
 fn meta_fvar_expr(meta: MetaId) -> Expr {
     Expr::fvar(MetaState::to_fvar(meta))
+}
+
+/// Eta-contract a pattern solution: `λ x. f x` becomes `f` whenever `f` does
+/// not reference the binder (`BVar(0)`).
+///
+/// Contraction runs depth-first along the lambda spine — exactly the shape
+/// the Miller construction builds (`λ x₁ … xₙ. h x₁ … xₙ`): the inner
+/// telescope must contract first (`λ a b. h a b` → `λ a. h a` → `h`), since
+/// the outer binder's body is only an application after the inner one has
+/// collapsed. When the guard holds, `f` has no loose `BVar(0)`, so
+/// `f.instantiate(dummy)` substitutes nothing and only lowers the remaining
+/// loose indices past the removed binder. Contraction never introduces free
+/// variables, so the caller's escape/scope postconditions still hold on the
+/// contracted form.
+fn eta_contract_solution(expr: Expr) -> Expr {
+    let ExprKind::Lam(bd, ty, body) = expr.kind() else {
+        return expr;
+    };
+    let contracted_body = eta_contract_solution(body.as_ref().clone());
+    if let ExprKind::App(f, a) = contracted_body.kind() {
+        if matches!(a.kind(), ExprKind::BVar(0)) && !f.has_loose_bvar(0) {
+            return f.instantiate(&Expr::bvar(0));
+        }
+    }
+    Expr::lam(*bd, ty.as_ref().clone(), contracted_body)
 }
 
 /// Find a free `FVar` in `expr` that is NOT in `allowed` and NOT a meta-fvar.

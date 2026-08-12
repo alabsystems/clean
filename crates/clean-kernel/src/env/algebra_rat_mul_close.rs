@@ -87,6 +87,8 @@ pub(crate) struct MulCloseConsts {
     mul_comm: Expr,
     // Eq.{1} over Rat.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_rat: Expr,
     eq_symm: Expr,
     eq_subst: Expr,
@@ -211,6 +213,7 @@ impl MulCloseConsts {
         Expr::apps(self.mul_comm.clone(), [a, b])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq_rat.clone(), [self.rat.clone(), a, b])
     }

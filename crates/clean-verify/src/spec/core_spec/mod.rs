@@ -40,10 +40,13 @@ mod beta_bd_embedding;
 mod beta_bd_sn;
 mod beta_reduces_preserves_typing;
 mod binder_join_components;
+mod budget_induction_prereqs;
 mod bundles;
+mod bvar_slot;
 mod closedness_bundle;
 mod complete_development;
 mod ctx_canonical_forms;
+mod ctx_rep;
 mod def_eq_joinable;
 mod def_eq_lift_congr;
 mod defeq_capstone;
@@ -51,6 +54,7 @@ mod defeq_complete_leaves;
 mod defeq_complete_steps;
 mod defeq_fuel;
 mod defeq_fuel_mono;
+mod defeq_fuel_wh3_mono;
 mod defeq_iota_delta_gen;
 mod defeq_nf_agree;
 mod defeq_round_app;
@@ -59,7 +63,7 @@ mod defeq_round_leaf;
 mod defeq_round_rest;
 mod defeq_struct_intro;
 mod defeq_struct_sound;
-mod defeq_whnf_join;
+pub(super) mod defeq_whnf_join;
 mod delta_step;
 mod delta_step_bridge;
 mod delta_subst;
@@ -68,7 +72,18 @@ mod derived_rules;
 mod env_closed_checkers;
 mod env_closed_checkers_depth;
 mod env_extensions;
-mod evalir;
+mod eval_ir_activation;
+mod eval_ir_correct;
+mod eval_ir_cost;
+mod eval_ir_crystal;
+mod eval_ir_fuel;
+mod eval_ir_machine;
+mod eval_ir_mode;
+mod eval_ir_ops;
+mod eval_ir_repr;
+mod eval_ir_state;
+mod eval_ir_steps;
+mod eval_ir_syntax;
 mod expr_model;
 mod expr_model_discrimination;
 mod expr_model_discrimination_lam_pi;
@@ -101,9 +116,14 @@ mod foundation_arith_witnesses;
 mod foundation_types;
 mod fuel_adequacy;
 mod fuel_pairing;
+mod hiotap3_discharge;
+mod hnf3_residual;
+mod hnf_conv;
+mod hnf_discharge3;
 mod hnf_refutation;
 mod impl_infer;
 mod impl_infer_mode_gate;
+mod impl_infer_sound;
 mod impl_infer_syntax;
 mod impl_infer_witnesses;
 mod implementation_soundness;
@@ -126,6 +146,7 @@ mod infer_terminates_proof;
 mod iota_closedness_bundle;
 mod iota_core;
 mod iota_immunity;
+mod iota_prepass;
 mod iota_step;
 mod iota_step_bridge;
 mod iota_subst;
@@ -141,6 +162,7 @@ mod mutual_schema;
 mod natrec;
 mod nf_app_leg;
 mod nf_head;
+mod nf_head_const_name;
 mod nf_shape;
 mod par_reduces_c;
 mod par_reduces_cd;
@@ -163,20 +185,29 @@ mod par_reduces_pd;
 mod par_reduction;
 mod pi_injectivity_confluence;
 mod pi_injectivity_def_eq;
+mod premise_witnesses;
 mod proj_rigidity;
 mod rbelow_descent;
 mod rec_env;
 mod rec_env_closed;
 mod reduction_witnesses;
+mod residual_narrowing;
 mod rigid_app_head;
 mod rigid_app_inv;
+mod rigid_bridge;
 mod rigid_preservation;
 mod rigid_tag;
 mod rose_schema;
 mod schema;
+mod slot_collapse;
+mod slot_dispatch_at;
 mod spine_join_components;
 mod stuck_app_rigidity;
 mod stuck_immunity;
+mod stuck_major_confluence;
+mod stuck_major_immune;
+mod stuck_major_recmeta;
+mod stuck_recursor;
 mod subject_reduction_bundle;
 mod substitution_commutation;
 mod substitution_commutation_nested;
@@ -200,6 +231,24 @@ mod unique_normal_forms_c;
 mod univ_poly;
 mod wall_a_completeness;
 mod wall_a_headmatch;
+mod wbelow3;
+mod wh3_fuel_adequacy;
+mod wh3_hiota_repair;
+mod wh3_norm_acc;
+mod wh3_norm_acc_witness;
+mod wh3_soundness;
+mod wh3_spine;
+mod wh3_stability;
+mod wh3_stuck_head;
+mod wh_fuel_adequacy;
+mod wh_hiota_repair;
+mod wh_neutral_stuck;
+mod wh_soundness;
+mod wh_step_arms;
+mod wh_step_mono;
+mod wh_step_mono_proof;
+mod wh_under_applied;
+mod whc3_inverter;
 mod whnf_classify;
 mod whnf_lemmas;
 mod whnf_normalizes;
@@ -251,6 +300,66 @@ impl Specification {
         let mut spec = Self::new_empty();
         bundles::run_bundle(&mut spec, bundles::CoreSpecBundle::IntervalArith)?;
         Ok(spec)
+    }
+
+    /// Build the subset of the spec needed for `EvalIR` tests: foundation types
+    /// plus the trust-ir executable-semantics stage (crystal job C3).
+    ///
+    /// EvalIR is deliberately self-contained — it carries its own `IRList` /
+    /// `IROption` families rather than reusing `ListType` / `OptionType`, whose
+    /// stages drag in `KExpr` and the whole reduction substrate — so this bundle
+    /// is two stages and builds in a fraction of the full spec's time. Both the
+    /// EvalIR witness tests and the vacuity firewall's audit of the EvalIR
+    /// relations use it.
+    ///
+    /// # Errors
+    /// Returns `SpecError` if spec construction fails.
+    pub fn new_eval_ir_spec() -> Result<Self, SpecError> {
+        let mut spec = Self::new_empty();
+        bundles::run_bundle(&mut spec, bundles::CoreSpecBundle::EvalIr)?;
+        Ok(spec)
+    }
+
+    /// Build EvalIR in the ordinary Clean prelude environment.
+    ///
+    /// The dependency-scoped [`Self::new_eval_ir_spec`] is the right authority
+    /// for EvalIR's own witnesses and vacuity firewall.  Consumers that compose
+    /// EvalIR with authored Clean source need the standard notation,
+    /// typeclasses, and logical vocabulary installed by
+    /// [`Environment::with_prelude`].  This constructor adds the exact same
+    /// single EvalIR stage to that production prelude without pulling in the
+    /// unrelated self-verification specification.
+    ///
+    /// # Errors
+    /// Returns `SpecError` if any EvalIR declaration fails to parse, elaborate,
+    /// or kernel-check in the prelude environment.
+    pub fn new_eval_ir_prelude_spec() -> Result<Self, SpecError> {
+        let mut spec = Specification {
+            env: Environment::with_prelude(),
+            definitions: HashMap::new(),
+            red_env_script_override: None,
+        };
+        spec.add_eval_ir()?;
+        // A2's `add_eval_ir_repr` is deliberately NOT in this bundle. Its
+        // `EncodesLevelArc` is indexed by `Level`, and this bundle starts from
+        // `Environment::with_prelude()` — the Lean-style prelude — which carries
+        // no reflected syntax, so the arms mention `Level.zero` with no `Level`
+        // in scope and the elaborator reports dot-notation on an unknown
+        // variable. Supplying `Level` is not a fix either: `add_expr_model`
+        // then fails on `instantiate_bvar_at_below`, because the prelude's
+        // universe-polymorphic `Eq` is not the `Eq` those lemmas were written
+        // against, and `add_foundation_types` collides outright (`Duplicate
+        // declaration: Eq.symm`). This bundle's job, per its own test, is that
+        // the EvalIR authority and the standard classes coexist in one
+        // environment; the Level-indexed A2/A4 stages belong to
+        // `new_eval_ir_spec`, which is built on the spec foundation.
+        Ok(spec)
+    }
+
+    /// Backward-compatible test-only name for [`Self::new_eval_ir_spec`].
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn new_eval_ir_test_spec() -> Result<Self, SpecError> {
+        Self::new_eval_ir_spec()
     }
 
     /// Build the minimum spec needed for zonotope soundness (T01-T08 + T08A/B)

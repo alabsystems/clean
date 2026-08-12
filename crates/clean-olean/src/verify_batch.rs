@@ -1088,7 +1088,12 @@ pub fn preload_init_with_snapshot(
         env,
         "Init",
         search_paths,
-        OleanImportPolicy::default().with_proof_elision(elide),
+        // Defer the O(env) heuristic instance backfill to a single end-of-closure
+        // pass: the Init closure is ~320 modules, so the per-module schedule is an
+        // O(modules × env) quadratic that dominated this pre-load.
+        OleanImportPolicy::default()
+            .with_proof_elision(elide)
+            .with_deferred_global_instance_backfill(),
     ) {
         Ok(s) => s,
         Err(e) => {

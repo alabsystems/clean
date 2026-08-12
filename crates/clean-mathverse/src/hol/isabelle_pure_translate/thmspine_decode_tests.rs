@@ -165,7 +165,7 @@ fn has_schematic_tvar_tyinst(p: &IsaProof) -> bool {
         match p {
             IsaProof::Thm { tyinst, .. } => tyinst
                 .iter()
-                .any(|ti| matches!(&ti.ty, super::super::isabelle_pure::IsaType::TVar { .. })),
+                .any(|ti| matches!(&ti.ty, IsaType::TVar { .. })),
             IsaProof::AbsP { b, .. } | IsaProof::Abst { b, .. } | IsaProof::AppT { f: b, .. } => {
                 walk(b)
             }

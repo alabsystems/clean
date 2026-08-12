@@ -167,7 +167,7 @@ mod tests {
     use super::*;
     use crate::engine_api::AutomationSource;
     use clean_kernel::env::Declaration;
-    use clean_kernel::{BinderInfo, Expr, Level, Name};
+    use clean_kernel::{Expr, Level, Name};
     use std::time::Duration;
 
     fn setup_env() -> Environment {
@@ -240,7 +240,7 @@ mod tests {
         let engine = AutomationEngine::new();
         let a = Expr::const_(Name::from_string("a"), vec![]);
         let b = Expr::const_(Name::from_string("b"), vec![]);
-        let c = Expr::const_(Name::from_string("c"), vec![]);
+        let _c = Expr::const_(Name::from_string("c"), vec![]);
         let timeout = Duration::from_secs(5);
 
         // Goal 0: a = a (provable by reflexivity)

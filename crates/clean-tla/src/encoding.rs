@@ -491,8 +491,10 @@ impl TlaContext {
     pub fn new() -> Self {
         let mut env = Environment::new();
         // Initialize required theories
-        let _ = env.init_set_theory();
-        let _ = env.init_fixed_point();
+        env.init_set_theory()
+            .expect("fresh TLA context should initialize set theory");
+        env.init_fixed_point()
+            .expect("fresh TLA context should initialize fixed-point theory");
 
         Self {
             vars: HashMap::new(),
@@ -500,6 +502,15 @@ impl TlaContext {
             env,
             bound_vars: Vec::new(),
         }
+    }
+
+    /// Clear obligation-local translation state while retaining the initialized
+    /// kernel environment. A context may therefore be reused across a batch
+    /// without INSTANCE substitutions or binder state leaking between items.
+    pub fn reset_for_obligation(&mut self) {
+        self.vars.clear();
+        self.ops.clear();
+        self.bound_vars.clear();
     }
 
     /// Bind a free variable to a clean expression

@@ -1065,7 +1065,7 @@ fn test_match_scrutinee_type_solved_meta_normalization() {
 fn test_trkc_depelim_eq_symm_index_refining_motive_kernel_checks() {
     let mut env = Environment::with_prelude();
     let decl = parse_decl_for_elab(
-        "def symm {A : Type} {a b : A} (h : Eq a b) : Eq b a := match h with | Eq.refl => Eq.refl",
+        "def symm {A : Type} {a b : A} (h : Eq a b) : Eq b a := match h with | Eq.refl => rfl",
     )
     .expect("symm should parse");
     let result = crate::elaborate_decl_and_register(&mut env, &decl);
@@ -1087,7 +1087,7 @@ fn test_trkc_depelim_eq_symm_index_refining_motive_kernel_checks() {
 fn test_trkc_depelim_eq_symm_axiom_deps_empty() {
     let mut env = Environment::with_prelude();
     let decl = parse_decl_for_elab(
-        "def symm {A : Type} {a b : A} (h : Eq a b) : Eq b a := match h with | Eq.refl => Eq.refl",
+        "def symm {A : Type} {a b : A} (h : Eq a b) : Eq b a := match h with | Eq.refl => rfl",
     )
     .expect("symm should parse");
     crate::elaborate_decl_and_register(&mut env, &decl).expect("symm should register");

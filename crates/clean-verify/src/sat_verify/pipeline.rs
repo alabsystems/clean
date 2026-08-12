@@ -47,9 +47,7 @@ use super::ay_contract::CertificateEnvelope;
 use super::ay_import::{
     detect_format as detect_drat_format, verify_ay_drat_proof, AyDratImporter, DratFormat,
 };
-use super::drat_to_lrat::{
-    self as drat_converter, ConvertError, StreamingVerifyResult as DratStreamingResult,
-};
+use super::drat_to_lrat::{self as drat_converter, ConvertError};
 use super::frat::{
     self, looks_like_frat_binary, looks_like_frat_text as frat_text_heuristic, FratError,
 };
@@ -58,10 +56,10 @@ use super::lrat_kernel_bridge::{
     to_certificate_envelope as lrat_to_envelope, verify_and_certify as lrat_verify_text,
     verify_auto_and_certify as lrat_verify_auto, LratBridgeError,
 };
-use super::pseudo_boolean::{parse_opb, PbError, VeriPbProof};
+use super::pseudo_boolean::{parse_opb, PbError};
 use super::types::Cnf;
 use crate::smt_verify::smtlib2_proof;
-use crate::smt_verify::{self, AletheVerifyError, VerifyMode};
+use crate::smt_verify::{self, VerifyMode};
 
 /// Errors from the unified proof pipeline.
 #[derive(Debug, Error)]
@@ -744,7 +742,7 @@ fn verify_any_smtlib2(proof: &[u8], start: Instant) -> Result<UnifiedResult, Pip
 
     match smtlib2_proof::parse_and_convert(proof_text) {
         Ok(dag) => {
-            let result = smt_verify::verify_smt_proof(&dag, smt_verify::VerifyMode::Permissive);
+            let result = smt_verify::verify_smt_proof(&dag, VerifyMode::Permissive);
             let elapsed = start.elapsed().as_micros() as u64;
             let trust_level = if result.valid && result.stats.is_fully_verified() {
                 TrustLevel::KernelVerified
@@ -1943,7 +1941,7 @@ mod tests {
     fn test_competition_entry_streaming_text_simple() {
         let dimacs = "p cnf 1 2\n1 0\n-1 0\n";
         let drat = b"0\n";
-        let reader = std::io::BufReader::new(&drat[..]);
+        let reader = io::BufReader::new(&drat[..]);
 
         let result = verify_competition_entry_streaming(dimacs, reader, false)
             .expect("streaming competition entry should work");
@@ -1959,7 +1957,7 @@ mod tests {
     fn test_competition_entry_streaming_text_three_clause() {
         let dimacs = "p cnf 2 3\n1 2 0\n-1 0\n-2 0\n";
         let drat = b"2 0\n0\n";
-        let reader = std::io::BufReader::new(&drat[..]);
+        let reader = io::BufReader::new(&drat[..]);
 
         let result = verify_competition_entry_streaming(dimacs, reader, false)
             .expect("streaming competition entry should work");
@@ -1970,7 +1968,7 @@ mod tests {
 
     #[test]
     fn test_competition_entry_streaming_invalid_dimacs() {
-        let reader = std::io::BufReader::new(&b"0\n"[..]);
+        let reader = io::BufReader::new(&b"0\n"[..]);
         let result = verify_competition_entry_streaming("not valid dimacs", reader, false);
         assert!(matches!(result, Err(PipelineError::CnfParse(_))));
     }
@@ -1979,7 +1977,7 @@ mod tests {
     fn test_competition_entry_streaming_rup_failure() {
         let dimacs = "p cnf 2 1\n1 2 0\n";
         let drat = b"0\n"; // Empty clause not RUP.
-        let reader = std::io::BufReader::new(&drat[..]);
+        let reader = io::BufReader::new(&drat[..]);
 
         let result = verify_competition_entry_streaming(dimacs, reader, false);
         assert!(result.is_err());
@@ -2003,7 +2001,7 @@ mod tests {
         }
         drat_text.push_str("0\n");
 
-        let reader = std::io::BufReader::new(drat_text.as_bytes());
+        let reader = io::BufReader::new(drat_text.as_bytes());
         let result = verify_competition_entry_streaming(&dimacs, reader, false)
             .expect("large chain streaming should succeed");
 
@@ -2023,7 +2021,7 @@ mod tests {
     fn test_competition_entry_streaming_certificate_metadata() {
         let dimacs = "p cnf 1 2\n1 0\n-1 0\n";
         let drat = b"0\n";
-        let reader = std::io::BufReader::new(&drat[..]);
+        let reader = io::BufReader::new(&drat[..]);
 
         let result =
             verify_competition_entry_streaming(dimacs, reader, false).expect("should succeed");

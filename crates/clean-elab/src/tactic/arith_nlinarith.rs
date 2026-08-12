@@ -15,7 +15,10 @@ use super::arith_linarith::{
 };
 use super::arithmetic::LinearConstraint;
 use super::groebner_basis::{groebner_goal_proof, groebner_preprocess, GroebnerConfig};
-use super::{decide, norm_num, ProofState, TacticError, TacticResult};
+// Kernel-evaluating `decide` ladder, not the `smt::decide` re-exported from
+// `super` — see the note in `norm_num.rs`.
+use super::decide::eval_decide as decide;
+use super::{norm_num, ProofState, TacticError, TacticResult};
 use certified::{try_certified_nlinarith, CertifiedNlinarithOutcome};
 use preprocess::is_square_nonnegative_goal;
 pub(crate) use preprocess::try_compute_linear_product;

@@ -9,7 +9,7 @@
 //! have new commits, fetches updates for stale sources, and records the
 //! latest commit SHAs and timestamps.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};

@@ -120,7 +120,12 @@ impl Environment {
                 let field_indices = self.get_constructor_return_indices(&field_ty, num_params);
                 for idx_expr in &field_indices {
                     let remapped = Self::remap_residual_index_bvars_for_minor(
-                        idx_expr, i, num_fields, ihs_above, n_pis,
+                        idx_expr,
+                        i,
+                        num_fields,
+                        ihs_above,
+                        num_motives,
+                        n_pis,
                     );
                     ih_type = Expr::app(ih_type, remapped);
                 }
@@ -139,7 +144,12 @@ impl Environment {
                     .unwrap_or_default();
                 for (k, (bi, domain)) in pi_domains.iter().enumerate().rev() {
                     let remapped = Self::remap_residual_index_bvars_for_minor(
-                        domain, i, num_fields, ihs_above, k,
+                        domain,
+                        i,
+                        num_fields,
+                        ihs_above,
+                        num_motives,
+                        k,
                     );
                     ih_type = Expr::pi(*bi, remapped, ih_type);
                 }

@@ -73,7 +73,7 @@ fn test_graduate_v2_carries_definition_dependency_and_gate_replays_it() {
     );
     assert_eq!(
         def_header.decl_kind,
-        crate::types::DeclKind::Definition as u8
+        DeclKind::Definition as u8
     );
     assert_eq!(def_header.source_system, SourceSystem::Cake as u8);
     assert_eq!(

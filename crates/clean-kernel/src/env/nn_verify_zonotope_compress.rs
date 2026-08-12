@@ -448,6 +448,8 @@ struct T10Consts {
     rat_add: Expr,
     rat_mul: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     rat_neg: Expr,
     /// `Eq.symm.{1}`.
     eq_symm: Expr,

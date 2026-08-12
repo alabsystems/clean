@@ -84,7 +84,7 @@
 
 use crate::tactic::term_close::refine_elaborated_from_pending;
 use crate::tactic::{
-    BoundValue, CompoundTacticEntry, CompoundTacticHandler, ProofState, TacticError, TacticEval,
+    CompoundTacticEntry, CompoundTacticHandler, ProofState, TacticError, TacticEval,
 };
 use clean_kernel::{ExprKind, Name};
 use clean_parser::{DoElem, InterpolationPart, SurfaceArg, SurfaceExpr, SurfaceLit, SurfaceTactic};

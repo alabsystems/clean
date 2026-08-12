@@ -117,7 +117,7 @@ fn build_project_check_report(args: &ProjectCheckArgs) -> anyhow::Result<Project
         .map(|source| (source.module.clone(), source.relative_path.clone()))
         .collect::<BTreeMap<_, _>>();
 
-    let mut modules = check_project_modules(&sources, &module_sources, args.allow_sorry);
+    let modules = check_project_modules(&sources, &module_sources, args.allow_sorry);
     let mut diagnostics = modules
         .iter()
         .flat_map(|module| module.diagnostics.iter().cloned())

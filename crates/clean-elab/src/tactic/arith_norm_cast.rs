@@ -13,7 +13,10 @@ use clean_kernel::{Expr, ExprKind};
 
 use super::arith_field_simp::get_app_fn;
 use super::cast::proof_carry::{rewrite_target_with_cast_lemmas, CastRewriteFlavor};
-use super::{decide, norm_num, rfl, ring, ProofState, TacticError, TacticResult};
+// Kernel-evaluating `decide` ladder, not the `smt::decide` re-exported from
+// `super` — see the note in `norm_num.rs`.
+use super::decide::eval_decide as decide;
+use super::{norm_num, rfl, ring, ProofState, TacticError, TacticResult};
 use crate::stack_safe;
 
 /// Norm cast tactic.

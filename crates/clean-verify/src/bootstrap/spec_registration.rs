@@ -152,20 +152,44 @@ impl Specification {
                     "(fun (G0 : ListType KExpr) (i : Nat) (A : KExpr) ",
                     "(hlk : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) => ",
                     "TypingCtxConv.var tenv G0 i A hlk) ",
-                    // pi arm (fields hA hB, then IHs ihA ihB)
-                    "(fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) ",
-                    "(hA : KernelInfers tenv G0 A (KExpr.sort n)) ",
-                    "(hB : KernelInfers tenv (ListType.cons KExpr A G0) B (KExpr.sort m)) ",
-                    "(ihA : TypingCtxConv tenv G0 A (KExpr.sort n)) ",
-                    "(ihB : TypingCtxConv tenv (ListType.cons KExpr A G0) B (KExpr.sort m)) => ",
-                    "TypingCtxConv.pi tenv G0 A B n m ihA ihB) ",
-                    // lam arm (fields hA hb, then IHs ihA ihb)
-                    "(fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
-                    "(hA : KernelInfers tenv G0 A (KExpr.sort u)) ",
+                    // pi arm (fields hA hwA hB hwB, then IHs ihA ihB).
+                    //
+                    // The two whnf premises are the arms' 2026-08-08 repair: the
+                    // deployed body whnf-reduces BOTH the domain's inferred type
+                    // (tc/infer.rs:555) and the body's (:573) before matching a
+                    // sort, where the old arm demanded a syntactic KExpr.sort and
+                    // so asserted nothing about any Pi needing a delta or beta
+                    // step first. Each whnf step is absorbed by TypingCtxConv's
+                    // conv rule through whnf_to_preserves_def_eq — the same
+                    // machinery the app arm below already uses.
+                    "(fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) ",
+                    "(SA : KExpr) (n : Level) (SB : KExpr) (m : Level) ",
+                    "(hA : KernelInfers tenv G0 A SA) ",
+                    "(hwA : whnf_to SA (KExpr.sort n)) ",
+                    "(hB : KernelInfers tenv (ListType.cons KExpr A G0) B SB) ",
+                    "(hwB : whnf_to SB (KExpr.sort m)) ",
+                    "(ihA : TypingCtxConv tenv G0 A SA) ",
+                    "(ihB : TypingCtxConv tenv (ListType.cons KExpr A G0) B SB) => ",
+                    "TypingCtxConv.pi tenv G0 A B n m ",
+                    "(TypingCtxConv.conv tenv G0 A SA (KExpr.sort n) ihA ",
+                    "(whnf_to_preserves_def_eq SA (KExpr.sort n) hwA)) ",
+                    "(TypingCtxConv.conv tenv (ListType.cons KExpr A G0) B SB (KExpr.sort m) ihB ",
+                    "(whnf_to_preserves_def_eq SB (KExpr.sort m) hwB))) ",
+                    // lam arm (fields hA hwA hb, then IHs ihA ihb). ONE whnf
+                    // premise, not two: the deployed Lam arm whnf's the domain's
+                    // type (tc/infer.rs:521) and never sort-checks the body's —
+                    // it abstracts it straight into the resulting Pi.
+                    "(fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) ",
+                    "(SA : KExpr) (u : Level) ",
+                    "(hA : KernelInfers tenv G0 A SA) ",
+                    "(hwA : whnf_to SA (KExpr.sort u)) ",
                     "(hb : KernelInfers tenv (ListType.cons KExpr A G0) b B) ",
-                    "(ihA : TypingCtxConv tenv G0 A (KExpr.sort u)) ",
+                    "(ihA : TypingCtxConv tenv G0 A SA) ",
                     "(ihb : TypingCtxConv tenv (ListType.cons KExpr A G0) b B) => ",
-                    "TypingCtxConv.lam tenv G0 A b B u ihA ihb) ",
+                    "TypingCtxConv.lam tenv G0 A b B u ",
+                    "(TypingCtxConv.conv tenv G0 A SA (KExpr.sort u) ihA ",
+                    "(whnf_to_preserves_def_eq SA (KExpr.sort u) hwA)) ",
+                    "ihb) ",
                     // const arm
                     "(fun (G0 : ListType KExpr) (nm : Name) (us : ListType Level) (A : KExpr) ",
                     "(ht : Eq (OptionType KExpr) (tenv nm) (OptionType.some KExpr A)) => ",

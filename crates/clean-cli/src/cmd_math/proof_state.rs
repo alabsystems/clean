@@ -143,7 +143,7 @@ pub(super) fn run_proof_state_open_obligation(
         run_open_obligation_in_embedded_server(
             project_path
                 .parent()
-                .unwrap_or_else(|| std::path::Path::new("."))
+                .unwrap_or_else(|| Path::new("."))
                 .to_owned(),
             request,
         )?
@@ -826,7 +826,7 @@ enum ExprPayloadError {
 }
 
 fn run_open_obligation_in_embedded_server(
-    root: std::path::PathBuf,
+    root: PathBuf,
     request: server_proof_state::OpenObligationRequest,
 ) -> Result<Response, MathError> {
     std::thread::spawn(move || {
@@ -1012,16 +1012,14 @@ fn server_artifact_ref(artifact: &ArtifactRef) -> server_proof_state::Obligation
 }
 
 fn open_obligation_metadata(
-    project_path: &std::path::Path,
-    obligation_source_path: &std::path::Path,
+    project_path: &Path,
+    obligation_source_path: &Path,
     project: &str,
     obligation_fingerprint: &str,
     obligation: &MathObligation,
     artifact_refs: Vec<server_proof_state::ObligationArtifactRef>,
 ) -> server_proof_state::ProofStateMetadata {
-    let project_root = project_path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
+    let project_root = project_path.parent().unwrap_or_else(|| Path::new("."));
     server_proof_state::ProofStateMetadata {
         project: Some(project.to_owned()),
         project_path: Some(project_path.display().to_string()),

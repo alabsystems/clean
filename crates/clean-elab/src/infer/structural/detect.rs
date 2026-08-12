@@ -445,10 +445,10 @@ fn find_recursive_calls_in_do_elem(
     shadowed_base: bool,
 ) {
     use clean_parser::DoElem;
-    let mut walk = |e: &SurfaceExpr, calls: &mut Vec<RecursiveCall>| {
+    let walk = |e: &SurfaceExpr, calls: &mut Vec<RecursiveCall>| {
         find_recursive_calls(func_name, e, calls, shadowed_short, shadowed_base);
     };
-    let mut walk_seq = |seq: &[DoElem], calls: &mut Vec<RecursiveCall>| {
+    let walk_seq = |seq: &[DoElem], calls: &mut Vec<RecursiveCall>| {
         for e in seq {
             find_recursive_calls_in_do_elem(func_name, e, calls, shadowed_short, shadowed_base);
         }

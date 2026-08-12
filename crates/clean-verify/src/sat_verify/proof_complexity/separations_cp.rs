@@ -8,6 +8,12 @@
 //! CP proof of the pigeonhole principle PHP(n+1, n), demonstrating the
 //! exponential separation from resolution (Haken 1985 vs Cook et al. 1987).
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use super::cutting_planes::CpInequality;
 
 /// A step in a standalone Cutting Planes derivation.

@@ -53,7 +53,7 @@ pub enum MizXmlError {
     MalformedXml { pos: usize, detail: String },
 }
 
-pub(crate) type MizXmlResult<T> = Result<T, MizXmlError>;
+pub type MizXmlResult<T> = Result<T, MizXmlError>;
 
 // ════════════════════════════════════════════════════════════════════════════
 // Minimal XML tokenizer
@@ -64,14 +64,7 @@ pub(crate) type MizXmlResult<T> = Result<T, MizXmlError>;
 pub(crate) struct XmlElement {
     pub(crate) tag: String,
     pub(crate) attrs: Vec<(String, String)>,
-    pub(crate) children: Vec<XmlNode>,
-}
-
-/// A node in the parsed XML tree.
-#[derive(Debug, Clone)]
-pub(crate) enum XmlNode {
-    Element(XmlElement),
-    Text(String),
+    pub(crate) children: Vec<XmlElement>,
 }
 
 impl XmlElement {
@@ -83,21 +76,9 @@ impl XmlElement {
             .map(|(_, v)| v.as_str())
     }
 
-    /// Get attribute value or return an error.
-    pub(crate) fn require_attr(&self, name: &'static str, pos: usize) -> MizXmlResult<&str> {
-        self.attr(name).ok_or(MizXmlError::MissingAttribute {
-            attr: name,
-            element: self.tag.clone(),
-            pos,
-        })
-    }
-
-    /// Get child elements (filtering out text nodes).
+    /// Get child elements.
     pub(crate) fn child_elements(&self) -> impl Iterator<Item = &XmlElement> {
-        self.children.iter().filter_map(|n| match n {
-            XmlNode::Element(e) => Some(e),
-            XmlNode::Text(_) => None,
-        })
+        self.children.iter()
     }
 
     /// Find first child element with the given tag.
@@ -245,17 +226,15 @@ impl<'a> XmlParser<'a> {
 
             // Child element?
             if self.remaining().starts_with('<') {
-                children.push(XmlNode::Element(self.parse_element()?));
+                children.push(self.parse_element()?);
             } else {
                 // Text content
-                let start = self.pos;
                 while self.pos < self.input.len() && self.input.as_bytes()[self.pos] != b'<' {
                     self.pos += 1;
                 }
-                let text = self.input[start..self.pos].trim().to_owned();
-                if !text.is_empty() {
-                    children.push(XmlNode::Text(text));
-                }
+                // Mizar's item export stores semantic content in elements and
+                // attributes. Inter-element text is formatting whitespace (or
+                // otherwise non-semantic), so do not allocate nodes for it.
             }
         }
 
@@ -364,19 +343,19 @@ pub fn parse_article(xml: &str) -> MizXmlResult<MizArticle> {
 ///
 /// The XML should contain a single formula element at the root
 /// (e.g., `<For>`, `<Not>`, `<And>`, `<Pred>`).
-pub(crate) fn parse_formula_xml(xml: &str) -> MizXmlResult<MizFormula> {
+pub fn parse_formula_xml(xml: &str) -> MizXmlResult<MizFormula> {
     let root = parse_xml(xml)?;
     parse_formula(&root)
 }
 
 /// Parse a single Mizar term from an XML string.
-pub(crate) fn parse_term_xml(xml: &str) -> MizXmlResult<MizTerm> {
+pub fn parse_term_xml(xml: &str) -> MizXmlResult<MizTerm> {
     let root = parse_xml(xml)?;
     parse_term(&root)
 }
 
 /// Parse a single Mizar type from an XML string.
-pub(crate) fn parse_type_xml(xml: &str) -> MizXmlResult<MizType> {
+pub fn parse_type_xml(xml: &str) -> MizXmlResult<MizType> {
     let root = parse_xml(xml)?;
     parse_type(&root)
 }
@@ -1375,7 +1354,7 @@ impl MizArticleParseResult {
 ///
 /// This is the preferred entry point for batch import pipelines where
 /// partial results are better than total failure.
-pub(crate) fn parse_mizar_article(xml: &str) -> MizXmlResult<MizArticleParseResult> {
+pub fn parse_mizar_article(xml: &str) -> MizXmlResult<MizArticleParseResult> {
     let root = parse_xml(xml)?;
     parse_article_with_recovery(&root)
 }
@@ -1484,7 +1463,7 @@ pub(crate) fn parse_registrations(elem: &XmlElement) -> MizXmlResult<Vec<MizRegi
 ///
 /// Scans the full article for all registration blocks and returns
 /// every registration found.
-pub(crate) fn parse_registrations_from_xml(xml: &str) -> MizXmlResult<Vec<MizRegistration>> {
+pub fn parse_registrations_from_xml(xml: &str) -> MizXmlResult<Vec<MizRegistration>> {
     let root = parse_xml(xml)?;
     parse_registrations(&root)
 }
@@ -1521,7 +1500,7 @@ pub(crate) fn parse_notations(elem: &XmlElement) -> MizXmlResult<Vec<MizNotation
 }
 
 /// Parse all notations from an article XML string.
-pub(crate) fn parse_notations_from_xml(xml: &str) -> MizXmlResult<Vec<MizNotation>> {
+pub fn parse_notations_from_xml(xml: &str) -> MizXmlResult<Vec<MizNotation>> {
     let root = parse_xml(xml)?;
     parse_notations(&root)
 }
@@ -1531,7 +1510,7 @@ pub(crate) fn parse_notations_from_xml(xml: &str) -> MizXmlResult<Vec<MizNotatio
 // ════════════════════════════════════════════════════════════════════════════
 
 /// Parse all schemes from an article XML string.
-pub(crate) fn parse_schemes_from_xml(xml: &str) -> MizXmlResult<Vec<MizScheme>> {
+pub fn parse_schemes_from_xml(xml: &str) -> MizXmlResult<Vec<MizScheme>> {
     let root = parse_xml(xml)?;
     parse_all_schemes(&root)
 }
@@ -1558,7 +1537,7 @@ fn parse_all_schemes(elem: &XmlElement) -> MizXmlResult<Vec<MizScheme>> {
 /// parsing the full item list.
 ///
 /// Useful for dependency resolution before full import.
-pub(crate) fn parse_environ_only(xml: &str) -> MizXmlResult<MizEnviron> {
+pub fn parse_environ_only(xml: &str) -> MizXmlResult<MizEnviron> {
     let root = parse_xml(xml)?;
     root.find_child("Environ")
         .map(parse_environ)
@@ -1574,7 +1553,7 @@ pub(crate) fn parse_environ_only(xml: &str) -> MizXmlResult<MizEnviron> {
 ///
 /// This is a lightweight check that does not parse the full document.
 #[must_use]
-pub(crate) fn is_mizar_article_xml(xml: &str) -> bool {
+pub fn is_mizar_article_xml(xml: &str) -> bool {
     let trimmed = xml.trim();
     // Skip XML declaration if present.
     let content = if trimmed.starts_with("<?xml") {
@@ -1595,7 +1574,7 @@ pub(crate) fn is_mizar_article_xml(xml: &str) -> bool {
 /// Counts occurrences of item-level start tags. Fast but approximate;
 /// use full parsing for exact counts.
 #[must_use]
-pub(crate) fn count_article_items_approx(xml: &str) -> usize {
+pub fn count_article_items_approx(xml: &str) -> usize {
     let item_tags = [
         "<Theorem",
         "<JustifiedTheorem",
@@ -1609,103 +1588,6 @@ pub(crate) fn count_article_items_approx(xml: &str) -> usize {
         "<NotationBlock",
     ];
     item_tags.iter().map(|tag| xml.matches(tag).count()).sum()
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// XML tree utilities
-// ════════════════════════════════════════════════════════════════════════════
-
-impl XmlElement {
-    /// Count child elements with the given tag.
-    pub(crate) fn count_children(&self, tag: &str) -> usize {
-        self.child_elements().filter(|e| e.tag == tag).count()
-    }
-
-    /// Collect all child elements with the given tag.
-    pub(crate) fn find_children(&self, tag: &str) -> Vec<&XmlElement> {
-        self.child_elements().filter(|e| e.tag == tag).collect()
-    }
-
-    /// Get attribute as u64 integer, returning an error if not parseable.
-    pub(crate) fn attr_u64(&self, name: &'static str, pos: usize) -> MizXmlResult<u64> {
-        let val = self.require_attr(name, pos)?;
-        val.parse::<u64>().map_err(|_| MizXmlError::InvalidInteger {
-            attr: name,
-            value: val.to_owned(),
-            pos,
-        })
-    }
-
-    /// Get attribute as i64 integer, returning an error if not parseable.
-    pub(crate) fn attr_i64(&self, name: &'static str, pos: usize) -> MizXmlResult<i64> {
-        let val = self.require_attr(name, pos)?;
-        val.parse::<i64>().map_err(|_| MizXmlError::InvalidInteger {
-            attr: name,
-            value: val.to_owned(),
-            pos,
-        })
-    }
-
-    /// Get attribute value, returning a default if not present.
-    pub(crate) fn attr_or(&self, name: &str, default: &str) -> String {
-        self.attr(name).unwrap_or(default).to_owned()
-    }
-
-    /// Whether this element has the given tag name.
-    pub(crate) fn is_tag(&self, tag: &str) -> bool {
-        self.tag == tag
-    }
-
-    /// Whether this element has any child elements (not counting text).
-    pub(crate) fn has_children(&self) -> bool {
-        self.child_elements().next().is_some()
-    }
-
-    /// Get the text content of this element (concatenated, whitespace-trimmed).
-    pub(crate) fn text_content(&self) -> String {
-        self.children
-            .iter()
-            .filter_map(|n| match n {
-                XmlNode::Text(t) => Some(t.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-            .trim()
-            .to_owned()
-    }
-
-    /// Recursively collect all elements matching a predicate.
-    pub(crate) fn collect_deep<'b>(
-        &'b self,
-        predicate: &dyn Fn(&XmlElement) -> bool,
-    ) -> Vec<&'b XmlElement> {
-        let mut results = Vec::new();
-        if predicate(self) {
-            results.push(self);
-        }
-        for child in self.child_elements() {
-            results.extend(child.collect_deep(predicate));
-        }
-        results
-    }
-
-    /// Count all elements in the subtree (including self).
-    pub(crate) fn subtree_size(&self) -> usize {
-        1 + self
-            .child_elements()
-            .map(|c| c.subtree_size())
-            .sum::<usize>()
-    }
-
-    /// Maximum nesting depth of the subtree.
-    pub(crate) fn max_depth(&self) -> usize {
-        1 + self
-            .child_elements()
-            .map(|c| c.max_depth())
-            .max()
-            .unwrap_or(0)
-    }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1744,7 +1626,7 @@ impl MizArticleStats {
 /// Quickly extract article statistics without building full AST items.
 ///
 /// Faster than full parsing when only counts are needed (e.g., for triage).
-pub(crate) fn article_stats(xml: &str) -> MizXmlResult<MizArticleStats> {
+pub fn article_stats(xml: &str) -> MizXmlResult<MizArticleStats> {
     let root = parse_xml(xml)?;
     let name = root.attr("aid").unwrap_or("").to_owned();
 

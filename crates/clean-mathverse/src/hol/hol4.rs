@@ -48,7 +48,7 @@ impl Default for Hol4Importer {
 impl Hol4Importer {
     /// Create a new HOL4 importer with a custom namespace.
     #[must_use]
-    pub(crate) fn with_namespace(namespace: &str) -> Self {
+    pub fn with_namespace(namespace: &str) -> Self {
         Self {
             namespace: LeanName::from_string(namespace),
         }
@@ -64,7 +64,7 @@ impl Hol4Importer {
     }
 
     /// Import an OpenTheory article from raw text.
-    pub(crate) fn import_text(
+    pub fn import_text(
         &self,
         input: &str,
     ) -> HolResult<(Vec<MathverseImportedConstant>, ImportStatistics)> {
@@ -118,7 +118,7 @@ impl Hol4Importer {
     /// records which theories this one depends on (e.g., `["bool", "num"]`).
     /// Each article is processed through the OpenTheory bridge. Articles that
     /// fail to parse are counted in statistics but do not abort the import.
-    pub(crate) fn import_theory(
+    pub fn import_theory(
         &self,
         theory_name: &str,
         parents: &[&str],
@@ -200,31 +200,31 @@ impl Hol4Importer {
 /// declares types, constants, and theorems. The parent list records
 /// which theories this one depends on.
 #[derive(Clone, Debug)]
-pub(crate) struct Hol4Theory {
+pub struct Hol4Theory {
     /// Name of this theory (e.g., `"bool"`, `"num"`, `"list"`).
-    pub(crate) theory_name: String,
+    pub theory_name: String,
     /// Parent theory names that this theory depends on.
-    pub(crate) parents: Vec<String>,
+    pub parents: Vec<String>,
     /// Type operator declarations from the articles.
-    pub(crate) types: Vec<MathverseImportedConstant>,
+    pub types: Vec<MathverseImportedConstant>,
     /// Constant declarations (including axioms) from the articles.
-    pub(crate) constants: Vec<MathverseImportedConstant>,
+    pub constants: Vec<MathverseImportedConstant>,
     /// Proved theorems from the articles.
-    pub(crate) theorems: Vec<MathverseImportedConstant>,
+    pub theorems: Vec<MathverseImportedConstant>,
     /// Aggregate statistics for this theory import.
-    pub(crate) statistics: Hol4Statistics,
+    pub statistics: Hol4Statistics,
 }
 
 impl Hol4Theory {
     /// Total number of declarations across all categories.
     #[must_use]
-    pub(crate) fn total_declarations(&self) -> usize {
+    pub fn total_declarations(&self) -> usize {
         self.types.len() + self.constants.len() + self.theorems.len()
     }
 
     /// The combined axiom profile for all declarations in the theory.
     #[must_use]
-    pub(crate) fn combined_axiom_profile(&self) -> AxiomProfile {
+    pub fn combined_axiom_profile(&self) -> AxiomProfile {
         let all = self
             .types
             .iter()
@@ -242,7 +242,7 @@ impl Hol4Theory {
     ///
     /// Returns `None` if the theory has no declarations.
     #[must_use]
-    pub(crate) fn min_trust_level(&self) -> Option<TrustLevel> {
+    pub fn min_trust_level(&self) -> Option<TrustLevel> {
         self.types
             .iter()
             .chain(self.constants.iter())
@@ -253,32 +253,32 @@ impl Hol4Theory {
 
     /// Names of all theorems in the theory.
     #[must_use]
-    pub(crate) fn theorem_names(&self) -> Vec<String> {
+    pub fn theorem_names(&self) -> Vec<String> {
         self.theorems.iter().map(|t| t.name.to_string()).collect()
     }
 
     /// Whether this theory has any parent dependencies.
     #[must_use]
-    pub(crate) fn has_parents(&self) -> bool {
+    pub fn has_parents(&self) -> bool {
         !self.parents.is_empty()
     }
 }
 
 /// Statistics for a HOL4 theory import.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Hol4Statistics {
+pub struct Hol4Statistics {
     /// Total number of article texts provided for import.
-    pub(crate) total_articles: usize,
+    pub total_articles: usize,
     /// Total number of constants successfully imported.
-    pub(crate) imported_constants: usize,
+    pub imported_constants: usize,
     /// Number of articles that failed to parse or import.
-    pub(crate) failed_articles: usize,
+    pub failed_articles: usize,
     /// Number of proved theorems imported.
-    pub(crate) theorem_count: usize,
+    pub theorem_count: usize,
     /// Number of type operators imported.
-    pub(crate) type_count: usize,
+    pub type_count: usize,
     /// Number of constant declarations (including axioms) imported.
-    pub(crate) constant_count: usize,
+    pub constant_count: usize,
 }
 
 impl Hol4Statistics {
@@ -286,7 +286,7 @@ impl Hol4Statistics {
     ///
     /// Returns 1.0 if no articles were provided.
     #[must_use]
-    pub(crate) fn success_rate(&self) -> f64 {
+    pub fn success_rate(&self) -> f64 {
         if self.total_articles == 0 {
             return 1.0;
         }
@@ -302,7 +302,7 @@ impl Hol4Statistics {
 /// but HOL4 also supports S-expression dumps and JSON for tooling.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum Hol4ExportFormat {
+pub enum Hol4ExportFormat {
     /// OpenTheory article format (`.art` files).
     /// This is the primary interoperability format supported by the bridge.
     ArticleFormat,
@@ -315,7 +315,7 @@ pub(crate) enum Hol4ExportFormat {
 impl Hol4ExportFormat {
     /// File extension associated with this format.
     #[must_use]
-    pub(crate) fn extension(&self) -> &'static str {
+    pub fn extension(&self) -> &'static str {
         match self {
             Self::ArticleFormat => "art",
             Self::SExpFormat => "sexp",
@@ -325,7 +325,7 @@ impl Hol4ExportFormat {
 
     /// Human-readable description of the format.
     #[must_use]
-    pub(crate) fn description(&self) -> &'static str {
+    pub fn description(&self) -> &'static str {
         match self {
             Self::ArticleFormat => "OpenTheory article format",
             Self::SExpFormat => "S-expression export format",
@@ -335,7 +335,7 @@ impl Hol4ExportFormat {
 
     /// Whether this format is currently supported for import.
     #[must_use]
-    pub(crate) fn is_import_supported(&self) -> bool {
+    pub fn is_import_supported(&self) -> bool {
         matches!(self, Self::ArticleFormat)
     }
 }
@@ -347,7 +347,7 @@ impl Hol4ExportFormat {
 /// theory hierarchy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum Hol4TypeOp {
+pub enum Hol4TypeOp {
     /// Boolean type: `bool`.
     Bool,
     /// Function arrow type: `->` (written `fun` internally).
@@ -376,7 +376,7 @@ pub(crate) enum Hol4TypeOp {
 impl Hol4TypeOp {
     /// The name of this type operator as it appears in HOL4.
     #[must_use]
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match self {
             Self::Bool => "bool",
             Self::Fun => "fun",
@@ -392,7 +392,7 @@ impl Hol4TypeOp {
 
     /// Arity (number of type arguments) of this operator.
     #[must_use]
-    pub(crate) fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         match self {
             Self::Bool | Self::Ind | Self::Num => 0,
             Self::Fun | Self::Prod | Self::Sum => 2,
@@ -403,13 +403,13 @@ impl Hol4TypeOp {
 
     /// Whether this is a built-in type operator (not user-defined).
     #[must_use]
-    pub(crate) fn is_builtin(&self) -> bool {
+    pub fn is_builtin(&self) -> bool {
         !matches!(self, Self::UserDefined { .. })
     }
 
     /// Try to parse a type operator name into a `Hol4TypeOp`.
     #[must_use]
-    pub(crate) fn from_name(name: &str) -> Self {
+    pub fn from_name(name: &str) -> Self {
         match name {
             "bool" => Self::Bool,
             "fun" | "->" => Self::Fun,
@@ -428,7 +428,7 @@ impl Hol4TypeOp {
 
     /// Try to parse with explicit arity for user-defined types.
     #[must_use]
-    pub(crate) fn from_name_with_arity(name: &str, arity: usize) -> Self {
+    pub fn from_name_with_arity(name: &str, arity: usize) -> Self {
         let mut op = Self::from_name(name);
         if let Self::UserDefined {
             arity: ref mut a, ..
@@ -442,17 +442,17 @@ impl Hol4TypeOp {
 
 /// A node in the HOL4 theory dependency graph.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Hol4TheoryNode {
+pub struct Hol4TheoryNode {
     /// Theory name.
-    pub(crate) name: String,
+    pub name: String,
     /// Names of parent theories that this theory depends on.
-    pub(crate) parents: Vec<String>,
+    pub parents: Vec<String>,
     /// Number of theorems in this theory (if known).
-    pub(crate) theorem_count: Option<usize>,
+    pub theorem_count: Option<usize>,
     /// Number of type operators defined in this theory (if known).
-    pub(crate) type_count: Option<usize>,
+    pub type_count: Option<usize>,
     /// Number of constants defined in this theory (if known).
-    pub(crate) constant_count: Option<usize>,
+    pub constant_count: Option<usize>,
 }
 
 /// A graph of HOL4 theory dependencies.
@@ -460,7 +460,7 @@ pub(crate) struct Hol4TheoryNode {
 /// HOL4 theories form a DAG where each theory declares its parent theories.
 /// The root of the graph is typically `min` (the minimal theory).
 #[derive(Clone, Debug)]
-pub(crate) struct Hol4TheoryGraph {
+pub struct Hol4TheoryGraph {
     /// All theories in the graph, keyed by theory name.
     theories: std::collections::HashMap<String, Hol4TheoryNode>,
 }
@@ -468,19 +468,19 @@ pub(crate) struct Hol4TheoryGraph {
 impl Hol4TheoryGraph {
     /// Create an empty theory graph.
     #[must_use]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             theories: std::collections::HashMap::new(),
         }
     }
 
     /// Add a theory node to the graph.
-    pub(crate) fn add_theory(&mut self, node: Hol4TheoryNode) {
+    pub fn add_theory(&mut self, node: Hol4TheoryNode) {
         self.theories.insert(node.name.clone(), node);
     }
 
     /// Add a theory by name with its parent list.
-    pub(crate) fn add_theory_with_parents(&mut self, name: &str, parents: &[&str]) {
+    pub fn add_theory_with_parents(&mut self, name: &str, parents: &[&str]) {
         self.theories.insert(
             name.to_owned(),
             Hol4TheoryNode {
@@ -495,25 +495,25 @@ impl Hol4TheoryGraph {
 
     /// Get a theory node by name.
     #[must_use]
-    pub(crate) fn get_theory(&self, name: &str) -> Option<&Hol4TheoryNode> {
+    pub fn get_theory(&self, name: &str) -> Option<&Hol4TheoryNode> {
         self.theories.get(name)
     }
 
     /// Number of theories in the graph.
     #[must_use]
-    pub(crate) fn theory_count(&self) -> usize {
+    pub fn theory_count(&self) -> usize {
         self.theories.len()
     }
 
     /// Whether the graph is empty.
     #[must_use]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.theories.is_empty()
     }
 
     /// All theory names, sorted alphabetically.
     #[must_use]
-    pub(crate) fn theory_names(&self) -> Vec<&str> {
+    pub fn theory_names(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self.theories.keys().map(|s| s.as_str()).collect();
         names.sort();
         names
@@ -521,7 +521,7 @@ impl Hol4TheoryGraph {
 
     /// Get the direct parents of a theory.
     #[must_use]
-    pub(crate) fn parents_of(&self, name: &str) -> Vec<&str> {
+    pub fn parents_of(&self, name: &str) -> Vec<&str> {
         self.theories
             .get(name)
             .map(|node| node.parents.iter().map(|s| s.as_str()).collect())
@@ -530,7 +530,7 @@ impl Hol4TheoryGraph {
 
     /// Get the direct children of a theory (theories that list `name` as a parent).
     #[must_use]
-    pub(crate) fn children_of(&self, name: &str) -> Vec<&str> {
+    pub fn children_of(&self, name: &str) -> Vec<&str> {
         self.theories
             .values()
             .filter(|node| node.parents.iter().any(|p| p == name))
@@ -540,7 +540,7 @@ impl Hol4TheoryGraph {
 
     /// Find root theories (theories with no parents in the graph).
     #[must_use]
-    pub(crate) fn roots(&self) -> Vec<&str> {
+    pub fn roots(&self) -> Vec<&str> {
         self.theories
             .values()
             .filter(|node| node.parents.is_empty())
@@ -550,7 +550,7 @@ impl Hol4TheoryGraph {
 
     /// Find leaf theories (theories with no children in the graph).
     #[must_use]
-    pub(crate) fn leaves(&self) -> Vec<&str> {
+    pub fn leaves(&self) -> Vec<&str> {
         let has_children: std::collections::HashSet<&str> = self
             .theories
             .values()
@@ -568,7 +568,7 @@ impl Hol4TheoryGraph {
     ///
     /// Returns all ancestors (direct and indirect parents) sorted by name.
     #[must_use]
-    pub(crate) fn transitive_dependencies(&self, name: &str) -> Vec<String> {
+    pub fn transitive_dependencies(&self, name: &str) -> Vec<String> {
         let mut visited = std::collections::HashSet::new();
         let mut stack = vec![name.to_owned()];
 
@@ -597,7 +597,7 @@ impl Hol4TheoryGraph {
     ///
     /// A well-formed HOL4 theory hierarchy should be a DAG.
     #[must_use]
-    pub(crate) fn has_cycle(&self) -> bool {
+    pub fn has_cycle(&self) -> bool {
         // Standard DFS cycle detection.
         let mut visited = std::collections::HashSet::new();
         let mut in_stack = std::collections::HashSet::new();
@@ -640,6 +640,12 @@ impl Hol4TheoryGraph {
     }
 }
 
+impl Default for Hol4TheoryGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Parse a theory graph from a text description.
 ///
 /// Expected format: one theory per line, as `theory_name: parent1, parent2, ...`.
@@ -653,7 +659,7 @@ impl Hol4TheoryGraph {
 /// list: bool, num
 /// ```
 #[must_use]
-pub(crate) fn parse_theory_graph(text: &str) -> Hol4TheoryGraph {
+pub fn parse_theory_graph(text: &str) -> Hol4TheoryGraph {
     let mut graph = Hol4TheoryGraph::new();
 
     for line in text.lines() {
@@ -711,7 +717,6 @@ fn collect_art_files(dir: &Path) -> HolResult<Vec<std::path::PathBuf>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hol::opentheory_bridge::HOL_BASE_PROFILE;
 
     /// Minimal refl article (x = x) for testing.
     const TEST_REFL: &str = r#"

@@ -28,7 +28,7 @@
 //! fallbacks, reconstruction failures, and outright failures are excluded
 //! upstream by `verify_corpus_incremental` and are therefore never stamped.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 

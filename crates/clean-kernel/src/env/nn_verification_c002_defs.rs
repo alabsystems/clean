@@ -23,6 +23,7 @@ use crate::name::Name;
 /// Uses the properly typed `NNVerify.*` infrastructure (zonotope types,
 /// LayerNorm definitions, matrix rank operations) rather than the
 /// placeholder `NNVerification.*` axioms.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct C002Consts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,

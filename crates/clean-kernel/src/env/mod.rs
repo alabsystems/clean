@@ -65,7 +65,10 @@ pub use carrier_refutation::{
 #[cfg(test)]
 use decl_add::find_undef_level_param;
 pub use decl_add::{mm_axiom_only, mm_two_pass_active, set_mm_axiom_only, MmAxiomOnlyGuard};
+pub use inductive_deep_induction::{DeepIndError, DeepIndOutcome};
 pub use inductive_info::InductiveInfo;
+pub use inductive_local_lift::{LiftedFamilyInfo, LocalLift, LocalLiftError};
+pub use inductive_local_lift_bridge::{BridgeOutcome, LocalLiftBridgeError};
 pub use inductive_no_confusion::{
     NoConfusionRegenerationDiagnostic, NoConfusionRegenerationIssue, NoConfusionRegenerationReport,
 };
@@ -1744,6 +1747,7 @@ mod proof_hierarchy;
 #[cfg(any(test, feature = "math-overlays"))]
 mod proof_hierarchy_theorems;
 pub mod proof_search;
+mod quotient_setoid;
 #[cfg(any(test, feature = "math-overlays"))]
 mod real_cauchy_carrier;
 mod real_complex_analysis;
@@ -1817,7 +1821,7 @@ mod types;
 pub use types::{
     ConstantInfo, ConstantKind, Declaration, EnvError, EnvExtensionEntry, EnvExtensionEntryData,
     KernelClassInfo, KernelInstanceInfo, PersistentEnvExtensionState, Reducibility, SimpLemmaInfo,
-    SimpPriority, TransparencyMode, DEFAULT_INSTANCE_PRIORITY,
+    SimpPriority, TransparencyMode, DEFAULT_INSTANCE_PRIORITY, LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
 
 // Bounded-memory closure loading: elide never-unfolded proof VALUES from a
@@ -1846,12 +1850,16 @@ pub use ext_attr::{attr_ext_idx, AttrExtEntry, AttrExtState, AttrRegistration};
 pub(crate) mod elim_analysis;
 
 // Inductive type construction - extracted for organization (see #1161, #307)
+mod inductive_all_family;
 mod inductive_aux_values;
 mod inductive_below;
 mod inductive_below_minors;
 #[allow(clippy::unnecessary_cast)]
 mod inductive_builder;
+mod inductive_deep_induction;
 mod inductive_fixed_indices;
+mod inductive_local_lift;
+mod inductive_local_lift_bridge;
 mod inductive_nested_elim;
 mod inductive_nested_restore;
 mod inductive_no_confusion;
@@ -1861,6 +1869,7 @@ mod inductive_recursor_minor;
 mod inductive_recursor_rules;
 mod inductive_recursor_types;
 mod inductive_recursor_types_mutual;
+mod rec_apply;
 
 // Type class, aesop rule, and attribute registries - extracted for organization (see #1161)
 mod registries;
@@ -3268,6 +3277,26 @@ pub struct Environment {
     generation: u64,
     #[serde(default)]
     options: HashMap<String, Option<String>>,
+    /// Names installed as PROVISIONAL HEADERS by header-first elaboration
+    /// (Trust I1): a signature staged so that later declarations resolve names
+    /// independently of source order. A header is a name and a type with no
+    /// value, which is indistinguishable downstream from an axiom the user
+    /// never wrote — so an environment holding one is NOT authoritative.
+    ///
+    /// This set is the kernel-side marker for that state. Its only job is to
+    /// make the non-authoritative environment *say so* if it ever escapes the
+    /// batch that built it: [`Environment::audit_certification`] reports
+    /// `CertificationIssue::Staged` for any reachable member, which is a
+    /// blocking issue, so a proof resting on a staged header can never be
+    /// certified. It is deliberately serialized (with `#[serde(default)]` for
+    /// backward compatibility) so a round-trip cannot launder the marker away.
+    ///
+    /// The structural firewall is separate and stronger: header-first
+    /// elaboration keeps two environments and never installs a header in the
+    /// one declarations are registered into, so `add_decl` refuses a term
+    /// naming a header by unknown-constant. This set is defence in depth.
+    #[serde(default)]
+    staged_headers: hashbrown::HashSet<Name>,
 }
 
 impl Environment {
@@ -3457,6 +3486,10 @@ impl Environment {
         self.init_string()?;
         self.init_option()?;
         self.init_sum()?;
+        // PSum was registered but never wired into the live prelude
+        // (found by the 2026-08-10 binder-fidelity audit): Lean core has
+        // it (Init/Core.lean), and its init fn existed dead in data_types.rs.
+        self.init_psum()?;
         self.init_fin()?;
         self.init_int()?;
         self.init_prod()?;
@@ -3553,6 +3586,21 @@ impl Environment {
         }
         self.init_inhabited()?;
         self.init_beq()?;
+        // `List.contains` (core Lean-4 `BEq`-based membership test) is registered
+        // by `init_beq_list` at the tail of `init_beq` just above (the SINGLE
+        // registrar — see `init_list_contains`'s doc); this call is the
+        // standalone-caller dependency wrapper and a no-op here.
+        //
+        // Gated on the non-import lane: in import-verification mode
+        // `init_beq_list` withholds the hand-rolled `List` stubs — the genuine
+        // Lean `List.contains` registers through the checked `.olean` import path
+        // instead. Same suppression discipline as the `init_multiset`/
+        // `init_finset` stubs below. SOUNDNESS: suppression only ever lets the
+        // genuine, fully kernel-checked Lean `List.contains` import in the
+        // stub's place; nothing here touches `is_def_eq`/`whnf` or acceptance.
+        if !self.suppress_lossy_structure_stubs {
+            self.init_list_contains()?;
+        }
         // Ord typeclass (`class Ord (α : Type u) where compare : α → α → Ordering`)
         // + `instOrdNat`/`instOrdBool`/`instOrdOrdering`. `init_ord` (order_ord.rs)
         // was complete but never wired, so `deriving Ord` failed its kernel re-check
@@ -3602,6 +3650,14 @@ impl Environment {
             self.init_hashable()?;
         }
         self.init_subtype()?;
+
+        // The Lean 4 core quotient-by-a-setoid package (Equivalence, Setoid,
+        // HasEquiv + the `≈` notation, Quotient, and the Quot companions).
+        // The five quotient PRIMITIVES and their ι-rule already live in the
+        // kernel (quot.rs + tc/reduction); this is the ordinary checked layer
+        // above them, and it is what makes the parser's long-standing `≈`
+        // desugaring resolve to a real constant.
+        self.init_quotient_setoid()?;
         self.init_hadd()?;
         self.init_hsub()?;
         self.init_hmul()?;
@@ -3615,6 +3671,16 @@ impl Environment {
         // and `v % w` failed to resolve `HDiv`/`HMod`. (Track TAC)
         self.init_nat_hdiv_inst()?;
         self.init_nat_hmod_inst()?;
+
+        // Homogeneous `Add/Mul/Sub Nat` instances (Lean 4 core Init/Prelude:
+        // `instance instAddNat : Add Nat := ⟨Nat.add⟩`, likewise Mul/Sub).
+        // The heterogeneous instHAddNat chain covers `a + b`, but a direct
+        // `Add.add a b` needs the homogeneous instance in the instance table
+        // (`FailedToSynthesizeInstance { goal: "Add {0} Nat" }` otherwise).
+        // Found absent by the 2026-08-10 prelude-fidelity audit.
+        self.init_nat_add_inst()?;
+        self.init_nat_mul_inst()?;
+        self.init_nat_sub_inst()?;
         // `+`, `-`, `*`, `/`, `%` over Int, backed by the Int.add/sub/mul
         // (real `Int.rec`/`Nat.rec` definitions) and Int.div/Int.mod (Opaque,
         // native-reduced) constants from `init_int_arith`. Without these,
@@ -5175,6 +5241,119 @@ impl Environment {
         removed
     }
 
+    /// Install `decl` as a PROVISIONAL HEADER — a signature staged so later
+    /// declarations resolve names independently of source order (Trust I1).
+    ///
+    /// The declaration must be an [`Declaration::Axiom`]: a header is a name
+    /// and a type with no value, and there is no other shape it can take. The
+    /// type still goes through the full [`Environment::add_decl`] kernel check,
+    /// so a malformed signature is refused here rather than surfacing later as
+    /// a mystery in some body that resolved against it.
+    ///
+    /// SOUNDNESS — this makes the environment NON-AUTHORITATIVE. A staged
+    /// header is indistinguishable, to every consumer, from an axiom the user
+    /// never wrote, so an environment holding one may not back a certification.
+    /// Two mechanisms enforce that, and only the second lives here:
+    ///
+    ///   1. STRUCTURAL (the real firewall): header-first elaboration keeps the
+    ///      staging environment separate from the environment declarations are
+    ///      registered into, and never installs a header in the latter. A term
+    ///      naming a header therefore fails `add_decl` by unknown-constant.
+    ///   2. MARKER (defence in depth, this function): the name is recorded in
+    ///      `staged_headers`, and [`Environment::audit_certification`] reports
+    ///      a blocking [`CertificationIssue::Staged`] for any reachable member.
+    ///      So even if a staging environment escaped, nothing it supports can
+    ///      be graded above `Rejected`.
+    ///
+    /// Discharge a header with [`Environment::discharge_staged_header`] before
+    /// registering the real declaration.
+    ///
+    /// # Errors
+    /// Returns [`EnvError`] if `decl` is not an axiom, or if the kernel refuses
+    /// the header's type.
+    pub fn add_staged_header(&mut self, decl: Declaration) -> Result<(), EnvError> {
+        let Declaration::Axiom { ref name, .. } = decl else {
+            let offender = match &decl {
+                Declaration::Definition { name, .. }
+                | Declaration::Axiom { name, .. }
+                | Declaration::Theorem { name, .. }
+                | Declaration::Opaque { name, .. } => name.clone(),
+            };
+            return Err(EnvError::InvalidDeclarationShape {
+                init: "add_staged_header",
+                decl: offender,
+                detail: "a staged header is a name and a type with no value, so it must be a \
+                         Declaration::Axiom; either pass the signature as an axiom, or register \
+                         the complete declaration with add_decl instead",
+            });
+        };
+        let name = name.clone();
+        self.add_decl(decl)?;
+        self.staged_headers.insert(name);
+        Ok(())
+    }
+
+    /// True when `name` is currently installed as a provisional header.
+    #[must_use]
+    pub fn is_staged_header(&self, name: &Name) -> bool {
+        self.staged_headers.contains(name)
+    }
+
+    /// True when ANY provisional header is installed — i.e. this environment is
+    /// not authoritative. Publish gates assert this is `false`.
+    #[must_use]
+    pub fn has_staged_headers(&self) -> bool {
+        !self.staged_headers.is_empty()
+    }
+
+    /// Every provisional header currently installed, sorted for determinism.
+    #[must_use]
+    pub fn staged_header_names(&self) -> Vec<Name> {
+        let mut names: Vec<Name> = self.staged_headers.iter().cloned().collect();
+        names.sort();
+        names
+    }
+
+    /// Remove a provisional header and every table entry it could have seeded,
+    /// so the real declaration can be registered in its place.
+    ///
+    /// [`Environment::forget_decl`] is NOT sufficient: it drops the constant and
+    /// its verification stamp only, leaving instance / class / parameter-name /
+    /// structure-field rows behind. Those are exactly what a header carrying
+    /// instance metadata would have written, and a stale row outlives the
+    /// header it came from.
+    ///
+    /// Fail-closed: refuses (returns `false`, changing nothing) for a name that
+    /// is not a staged header, so this can never be used to delete a real,
+    /// kernel-checked declaration.
+    pub fn discharge_staged_header(&mut self, name: &Name) -> bool {
+        if !self.staged_headers.remove(name) {
+            return false;
+        }
+        self.constants.remove(name);
+        self.declaration_verification.remove(name);
+        self.constant_origins.remove(name);
+        self.param_names.remove(name);
+        self.param_binder_infos.remove(name);
+        self.structure_fields.remove(name);
+        self.classes.remove(name);
+        self.inductives.remove(name);
+        self.constructors.remove(name);
+        self.recursors.remove(name);
+        if self.instance_names.remove(name) {
+            for entries in self.instances.values_mut() {
+                entries.retain(|entry| &entry.name != name);
+            }
+        }
+        self.private_decls.remove(name);
+        self.protected_decls.remove(name);
+        self.noncomputable_decls.remove(name);
+        self.partial_decls.remove(name);
+        self.unsafe_decls.remove(name);
+        self.generation += 1;
+        true
+    }
+
     pub fn forget_value(&mut self, name: &Name) -> bool {
         if let Some(ci) = self.constants.get_mut(name) {
             ci.value = None;
@@ -5387,6 +5566,8 @@ mod tests_algebra_rat_add_comm;
 #[cfg(test)]
 mod tests_algebra_rat_mul_assoc;
 #[cfg(test)]
+mod tests_all_family;
+#[cfg(test)]
 mod tests_axiom_audit;
 #[cfg(test)]
 mod tests_bcp_loop_refinement;
@@ -5408,6 +5589,8 @@ mod tests_constant_origin;
 mod tests_craig_interpolation;
 #[cfg(test)]
 mod tests_cutting_planes;
+#[cfg(test)]
+mod tests_deep_induction;
 #[cfg(test)]
 mod tests_entropy_clause_quality;
 #[cfg(test)]
@@ -5433,6 +5616,8 @@ mod tests_hit_trunc;
 #[cfg(test)]
 mod tests_init_contracts;
 #[cfg(test)]
+mod tests_instance_priority_adoption;
+#[cfg(test)]
 mod tests_int_abs_proofs;
 #[cfg(test)]
 mod tests_int_dist_proofs;
@@ -5446,6 +5631,10 @@ mod tests_issue_1488;
 mod tests_labelled_interpolation_minimality;
 #[cfg(test)]
 mod tests_learned_clause_minimality;
+#[cfg(test)]
+mod tests_local_lift;
+#[cfg(test)]
+mod tests_local_lift_bridge;
 #[cfg(test)]
 mod tests_masquerade_gate;
 #[cfg(test)]
@@ -5600,6 +5789,8 @@ mod tests_nn_verify_tier_b_rat_abs_demasquerade_3565;
 mod tests_rat_false_add_axioms;
 #[cfg(test)]
 mod tests_recursor_authority;
+#[cfg(test)]
+mod tests_trans_lean_shape;
 #[cfg(test)]
 mod tests_ws17_import_prelude;
 // Batch 4 (#3551): Rat min/max transitivity / idempotence at ground zero.

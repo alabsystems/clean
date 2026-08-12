@@ -489,6 +489,171 @@ mod tests {
             );
         }
 
+        // ── Parenthesized bounded binders MUST preserve the guard ────────────
+        //
+        // Regression for the DEFECT-2 desugar bug: `explicit_binders` parsed a
+        // parenthesized bounded binder `(x ∈ s)` / `(n > 0)` and then THREW THE
+        // GUARD AWAY, so `∀ (x ∈ s), p` silently became the strictly stronger
+        // `∀ x, p` (and `∃ (x ∈ s), p` became `∃ x, p`) — a soundness-relevant
+        // meaning change. Lean desugars these to `∀ x, x ∈ s → p` and
+        // `∃ x, x ∈ s ∧ p`; these tests assert the guard survives the parse.
+        //
+        // The assertions inspect the AST directly (not `is_ok`) because a
+        // dropped guard still parses successfully — only the shape reveals it.
+        use crate::surface::SurfaceExpr;
+
+        /// Count occurrences of `Ident(name)` anywhere in a surface expression.
+        fn count_ident(expr: &SurfaceExpr, name: &str) -> usize {
+            let here = matches!(expr, SurfaceExpr::Ident(_, s) if s == name) as usize;
+            let mut n = here;
+            match expr {
+                SurfaceExpr::App(_, f, args) => {
+                    n += count_ident(f, name);
+                    for a in args {
+                        n += count_ident(&a.expr, name);
+                    }
+                }
+                SurfaceExpr::Arrow(_, l, r) => {
+                    n += count_ident(l, name) + count_ident(r, name);
+                }
+                SurfaceExpr::Pi(_, _, body) | SurfaceExpr::Lambda(_, _, body) => {
+                    n += count_ident(body, name);
+                }
+                _ => {}
+            }
+            n
+        }
+
+        #[test]
+        fn test_paren_bounded_forall_membership_preserves_guard() {
+            // `∀ (x ∈ s), P x`  ≡  `∀ x, x ∈ s → P x`
+            let expr = parse_expr("∀ (x ∈ s), P x").expect("parenthesized bounded ∀ should parse");
+            // Guard desugars to `Membership.mem s x`, wrapped as an Arrow.
+            assert!(
+                matches!(&expr, SurfaceExpr::Pi(_, _, body) if matches!(&**body, SurfaceExpr::Arrow(..))),
+                "∀ (x ∈ s), P x must desugar to a Pi over an Arrow (guard preserved), got {expr:?}"
+            );
+            assert_eq!(
+                count_ident(&expr, "Membership.mem"),
+                1,
+                "the `∈ s` guard must survive as `Membership.mem`, not be discarded: {expr:?}"
+            );
+        }
+
+        #[test]
+        fn test_paren_bounded_forall_comparison_preserves_guard() {
+            // `∀ (n > 0), P n`  ≡  `∀ n, n > 0 → P n`
+            let expr = parse_expr("∀ (n > 0), P n").expect("parenthesized bounded ∀ should parse");
+            match &expr {
+                SurfaceExpr::Pi(_, binders, body) => {
+                    assert_eq!(binders.len(), 1, "one bound name `n`");
+                    assert!(
+                        matches!(&**body, SurfaceExpr::Arrow(..)),
+                        "guard `n > 0` must become the Arrow antecedent, got {body:?}"
+                    );
+                }
+                other => panic!("expected Pi, got {other:?}"),
+            }
+            assert_eq!(
+                count_ident(&expr, "GT.gt"),
+                1,
+                "the `> 0` guard must survive as `GT.gt`: {expr:?}"
+            );
+        }
+
+        #[test]
+        fn test_paren_bounded_exists_preserves_guard() {
+            // `∃ (n > 0), P n`  ≡  `∃ n, n > 0 ∧ P n`
+            let expr = parse_expr("∃ (n > 0), P n").expect("parenthesized bounded ∃ should parse");
+            // Exists desugars to `Exists (fun n => And (GT.gt n 0) (P n))`.
+            assert_eq!(
+                count_ident(&expr, "GT.gt"),
+                1,
+                "the `> 0` guard must survive as `GT.gt` inside the ∃ body: {expr:?}"
+            );
+            assert_eq!(
+                count_ident(&expr, "And"),
+                1,
+                "∃ (n > 0), P n must conjoin the guard with the body via `And`: {expr:?}"
+            );
+        }
+
+        #[test]
+        fn test_paren_bounded_forall_multiple_binders_preserve_all_guards() {
+            // `∀ (a > 0) (b > 1), a = b`  ≡  `∀ a b, a > 0 → b > 1 → a = b`
+            let expr = parse_expr("∀ (a > 0) (b > 1), a = b")
+                .expect("multiple parenthesized bounded ∀ binders should parse");
+            assert_eq!(
+                count_ident(&expr, "GT.gt"),
+                2,
+                "both guards `a > 0` and `b > 1` must survive: {expr:?}"
+            );
+        }
+
+        /// Regression for the arrow-speculation guard leak: parsing the TYPE
+        /// of a binder like `(hs : ¬(r ≥ Int.ofNat w))` routes the inner
+        /// parenthesized relation through `arrow_expr`'s speculative
+        /// binder-arrow attempt, which recognized `(r ≥ …)` as a bounded
+        /// binder and stashed its guard; the backtrack restored the token
+        /// position but not the stash, so the enclosing `∀` drained a phantom
+        /// `r ≥ Int.ofNat w →` antecedent around its body. Found because the
+        /// trust bridge's composed all-18 conjunction stopped kernel-checking
+        /// (its Shl/LShr/AShr arms carry exactly this hypothesis shape).
+        #[test]
+        fn paren_relation_inside_binder_type_leaks_no_guard() {
+            let expr = parse_expr(
+                "∀ (w : Nat) (l r : Int) (hs : ¬(r ≥ Int.ofNat w)) (h0 : 0 ≤ Int.mul l ((2 : Int) ^ r.toNat)), True",
+            )
+            .expect("shl-shaped fragment parses");
+            match &expr {
+                SurfaceExpr::Pi(_, binders, body) => {
+                    assert_eq!(binders.len(), 5, "w, l, r, hs, h0 — nothing more");
+                    assert!(
+                        matches!(body.as_ref(), SurfaceExpr::Ident(_, name) if name == "True"),
+                        "body must be exactly `True` — a leaked guard wraps it in an Arrow: {body:?}"
+                    );
+                }
+                other => panic!("expected Pi, got {other:?}"),
+            }
+        }
+
+        /// The arrow form `(n > 0) → U` is a PLAIN arrow whose domain is the
+        /// proposition `n > 0` (binder-predicate sugar exists only under
+        /// quantifiers) — the speculative binder reading must be rejected, not
+        /// half-taken as `Pi([n], U)` with the guard dropped or leaked.
+        #[test]
+        fn paren_relation_arrow_is_plain_arrow_not_binder() {
+            let expr = parse_expr("(n > 0) → True").expect("prop-domain arrow parses");
+            match &expr {
+                SurfaceExpr::Arrow(_, domain, body) => {
+                    assert!(
+                        matches!(body.as_ref(), SurfaceExpr::Ident(_, name) if name == "True"),
+                        "codomain is True: {body:?}"
+                    );
+                    let d = format!("{domain:?}");
+                    assert!(
+                        d.contains("GT.gt") || d.contains('>'),
+                        "domain keeps the relation: {d}"
+                    );
+                }
+                other => panic!("expected plain Arrow, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn test_plain_paren_binder_has_no_spurious_guard() {
+            // A normal typed binder `(n : Nat)` must NOT gain any guard Arrow.
+            let expr =
+                parse_expr("∀ (n : Nat), P n").expect("plain parenthesized ∀ binder should parse");
+            match &expr {
+                SurfaceExpr::Pi(_, _, body) => assert!(
+                    !matches!(&**body, SurfaceExpr::Arrow(..)),
+                    "`∀ (n : Nat), P n` body must be `P n`, not a guarded Arrow: {body:?}"
+                ),
+                other => panic!("expected Pi, got {other:?}"),
+            }
+        }
+
         /// Workaround: MATP-BENCH Q3 with explicit `in` separators
         ///
         /// Without layout-sensitive parsing, implicit let chaining where the

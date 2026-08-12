@@ -180,7 +180,7 @@ impl CleanBackend {
 
     /// Classify a parsed declaration
     pub(crate) fn classify_decl(
-        decl: &clean_parser::SurfaceDecl,
+        decl: &SurfaceDecl,
     ) -> (CommandKind, Option<String>, (usize, usize)) {
         use clean_parser::SurfaceDecl;
 
@@ -205,6 +205,16 @@ impl CleanBackend {
             ),
             SurfaceDecl::Coinductive { span, name, .. } => (
                 CommandKind::Coinductive,
+                Some(name.clone()),
+                (span.start, span.end),
+            ),
+            SurfaceDecl::Codata { span, name, .. } => (
+                CommandKind::Coinductive,
+                Some(name.clone()),
+                (span.start, span.end),
+            ),
+            SurfaceDecl::Codef { span, name, .. } => (
+                CommandKind::Definition,
                 Some(name.clone()),
                 (span.start, span.end),
             ),
@@ -339,7 +349,7 @@ impl CleanBackend {
     }
 
     /// Get the span of a declaration
-    pub(crate) fn get_decl_span(decl: &clean_parser::SurfaceDecl) -> (usize, usize) {
+    pub(crate) fn get_decl_span(decl: &SurfaceDecl) -> (usize, usize) {
         Self::classify_decl(decl).2
     }
 
@@ -751,7 +761,7 @@ impl CleanBackend {
     /// `RegisteredElabResult::hole_contexts`), so only `sorry` — which the
     /// elaborator does not span-tag — is handled here. The hole-local expected
     /// type for a body `sorry` is the declaration's own elaborated type.
-    fn body_sorry_span(decl: &clean_parser::SurfaceDecl) -> Option<clean_parser::Span> {
+    fn body_sorry_span(decl: &SurfaceDecl) -> Option<clean_parser::Span> {
         use clean_parser::SurfaceDecl;
         let body = match decl {
             SurfaceDecl::Def { val, .. } | SurfaceDecl::Example { val, .. } => val.as_ref(),
@@ -770,7 +780,7 @@ impl CleanBackend {
     /// attribute list. Only the declaration forms that carry an `attrs` list
     /// (`def`, `theorem`, `axiom`, `opaque`) can bear the attribute; the
     /// canonical Lean form is `@[widget_module] def myWidget : Widget.Module`.
-    pub(crate) fn is_widget_module_decl(decl: &clean_parser::SurfaceDecl) -> bool {
+    pub(crate) fn is_widget_module_decl(decl: &SurfaceDecl) -> bool {
         use clean_parser::{Attribute, SurfaceDecl};
         let attrs = match decl {
             SurfaceDecl::Def { attrs, .. }
@@ -789,7 +799,7 @@ impl CleanBackend {
     /// the inner expression. Synthetic, parser-generated sorry is excluded: it
     /// has no user-visible source token to navigate to. Explicit `_` holes are
     /// handled by the elaborator and intentionally not matched here.
-    fn expr_sorry_span(expr: &clean_parser::SurfaceExpr) -> Option<clean_parser::Span> {
+    fn expr_sorry_span(expr: &SurfaceExpr) -> Option<clean_parser::Span> {
         use clean_parser::SurfaceExpr;
         match expr {
             SurfaceExpr::Ident(span, name) if name == "sorry" => Some(*span),
@@ -801,7 +811,7 @@ impl CleanBackend {
     /// Extract elaboration info from an ElabResult
     fn extract_elab_info(
         result: &clean_elab::ElabResult,
-        decl: &clean_parser::SurfaceDecl,
+        decl: &SurfaceDecl,
     ) -> Option<ElaboratedDecl> {
         use clean_elab::ElabResult;
 

@@ -8,6 +8,9 @@
 //! with tree analysis, field resolution, override analysis, diamond detection,
 //! C3 linearization, DOT visualization, and inheritance statistics.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![allow(dead_code)]
 use crate::structure_inherit::{structural_type_eq, FieldInfo, InheritanceResolver};
 use clean_kernel::{Environment, Expr, Name};
 use std::collections::{HashMap, HashSet, VecDeque};

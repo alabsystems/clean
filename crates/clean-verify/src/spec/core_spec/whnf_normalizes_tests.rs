@@ -148,7 +148,7 @@ fn test_whnf_normalizes_bd_targets_exact_fragment_and_conclusion() {
     let refl_ty = refl
         .elaborated_type
         .as_ref()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .unwrap_or_default();
     assert!(
         refl_ty.contains("beta_bd_normal"),
@@ -175,7 +175,7 @@ fn test_whnf_normalizes_result_over_stuck_aware_closure() {
     let intro_ty = intro
         .elaborated_type
         .as_ref()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .unwrap_or_default();
     assert!(
         intro_ty.contains("beta_bd_to"),

@@ -354,7 +354,6 @@ mod tests {
     use crate::env::axiom_audit::{ProofQuality, ADMITTED_DOMAIN_AXIOMS};
     use crate::env::types::ConstantKind;
     use crate::tc::TypeChecker;
-    use std::collections::HashSet;
 
     const ADD_VALID: &str = "NNVerify.Rat.interval_add_valid";
     const HULL_LO_LE_FST_LO: &str = "NNVerify.Rat.interval_hull_lo_le_fst_lo";
@@ -436,8 +435,7 @@ mod tests {
                     // domain axiom — fails this gate.
                     assert!(
                         ALLOWED_INT_NAT_PRIMITIVES.contains(&a.as_str())
-                            || crate::env::axiom_audit::ADMITTED_DOMAIN_AXIOMS
-                                .contains(&a.as_str()),
+                            || ADMITTED_DOMAIN_AXIOMS.contains(&a.as_str()),
                         "{name} must be Constructive or AxiomDependent on Int/Nat \
                          ring-normalization primitives and/or admitted domain \
                          axioms only; got unexpected axiom {a:?} in closure {axiom_names:?}"

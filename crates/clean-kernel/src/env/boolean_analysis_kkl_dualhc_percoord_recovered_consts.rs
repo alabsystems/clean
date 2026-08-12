@@ -17,6 +17,7 @@ struct PercoordConsts {
     nat_succ: Expr,
     nat_zero: Expr,
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_pow: Expr,
     int_of_nat: Expr,
     rat_mk: Expr,
@@ -47,6 +48,7 @@ struct PercoordConsts {
     congr_arg: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl PercoordConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

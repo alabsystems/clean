@@ -90,9 +90,7 @@ fn test_elaborate_and_verify_nat_lit() {
     let (expr, _ty, cert) = ctx
         .elaborate_and_verify(&surface)
         .expect("elaborate_and_verify nat literal should succeed");
-    assert!(
-        matches!(expr.kind(), ExprKind::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(42))
-    );
+    assert!(matches!(expr.kind(), ExprKind::Lit(Literal::Nat(n)) if n.to_u64() == Some(42)));
     assert!(matches!(cert, ProofCert::Lit { .. }));
 }
 

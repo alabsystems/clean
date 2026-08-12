@@ -606,6 +606,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.nat_integral_domain_inst_init == true`
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_nat_integral_domain_inst(&self) -> bool {
         self.nat_integral_domain_inst_init
     }

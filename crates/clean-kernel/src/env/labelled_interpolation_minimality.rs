@@ -40,6 +40,7 @@ use crate::name::Name;
 
 /// Shared constants used across all labelled interpolation minimality declarations.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct LabelledInterpolationConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,

@@ -7,7 +7,7 @@
 //! level (it gated proof-irrel on `ctx.is_empty()`).
 
 use clean_ck0::rawexpr::BinderInfo;
-use clean_ck0::{is_def_eq, Budget, Env, MinimalEnv, Name, RawExpr, RawLevel, Term, Transparency};
+use clean_ck0::{is_def_eq, Budget, MinimalEnv, Name, RawExpr, RawLevel, Term, Transparency};
 
 fn n(s: &str) -> Name {
     Name::from_dotted(s)

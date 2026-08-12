@@ -4,6 +4,8 @@
 
 //! Extensions for `library_search`.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use std::collections::{BTreeMap, VecDeque};
 
 use clean_kernel::{name::Name, Expr, ExprKind};
@@ -17,6 +19,8 @@ use super::library_search::{
 #[derive(Debug, Clone, Error, PartialEq)]
 pub(crate) enum SearchExtError {
     #[error("search cache capacity must be positive")]
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     CacheCapacityExceeded,
     #[error("invalid search task id {id}")]
     InvalidTaskId { id: usize },
@@ -150,6 +154,7 @@ impl SearchCache {
         }
     }
 
+    #[allow(dead_code)] // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn validate(&self) -> Result<(), SearchExtError> {
         (self.capacity > 0)
             .then_some(())
@@ -303,6 +308,8 @@ impl SearchStats {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TypeFilterMode {
     ExactHead,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     Compatible,
     SubExpression,
 }

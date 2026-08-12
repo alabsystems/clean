@@ -1,0 +1,15 @@
+# Local policy for the Aristotle/Harmonic Lean patch bundle ingest contract.
+schema_version = "clean-math_map-policy-v1"
+allowed_schema_versions = ["1.0.0"]
+allowed_services = ["math_map"]
+allowed_target_kinds = ["fill_sorry", "repair_proof", "frontier_candidate"]
+denied_target_kinds = []
+denied_imports = []
+max_bundle_bytes = 104857600
+max_bundle_age_days = 30
+require_signature = true
+require_registered_signature = true
+
+# Production Aristotle ingest must be backed by real ed25519 verification.
+require_cryptographic_signature = true
+require_patch_hashes = true

@@ -31,7 +31,7 @@ use std::sync::Arc;
 
 /// A nullary constant `name`.
 fn cst(name: &str) -> Expr {
-    Expr::const_(Name::from_string(name), Vec::<crate::level::Level>::new())
+    Expr::const_(Name::from_string(name), Vec::<Level>::new())
 }
 
 /// The interval type `I`.

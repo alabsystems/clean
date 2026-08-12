@@ -522,22 +522,21 @@ fn prop_env_typed() -> Environment {
     .expect("register MMThm");
 
     // Register `name : Π σ, MMThm(σ h_0) → … → MMThm(σ h_{n-1}) → MMThm(σ concl)`.
-    let mut add_assertion =
-        |env: &mut Environment, name: &str, hyps: &[Vec<u64>], concl: &[u64]| {
-            let mut b = EnvDeclBuilder::new();
-            let (s_id, s) = b.fresh_local(subst_fn_ty.clone());
-            let mut ty = mmthm(apply_subst_var(s.clone(), concl));
-            for h in hyps.iter().rev() {
-                ty = Expr::arrow(mmthm(apply_subst_var(s.clone(), h)), ty);
-            }
-            let ty = b.finish(b.mk_pi(s_id, BinderInfo::Default, subst_fn_ty.clone(), ty));
-            env.add_decl(Declaration::Axiom {
-                name: Name::from_string(name),
-                level_params: vec![],
-                type_: ty,
-            })
-            .unwrap_or_else(|e| panic!("register {name}: {e}"));
-        };
+    let add_assertion = |env: &mut Environment, name: &str, hyps: &[Vec<u64>], concl: &[u64]| {
+        let mut b = EnvDeclBuilder::new();
+        let (s_id, s) = b.fresh_local(subst_fn_ty.clone());
+        let mut ty = mmthm(apply_subst_var(s.clone(), concl));
+        for h in hyps.iter().rev() {
+            ty = Expr::arrow(mmthm(apply_subst_var(s.clone(), h)), ty);
+        }
+        let ty = b.finish(b.mk_pi(s_id, BinderInfo::Default, subst_fn_ty.clone(), ty));
+        env.add_decl(Declaration::Axiom {
+            name: Name::from_string(name),
+            level_params: vec![],
+            type_: ty,
+        })
+        .unwrap_or_else(|e| panic!("register {name}: {e}"));
+    };
 
     // wi : wff ph → wff ps → wff ( ph → ps )
     add_assertion(

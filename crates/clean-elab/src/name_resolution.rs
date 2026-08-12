@@ -73,6 +73,9 @@ pub(crate) fn resolve_identifier(
 /// Matches are searched under the current namespace and each open namespace.
 /// Results are deduplicated and returned in a stable order.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn get_completions(
     prefix: &str,
     ns_state: &NamespaceState,
@@ -98,6 +101,9 @@ fn qualify_name(namespace: &Name, name: &Name) -> Option<Name> {
     Some(Name::from_string(&qualified))
 }
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 fn collect_completions(
     namespace: &Name,
     prefix: &str,
@@ -117,6 +123,9 @@ fn collect_completions(
     }
 }
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 fn completion_search_prefix(namespace: &Name, prefix: &str) -> String {
     if namespace.is_anon() {
         prefix.to_string()

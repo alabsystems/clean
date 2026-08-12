@@ -47,11 +47,11 @@ impl Environment {
             let (bv_id, _bv) = b.fresh_local(type_v.clone());
             let e = b.mk_pi(
                 bv_id,
-                BinderInfo::Implicit,
+                BinderInfo::Default,
                 type_v.clone(),
                 result_sort.clone(),
             );
-            let e = b.mk_pi(a_id, BinderInfo::Implicit, type_u.clone(), e);
+            let e = b.mk_pi(a_id, BinderInfo::Default, type_u.clone(), e);
             b.finish(e)
         };
 
@@ -405,11 +405,11 @@ impl Environment {
             let (bv_id, _bv) = b.fresh_local(sort_v.clone());
             let e = b.mk_pi(
                 bv_id,
-                BinderInfo::Implicit,
+                BinderInfo::Default,
                 sort_v.clone(),
                 result_sort.clone(),
             );
-            let e = b.mk_pi(a_id, BinderInfo::Implicit, sort_u.clone(), e);
+            let e = b.mk_pi(a_id, BinderInfo::Default, sort_u.clone(), e);
             b.finish(e)
         };
 
@@ -835,7 +835,7 @@ impl Environment {
             let result = Expr::app(Expr::app(subtype_const.clone(), alpha.clone()), p.clone());
             let e = b.mk_pi(pv_id, BinderInfo::Default, pval_ty, result);
             let e = b.mk_pi(val_id, BinderInfo::Default, alpha, e);
-            let e = b.mk_pi(p_id, BinderInfo::Default, p_ty, e);
+            let e = b.mk_pi(p_id, BinderInfo::Implicit, p_ty, e);
             let e = b.mk_pi(alpha_id, BinderInfo::Implicit, sort_u.clone(), e);
             b.finish(e)
         };
@@ -864,7 +864,7 @@ impl Environment {
             let sub_ty = Expr::app(Expr::app(subtype_const.clone(), alpha.clone()), p.clone());
             let (s_id, _s) = b.fresh_local(sub_ty.clone());
             let e = b.mk_pi(s_id, BinderInfo::Default, sub_ty, alpha.clone());
-            let e = b.mk_pi(p_id, BinderInfo::Default, p_ty, e);
+            let e = b.mk_pi(p_id, BinderInfo::Implicit, p_ty, e);
             let e = b.mk_pi(alpha_id, BinderInfo::Implicit, sort_u.clone(), e);
             b.finish(e)
         };
@@ -913,7 +913,7 @@ impl Environment {
             );
             let result = Expr::app(p.clone(), h_val);
             let e = b.mk_pi(s_id, BinderInfo::Default, sub_ty, result);
-            let e = b.mk_pi(p_id, BinderInfo::Default, p_ty, e);
+            let e = b.mk_pi(p_id, BinderInfo::Implicit, p_ty, e);
             let e = b.mk_pi(alpha_id, BinderInfo::Implicit, sort_u.clone(), e);
             b.finish(e)
         };

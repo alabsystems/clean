@@ -232,15 +232,16 @@ fn test_tactic_builder_trivial() {
 
     // Goal: P with hp : P in context (trivial uses assumption internally)
     let p = Expr::const_(Name::from_string("P"), vec![]);
-    let mut state = ProofState::new(env, p.clone());
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        p.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Run aesop
     let result = aesop(&mut state);
@@ -302,15 +303,16 @@ fn test_tactic_builder_assumption() {
 
     // Goal: P
     let p = Expr::const_(Name::from_string("P"), vec![]);
-    let mut state = ProofState::new(env, p.clone());
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        p.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Run aesop - assumption should find hp
     let result = aesop(&mut state);

@@ -95,6 +95,7 @@ struct L2Consts {
     l1: Level,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl L2Consts {
     fn new() -> Self {
         let l0 = Level::zero();

@@ -56,6 +56,10 @@ pub(crate) struct ReuseCandidate {
     pub(crate) source_var: VarId,
     pub(crate) ctor_tag: u16,
     pub(crate) num_fields: usize,
+    // Per-field layout of the slot. `is_compatible_reuse` decides on the
+    // aggregate `CtorInfo` (object count + scalar size); the field-wise types
+    // are what a field-level partial-reuse check will compare — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) field_types: Vec<IRType>,
     pub(crate) distance_to_use: usize,
     pub(crate) ctor_info: CtorInfo,
@@ -65,8 +69,14 @@ pub(crate) struct ReuseCandidate {
 #[derive(Clone, Debug)]
 pub(crate) struct AllocationSite {
     pub(crate) var: VarId,
+    // The allocation's own shape. Matching is done through `ctor_info`, so the
+    // tag/arity/field-type triple is currently write-only; it is the data a
+    // tag-preserving (in-place `SetTag`-free) reuse rule needs — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) ctor_tag: u16,
+    #[allow(dead_code)]
     pub(crate) num_fields: usize,
+    #[allow(dead_code)]
     pub(crate) field_types: Vec<IRType>,
     pub(crate) ctor_info: CtorInfo,
 }

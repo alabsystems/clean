@@ -67,7 +67,7 @@ fn axiom_closure(env: &Environment, name: &str) -> Vec<String> {
     env.axiom_deps(&Name::from_string(name))
         .unwrap_or_else(|| panic!("{name} should be registered"))
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect()
 }
 
@@ -332,7 +332,7 @@ fn test_no_where_decl_ever_registers_with_sorry_axiom() {
                     };
                     let tainted: Vec<String> = deps
                         .iter()
-                        .map(std::string::ToString::to_string)
+                        .map(ToString::to_string)
                         .filter(|d| d.to_lowercase().contains("sorry"))
                         .collect();
                     assert!(

@@ -97,6 +97,8 @@ struct PolyConsts {
     nnreal_add: Expr,
     nnreal_of_rat: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     rat: Expr,
     rat_mk: Expr,
     int_of_nat: Expr,

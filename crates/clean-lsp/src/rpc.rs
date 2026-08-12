@@ -228,6 +228,7 @@ struct RpcSession {
 pub(crate) struct RpcObjectStore {
     /// Next reference id to hand out. Starts at 1; `0` is reserved as a
     /// never-allocated sentinel for callers that need one.
+    #[cfg(test)]
     next_ref: AtomicU64,
     /// Live references keyed by their opaque id.
     objects: DashMap<u64, Value>,
@@ -242,6 +243,7 @@ impl Default for RpcObjectStore {
 impl RpcObjectStore {
     fn new() -> Self {
         Self {
+            #[cfg(test)]
             next_ref: AtomicU64::new(1),
             objects: DashMap::new(),
         }
@@ -250,6 +252,7 @@ impl RpcObjectStore {
     /// Allocate a fresh reference for `value`, returning its opaque id.
     ///
     /// Ids are monotonically increasing and never reused.
+    #[cfg(test)]
     fn alloc(&self, value: Value) -> u64 {
         let id = self.next_ref.fetch_add(1, Ordering::SeqCst);
         self.objects.insert(id, value);
@@ -259,6 +262,7 @@ impl RpcObjectStore {
     /// Look up the value held behind `id`, cloning it for the caller.
     ///
     /// Returns `None` if `id` was never allocated or has already been released.
+    #[cfg(test)]
     fn get(&self, id: u64) -> Option<Value> {
         self.objects.get(&id).map(|entry| entry.value().clone())
     }
@@ -296,17 +300,11 @@ type RpcProcedure =
 
 /// Context passed to RPC procedures
 ///
-/// Fields are populated for every call but not yet read by stub procedures.
-/// When real widget procedures are implemented, they will use these fields.
 pub(crate) struct RpcCallContext<'a> {
-    /// Session ID
-    pub session_id: u64,
     /// Document URI
     pub uri: &'a Url,
     /// Position in document
     pub position: Position,
-    /// Object store for allocating references
-    pub object_store: &'a RpcObjectStore,
     /// Widget instances and JS modules visible to infoview calls
     pub widget_registry: &'a WidgetRegistry,
 }
@@ -322,10 +320,6 @@ pub(crate) struct WidgetRegistry {
 }
 
 impl WidgetRegistry {
-    fn register_widget(&self, uri: Url, widget: PanelWidgetInstance) {
-        self.widgets_by_uri.entry(uri).or_default().push(widget);
-    }
-
     fn replace_widgets(&self, uri: Url, widgets: Vec<PanelWidgetInstance>) {
         if widgets.is_empty() {
             self.widgets_by_uri.remove(&uri);
@@ -434,14 +428,6 @@ impl RpcSessionManager {
         manager
     }
 
-    /// Register a panel widget for a document.
-    ///
-    /// This is an explicit registry hook. It does not yet imply that widgets are
-    /// populated from live elaboration state.
-    pub(crate) fn register_panel_widget(&self, uri: Url, widget: PanelWidgetInstance) {
-        self.widget_registry.register_widget(uri, widget);
-    }
-
     /// Replace all panel widgets for a document.
     ///
     /// The LSP backend uses this to refresh document-backed widgets after
@@ -534,10 +520,8 @@ impl RpcSessionManager {
 
         // Create context
         let ctx = RpcCallContext {
-            session_id: params.session_id,
             uri: &session.uri,
             position: params.position,
-            object_store: &session.object_store,
             widget_registry: &self.widget_registry,
         };
 
@@ -1133,9 +1117,9 @@ mod tests {
         let uri = Url::parse("file:///widgets.lean").unwrap();
         let javascript_hash = 987_654;
 
-        manager.register_panel_widget(
+        manager.replace_panel_widgets(
             uri.clone(),
-            PanelWidgetInstance {
+            vec![PanelWidgetInstance {
                 id: "clean.TestWidget".to_string(),
                 javascript_hash,
                 props: serde_json::json!({"kind": "test", "value": 5}),
@@ -1150,7 +1134,7 @@ mod tests {
                     },
                 }),
                 name: None,
-            },
+            }],
         );
         manager.register_widget_source(
             javascript_hash,
@@ -1208,9 +1192,9 @@ mod tests {
     fn test_widget_registry_filters_widgets_by_range() {
         let manager = RpcSessionManager::new();
         let uri = Url::parse("file:///widgets.lean").unwrap();
-        manager.register_panel_widget(
+        manager.replace_panel_widgets(
             uri.clone(),
-            PanelWidgetInstance {
+            vec![PanelWidgetInstance {
                 id: "clean.RangeWidget".to_string(),
                 javascript_hash: 1,
                 props: Value::Null,
@@ -1225,7 +1209,7 @@ mod tests {
                     },
                 }),
                 name: None,
-            },
+            }],
         );
 
         let connected = manager

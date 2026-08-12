@@ -101,6 +101,11 @@ pub(crate) use self::reviewer_deck::*;
 pub(crate) use self::rows::*;
 pub(crate) use self::sorry_bypass_lint::*;
 pub(crate) use self::tactic_count_artifact::*;
+// 2026-07-31: no production caller re-exports through here — the module's own
+// `tests::part_10` / `part_12` reach `validate_tactic_count_artifact_consistency`
+// and `validate_tactic_parity_report_linkage` through this glob. Gated on
+// `cfg(test)` so the non-test lib build does not carry an unused import.
+#[cfg(test)]
 pub(crate) use self::tactic_count_consistency::*;
 pub(crate) use self::tactic_count_fingerprints::*;
 pub(crate) use self::tactic_parity_types::*;

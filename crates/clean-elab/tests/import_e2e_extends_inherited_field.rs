@@ -77,6 +77,9 @@ fn nat_lit(n: u32) -> Expr {
 }
 
 /// Reduce `expr` to WHNF and return the head constant's name, if any.
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn whnf_head_const(env: &Environment, expr: &Expr) -> Option<String> {
     let tc = TypeChecker::new(env);
     let reduced = tc.whnf(expr);

@@ -257,6 +257,9 @@ pub(crate) fn eval_mathverse_use(state: &mut ProofState, _args: &[Expr]) -> Tact
 /// must build the tactic-level target/context, install an [`MathverseLibrary`] with
 /// [`set_mathverse_library`], then call this function to run the same strict
 /// KernelVerified path used by the `mathverse_use` tactic.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub fn run_strict_mathverse_use(state: &mut ProofState) -> TacticResult {
     #[cfg(feature = "mathverse-library")]
     {
@@ -290,6 +293,9 @@ pub fn run_strict_mathverse_use(state: &mut ProofState) -> TacticResult {
 /// This is a **consumption / visibility** gate, NOT the minting of a
 /// `KernelVerified` verdict — the kernel check is unchanged. `Strict` remains
 /// the default; callers must explicitly select this mode.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub fn run_relaxed_foundational_mathverse_use(state: &mut ProofState) -> TacticResult {
     #[cfg(feature = "mathverse-library")]
     {
@@ -805,6 +811,11 @@ fn eval_mathverse_suggest_impl(state: &mut ProofState) -> TacticResult {
 ///
 /// Accepts `SourceVerified` constants in addition to `KernelVerified`.
 /// Not yet wired into the tactic registry; will be connected by #3359 follow-up.
+// 2026-07-31: staged entry point with no caller yet — it is the sole production
+// constructor of `TrustGate::Relaxed` and the registry wiring is the pending
+// half of #3359. Kept (not deleted) because deleting it would also strand the
+// `Relaxed` gate variant and its tests in `mathverse_use_tests`.
+#[allow(dead_code)]
 #[cfg(feature = "mathverse-library")]
 pub(crate) fn eval_mathverse_use_relaxed(state: &mut ProofState) -> TacticResult {
     eval_mathverse_use_with_trust(state, TrustGate::Relaxed)

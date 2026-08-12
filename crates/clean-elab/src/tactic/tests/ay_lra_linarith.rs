@@ -37,6 +37,12 @@ fn setup_lra_env() -> Environment {
     env
 }
 
+// 2026-07-31: the `Real`-side and `Int.lt`/`Int.ofNat` members of this fixture
+// set currently have no calling test — the `Int.le` siblings (`int_type`,
+// `int_le`) are exercised throughout the file. Kept (not deleted) because they
+// are one coherent expression-builder set for this tactic's goal shapes, and a
+// half-set is a trap for the next QF_LRA test.
+#[allow(dead_code)]
 fn setup_real_env() -> Environment {
     let mut env = setup_lra_env();
     env.init_real_linear_order()
@@ -50,10 +56,12 @@ fn int_type() -> Expr {
     Expr::const_(Name::from_string("Int"), vec![])
 }
 
+#[allow(dead_code)] // 2026-07-31: see the fixture-set note on `setup_real_env`.
 fn real_type() -> Expr {
     Expr::const_(Name::from_string("Real"), vec![])
 }
 
+#[allow(dead_code)] // 2026-07-31: see the fixture-set note on `setup_real_env`.
 fn int_of_nat(n: u64) -> Expr {
     Expr::app(
         Expr::const_(Name::from_string("Int.ofNat"), vec![]),
@@ -77,6 +85,7 @@ fn int_le(lhs: Expr, rhs: Expr) -> Expr {
     )
 }
 
+#[allow(dead_code)] // 2026-07-31: see the fixture-set note on `setup_real_env`.
 fn int_lt(lhs: Expr, rhs: Expr) -> Expr {
     Expr::app(
         Expr::app(
@@ -93,6 +102,7 @@ fn int_lt(lhs: Expr, rhs: Expr) -> Expr {
     )
 }
 
+#[allow(dead_code)] // 2026-07-31: see the fixture-set note on `setup_real_env`.
 fn real_of_nat(n: u64) -> Expr {
     Expr::app(
         Expr::const_(Name::from_string("Real.ofNat"), vec![]),
@@ -100,6 +110,7 @@ fn real_of_nat(n: u64) -> Expr {
     )
 }
 
+#[allow(dead_code)] // 2026-07-31: see the fixture-set note on `setup_real_env`.
 fn real_le(lhs: Expr, rhs: Expr) -> Expr {
     Expr::app(
         Expr::app(

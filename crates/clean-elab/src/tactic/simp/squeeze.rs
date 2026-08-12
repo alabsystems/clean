@@ -229,9 +229,14 @@ fn simp_expr_tracking(
         // record value/body lemma provenance.
         if !preserve_outer_let {
             for lemma in lemmas.candidates(state, goal, &result.expr) {
-                if let Some((new_expr, proof)) =
-                    try_apply_simp_lemma_with_proof(state, goal, &result.expr, lemma)
-                {
+                if let Some((new_expr, proof)) = try_apply_simp_lemma_with_proof(
+                    state,
+                    goal,
+                    &result.expr,
+                    lemma,
+                    lemmas,
+                    config,
+                ) {
                     if new_expr != result.expr {
                         let step = SimpResult {
                             expr: new_expr,

@@ -82,6 +82,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants shared across the testBit-extensionality lemmas.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct C {
     nat: Expr,
     zero: Expr,

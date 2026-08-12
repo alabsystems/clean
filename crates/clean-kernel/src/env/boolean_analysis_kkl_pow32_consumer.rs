@@ -91,6 +91,8 @@ struct Pow32ConsumerConsts {
     finsum_ofrat: Expr,
     // logic.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq1: Expr,
     eq_trans1: Expr,
     eq_subst1: Expr,
@@ -183,6 +185,7 @@ impl Pow32ConsumerConsts {
     }
     /// `@Eq.{1} NNReal a b`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_nnreal(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nnreal.clone(), a, b])
     }

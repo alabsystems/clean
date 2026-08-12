@@ -97,6 +97,9 @@ pub(crate) struct MutualInductiveSpec {
 
 /// Result of elaborating a single extended inductive type.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct InductiveResult {
     /// The inductive declaration expression (type former).
     pub(crate) decl: Expr,

@@ -22,7 +22,9 @@
 
 use super::types::{SmtCommand, SmtScript, SmtSort, SmtTerm};
 use crate::types::{AxiomProfile, Provenance, SourceSystem, TrustLevel};
-use clean_kernel::{BinderInfo, Expr, ExprKind, LevelVec, Name};
+#[cfg(test)]
+use clean_kernel::ExprKind;
+use clean_kernel::{BinderInfo, Expr, LevelVec, Name};
 use thiserror::Error;
 
 // ════════════════════════════════════════════════════════════════════════════

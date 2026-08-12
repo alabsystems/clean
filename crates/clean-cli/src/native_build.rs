@@ -493,6 +493,7 @@ pub(crate) fn emit_entry_c(file: &Path, decl: &str, opt_level: u8) -> anyhow::Re
 /// and copies it to `out_path` (creating parent dirs). The scratch dir is
 /// cleaned up on drop. `clean run` runs the binary in place via the lower-level
 /// helpers; `clean lake run` calls this to land a stable binary it then execs.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn build_native_executable(
     file: &Path,
     decl: &str,
@@ -657,6 +658,39 @@ pub(crate) fn mangle_decl(decl: &str) -> String {
 }
 
 /// Like [`select_shims_from`] but over several tables, concatenated in order.
+/// Extract-lane helper: shim coverage over emitted C TEXT — returns the
+/// concatenated C definitions of every referenced shim, or an error naming
+/// the first uncovered extern (fail-closed; `clean extract`).
+pub(crate) fn select_shims_for_c_text(emitted_c: &str) -> anyhow::Result<String> {
+    let shims = select_shims_from_tables(emitted_c, ALL_PRELUDE_SHIM_TABLES)?;
+    Ok(shims
+        .iter()
+        .map(|s| s.definition)
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+/// Extract-lane helper: the mangled `l_*` symbol for a declaration.
+pub(crate) fn mangle_decl_symbol(decl: &str) -> String {
+    mangle_decl(decl)
+}
+
+/// Extract-lane helper: materialize the runtime + emitted C + a caller-
+/// provided driver `main()` into `dir`, then cc-compile and link. Returns
+/// the executable path.
+pub(crate) fn build_extract_executable(
+    dir: &Path,
+    shims_c: &str,
+    emitted_c: &str,
+    driver_c: &str,
+) -> anyhow::Result<PathBuf> {
+    // Shims must precede the emitted closure (same-translation-unit forward
+    // definition, matching the `clean run` layout).
+    let program = format!("#include \"clean_runtime.h\"\n{shims_c}\n{emitted_c}\n{driver_c}");
+    let build = materialize_build(dir, &program)?;
+    compile_and_link(dir, &build)
+}
+
 fn select_shims_from_tables(
     emitted_c: &str,
     tables: &[&'static [PreludeShim]],

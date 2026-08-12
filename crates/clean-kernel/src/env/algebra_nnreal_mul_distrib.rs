@@ -49,6 +49,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the distributivity lemmas.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct DistribConsts {
     nat: Expr,
     nat_zero: Expr,
@@ -142,6 +143,7 @@ impl DistribConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn prop(&self) -> Expr {
         Expr::from_kind(ExprKind::Sort(Level::zero()))
     }

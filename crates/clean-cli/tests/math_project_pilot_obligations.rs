@@ -115,6 +115,7 @@ fn parse_json(args: &[&str], output: &Output) -> Value {
     })
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn read_fixture_json(path: &str) -> Value {
     let path = workspace_root().join(path);
     let bytes =
@@ -123,6 +124,7 @@ fn read_fixture_json(path: &str) -> Value {
         .unwrap_or_else(|err| panic!("failed to parse {} as JSON: {err}", path.display()))
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn write_temp_obligation(name: &str, obligation: &Value) -> PathBuf {
     let dir = workspace_root()
         .join("target")

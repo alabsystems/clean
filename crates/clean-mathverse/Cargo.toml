@@ -21,6 +21,10 @@ clean-kernel = { workspace = true, features = ["test-utils", "math-overlays", "p
 # the default `ay-smt` backend) SMT.
 clean-auto.workspace = true
 clean-olean.workspace = true
+# `denotation` backs the `changed_llvm2_denotation` false control in
+# `false_control_suite`: the probe hands the real cross-validator a claimed
+# translation hash taken from a DIFFERENT program and requires a rejection.
+clean-c-sem.workspace = true
 clean-cake = { path = "../clean-cake" }
 clean-features.workspace = true
 thiserror.workspace = true
@@ -71,6 +75,13 @@ slow_tests = []
 mimalloc = ["dep:mimalloc"]
 
 [dev-dependencies]
+# `qbf_verify::strategy` and `nn_verify::certificate::branch_cover` are the real
+# verifiers behind two false controls, and `false_control_suite`'s unit tests run
+# them on the same known-bad inputs its probes use. This is a DEV-dependency, not
+# a normal one, because clean-verify -> clean-elab -> (feature `mathverse-library`)
+# clean-mathverse is a Cargo package cycle; cargo permits dev-dependency cycles
+# only. See the crate-graph note in `src/false_control_suite.rs`.
+clean-verify.workspace = true
 criterion.workspace = true
 # The `clean` facade crate provides the check pipeline (CheckConfig,
 # load_source_into) used by the kernel-export bridge test in

@@ -1062,7 +1062,7 @@ fn test_term_elab_mklambda_body_builds_lambda_and_kernel_checks() {
         .expect("mkLambda body should elaborate to `fun x : Nat => Nat.zero`");
 
     assert!(
-        matches!(term.kind(), clean_kernel::ExprKind::Lam(..)),
+        matches!(term.kind(), ExprKind::Lam(..)),
         "mkLambda body should build a kernel lambda, got {term:?}"
     );
     let ty = ctx
@@ -1093,7 +1093,7 @@ fn test_term_elab_mkforall_body_builds_dependent_arrow_and_kernel_checks() {
         .expect("mkForall body should elaborate to `(x : Nat) → Nat`");
 
     assert!(
-        matches!(term.kind(), clean_kernel::ExprKind::Pi(..)),
+        matches!(term.kind(), ExprKind::Pi(..)),
         "mkForall body should build a kernel Pi, got {term:?}"
     );
     // `(x : Nat) → Nat` is a type, so its own type must be a sort.
@@ -1101,7 +1101,7 @@ fn test_term_elab_mkforall_body_builds_dependent_arrow_and_kernel_checks() {
         .infer_type(&term)
         .expect("constructed Pi must kernel-check");
     assert!(
-        matches!(ty.kind(), clean_kernel::ExprKind::Sort(_)),
+        matches!(ty.kind(), ExprKind::Sort(_)),
         "constructed `(x : Nat) → Nat` should be a Sort, got {ty:?}"
     );
 }
@@ -1128,7 +1128,7 @@ fn test_term_elab_expr_lam_with_binderinfo_builds_lambda() {
         .expect("Expr.lam body should elaborate to a lambda");
 
     assert!(
-        matches!(term.kind(), clean_kernel::ExprKind::Lam(..)),
+        matches!(term.kind(), ExprKind::Lam(..)),
         "Expr.lam body should build a kernel lambda, got {term:?}"
     );
     let ty = ctx
@@ -1198,7 +1198,7 @@ fn test_term_elab_infer_type_terminal_query_yields_type_and_kernel_checks() {
         .infer_type(&term)
         .expect("the inferred type must itself kernel-check");
     assert!(
-        matches!(ty.kind(), clean_kernel::ExprKind::Sort(..)),
+        matches!(ty.kind(), ExprKind::Sort(..)),
         "the type of `Nat` must be a sort, got {ty:?}"
     );
 }
@@ -1321,12 +1321,12 @@ fn test_term_elab_whnf_reduces_term_and_kernel_checks() {
     // `Nat.zero` constructor), NOT the unreduced `Nat.pred ...` application. Pin
     // that the reduction actually took place.
     assert!(
-        !matches!(term.kind(), clean_kernel::ExprKind::App(..)),
+        !matches!(term.kind(), ExprKind::App(..)),
         "whnf result must be reduced (not the unreduced `Nat.pred ...` application), got {term:?}"
     );
     let is_zero_value = match term.kind() {
-        clean_kernel::ExprKind::Const(name, _) => name == &Name::from_string("Nat.zero"),
-        clean_kernel::ExprKind::Lit(clean_kernel::Literal::Nat(n)) => n.is_zero(),
+        ExprKind::Const(name, _) => name == &Name::from_string("Nat.zero"),
+        ExprKind::Lit(Literal::Nat(n)) => n.is_zero(),
         _ => false,
     };
     assert!(
@@ -1585,7 +1585,7 @@ fn test_term_elab_if_true_selects_then_branch_and_kernel_checks() {
     // The selected branch must be the literal chosen term, not a runtime `ite`
     // application keeping both branches.
     assert!(
-        !matches!(term.kind(), clean_kernel::ExprKind::App(..)),
+        !matches!(term.kind(), ExprKind::App(..)),
         "computed control flow must select a branch, not build an `ite` app: {term:?}"
     );
     let ty = ctx

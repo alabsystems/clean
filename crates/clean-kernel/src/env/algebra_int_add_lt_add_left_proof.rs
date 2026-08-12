@@ -59,6 +59,8 @@ use crate::name::Name;
 struct IntAddLtAddLeftConsts {
     int_type: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     int_le: Expr,
     int_lt: Expr,
     int_add: Expr,
@@ -95,6 +97,7 @@ impl IntAddLtAddLeftConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn le(&self, x: Expr, y: Expr) -> Expr {
         Expr::app(Expr::app(self.int_le.clone(), x), y)
     }

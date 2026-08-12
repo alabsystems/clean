@@ -426,10 +426,10 @@ pub fn concrete_use_init(lowered: &crate::vir_lowering::LoweredProgram) -> Vec<(
             for p in &b.params {
                 first_def.insert(p.local, 0); // SSA params: defined at block entry
             }
-            let mut justify = |l: LocalId,
-                               use_stmt: usize,
-                               first_def: &HashMap<LocalId, usize>,
-                               out: &mut Vec<(String, Expr)>| {
+            let justify = |l: LocalId,
+                           use_stmt: usize,
+                           first_def: &HashMap<LocalId, usize>,
+                           out: &mut Vec<(String, Expr)>| {
                 let base = format!("{function}::b{bi}::local{l}@{use_stmt}");
                 match (first_def.get(&l), enc(use_stmt)) {
                     (Some(d), Some(eu)) => match enc(*d) {

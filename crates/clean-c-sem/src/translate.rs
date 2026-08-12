@@ -1907,7 +1907,7 @@ mod tests {
         });
 
         let (_, here_args) = spine(&here);
-        let (_, there_args) = spine(&there);
+        let (_, _there_args) = spine(&there);
         assert!(
             matches!(
                 here_args[1].kind(),

@@ -29,8 +29,9 @@ use std::collections::BTreeMap;
 
 use clean_kernel::expr::FVarId;
 use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::Expr;
+#[cfg(test)]
+use clean_kernel::{BinderInfo, Declaration, Environment, Name};
 
 use super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
 
@@ -54,10 +55,10 @@ mod thmspine_decode_tests;
 mod translate;
 
 pub use classes::*;
-pub use connectives::*;
+pub(crate) use connectives::*;
 pub use datatypes::*;
-pub use def_axioms::*;
-pub use proof_terms::*;
+pub(crate) use def_axioms::*;
+pub(crate) use proof_terms::*;
 pub use translate::*;
 
 /// Error translating a Pure proof to a clean `Expr`.
@@ -231,10 +232,8 @@ std::thread_local! {
     /// rejects the line as [`TranslateError::PremiseBudgetExceeded`]. Reset with
     /// the counter; under budget it is never set and behaviour is byte-identical.
     static PREMISE_POISON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// Per-LINE **peak** premise-search step count — the max [`PREMISE_STEPS`]
-    /// reached across every attempt since the last [`reset_translate_steps`].
-    /// Instrumentation ONLY (never gates a verdict); a calibration test reads it
-    /// via [`premise_steps_peak`] to size [`PREMISE_STEP_BUDGET_DEFAULT`].
+    /// Test-only per-LINE peak used to calibrate the production budget.
+    #[cfg(test)]
     static PREMISE_STEPS_PEAK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
@@ -304,8 +303,7 @@ impl Drop for AlignOverrideGuard {
 pub(crate) fn reset_translate_steps() {
     TRANSLATE_STEPS.with(|c| c.set(0));
     SUBST_POISON.with(|c| c.set(false));
-    // Per-LINE peak resets here too so the calibration getter reports one line's
-    // peak (the driver calls this once at the start of every theorem line).
+    #[cfg(test)]
     PREMISE_STEPS_PEAK.with(|c| c.set(0));
 }
 
@@ -313,9 +311,8 @@ pub(crate) fn reset_translate_steps() {
 /// the very start of each `prove_from_premises` premise-search
 /// ([`proof_terms::premise_instantiation_body`]), so the budget covers exactly ONE
 /// attempt (the driver runs several escalation modes per line, each a fresh
-/// attempt with its own full budget). The per-LINE peak
-/// ([`PREMISE_STEPS_PEAK`]) is NOT reset here — it accumulates across a line's
-/// attempts and is cleared by [`reset_translate_steps`].
+/// attempt with its own full budget). Test builds separately accumulate a
+/// per-line calibration peak, cleared by [`reset_translate_steps`].
 pub(crate) fn reset_premise_steps() {
     PREMISE_STEPS.with(|c| c.set(0));
     PREMISE_POISON.with(|c| c.set(false));
@@ -325,8 +322,8 @@ pub(crate) fn reset_premise_steps() {
 /// while it is OK to keep searching; returns `false` (and latches
 /// [`PREMISE_POISON`]) once the per-ATTEMPT counter passes the budget, so the
 /// recursive walk unwinds cheaply. A no-op returning `true` when no budget is
-/// configured (`ISA_PREMISE_STEP_BUDGET=0`, the zero-cost opt-out). Every call
-/// also updates the per-LINE peak ([`PREMISE_STEPS_PEAK`]) for calibration.
+/// configured (`ISA_PREMISE_STEP_BUDGET=0`, the zero-cost opt-out). Test builds
+/// additionally update a calibration-only per-line peak.
 pub(crate) fn bump_premise_steps() -> bool {
     let Some(budget) = premise_step_budget() else {
         return true;
@@ -334,6 +331,7 @@ pub(crate) fn bump_premise_steps() -> bool {
     PREMISE_STEPS.with(|c| {
         let n = c.get() + 1;
         c.set(n);
+        #[cfg(test)]
         PREMISE_STEPS_PEAK.with(|p| {
             if n > p.get() {
                 p.set(n);
@@ -367,6 +365,7 @@ pub(crate) fn premise_budget_exhausted() -> Option<u64> {
 /// read by the calibration test to size [`PREMISE_STEP_BUDGET_DEFAULT`]. Never
 /// influences a verdict.
 #[must_use]
+#[cfg(test)]
 pub(crate) fn premise_steps_peak() -> u64 {
     PREMISE_STEPS_PEAK.with(std::cell::Cell::get)
 }
@@ -536,8 +535,6 @@ pub(crate) struct Param {
     /// Embedded clean type of the binder (`Type` for a type param, else the
     /// embedded HOL type).
     pub(crate) ty: Expr,
-    /// `true` for a `∀ (T : Type)` type parameter (must bind outermost).
-    pub(crate) is_type: bool,
 }
 
 /// Translation context: discovered parameters in first-seen order.
@@ -1216,7 +1213,7 @@ mod tests {
     /// the produced decl in a fresh point-free env, and return the FIRST decl clean's
     /// kernel accepts (the final `Unfold` pass is what makes the def-const-backed
     /// constants reflexive). Returns the accepted `(type, value)` pair.
-    fn translate_pointfree(thm: &super::super::isabelle_pure::IsaProvenTheorem) -> (Expr, Expr) {
+    fn translate_pointfree(thm: &IsaProvenTheorem) -> (Expr, Expr) {
         let modes = [
             (
                 ClassMembership::Erase,

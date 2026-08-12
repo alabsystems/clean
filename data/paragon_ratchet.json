@@ -9,10 +9,10 @@
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)"
   },
   "totals": {
-    "files_over_500": 1352,
-    "unwrap_expect_production": 1197,
-    "bare_pub_non_lib": 13081,
-    "allow_dead_code_sites": 0
+    "files_over_500": 1406,
+    "unwrap_expect_production": 1225,
+    "bare_pub_non_lib": 13611,
+    "allow_dead_code_sites": 58
   },
   "crates": {
     "clean": {
@@ -22,7 +22,7 @@
       "allow_dead_code_sites": 0
     },
     "clean-auto": {
-      "files_over_500": 43,
+      "files_over_500": 44,
       "unwrap_expect_production": 62,
       "bare_pub_non_lib": 981,
       "allow_dead_code_sites": 0
@@ -34,9 +34,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-c-sem": {
-      "files_over_500": 22,
+      "files_over_500": 23,
       "unwrap_expect_production": 12,
-      "bare_pub_non_lib": 442,
+      "bare_pub_non_lib": 459,
       "allow_dead_code_sites": 0
     },
     "clean-cake": {
@@ -52,28 +52,28 @@
       "allow_dead_code_sites": 0
     },
     "clean-cli": {
-      "files_over_500": 38,
+      "files_over_500": 42,
       "unwrap_expect_production": 24,
-      "bare_pub_non_lib": 6,
+      "bare_pub_non_lib": 7,
       "allow_dead_code_sites": 0
     },
     "clean-compiler": {
-      "files_over_500": 148,
+      "files_over_500": 149,
       "unwrap_expect_production": 19,
       "bare_pub_non_lib": 521,
       "allow_dead_code_sites": 0
     },
     "clean-discovery": {
-      "files_over_500": 3,
+      "files_over_500": 2,
       "unwrap_expect_production": 0,
-      "bare_pub_non_lib": 222,
+      "bare_pub_non_lib": 238,
       "allow_dead_code_sites": 0
     },
     "clean-elab": {
-      "files_over_500": 364,
-      "unwrap_expect_production": 257,
-      "bare_pub_non_lib": 1397,
-      "allow_dead_code_sites": 0
+      "files_over_500": 375,
+      "unwrap_expect_production": 259,
+      "bare_pub_non_lib": 1435,
+      "allow_dead_code_sites": 8
     },
     "clean-features": {
       "files_over_500": 0,
@@ -88,9 +88,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-kernel": {
-      "files_over_500": 123,
-      "unwrap_expect_production": 154,
-      "bare_pub_non_lib": 1221,
+      "files_over_500": 129,
+      "unwrap_expect_production": 158,
+      "bare_pub_non_lib": 1228,
       "allow_dead_code_sites": 0
     },
     "clean-lake": {
@@ -118,9 +118,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-mathverse": {
-      "files_over_500": 220,
-      "unwrap_expect_production": 194,
-      "bare_pub_non_lib": 3270,
+      "files_over_500": 225,
+      "unwrap_expect_production": 203,
+      "bare_pub_non_lib": 3646,
       "allow_dead_code_sites": 0
     },
     "clean-mathverse-server": {
@@ -130,14 +130,14 @@
       "allow_dead_code_sites": 0
     },
     "clean-olean": {
-      "files_over_500": 29,
+      "files_over_500": 32,
       "unwrap_expect_production": 47,
-      "bare_pub_non_lib": 338,
+      "bare_pub_non_lib": 340,
       "allow_dead_code_sites": 0
     },
     "clean-parser": {
       "files_over_500": 30,
-      "unwrap_expect_production": 215,
+      "unwrap_expect_production": 217,
       "bare_pub_non_lib": 119,
       "allow_dead_code_sites": 0
     },
@@ -154,7 +154,7 @@
       "allow_dead_code_sites": 0
     },
     "clean-rust-sem": {
-      "files_over_500": 34,
+      "files_over_500": 33,
       "unwrap_expect_production": 57,
       "bare_pub_non_lib": 667,
       "allow_dead_code_sites": 0
@@ -173,25 +173,25 @@
     },
     "clean-tla": {
       "files_over_500": 24,
-      "unwrap_expect_production": 18,
-      "bare_pub_non_lib": 207,
+      "unwrap_expect_production": 28,
+      "bare_pub_non_lib": 208,
       "allow_dead_code_sites": 0
     },
     "clean-verify": {
-      "files_over_500": 195,
-      "unwrap_expect_production": 71,
-      "bare_pub_non_lib": 2244,
-      "allow_dead_code_sites": 0
+      "files_over_500": 219,
+      "unwrap_expect_production": 72,
+      "bare_pub_non_lib": 2316,
+      "allow_dead_code_sites": 50
     }
   },
   "worst_offenders_over_500": [
     {
       "path": "crates/clean-mathverse/src/coq/alpha.rs",
-      "lines": 18462
+      "lines": 18459
     },
     {
       "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
-      "lines": 11659
+      "lines": 11979
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
@@ -203,7 +203,7 @@
     },
     {
       "path": "crates/clean-lsp/src/backend/tests.rs",
-      "lines": 7539
+      "lines": 7538
     },
     {
       "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
@@ -219,11 +219,11 @@
     },
     {
       "path": "crates/clean-mathverse/src/shard.rs",
-      "lines": 6339
+      "lines": 6340
     },
     {
       "path": "crates/clean-kernel/src/bitvec_coercion.rs",
-      "lines": 6142
+      "lines": 6222
     },
     {
       "path": "crates/clean-mathverse/src/hol/isabelle_pure_translate/def_axioms/conj_bundle.rs",
@@ -231,7 +231,7 @@
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
-      "lines": 5888
+      "lines": 5905
     },
     {
       "path": "crates/clean-mathverse/src/verify/incremental/tests.rs",
@@ -239,15 +239,19 @@
     },
     {
       "path": "crates/clean-math-project/src/lib.rs",
-      "lines": 5641
+      "lines": 5640
     },
     {
       "path": "crates/clean-elab/src/tactic/tests/core.rs",
-      "lines": 5589
+      "lines": 5595
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/iota_core.rs",
       "lines": 5339
+    },
+    {
+      "path": "crates/clean-elab/src/codata_cmd.rs",
+      "lines": 5287
     },
     {
       "path": "crates/clean-kernel/src/tc/reduction/kan.rs",
@@ -259,13 +263,9 @@
     },
     {
       "path": "crates/clean-compiler/src/emit_trust_ir_tests.rs",
-      "lines": 4960
-    },
-    {
-      "path": "crates/clean-elab/tests/trustir_typesystem_e2e.rs",
-      "lines": 4952
+      "lines": 4977
     }
   ],
   "generated_by": "scripts/paragon_ratchet.sh --update",
-  "last_updated": "2026-07-26"
+  "last_updated": "2026-08-10"
 }

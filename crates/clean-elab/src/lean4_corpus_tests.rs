@@ -893,6 +893,156 @@ theorem using_wrong (n : Nat) : 0 + n = n := by
 }
 
 // ---------------------------------------------------------------------------
+// REGRESSION: `induction` over an inductive with TWO field-binding constructors.
+//
+// `build_induction_cases` (`tactic/induction.rs`) allocated every branch's field
+// and IH FVars from the monotonic global `next_fvar` and never reset it per
+// branch, unlike `cases_core` (`proof_manipulation.rs`) which resets to the
+// goal's own binder base. `close_fvars` accepts a tactic FVar in the assembled
+// recursor term only when `id - binder_base < binder_depth` at its occurrence,
+// and each minor premise's lambda chain restarts that depth at zero — so the
+// SECOND field-binding branch got `base + 1` at depth 1 and the whole proof was
+// rejected with
+//   TypeCheckFailed("metavariable MetaId(0) assignment violates its creation
+//    scope: nested metavariable MetaId(2) captures out-of-scope local FVarId(4)
+//    at binder depth 1")
+//
+// THE PREDICATE IS "TWO OR MORE CONSTRUCTORS BIND A FIELD", not "the first
+// constructor binds a field" — the offset that breaks branch `j` is the number
+// of fields bound by branches `0..j`, so position is irrelevant. Both halves
+// were checked against the pre-fix binary:
+//   * `| one (a : α) | two`   (first binds, second nullary)  — PASSED pre-fix
+//   * `| z | a1 (x : α) | a2 (y : α)` (first nullary)        — FAILED pre-fix
+//
+// A `Nat` / `List` / `Option` induction test therefore proves NOTHING here: it
+// passes with or without the fix, because their only field-binding constructor
+// is the last one. `Or` (`inl a` / `inr b`) and `Sum` are the smallest
+// witnesses. Single-constructor types — `And`, `Prod`, `Subtype`, `Sigma`,
+// `Exists`, every `structure`/`class` — were NOT affected: with one branch
+// there is no earlier branch to advance the counter.
+// ---------------------------------------------------------------------------
+
+/// RED without the per-branch `next_fvar` reset in `build_induction_cases`:
+/// `Or` leads with `inl (h : a)`, so the `inr` branch's field lands one id too
+/// high for its binder depth and the assembled `Or.rec` term is rejected.
+#[test]
+fn test_induction_or_field_binding_first_ctor_kernel_checks() {
+    let code = r#"
+theorem or_sym_induction (a b : Prop) (h : a ∨ b) : b ∨ a := by
+  induction h with
+  | inl ha => exact Or.inr ha
+  | inr hb => exact Or.inl hb
+"#;
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "induction on `Or` (field-binding first ctor)");
+    assert!(
+        env.get_const(&Name::from_string("or_sym_induction"))
+            .is_some(),
+        "or_sym_induction should be registered after a kernel-checked proof"
+    );
+}
+
+/// CONTROL for the test above: the SAME goal and the SAME branch bodies proved
+/// with `cases` instead of `induction`. `cases_core` already resets `next_fvar`
+/// per branch, so this passed both before and after the fix — it is what pins
+/// the failure to `build_induction_cases` rather than to `Or`, the prelude, the
+/// `with`-block dispatcher, or `close_fvars` itself.
+#[test]
+fn test_cases_or_field_binding_first_ctor_control_kernel_checks() {
+    let code = r#"
+theorem or_sym_cases (a b : Prop) (h : a ∨ b) : b ∨ a := by
+  cases h with
+  | inl ha => exact Or.inr ha
+  | inr hb => exact Or.inl hb
+"#;
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "cases on `Or` (control)");
+    assert!(
+        env.get_const(&Name::from_string("or_sym_cases")).is_some(),
+        "or_sym_cases should be registered after a kernel-checked proof"
+    );
+}
+
+/// Same defect, in `Type` rather than `Prop`: `Sum` leads with `inl (a : α)`.
+/// RED without the fix, for the identical reason.
+#[test]
+fn test_induction_sum_field_binding_first_ctor_kernel_checks() {
+    let code = r#"
+def sum_swap (α β : Type) (s : Sum α β) : Sum β α := by
+  induction s with
+  | inl a => exact Sum.inr a
+  | inr b => exact Sum.inl b
+"#;
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "induction on `Sum` (field-binding first ctor)");
+    assert!(
+        env.get_const(&Name::from_string("sum_swap")).is_some(),
+        "sum_swap should be registered after a kernel-checked proof"
+    );
+}
+
+/// Pins the PREDICATE with a locally declared inductive, independent of the
+/// prelude. `FirstBindsThenNullary` has a field-binding FIRST constructor and
+/// only one field-binding constructor overall — it passed even before the fix.
+/// `NullaryThenTwoBinders` has a NULLARY first constructor and two later
+/// field-binding ones — it was RED before the fix. Position is irrelevant; the
+/// count of field-binding constructors is what matters.
+#[test]
+fn test_induction_two_field_binding_ctors_is_the_predicate() {
+    let code = r#"
+inductive FirstBindsThenNullary (α : Type) where
+  | one (a : α)
+  | two
+
+def fbtn_test (α : Type) (x : FirstBindsThenNullary α) : Nat := by
+  induction x with
+  | one a => exact 0
+  | two => exact 1
+
+inductive NullaryThenTwoBinders (α : Type) where
+  | z
+  | a1 (x : α)
+  | a2 (y : α)
+
+def nttb_test (α : Type) (x : NullaryThenTwoBinders α) : Nat := by
+  induction x with
+  | z => exact 0
+  | a1 x => exact 1
+  | a2 y => exact 2
+"#;
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "induction predicate: >= 2 field-binding ctors");
+    assert!(env.get_const(&Name::from_string("fbtn_test")).is_some());
+    assert!(env.get_const(&Name::from_string("nttb_test")).is_some());
+}
+
+/// The reset must not disturb the shapes that already worked: `Nat` and `List`
+/// lead with a NULLARY constructor. Kept as a no-regression guard only — it is
+/// explicitly NOT evidence about the bug (it is green either way).
+#[test]
+fn test_induction_nullary_first_ctor_still_kernel_checks() {
+    let code = r#"
+theorem nat_zero_add_guard (n : Nat) : 0 + n = n := by
+  induction n with
+  | zero => rfl
+  | succ k ih => rw [Nat.add_succ, ih]
+
+theorem list_refl_guard (l : List Nat) : l = l := by
+  induction l with
+  | nil => rfl
+  | cons hd tl ih => rfl
+"#;
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "induction with a nullary first ctor");
+    assert!(env
+        .get_const(&Name::from_string("nat_zero_add_guard"))
+        .is_some());
+    assert!(env
+        .get_const(&Name::from_string("list_refl_guard"))
+        .is_some());
+}
+
+// ---------------------------------------------------------------------------
 // List `cases` / `induction`: universe-param leak in the recursor path.
 //
 // `List.cons : {α : Type u} → α → List α → List α` keeps `List.{u}` in its
@@ -1055,8 +1205,61 @@ def bad {p : Nat -> Prop} (x : Subtype p) : Bool := x
 "#;
     let (_env, results) = elab_file_prelude(code);
     assert!(
-        results.iter().any(std::result::Result::is_err),
+        results.iter().any(Result::is_err),
         "Subtype p must NOT coerce to Bool (base Nat does not unify with Bool)"
+    );
+}
+
+/// Universe-POLYMORPHIC receiver: `try_coerce_subtype_val` reuses the
+/// receiver's own `Subtype.{u}` level LITERALLY when it builds `Subtype.val`.
+/// That is only sound if the emitted term stays in the receiver's level
+/// equivalence class through declaration close — for an EXPLICIT `.{u}` (rigid
+/// param) and for an auto-bound receiver whose level is still an open
+/// non-rigid param that `finalize_level_params` must solve-or-generalize. The
+/// concrete-`Nat` fixtures above never reach either path, so this is the
+/// executed guard for both.
+#[test]
+fn test_subtype_value_coerces_at_polymorphic_universe() {
+    // Explicit `.{u}`: the receiver's level is a rigid declaration param.
+    let code = r#"
+def valOf.{u} {α : Sort u} {p : α -> Prop} (x : Subtype p) : α := x
+theorem propOf.{u} {α : Sort u} {p : α -> Prop} (x : Subtype p) : p x := x.2
+"#;
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "Subtype → base coercion (explicit .{u} receiver)");
+    for name in ["valOf", "propOf"] {
+        let decl = env
+            .get_const(&Name::from_string(name))
+            .unwrap_or_else(|| panic!("{name} should be registered"));
+        assert_eq!(
+            decl.level_params.len(),
+            1,
+            "{name} must keep exactly its declared universe param — a spurious \
+             extra param means the coercion minted an untied level"
+        );
+        if let Some(ref val) = decl.value {
+            assert!(!val.has_sorry(), "{name} must elaborate sorry-free");
+        }
+    }
+
+    // Auto-bound: `α`'s `Sort` level starts as an open non-rigid param and the
+    // coercion fires before it is solved; close must generalize BOTH the
+    // receiver's and the emitted `Subtype.val`'s occurrence consistently.
+    let code_auto = r#"
+def valOfAuto {α : Sort _} {p : α -> Prop} (x : Subtype p) : α := x
+"#;
+    let (env_auto, results_auto) = elab_file_prelude(code_auto);
+    assert_all_ok(
+        &results_auto,
+        "Subtype → base coercion (auto-bound receiver)",
+    );
+    let auto = env_auto
+        .get_const(&Name::from_string("valOfAuto"))
+        .expect("valOfAuto should be registered");
+    assert_eq!(
+        auto.level_params.len(),
+        1,
+        "valOfAuto must generalize to exactly one universe param"
     );
 }
 
@@ -5793,6 +5996,29 @@ fn test_r65_everyday_lock() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn test_named_arg_under_at_fills_implicit_slots() {
+    // Under `@` every binder is positional, so a positional arg after a
+    // named one must fill an IMPLICIT slot (`@two Nat 1 (B := Nat) 2` —
+    // Lean 4 accepts; refuter probe p23). Non-@ behavior is unchanged.
+    let code = "def two {A : Type} (a : A) {B : Type} (b : B) : A := a
+        def useIt : Nat := @two Nat 1 (B := Nat) 2
+        theorem useIt_val : useIt = 1 := rfl
+";
+    assert_all_ok(&elab_file_prelude(code).1, "@two Nat 1 (B := Nat) 2");
+}
+
+#[test]
+fn test_named_arg_under_at_leading_named_then_positionals() {
+    // Named-before-positionals under `@`: the positional queue fills the
+    // remaining slots (implicit A and explicit a/b) in declaration order.
+    let code = "def two2 {A : Type} (a : A) {B : Type} (b : B) : A := a
+        def useIt2 : Nat := @two2 (B := Nat) Nat 1 2
+        theorem useIt2_val : useIt2 = 1 := rfl
+";
+    assert_all_ok(&elab_file_prelude(code).1, "@two2 (B := Nat) Nat 1 2");
+}
+
+#[test]
 fn test_natrec_motive_named_arg() {
     let code = "def T2 : Nat → Type\n  | 0 => Bool\n  | _+1 => Nat\n\
         def f2r (n : Nat) : T2 n := Nat.rec (motive := T2) true (fun _ _ => (7 : Nat)) n\n\
@@ -8733,7 +8959,7 @@ fn test_b107_deriving_repr_nonrepr_field_fails_loud() {
 "####;
     let (_env, results) = elab_file_prelude(code);
     assert!(
-        results.iter().any(std::result::Result::is_err),
+        results.iter().any(Result::is_err),
         "deriving Repr on a struct with a non-representable field must fail loud, got: {results:?}"
     );
 }
@@ -11656,4 +11882,98 @@ theorem mytwo_is_two : mytwo = 2 := rfl
 "#;
     let results = elab_file_prelude(code).1;
     assert_all_ok(&results, "user term elaborator body fidelity");
+}
+
+// ---------------------------------------------------------------------------
+// Macro hygiene: a template-introduced binder must not capture spliced syntax
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_macro_hygiene_template_let_does_not_capture_spliced_argument() {
+    // FIDELITY: `capture a` splices the CALLER's `a`, which Lean 4 resolves to
+    // the enclosing `let a := 10` — the macro template's own `let a := 1` is a
+    // different, hygienic binder. So `bad = 10 + 1 = 11`.
+    //
+    // Before template-binder hygiene, the template's `a` and the spliced `a`
+    // were indistinguishable after substitution, the template captured the
+    // argument, and Clean silently computed `1 + 1 = 2` — proving a DIFFERENT
+    // theorem than the source states. That is the defect this guards.
+    let code = r#"
+macro "capture " x:term : term => `(let a := 1; $x + a)
+def bad : Nat := let a := 10; capture a
+theorem hyg_capture_11 : bad = 11 := rfl
+"#;
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "macro template binder must not capture the spliced argument",
+    );
+}
+
+#[test]
+fn test_macro_hygiene_captured_value_is_rejected() {
+    // The other direction, and the one that matters: the pre-fix answer must now
+    // FAIL. A test that passes both ways would protect nothing.
+    let code = r#"
+macro "capture " x:term : term => `(let a := 1; $x + a)
+def bad : Nat := let a := 10; capture a
+theorem hyg_capture_2 : bad = 2 := rfl
+"#;
+    assert!(
+        elab_file_prelude(code).1.iter().any(Result::is_err),
+        "the captured value (bad = 2) must be rejected: it is the wrong theorem"
+    );
+}
+
+#[test]
+fn test_macro_hygiene_template_global_constant_still_resolves() {
+    // Guard against over-renaming: templates legitimately reference global
+    // constants, and a template-introduced binder in the same template must not
+    // disturb them. `viaLet 4` = `let t := Nat.succ 4; Nat.succ t` = 6.
+    let code = r#"
+macro "bump " x:term : term => `(Nat.succ $x)
+macro "viaLet " x:term : term => `(let t := Nat.succ $x; Nat.succ t)
+def g1 : Nat := bump 4
+def g2 : Nat := viaLet 4
+theorem hyg_global_a : g1 = 5 := rfl
+theorem hyg_global_b : g2 = 6 := rfl
+"#;
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "template references to global constants must keep resolving",
+    );
+}
+
+#[test]
+fn test_macro_hygiene_nested_expansion() {
+    // Two stacked expansions, each introducing a binder named `s`, invoked where
+    // the caller also binds `s`. Correct (Lean) answer:
+    //   inc2 s   -> let s✝A := 2; inc1 (s + s✝A)   [spliced s = 100]
+    //   inc1 102 -> let s✝B := 1; 102 + s✝B        = 103
+    // The capturing behaviour would instead give 3 (every `s` collapsing onto
+    // the innermost template binder), so 103 pins the hygienic reading.
+    let code = r#"
+macro "inc1 " x:term : term => `(let s := 1; $x + s)
+macro "inc2 " y:term : term => `(let s := 2; inc1 ($y + s))
+def nested : Nat := let s := 100; inc2 s
+theorem hyg_nested : nested = 103 := rfl
+"#;
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "nested macro expansions must each get their own hygienic binder",
+    );
+}
+
+#[test]
+fn test_macro_hygiene_nested_expansion_captured_value_rejected() {
+    // SOUNDNESS: the capturing answer for the nested case must be rejected.
+    let code = r#"
+macro "inc1 " x:term : term => `(let s := 1; $x + s)
+macro "inc2 " y:term : term => `(let s := 2; inc1 ($y + s))
+def nested : Nat := let s := 100; inc2 s
+theorem hyg_nested_wrong : nested = 3 := rfl
+"#;
+    assert!(
+        elab_file_prelude(code).1.iter().any(Result::is_err),
+        "the captured nested value (nested = 3) must be rejected"
+    );
 }

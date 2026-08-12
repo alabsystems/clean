@@ -21,6 +21,12 @@
 //! Uses the Lipschitz analysis infrastructure from `ibp_crown::lipschitz`
 //! to verify that eclipse block Lipschitz constants satisfy `L < 1`.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use thiserror::Error;
 
 /// Errors raised during ECLipsE convergence verification.
@@ -44,6 +50,8 @@ pub(crate) enum EclipseConvergenceError {
 
     /// Dimension mismatch between inputs.
     #[error("dimension mismatch: expected {expected}, got {got}")]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     DimensionMismatch { expected: usize, got: usize },
 
     /// The iteration did not converge within the allowed iterations.

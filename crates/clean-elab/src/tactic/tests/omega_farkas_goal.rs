@@ -50,10 +50,7 @@ fn nat_add(lhs: Expr, rhs: Expr) -> Expr {
 /// `@GE.ge Nat instLENat a b` (`a ≥ b`).
 fn nat_ge(a: Expr, b: Expr) -> Expr {
     Expr::apps(
-        Expr::const_(
-            Name::from_string("GE.ge"),
-            vec![clean_kernel::level::Level::zero()],
-        ),
+        Expr::const_(Name::from_string("GE.ge"), vec![Level::zero()]),
         [
             nat_type(),
             Expr::const_(Name::from_string("instLENat"), vec![]),
@@ -66,12 +63,7 @@ fn nat_ge(a: Expr, b: Expr) -> Expr {
 /// `@Eq Nat l r` (`l = r`).
 fn nat_eq(l: Expr, r: Expr) -> Expr {
     Expr::apps(
-        Expr::const_(
-            Name::from_string("Eq"),
-            vec![clean_kernel::level::Level::succ(
-                clean_kernel::level::Level::zero(),
-            )],
-        ),
+        Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
         [nat_type(), l, r],
     )
 }
@@ -94,7 +86,7 @@ fn state_with(decls: Vec<LocalDecl>, goal_target: Expr) -> ProofState {
 fn assert_omega_proves(mut state: ProofState, label: &str) {
     reset_all_counters();
     let axiom_before = axiom_snapshot();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_ok(),
         "omega should prove `{label}`, got: {result:?}"
@@ -122,7 +114,7 @@ fn assert_omega_proves(mut state: ProofState, label: &str) {
 /// Run omega and assert it does NOT close (false / SAT goal — fail closed).
 fn assert_omega_rejects(mut state: ProofState, label: &str) {
     reset_all_counters();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_err() && !state.is_complete(),
         "omega must REJECT the false goal `{label}`, but it closed: {result:?}"
@@ -419,7 +411,7 @@ fn test_nonneg_le_hyp_rejects_false_a_ge_1() {
 /// with the `Nat.mul`-backed `HMul` instance. Mirrors the shape omega sees for a
 /// goal written `2 * a` in Lean source.
 fn hmul(k: Expr, x: Expr) -> Expr {
-    let z = clean_kernel::level::Level::zero();
+    let z = Level::zero();
     let nat = nat_type;
     // instHMul for Nat: @HMul.mk Nat Nat Nat Nat.mul.
     let inst = Expr::apps(

@@ -5,7 +5,6 @@
 use super::tests_support::make_let;
 use super::*;
 use crate::stmt::FunctionDef;
-use crate::types::RustType;
 use crate::values::{EnumPayload, RefCellBorrowState};
 
 mod cells;
@@ -202,16 +201,4 @@ pub(super) fn register_nullary_function(interp: &mut Interpreter, name: &str, va
         is_async: false,
         type_params: vec![],
     });
-}
-
-pub(super) fn unit_function(name: &str) -> FunctionDef {
-    FunctionDef {
-        name: name.to_string(),
-        params: vec![],
-        ret_ty: RustType::Unit,
-        body: Expr::Literal(Value::Unit),
-        is_unsafe: false,
-        is_async: false,
-        type_params: vec![],
-    }
 }

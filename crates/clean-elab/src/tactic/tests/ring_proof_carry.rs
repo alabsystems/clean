@@ -453,7 +453,7 @@ fn test_ring_coeff_merge_add_self() {
     reset_arith_counter();
     let (env, nat) = proof_carry_env();
     let a = var("a");
-    let two = super::super::finite_cases::make_nat_literal(2);
+    let two = make_nat_literal(2);
     let lhs = nat_add(a.clone(), a.clone());
     let rhs = nat_mul(two, a);
     let mut state = ProofState::new(env, make_eq(nat, lhs, rhs));
@@ -470,7 +470,7 @@ fn test_ring_coeff_merge_binomial_square() {
     let (env, nat) = proof_carry_env();
     let a = var("a");
     let b = var("b");
-    let two = super::super::finite_cases::make_nat_literal(2);
+    let two = make_nat_literal(2);
     let lhs = nat_mul(nat_add(a.clone(), b.clone()), nat_add(a.clone(), b.clone()));
     // a*a + 2*a*b + b*b  (2*a*b parses as (2*a)*b)
     let rhs = nat_add(
@@ -494,7 +494,7 @@ fn test_ring_coeff_merge_binomial_reordered() {
     let (env, nat) = proof_carry_env();
     let a = var("a");
     let b = var("b");
-    let two = super::super::finite_cases::make_nat_literal(2);
+    let two = make_nat_literal(2);
     let lhs = nat_mul(nat_add(a.clone(), b.clone()), nat_add(a.clone(), b.clone()));
     // a*a + b*b + 2*a*b
     let rhs = nat_add(
@@ -537,7 +537,7 @@ fn test_ring_coeff_merge_wrong_coeff_fails() {
     reset_arith_counter();
     let (env, nat) = proof_carry_env();
     let a = var("a");
-    let three = super::super::finite_cases::make_nat_literal(3);
+    let three = make_nat_literal(3);
     let lhs = nat_add(a.clone(), a.clone());
     let rhs = nat_mul(three, a);
     let mut state = ProofState::new(env, make_eq(nat, lhs, rhs));

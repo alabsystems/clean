@@ -42,6 +42,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the pure cube lemmas.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct CubeConsts {
     rat: Expr,
     rat_zero: Expr,
@@ -91,6 +92,7 @@ pub(crate) struct CubeConsts {
     false_elim0: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl CubeConsts {
     pub(crate) fn new() -> Self {
         let l0 = Level::zero();

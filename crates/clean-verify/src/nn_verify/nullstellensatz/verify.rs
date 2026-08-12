@@ -31,13 +31,18 @@
 //! - Stengle, "A Nullstellensatz and a Positivstellensatz in semialgebraic
 //!   geometry" (Math. Ann., 1974)
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use num_rational::Rational64;
 
 use crate::smt_verify::nra::{verify_sos, Polynomial};
 
 use super::polynomial::{
     box_domain_constraints, network_to_polynomials, NnSosCertificate, PolynomialNetwork,
-    PolynomialProperty,
 };
 
 /// Result of verifying a Neural Nullstellensatz certificate.
@@ -253,7 +258,9 @@ fn sos_to_polynomial(cert: &crate::smt_verify::nra::SosCertificate) -> Option<Po
 
 #[cfg(test)]
 mod tests {
-    use super::super::polynomial::{AffineLayer, LayerPattern, NeuronPattern, PolynomialNetwork};
+    use super::super::polynomial::{
+        AffineLayer, LayerPattern, NeuronPattern, PolynomialNetwork, PolynomialProperty,
+    };
     use super::*;
     use crate::smt_verify::nra::{Monomial, SosCertificate};
 

@@ -20,7 +20,7 @@ use std::collections::{HashSet, VecDeque};
 /// constructor instead of registering a term with free variables.
 fn has_unassigned_meta(e: &Expr) -> bool {
     match e.kind() {
-        ExprKind::FVar(id) => crate::unify::MetaState::from_fvar(*id).is_some(),
+        ExprKind::FVar(id) => MetaState::from_fvar(*id).is_some(),
         ExprKind::App(f, a) => has_unassigned_meta(f) || has_unassigned_meta(a),
         ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
             has_unassigned_meta(t) || has_unassigned_meta(b)
@@ -123,7 +123,7 @@ impl<'a> ElabCtx<'a> {
         // instances take the pre-B99 path byte-for-byte).
         let expected_whnf = if matches!(
             expected_whnf.kind(),
-            ExprKind::FVar(id) if crate::unify::MetaState::from_fvar(*id).is_some()
+            ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some()
         ) {
             let ofnat = Name::from_string("OfNat");
             let has_user_default_at_nat_tier = self
@@ -564,9 +564,8 @@ impl<'a> ElabCtx<'a> {
             && to_head == Name::from_string("Nat")
             && self.env.get_const(&Name::from_string("Fin.val")).is_some()
         {
-            if let clean_kernel::ExprKind::App(fin_c, n_arg) = from.kind() {
-                if matches!(fin_c.kind(), clean_kernel::ExprKind::Const(c, _) if *c == Name::from_string("Fin"))
-                {
+            if let ExprKind::App(fin_c, n_arg) = from.kind() {
+                if matches!(fin_c.kind(), ExprKind::Const(c, _) if *c == Name::from_string("Fin")) {
                     return Some(Expr::app(
                         Expr::app(
                             Expr::const_(Name::from_string("Fin.val"), vec![]),
@@ -1182,10 +1181,7 @@ impl<'a> ElabCtx<'a> {
 
     /// Check if an expression is a Nat literal
     pub(in crate::infer) fn is_nat_literal(expr: &Expr) -> bool {
-        matches!(
-            expr.kind(),
-            ExprKind::Lit(clean_kernel::expr::Literal::Nat(_))
-        )
+        matches!(expr.kind(), ExprKind::Lit(Literal::Nat(_)))
     }
 
     /// Check if a type is the Real type

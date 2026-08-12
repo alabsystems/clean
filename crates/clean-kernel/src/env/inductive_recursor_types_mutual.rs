@@ -24,6 +24,7 @@ use crate::name::Name;
 use super::inductive_fixed_indices::{ind_const_with_levels, CtorInfo};
 use super::Environment;
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     /// Build motive types for all types in a mutual inductive block.
     ///

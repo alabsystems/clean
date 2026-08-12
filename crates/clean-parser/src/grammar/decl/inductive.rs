@@ -24,9 +24,15 @@ impl Parser {
         // Type annotation is optional in some cases
         let ty = if self.eat(&TokenKind::Colon) {
             self.expr()?
-        } else {
-            // Default to Type
+        } else if universe_params.is_empty() {
+            // Default to Type (monomorphic inductives keep landing on Type 0)
             SurfaceExpr::Universe(start_span, UniverseExpr::Type)
+        } else {
+            // U2 rung 5: a `.{u}`-declared inductive with an omitted result
+            // sort gets a FRESH level (solved from constructor-field sorts in
+            // elab_inductive) instead of collapsing to concrete Type 0 —
+            // `inductive Box.{u} (A : Type u) | mk : A → Box A` infers Type u.
+            SurfaceExpr::Universe(start_span, UniverseExpr::TypeImplicit)
         };
 
         // Parse constructors - three syntaxes supported:
@@ -91,8 +97,12 @@ impl Parser {
         let binders = self.optional_binders()?;
         let ty = if self.eat(&TokenKind::Colon) {
             self.expr()?
-        } else {
+        } else if universe_params.is_empty() {
             SurfaceExpr::Universe(start_span, UniverseExpr::Type)
+        } else {
+            // U2 rung 5 (see inductive_decl_with_mods): fresh level for
+            // `.{u}`-declared inductives, solved from ctor-field sorts.
+            SurfaceExpr::Universe(start_span, UniverseExpr::TypeImplicit)
         };
         let mut ctors = Vec::new();
         if self.eat(&TokenKind::Where) {

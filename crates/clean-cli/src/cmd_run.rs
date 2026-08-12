@@ -31,7 +31,7 @@
 //!    completion and exits `0`. See [`crate::native_build`] for the IO lowering
 //!    and shim model.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{bail, Context};

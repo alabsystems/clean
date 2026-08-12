@@ -1955,7 +1955,7 @@ fn test_serde_roundtrip_annotated_notation() {
 
 #[test]
 fn test_serde_roundtrip_scheme_signature() {
-    use super::types::{MizSchemeFuncArg, MizSchemePredArg, MizSchemeSignature};
+    use super::types::{MizSchemePredArg, MizSchemeSignature};
 
     let sig = MizSchemeSignature {
         name: "Sch1".to_owned(),

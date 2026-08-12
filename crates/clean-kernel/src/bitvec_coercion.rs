@@ -189,6 +189,14 @@ pub mod names {
     /// `bvf_and_cong` / `bvf_xor_cong` — bitwise op congruences (B4 AND/XOR wiring).
     pub const BVF_AND_CONG: &str = "Clean.BVC.bvf_and_cong";
     pub const BVF_XOR_CONG: &str = "Clean.BVC.bvf_xor_cong";
+    /// `bvf_or_cong : ∀ a a' b b', bvfEval a = bvfEval a' → bvfEval b = bvfEval b'
+    /// → bvfEval (Or a b) = bvfEval (Or a' b')` — the GENERAL, two-sided OR
+    /// congruence, sibling of `BVF_AND_CONG` / `BVF_XOR_CONG`.
+    ///
+    /// Distinct from [`BVF_OR_CONG2`], which fixes the LEFT operand and therefore
+    /// only covers the `Orr Wd, WZR, Ws` register-move wrapper. A user-level `|`
+    /// moves BOTH operands and needs this one.
+    pub const BVF_OR_CONG: &str = "Clean.BVC.bvf_or_cong";
     /// `bvf_mul_cong : ∀ (a a' b b' : BvF), bvfEval a = bvfEval a' →
     ///     bvfEval b = bvfEval b' → bvfEval (Mul a b) = bvfEval (Mul a' b')`
     /// (the MUL analogue of `bvf_add_cong`; B4 MUL-op wiring — cancels the shared
@@ -260,6 +268,17 @@ pub mod names {
     /// the memory keystone for multi-cell / multi-byte store-load (each byte load skips the later
     /// byte stores via selectStoreDiff and hits its own via selectStoreSame).
     pub const SELECT_STORE_DIFF: &str = "Clean.BVC.selectStoreDiff";
+    /// `selectAddrCong : ∀ m a a', a = a' → bvSelect m a = bvSelect m a'` — the
+    /// address congruence at a FIXED array: two reads of the SAME uninterpreted
+    /// memory at provably-equal addresses are equal.
+    ///
+    /// This is what admits a BARE `Select(MEM, a)` — the dereference of a `&T`
+    /// parameter — into the O(1) fragment. Note what it does NOT say: it mentions
+    /// no store, so read-over-write and aliasing remain entirely outside the
+    /// fragment and still need `selectStoreSame` / `selectStoreDiff`, each with
+    /// its own side condition. Proved by congruence at `fun x => bvSelect m x`,
+    /// so its axiom closure is empty.
+    pub const SELECT_ADDR_CONG: &str = "Clean.BVC.selectAddrCong";
     /// `bvBeqConsFalse : ∀ (h1 h2 : Bool) (t1 t2 : List Bool), Bool.xor h1 h2 = true →
     ///     bvBeq (h1 :: t1) (h2 :: t2) = false`
     /// — THE address-distinctness REDUCTION STEP feeding `selectStoreDiff`. `bvBeq` is the
@@ -416,10 +435,12 @@ fn zip_or(xs: Expr, ys: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::ZIP_OR), [xs, ys])
 }
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn zip_and(xs: Expr, ys: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::ZIP_AND), [xs, ys])
 }
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn zip_xor(xs: Expr, ys: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::ZIP_XOR), [xs, ys])
 }
@@ -454,6 +475,7 @@ fn bv_is_cons(x: Expr) -> Expr {
 /// `@idP Q proof : Q` — ascribe the (un-reduced) Prop type Q via the general
 /// def-eq-carrying combinator; `proof` is checked at Q by full def_eq.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn idp(q: Expr, proof: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::IDP), [q, proof])
 }
@@ -473,6 +495,7 @@ fn bv_is_zero(xs: Expr) -> Expr {
     Expr::app(Expr::const_str(names::BV_IS_ZERO), xs)
 }
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn lb_bool_arrow() -> Expr {
     Expr::arrow(list_bool(), bool_ty())
 }
@@ -2383,6 +2406,10 @@ impl Environment {
         for (thm_name, ctor_name, reduced) in [
             (names::BVF_AND_CONG, "Clean.BVC.BvF.And", names::ZIP_AND),
             (names::BVF_XOR_CONG, "Clean.BVC.BvF.Xor", names::ZIP_XOR),
+            // OR — bvfEval(Or x y) reduces to bvZipOr (eval x)(eval y), the same
+            // per-bit zip shape as And/Xor, so the generic body below proves it
+            // with the same two `Eq.subst`s and no new proof code.
+            (names::BVF_OR_CONG, "Clean.BVC.BvF.Or", names::ZIP_OR),
             // MUL — bvfEval(Mul x y) reduces to bvMul (eval x)(eval y); same shape.
             (names::BVF_MUL_CONG, "Clean.BVC.BvF.Mul", names::BV_MUL),
             // DIV — bvfEval(Div x y) reduces to bvDiv (eval x)(eval y); same shape.
@@ -3306,6 +3333,58 @@ impl Environment {
             };
             self.add_decl(Declaration::Theorem {
                 name: Name::from_string(names::SELECT_STORE_DIFF),
+                level_params: vec![],
+                type_: ty,
+                value: val,
+            })?;
+
+            // ── selectAddrCong : ∀ m a a', a = a' → bvSelect m a = bvSelect m a' ──
+            // The ARRAY is fixed and never interpreted here; only the ADDRESS
+            // moves. So this is plain congruence at `f := fun x => bvSelect m x`,
+            // and `congrArg`'s conclusion `Eq (f a) (f a')` is beta-defeq to the
+            // goal. It is deliberately weaker than the read-over-write lemmas
+            // above: it mentions no store at all, so aliasing stays out of the
+            // fragment and admitting a bare `Select(MEM, a)` on its strength
+            // still requires the caller's separate no-store side condition.
+            let ty = {
+                let mut b = EnvDeclBuilder::new();
+                let (m_id, m) = b.fresh_local(arr_ty.clone());
+                let (a_id, a) = b.fresh_local(list_bool());
+                let (ap_id, ap) = b.fresh_local(list_bool());
+                let hty = eq_list(a.clone(), ap.clone());
+                let (h_id, _h) = b.fresh_local(hty.clone());
+                let goal = eq_list(sel(m.clone(), a.clone()), sel(m.clone(), ap.clone()));
+                let t = b.mk_pi(h_id, BinderInfo::Default, hty, goal);
+                let t = b.mk_pi(ap_id, BinderInfo::Default, list_bool(), t);
+                let t = b.mk_pi(a_id, BinderInfo::Default, list_bool(), t);
+                b.finish(b.mk_pi(m_id, BinderInfo::Default, arr_ty.clone(), t))
+            };
+            let val = {
+                let mut b = EnvDeclBuilder::new();
+                let (m_id, m) = b.fresh_local(arr_ty.clone());
+                let (a_id, a) = b.fresh_local(list_bool());
+                let (ap_id, ap) = b.fresh_local(list_bool());
+                let hty = eq_list(a.clone(), ap.clone());
+                let (h_id, h) = b.fresh_local(hty.clone());
+                // `fun w => bvSelect m w`, with the array captured.
+                let read_at = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (w_id, w) = c.fresh_local(list_bool());
+                    c.finish_child(c.mk_lam(
+                        w_id,
+                        BinderInfo::Default,
+                        list_bool(),
+                        sel(m.clone(), w),
+                    ))
+                };
+                let proof = congr_arg_ll(a.clone(), ap.clone(), read_at, h);
+                let r = b.mk_lam(h_id, BinderInfo::Default, hty, proof);
+                let r = b.mk_lam(ap_id, BinderInfo::Default, list_bool(), r);
+                let r = b.mk_lam(a_id, BinderInfo::Default, list_bool(), r);
+                b.finish(b.mk_lam(m_id, BinderInfo::Default, arr_ty.clone(), r))
+            };
+            self.add_decl(Declaration::Theorem {
+                name: Name::from_string(names::SELECT_ADDR_CONG),
                 level_params: vec![],
                 type_: ty,
                 value: val,
@@ -6020,6 +6099,7 @@ impl Environment {
 
 /// `Eq.refl.{1} Nat v` built without consuming an outer hypothesis (local to a builder ctx).
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn eq_refl_nat_local(_c: &EnvDeclBuilder, v: Expr) -> Expr {
     Expr::apps(
         Expr::const_(

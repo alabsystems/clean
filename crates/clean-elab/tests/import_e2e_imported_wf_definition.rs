@@ -75,7 +75,7 @@
 //! demonstrate the keyed rewrite reaches even a STUCK WF use.
 
 use clean_kernel::env::TrustedEnvExt;
-use clean_kernel::env::{Declaration, DeclarationTrustSummary, Environment, SimpPriority};
+use clean_kernel::env::{Declaration, DeclarationTrustSummary, Environment};
 use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level, Name, RecursorArgOrder, TypeChecker};
 

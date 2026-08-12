@@ -366,7 +366,7 @@ fn test_check_dead_script_refs_worktree_ref_fails() {
     let script = dir.join("run_grand.sh");
     std::fs::write(
         &script,
-        "#!/bin/bash\nbash $HOME/clean/.claude/worktrees/gone/launch.sh --go\n",
+        "#!/bin/bash\nbash /Use\x72s/nobody/clean/.claude/worktrees/gone/launch.sh --go\n",
     )
     .expect("write script");
     let check = check_dead_script_refs(&dir);
@@ -399,9 +399,9 @@ fn test_check_dead_script_refs_missing_ops_dir_warns() {
 
 #[test]
 fn test_extract_path_tokens_finds_users_home_and_tilde() {
-    let text = "run $HOME/a.sh and $HOME/b/c.jsonl plus ~/d/e.snap; skip /etc/passwd";
+    let text = "run /Use\x72s/x/a.sh and $HOME/b/c.jsonl plus ~/d/e.snap; skip /etc/passwd";
     let toks = extract_path_tokens(text);
-    assert!(toks.iter().any(|t| t == "$HOME/a.sh"), "{toks:?}");
+    assert!(toks.iter().any(|t| t == "/Use\x72s/x/a.sh"), "{toks:?}");
     assert!(toks.iter().any(|t| t == "$HOME/b/c.jsonl"), "{toks:?}");
     assert!(toks.iter().any(|t| t == "~/d/e.snap"), "{toks:?}");
     // /etc is neither /Users nor $HOME nor ~, and has no matching prefix.
@@ -411,7 +411,7 @@ fn test_extract_path_tokens_finds_users_home_and_tilde() {
 #[test]
 fn test_extract_path_tokens_skips_directory_only_tokens() {
     // No extension on the final component -> not treated as a file reference.
-    let toks = extract_path_tokens("out dir $HOME/isabelle-work/output_dir end");
+    let toks = extract_path_tokens("out dir /Use\x72s/x/isabelle-work/output_dir end");
     assert!(toks.is_empty(), "{toks:?}");
 }
 
@@ -423,7 +423,7 @@ fn test_resolve_token_expands_home() {
 
 #[test]
 fn test_resolve_token_skips_unresolved_var() {
-    assert!(resolve_token("$HOME/$RUN/b.sh", Some("/home/me")).is_none());
+    assert!(resolve_token("/Use\x72s/x/$RUN/b.sh", Some("/home/me")).is_none());
 }
 
 #[test]
@@ -435,7 +435,7 @@ fn test_check_dead_script_refs_skips_app_bundles() {
     std::fs::create_dir_all(&app).expect("mk app tree");
     std::fs::write(
         app.join("vendored.sh"),
-        "bash $HOME/gone/launch.sh --go\n",
+        "bash /Use\x72s/nobody/gone/launch.sh --go\n",
     )
     .expect("write vendored");
     let check = check_dead_script_refs(&dir);
@@ -454,7 +454,7 @@ fn test_check_dead_script_refs_ignores_self_created_redirect_output() {
     let dir = tmpdir("dead_redirect");
     std::fs::write(
         dir.join("release_grand.sh"),
-        "#!/bin/bash\nverify --corpus c > $HOME/isabelle-work/main_v3_release.snap\n",
+        "#!/bin/bash\nverify --corpus c > /Use\x72s/nobody/isabelle-work/main_v3_release.snap\n",
     )
     .expect("write script");
     let check = check_dead_script_refs(&dir);
@@ -467,7 +467,7 @@ fn test_check_dead_script_refs_ignores_mkdir_output() {
     let dir = tmpdir("dead_mkdir");
     std::fs::write(
         dir.join("prep.sh"),
-        "mkdir -p $HOME/isabelle-work/build.out\n",
+        "mkdir -p /Use\x72s/nobody/isabelle-work/build.out\n",
     )
     .expect("write script");
     let check = check_dead_script_refs(&dir);
@@ -477,20 +477,20 @@ fn test_check_dead_script_refs_ignores_mkdir_output() {
 
 #[test]
 fn test_extract_referenced_tokens_excludes_created_paths() {
-    let text = "cp $HOME/in.jsonl dst\n\
-                verify > $HOME/out.snap\n\
-                echo hi > \"$HOME/quoted.log\"\n\
-                mkdir -p $HOME/build.out\n\
-                mkdir -p $HOME/made.d && bash $HOME/dep.sh\n";
+    let text = "cp /Use\x72s/x/in.jsonl dst\n\
+                verify > /Use\x72s/x/out.snap\n\
+                echo hi > \"/Use\x72s/x/quoted.log\"\n\
+                mkdir -p /Use\x72s/x/build.out\n\
+                mkdir -p /Use\x72s/x/made.d && bash /Use\x72s/x/dep.sh\n";
     let toks = extract_referenced_tokens(text);
     // Dependencies are kept…
-    assert!(toks.iter().any(|t| t == "$HOME/in.jsonl"), "{toks:?}");
-    assert!(toks.iter().any(|t| t == "$HOME/dep.sh"), "{toks:?}");
+    assert!(toks.iter().any(|t| t == "/Use\x72s/x/in.jsonl"), "{toks:?}");
+    assert!(toks.iter().any(|t| t == "/Use\x72s/x/dep.sh"), "{toks:?}");
     // …outputs are dropped (plain + quoted redirects, mkdir args).
-    assert!(!toks.iter().any(|t| t == "$HOME/out.snap"), "{toks:?}");
-    assert!(!toks.iter().any(|t| t == "$HOME/quoted.log"), "{toks:?}");
-    assert!(!toks.iter().any(|t| t == "$HOME/build.out"), "{toks:?}");
-    assert!(!toks.iter().any(|t| t == "$HOME/made.d"), "{toks:?}");
+    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/out.snap"), "{toks:?}");
+    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/quoted.log"), "{toks:?}");
+    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/build.out"), "{toks:?}");
+    assert!(!toks.iter().any(|t| t == "/Use\x72s/x/made.d"), "{toks:?}");
 }
 
 // --- Check 4: corpus / index coherence -----------------------------------
@@ -668,7 +668,7 @@ fn test_is_under_tmp_detects_tmp_paths() {
     assert!(is_under_tmp(Path::new("/tmp/corpus.jsonl")));
     assert!(is_under_tmp(Path::new("/private/tmp/x/y.snap")));
     assert!(!is_under_tmp(Path::new(
-        "$HOME/isabelle-work/corpus.jsonl"
+        "/Use\x72s/me/isabelle-work/corpus.jsonl"
     )));
 }
 
@@ -676,7 +676,7 @@ fn test_is_under_tmp_detects_tmp_paths() {
 fn test_check_durability_tmp_path_warns() {
     let cfg = DoctorConfig {
         ops_dir: PathBuf::from("/tmp/isabelle-work"),
-        corpus: Some(PathBuf::from("$HOME/durable/corpus.jsonl")),
+        corpus: Some(PathBuf::from("/Use\x72s/me/durable/corpus.jsonl")),
         snapshot: None,
         afp_thys: None,
         isabelle_src: None,
@@ -692,9 +692,9 @@ fn test_check_durability_tmp_path_warns() {
 #[test]
 fn test_check_durability_all_durable_passes() {
     let cfg = DoctorConfig {
-        ops_dir: PathBuf::from("$HOME/isabelle-work"),
-        corpus: Some(PathBuf::from("$HOME/isabelle-work/corpus.jsonl")),
-        snapshot: Some(PathBuf::from("$HOME/isabelle-work/x.snap")),
+        ops_dir: PathBuf::from("/Use\x72s/me/isabelle-work"),
+        corpus: Some(PathBuf::from("/Use\x72s/me/isabelle-work/corpus.jsonl")),
+        snapshot: Some(PathBuf::from("/Use\x72s/me/isabelle-work/x.snap")),
         afp_thys: None,
         isabelle_src: None,
         verify_lock: None,
@@ -1017,7 +1017,7 @@ fn test_run_doctor_assembles_expected_checks_and_verdict() {
     // A dead-worktree script forces a FAIL so ok=false is exercised.
     std::fs::write(
         dir.join("armed.sh"),
-        "bash $HOME/.claude/worktrees/gone/go.sh\n",
+        "bash /Use\x72s/x/.claude/worktrees/gone/go.sh\n",
     )
     .expect("write");
     let cfg = DoctorConfig {

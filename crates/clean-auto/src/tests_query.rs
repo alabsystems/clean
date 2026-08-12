@@ -205,18 +205,15 @@ impl ProofTermOracle {
     }
 }
 
-impl crate::oracle::ProofOracle for ProofTermOracle {
-    fn suggest_proof(
-        &self,
-        _request: &crate::oracle::OracleRequest,
-    ) -> Result<Vec<crate::oracle::OracleCandidate>, OracleError> {
+impl ProofOracle for ProofTermOracle {
+    fn suggest_proof(&self, _request: &OracleRequest) -> Result<Vec<OracleCandidate>, OracleError> {
         // This oracle only produces proof terms, not tactic text.
         Ok(Vec::new())
     }
 
     fn suggest_proof_term(
         &self,
-        _request: &crate::oracle::OracleRequest,
+        _request: &OracleRequest,
     ) -> Result<Vec<ProofTermCandidate>, OracleError> {
         Ok(self.proof_terms.clone())
     }
@@ -244,7 +241,7 @@ fn test_oracle_suggest_proof_term_kernel_validated() {
         Expr::app(
             Expr::const_(
                 Name::from_string("Eq.refl"),
-                vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
+                vec![Level::succ(Level::zero())],
             ),
             a_ty,
         ),
@@ -288,7 +285,7 @@ fn test_oracle_suggest_proof_term_rejects_ill_typed() {
         Expr::app(
             Expr::const_(
                 Name::from_string("Eq.refl"),
-                vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
+                vec![Level::succ(Level::zero())],
             ),
             a_ty,
         ),
@@ -338,19 +335,16 @@ fn test_oracle_suggest_proof_term_falls_back_to_tactic_runner() {
     struct FallbackOracle {
         bad_proof: Expr,
     }
-    impl crate::oracle::ProofOracle for FallbackOracle {
+    impl ProofOracle for FallbackOracle {
         fn suggest_proof(
             &self,
-            _request: &crate::oracle::OracleRequest,
-        ) -> Result<Vec<crate::oracle::OracleCandidate>, OracleError> {
-            Ok(vec![crate::oracle::OracleCandidate::new(
-                "exact proof",
-                0.9,
-            )])
+            _request: &OracleRequest,
+        ) -> Result<Vec<OracleCandidate>, OracleError> {
+            Ok(vec![OracleCandidate::new("exact proof", 0.9)])
         }
         fn suggest_proof_term(
             &self,
-            _request: &crate::oracle::OracleRequest,
+            _request: &OracleRequest,
         ) -> Result<Vec<ProofTermCandidate>, OracleError> {
             Ok(vec![ProofTermCandidate::new(self.bad_proof.clone(), 0.95)])
         }
@@ -388,7 +382,7 @@ fn test_oracle_suggest_proof_term_falls_back_to_tactic_runner() {
 fn test_oracle_suggest_tactic_delegates_to_suggest_proof() {
     // Verify the default suggest_tactic delegates to suggest_proof
     let oracle = TestOracle::new(&[("exact rfl", 0.9), ("simp", 0.5)]);
-    let request = crate::oracle::OracleRequest::new("True");
+    let request = OracleRequest::new("True");
 
     let proof_result = oracle
         .suggest_proof(&request)
@@ -433,7 +427,7 @@ fn test_oracle_with_proof_term_oracle_no_runner_needed() {
         Expr::app(
             Expr::const_(
                 Name::from_string("Eq.refl"),
-                vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
+                vec![Level::succ(Level::zero())],
             ),
             a_ty,
         ),

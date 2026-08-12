@@ -89,6 +89,7 @@ impl Environment {
     ///
     /// Part of #3500 Phase 1 — faithful-carrier foundation.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn register_effective_generators(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("NNVerify.LayerNorm.effective_generators");
         if self.get_const(&name).is_some() {

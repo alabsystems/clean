@@ -114,6 +114,64 @@ impl Environment {
         Ok(())
     }
 
+    /// Adopt an authoritative priority for an ALREADY-registered instance,
+    /// re-seating it in its class bucket so the priority-descending invariant
+    /// of [`Self::get_class_instances`] still holds.
+    ///
+    /// This exists for one job: Clean seeds a hand-rolled prelude whose
+    /// instance priorities are GUESSED, then imports a real Lean environment
+    /// that serializes the true priority in every `.olean`. Import is
+    /// first-registered-wins, so without this the guess would win permanently —
+    /// and instance priority decides which candidate `synthInstance` reaches
+    /// first, i.e. the shape of every elaborated term. Three separate defects
+    /// (`instOfNatNat` 100-vs-1000, `instLTNat` 100-vs-1000, and the B101
+    /// hetero bridges) were fixed one row at a time before this path existed.
+    ///
+    /// Only the priority moves: `class_name`, `type_` and `value` are the
+    /// hand-registered entry's own (the prelude sets `type_`/`value` for
+    /// binder-info fidelity that the persisted Lean entry does not carry, so
+    /// replacing the whole entry would lose it). The entry is re-inserted with
+    /// [`Self::register_instance`]'s placement rule — front of its new tier —
+    /// which is exactly where a fresh registration at this moment would land.
+    ///
+    /// Returns the previous priority, or `None` when `name` is not a
+    /// registered instance (nothing is created: never fabricate metadata).
+    ///
+    /// SOUNDNESS: instance metadata is elaboration-only. It steers which
+    /// candidate `resolve_instance` tries first; every synthesized term is
+    /// still kernel re-checked by its caller. A wrong priority can only cost
+    /// completeness/parity, never admit a false proof.
+    ///
+    /// ENSURES: on `Some`, `get_class_instances(class)` contains exactly one
+    /// entry named `name`, with the requested priority, still ordered
+    /// priority-descending.
+    /// REQUIRES: none
+    pub fn adopt_instance_priority(&mut self, name: &Name, priority: u32) -> Option<u32> {
+        if !self.instance_names.contains(name) {
+            return None;
+        }
+        let class_name = self
+            .instances
+            .iter()
+            .find(|(_, entries)| entries.iter().any(|e| &e.name == name))
+            .map(|(class, _)| class.clone())?;
+        let entries = self.instances.get_mut(&class_name)?;
+        let pos = entries.iter().position(|e| &e.name == name)?;
+        let previous = entries[pos].priority;
+        if previous == priority {
+            return Some(previous);
+        }
+        let mut info = entries.remove(pos);
+        info.priority = priority;
+        let insert_at = entries
+            .iter()
+            .position(|e| e.priority <= priority)
+            .unwrap_or(entries.len());
+        entries.insert(insert_at, info);
+        self.generation += 1;
+        Some(previous)
+    }
+
     /// Check if a name is a registered type class
     /// ENSURES: Returns a value consistent with the function's documented semantics.
     /// REQUIRES: none

@@ -58,7 +58,7 @@ fn test_infer_type_closed_term_no_infinite_recursion() {
     );
 
     // Sort(1) is also closed — triggers the same path
-    let type1 = Expr::sort(crate::level::Level::succ(crate::level::Level::zero()));
+    let type1 = Expr::sort(Level::succ(Level::zero()));
     let ty2 = tc
         .infer_type(&type1)
         .expect("infer_type(Type 1) should succeed");
@@ -81,8 +81,8 @@ fn test_add_decl_exercises_infer_type_guard() {
     let decl = Declaration::Definition {
         name: Name::from_string("myConst"),
         level_params: vec![],
-        type_: Expr::sort(crate::level::Level::succ(crate::level::Level::zero())), // Type 0
-        value: Expr::prop(),                                                       // Prop : Type 0
+        type_: Expr::sort(Level::succ(Level::zero())), // Type 0
+        value: Expr::prop(),                           // Prop : Type 0
         is_reducible: true,
     };
 

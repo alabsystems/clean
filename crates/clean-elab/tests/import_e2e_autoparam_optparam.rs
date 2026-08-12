@@ -50,7 +50,7 @@
 //! pinned with a flip-on-fix assertion below (NOT `#[ignore]`), so it converts
 //! to a failure the moment the feature lands.
 
-use clean_kernel::env::{Declaration, Environment, TrustedEnvExt};
+use clean_kernel::env::{Declaration, Environment};
 use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level, Name, TypeChecker};
 

@@ -42,6 +42,8 @@ pub(super) struct LipschitzConsts {
     pub(super) nn_vec: Expr,
     pub(super) rat_add: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) rat_mul: Expr,
     pub(super) rat_one: Expr,
     pub(super) rat_zero: Expr,
@@ -125,6 +127,7 @@ impl LipschitzConsts {
 
     /// Build `Rat.mul a b`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn mul(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_mul.clone(), a), b)
     }

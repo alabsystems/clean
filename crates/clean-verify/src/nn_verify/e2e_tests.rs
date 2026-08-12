@@ -674,7 +674,7 @@ fn test_e2e_single_layer_composed_cert() {
 #[test]
 fn test_e2e_four_dim_single_class() {
     // 4-dim but single output class => trivially robust
-    let bounds = [(-1.0, 1.0), (-2.0, 2.0), (-0.5, 0.5), (-3.0, 3.0)];
+    let _bounds = [(-1.0, 1.0), (-2.0, 2.0), (-0.5, 0.5), (-3.0, 3.0)];
     // Use single output class (collapse to 1-dim for property check)
     // But since Farkas requires input_dim == output_dim for box certs,
     // keep all 4 dims and use true_class=0, margin=0.

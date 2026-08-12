@@ -39,7 +39,13 @@
 //! - Z3 proof format: <https://microsoft.github.io/z3guide/docs/logic/Proofs>
 //! - SMT-COMP proof track: <https://smt-comp.github.io/>
 
-use std::collections::{BTreeMap, HashMap};
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
+use std::collections::HashMap;
 
 use thiserror::Error;
 
@@ -70,10 +76,14 @@ pub enum SmtLib2ProofError {
 
     /// Unknown proof rule name.
     #[error("unknown proof rule: {name}")]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     UnknownRule { name: String },
 
     /// Reference to undefined proof step or definition.
     #[error("undefined reference: {name}")]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     UndefinedReference { name: String },
 
     /// Invalid S-expression structure.
@@ -82,6 +92,8 @@ pub enum SmtLib2ProofError {
 
     /// No proof block found in input.
     #[error("no (proof ...) block found in input")]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     NoProofBlock,
 }
 
@@ -942,7 +954,7 @@ impl SmtLib2Converter {
                     let term_id = self.convert_term_expr(term_expr);
                     // Check if this matches a known assertion.
                     for &step_id in self.assertion_map.values() {
-                        if let Some(SmtProofStep::Assume(assumed_id)) =
+                        if let Some(SmtProofStep::Assume(_assumed_id)) =
                             self.dag.step(step_id).cloned()
                         {
                             // Term comparison is imprecise (IDs differ), so
@@ -1467,7 +1479,7 @@ mod tests {
             )
         "#;
         let dag = parse_and_convert(input).expect("parse and convert");
-        let result = verify_smt_proof(&dag, VerifyMode::Permissive);
+        let _result = verify_smt_proof(&dag, VerifyMode::Permissive);
         // The proof structure is: assume p, assume (not p), resolve to empty.
         // Whether it verifies depends on term ID matching in the resolution checker.
         // At minimum, the DAG should have steps.

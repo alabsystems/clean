@@ -46,7 +46,8 @@ use crate::spec::Specification;
 /// `(shape name, witness type, payload binders, applied form)`. The order is
 /// irrelevant here — unlike the recursor tables, these are independent
 /// declarations.
-const SHAPES: [(&str, &str, &str, &str); 7] = [
+const SHAPES: [(&str, &str, &str, &str); 8] = [
+    ("bvar", "BvarShape", "(bi : Nat)", "(KExpr.bvar bi)"),
     ("sort", "SortShape", "(n : Level)", "(KExpr.sort n)"),
     (
         "lam",
@@ -97,7 +98,7 @@ const SHAPES: [(&str, &str, &str, &str); 7] = [
 /// applications. That is expected — a const-headed neutral and a
 /// rigid-headed spine are different witnesses for the same head — and the
 /// `app` lemma therefore builds its witness twice.
-const NF_LEAVES: [(&str, &str, &str, &str); 8] = [
+const NF_LEAVES: [(&str, &str, &str, &str); 9] = [
     (
         "lam",
         "(qty : KExpr) (qbody : KExpr)",
@@ -137,6 +138,7 @@ const NF_LEAVES: [(&str, &str, &str, &str); 8] = [
         "(_hdd : Eq (OptionType KExpr) \
          (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (OptionType.none KExpr)) ",
     ),
+    ("bvar", "(bi : Nat)", "(KExpr.bvar bi)", ""),
 ];
 
 impl Specification {
@@ -220,12 +222,16 @@ impl Specification {
 
         let motive = format!("{h} -> {g}", h = hyp("z"), g = goal("z"));
 
-        // rigid_app_head declaration order: sort, pi, lit, app, proj
-        // => NF_LEAVES indices 1..=5, with index 4 (app) the recursive one.
+        // rigid_app_head declaration order: sort, pi, lit, app, proj, bvar
+        // => NF_LEAVES indices 1..=5 then 8, with index 4 (app) the recursive
+        // one. The bvar leaf is REUSED from the nf_head arm rather than
+        // duplicated: the two occurrences sit in different lambdas, so their
+        // binders cannot collide.
         let mut rigid_arms = String::new();
         for leaf_idx in 1usize..=5 {
             rigid_arms.push_str(&arm(leaf_idx, leaf_idx == 4));
         }
+        rigid_arms.push_str(&arm(8, false));
 
         format!(
             "def nf_tag_forces_{name} {binders} (x : KExpr) (hn : nf_head x) \
@@ -235,18 +241,18 @@ impl Specification {
              (fun (e0 : KExpr) (hr : rigid_app_head e0) => \
              rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {motive}) \
              {rigid_arms}e0 hr) \
-             {neutral_arm}{const_arm}x hn htag",
+             {neutral_arm}{const_arm}{bvar_arm}x hn htag",
             top_hyp = hyp("x"),
             top_goal = goal("x"),
             lam_arm = arm(0, false),
             neutral_arm = arm(6, false),
             const_arm = arm(7, false),
+            bvar_arm = arm(8, false),
         )
     }
 
     fn add_tag_forces_shape(&mut self) -> Result<(), SpecError> {
-        for target in 0..SHAPES.len() {
-            let (name, witness, _, _) = SHAPES[target];
+        for (target, &(name, witness, _, _)) in SHAPES.iter().enumerate() {
             self.add_recursive_def(
                 &Self::tag_forces_shape_src(target),
                 &format!(
@@ -270,14 +276,16 @@ impl Specification {
 mod tests {
     use super::*;
 
-    /// Seven shapes, eight leaves, and every leaf must name a real shape.
+    /// EIGHT shapes, NINE leaves, and every leaf must name a real shape.
     /// Two leaves share the `app` shape — `rigid/app` and `neutral` — which is
     /// expected: a rigid-headed spine and a const-headed neutral are different
-    /// witnesses for the same head.
+    /// witnesses for the same head. The counts moved when `nf_head` gained its
+    /// `bvar` arm; the structural check below is the part with content, and it
+    /// is what catches a leaf added without its shape witness.
     #[test]
     fn test_shape_tables_agree() {
-        assert_eq!(SHAPES.len(), 7);
-        assert_eq!(NF_LEAVES.len(), 8);
+        assert_eq!(SHAPES.len(), 8);
+        assert_eq!(NF_LEAVES.len(), 9);
         let shape_names: Vec<&str> = SHAPES.iter().map(|(n, _, _, _)| *n).collect();
         for (n, _, _, _) in NF_LEAVES {
             assert!(
@@ -298,25 +306,38 @@ mod tests {
         );
     }
 
-    /// Each lemma builds its witness once per matching leaf and discriminates on
-    /// every other. For `app` that is two builds and six kills; for the rest,
-    /// one and seven.
+    /// Each lemma builds its witness once per EMITTED arm matching its shape and
+    /// discriminates on every other.
+    ///
+    /// Emitted arms are NF_LEAVES plus one: since `rigid_app_head` gained a
+    /// `bvar` constructor, the bvar leaf is emitted TWICE — once under
+    /// `nf_head.bvar`, once under the rigid recursor. Both builds are correct;
+    /// a bvar-headed term is now reachable by either route.
     #[test]
     fn test_each_lemma_builds_and_kills_exactly() {
-        for target in 0..SHAPES.len() {
-            let (name, witness, _, _) = SHAPES[target];
+        // The bvar leaf is the one emitted twice.
+        let emitted = |name: &str| {
+            NF_LEAVES.iter().filter(|(n, _, _, _)| *n == name).count() + usize::from(name == "bvar")
+        };
+        let total: usize = SHAPES.iter().map(|(n, _, _, _)| emitted(n)).sum();
+        assert_eq!(
+            total,
+            NF_LEAVES.len() + 1,
+            "every emitted arm must belong to exactly one shape"
+        );
+        for (target, &(name, witness, _, _)) in SHAPES.iter().enumerate() {
             let src = Specification::tag_forces_shape_src(target);
-            let matching = NF_LEAVES.iter().filter(|(n, _, _, _)| *n == name).count();
+            let matching = emitted(name);
             let builds = src.matches(&format!("{witness}.mk ")).count();
             let kills = src.matches("nat_discr_t ").count();
             assert_eq!(
                 builds, matching,
-                "nf_tag_forces_{name}: one build per matching leaf ({matching}), found {builds}"
+                "nf_tag_forces_{name}: one build per emitted arm ({matching}), found {builds}"
             );
             assert_eq!(
                 kills,
-                NF_LEAVES.len() - matching,
-                "nf_tag_forces_{name}: every non-matching leaf must be killed arithmetically"
+                total - matching,
+                "nf_tag_forces_{name}: every non-matching arm must be killed arithmetically"
             );
         }
     }

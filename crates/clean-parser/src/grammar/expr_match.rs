@@ -322,6 +322,20 @@ impl Parser {
                 col: self.current().col as usize,
                 message: "syntax quotation patterns are not supported".to_string(),
             }),
+            TokenKind::Rfl => {
+                // `rfl` in PATTERN position is Lean's `@[match_pattern] def rfl`
+                // (Init/Prelude.lean:352): an alias for the `Eq.refl`
+                // constructor, NOT a binder — verified against Lean 4.33.0,
+                // where `match (n : Nat) with | rfl => 0` is a type error, so
+                // bare-`rfl`-as-variable is not a behavior we can lose (and
+                // cannot be one here either: `rfl` lexes as a KEYWORD token,
+                // never reaching the `Ident` arm). `Eq.refl` takes zero
+                // explicit fields in pattern position (α and a are inductive
+                // PARAMETERS), hence the empty argument vector. HEq keeps
+                // needing its own `HEq.refl` spelling, exactly as in Lean.
+                self.advance();
+                Ok(SurfacePattern::Ctor("Eq.refl".to_string(), Vec::new()))
+            }
             TokenKind::Underscore => {
                 self.advance();
                 Ok(SurfacePattern::Wildcard)
@@ -443,6 +457,7 @@ impl Parser {
                 | TokenKind::StringLit(_)
                 | TokenKind::CharLit(_)
                 | TokenKind::Underscore
+                | TokenKind::Rfl
                 | TokenKind::Dot
                 | TokenKind::LParen
                 | TokenKind::LBracket
@@ -484,6 +499,20 @@ impl Parser {
             TokenKind::CharLit(c) => {
                 self.advance();
                 Ok(SurfacePattern::Lit(SurfaceLit::Char(c)))
+            }
+            TokenKind::Rfl => {
+                // `rfl` in PATTERN position is Lean's `@[match_pattern] def rfl`
+                // (Init/Prelude.lean:352): an alias for the `Eq.refl`
+                // constructor, NOT a binder — verified against Lean 4.33.0,
+                // where `match (n : Nat) with | rfl => 0` is a type error, so
+                // bare-`rfl`-as-variable is not a behavior we can lose (and
+                // cannot be one here either: `rfl` lexes as a KEYWORD token,
+                // never reaching the `Ident` arm). `Eq.refl` takes zero
+                // explicit fields in pattern position (α and a are inductive
+                // PARAMETERS), hence the empty argument vector. HEq keeps
+                // needing its own `HEq.refl` spelling, exactly as in Lean.
+                self.advance();
+                Ok(SurfacePattern::Ctor("Eq.refl".to_string(), Vec::new()))
             }
             TokenKind::Underscore => {
                 self.advance();

@@ -95,6 +95,9 @@ pub(crate) struct WhereClause {
 ///   an unannotated clause leaves the binder type `None` (inferred). See
 ///   [`crate::where_desugar_ext::build_let_rec`] for the shape contract.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn desugar_where(body: SurfaceExpr, clauses: &[WhereClause]) -> SurfaceExpr {
     if clauses.is_empty() {
         return body;
@@ -121,6 +124,9 @@ pub(crate) fn desugar_where(body: SurfaceExpr, clauses: &[WhereClause]) -> Surfa
 /// - Returns a `SurfaceExpr` with nested `LetRec` wrapping the body
 /// - Empty `where_defs` returns the body unchanged
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn desugar_where_from_parsed(
     body: &SurfaceExpr,
     where_defs: &[WhereLocalDef],

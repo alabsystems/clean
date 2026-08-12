@@ -84,11 +84,8 @@ pub struct UnwitnessedPremise {
 
 /// Strip `Pi` binders, then the `App` spine, and report the head `Const`.
 fn conclusion_head(mut e: &Expr) -> Option<Name> {
-    loop {
-        match e.kind() {
-            ExprKind::Pi(_, _, body) => e = body,
-            _ => break,
-        }
+    while let ExprKind::Pi(_, _, body) = e.kind() {
+        e = body;
     }
     let mut head = e;
     while let ExprKind::App(f, _) = head.kind() {

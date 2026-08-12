@@ -50,6 +50,8 @@ use crate::name::Name;
 pub(crate) struct LeAddConsts {
     nat: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_zero: Expr,
     rat: Expr,
     rat_zero: Expr,
@@ -213,6 +215,7 @@ impl LeAddConsts {
     /// The `CauSeq.le` body for a fixed `(f,g)`:
     ///   `∀ ε, 0<ε → ∃ N, ∀ n, N≤n → vseq f n < vseq g n + ε`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn le_body(&self, parent: &EnvDeclBuilder, f: &Expr, g: &Expr) -> Expr {
         let mut b = EnvDeclBuilder::child_of(parent);
         let (eps_id, eps) = b.fresh_local(self.rat.clone());

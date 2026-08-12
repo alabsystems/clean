@@ -567,7 +567,7 @@ mod tests {
         // returns at least the root.
         let names = all_names(&lib);
         if let Some(add_pos) = names.iter().position(|n| n == "Nat.add") {
-            let mut dep_iter = lib.walk_deps(add_pos as u32);
+            let dep_iter = lib.walk_deps(add_pos as u32);
             let mut dep_names = Vec::new();
             for idx in dep_iter {
                 if let Some(name) = lib.get_name(idx) {

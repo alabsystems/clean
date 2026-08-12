@@ -71,8 +71,7 @@ pub(super) fn try_with_denominator_bridge(
     let scaled_goal_rhs = make_mul_app(&alpha, &scale_expr, &goal_rhs)?;
     let scaled_goal_ty = make_eq_type(&alpha, &scaled_goal_lhs, &scaled_goal_rhs, &eq_level);
 
-    let mut scratch =
-        state.clone_with_fresh_goal_target_in_context(scaled_goal_ty, &goal.local_ctx);
+    let scratch = state.clone_with_fresh_goal_target_in_context(scaled_goal_ty, &goal.local_ctx);
     let scratch_goal = scratch.current_goal()?.clone();
     let scaled_proof = build_proof_with_negative_mode(
         &scratch,

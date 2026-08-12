@@ -72,6 +72,9 @@ fn single_nullary_ctor() -> Vec<CtorInfo2> {
     }]
 }
 
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn many_field_ctor() -> Vec<CtorInfo2> {
     let fields: Vec<(Name, Expr)> = (0..20)
         .map(|i| (Name::from_string(&format!("f{i}")), Expr::const_str("Nat")))

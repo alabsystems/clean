@@ -16,6 +16,7 @@ pub(crate) const NAMESPACE: &str = "Topology.Contractible";
 pub(crate) const DECL_COUNT: usize = 12;
 
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const DECL_NAMES: [&str; DECL_COUNT] = [
     "Topology.Contraction",
     "Topology.Contraction.homotopy",

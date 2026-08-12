@@ -139,7 +139,7 @@ pub(crate) fn compile_to_string(args: CompileArgs) -> anyhow::Result<String> {
 /// and crucially do NOT propagate any lowering `Err` — per-const fallback never
 /// aborts the compile. Only the **root** (the selected decl) keeps hard-error
 /// behavior: a non-compilable root is a usage error with the original message.
-fn select_lcnf_decl(
+pub(crate) fn select_lcnf_decl(
     args: &CompileArgs,
 ) -> anyhow::Result<(Vec<Decl>, Environment, PipelineConfig)> {
     let file = args
@@ -551,7 +551,7 @@ fn pipeline_config_from_opt_level(opt_level: u8) -> PipelineConfig {
 // `source_file` feeds only the trust-ir arm's debug info; the other formats
 // ignore it (and it is entirely unused without the `trust-ir-backend` feature).
 #[cfg_attr(not(feature = "trust-ir-backend"), allow(unused_variables))]
-fn emit_decls(
+pub(crate) fn emit_decls(
     decls: &[Decl],
     env: &Environment,
     emit: EmitFormat,
@@ -613,7 +613,7 @@ fn emit_decls(
 mod tests {
     use super::*;
 
-    fn write_temp_lean(source: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    fn write_temp_lean(source: &str) -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().expect("tempdir");
         let file = dir.path().join("compile_smoke.lean");
         std::fs::write(&file, source).expect("write fixture");

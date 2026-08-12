@@ -24,7 +24,6 @@ use clean_elab::{
     elaborate_decl_and_register, preprocess_decl_with_context, ElabResult, FileContext,
 };
 use clean_kernel::env::Environment;
-use clean_kernel::Name;
 use clean_parser::parse_file;
 
 /// Indexed carrier for computational casts: the payload `k` rides along the

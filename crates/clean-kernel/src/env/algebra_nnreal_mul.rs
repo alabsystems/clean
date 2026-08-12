@@ -48,6 +48,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for `IsCauchy_bounded`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct BoundedConsts {
     #[cfg(test)]
     prop: Expr,
@@ -220,6 +221,7 @@ impl BoundedConsts {
     }
     /// `Rat.le_trans a b c hab hbc : Rat.le a c`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn rle_trans(&self, a: Expr, b: Expr, cc: Expr, hab: Expr, hbc: Expr) -> Expr {
         Expr::apps(self.rat_le_trans.clone(), [a, b, cc, hab, hbc])
     }

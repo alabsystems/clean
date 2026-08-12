@@ -180,7 +180,7 @@ fn run_pilot(out: &Path, baseline_dir: &Path) -> GraduationRecord {
     .expect("graduation must not hit infrastructure errors")
 }
 
-fn entry<'a>(record: &'a GraduationRecord, name: &str) -> &'a super::record::GraduatedTheorem {
+fn entry<'a>(record: &'a GraduationRecord, name: &str) -> &'a GraduatedTheorem {
     record
         .theorems
         .iter()

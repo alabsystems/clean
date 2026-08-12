@@ -44,7 +44,9 @@ pub(crate) const RELEASE_ISSUE_OWNER_ACTION: &str = "assign a release owner or a
 pub(crate) const RELEASE_DECISION_ACTION: &str = "add a visible `Release decision:` note";
 pub(crate) const LEAN4_BASELINE_PATH: &str = "tests/differential/lean4_baseline.json";
 pub(crate) const LEAN4_EXPRESSIONS_PATH: &str = "tests/differential/expressions.txt";
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const KERNEL_SOUNDNESS_GATE_PATH: &str = "scripts/kernel_soundness_gate.sh";
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const KERNEL_SOUNDNESS_GATE_COMMAND: &str = "./scripts/kernel_soundness_gate.sh";
 pub(crate) const KERNEL_SOUNDNESS_RUST_GATE_COMMAND: &str =
     "clean replacement trust-core-evidence --kernel-soundness";
@@ -53,7 +55,9 @@ pub(crate) const KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_SCHEMA_VERSION: &str =
 pub(crate) const KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_PATH: &str =
     "reports/kernel-soundness-launch-evidence.json";
 pub(crate) const KERNEL_SOUNDNESS_EXPECTED_STEPS: u32 = 3;
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const DENY_SORRY_GATE_PATH: &str = "scripts/deny_sorry_gate.sh";
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const DENY_SORRY_GATE_COMMAND: &str = "./scripts/deny_sorry_gate.sh";
 pub(crate) const DENY_SORRY_RUST_GATE_COMMAND: &str =
     "clean replacement trust-core-evidence --deny-sorry";
@@ -67,7 +71,9 @@ pub(crate) const TRUST_CORE_RUST_MODULE_DIR: &str = "crates/clean-cli/src/cmd_re
 /// `source_sha256` key for the digest of that directory's non-test `.rs` files.
 pub(crate) const TRUST_CORE_RUST_MODULE_TREE_KEY: &str =
     "crates/clean-cli/src/cmd_replacement/**/*.rs";
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const LINT_SORRY_BYPASS_PATH: &str = "scripts/lint_sorry_bypass.sh";
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const AXIOM_AUDIT_RELEASE_CHECK_PATH: &str = "scripts/axiom_audit_release_check.sh";
 pub(crate) const AXIOM_AUDIT_GATE_COMMAND: &str = "clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json";
 pub(crate) const AXIOM_AUDIT_LAUNCH_EVIDENCE_SCHEMA_VERSION: &str =
@@ -116,6 +122,7 @@ pub(crate) const PROOF_SYSTEM_VERIFICATION_AUDIT_LANES: &[VerificationAuditLaneE
             "Remaining `church_rosser_whnf` leaf closed or sharply reduced with current blocker documented.",
     },
 ];
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const KERNEL_GATE_PREFLIGHT_MARKERS: &[&str] = &[
     "validate_differential_artifacts",
     "--- Lane 0: Differential artifact preflight ---",

@@ -28,7 +28,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::dag::{SmtProofDag, SmtTheory};
+use super::dag::SmtProofDag;
 use super::trust::{SmtVerifyResult, SmtVerifyStats};
 use super::{verify_smt_proof, VerifyMode};
 
@@ -646,7 +646,7 @@ fn read_u64_le(pos: &mut usize, data: &[u8]) -> Result<u64, CertificateError> {
 mod tests {
     use super::*;
     use crate::smt_verify::dag::{
-        SmtProofStep, SmtSort, SmtSymbol, SmtTerm, SmtTermId, TheoryLemmaDetail,
+        SmtProofStep, SmtSort, SmtSymbol, SmtTerm, SmtTheory, TheoryLemmaDetail,
     };
 
     /// Build a simple valid proof: assume p, assume not(p), resolve to empty.

@@ -36,6 +36,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for `NNReal.add`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct NNAddConsts {
     nat: Expr,
     rat: Expr,
@@ -122,6 +123,7 @@ impl NNAddConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn seq_ty(&self) -> Expr {
         Expr::pi(BinderInfo::Default, self.nat.clone(), self.nnrat.clone())
     }

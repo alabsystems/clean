@@ -141,8 +141,7 @@ fn test_rat_le_reflexive_zero_smt_bridge_proves() {
     // The proof step should be a reflexivity-based or propositional proof
     let step = result.proof_step();
     assert!(
-        result.proof_term().kind()
-            != &clean_kernel::ExprKind::Sort(clean_kernel::level::Level::zero()),
+        result.proof_term().kind() != &ExprKind::Sort(Level::zero()),
         "Proof term must not be degenerate: {step:?}"
     );
 }

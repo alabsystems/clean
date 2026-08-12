@@ -39,7 +39,7 @@ use std::path::Path;
 use crate::build_library_native::{
     build_native_shard_with_config, CleanNativeBuildResult, NativeBuildConfig,
 };
-use crate::error::{MathverseError, MathverseResult};
+use crate::error::MathverseResult;
 use crate::shard::ShardWriter;
 use crate::trust::gamma_crown::{
     build_trust_report, classify_declaration, format_trust_report, DeclarationTrustSummary,

@@ -32,6 +32,8 @@ pub(crate) struct FRConsts {
     pub(crate) float: Expr,
     pub(crate) prop: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) type0: Expr,
     pub(crate) rat_sub: Expr,
     pub(crate) rat_mul: Expr,

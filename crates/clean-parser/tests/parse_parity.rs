@@ -156,12 +156,6 @@ fn classify(row: &Row) -> Class {
     }
 }
 
-fn is_allowlisted(family: &str, input: &str) -> bool {
-    ALLOWLIST
-        .iter()
-        .any(|(f, i, _)| *f == family && *i == input)
-}
-
 #[test]
 fn parse_parity_no_unpinned_silent_divergence() {
     let rows = load_rows();

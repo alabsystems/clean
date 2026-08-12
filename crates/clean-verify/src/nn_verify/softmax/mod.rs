@@ -51,8 +51,3 @@ pub use c020_spec::{
     c020_theorem_entries, C020_LSE_CONVEXITY, C020_LSE_SQUEEZE, C020_O_RANGE_TIGHTNESS,
     C020_SOFTMAX_BOUND_SOUNDNESS,
 };
-pub(crate) use convex_relaxation::{
-    softmax_convex_relaxation, tightness_ratio, verify_o_range_tightness,
-    verify_relaxation_soundness, SoftmaxRelaxation,
-};
-pub(crate) use lse::{log_sum_exp, softmax, softmax_via_lse};

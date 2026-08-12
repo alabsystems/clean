@@ -712,55 +712,12 @@ pub(crate) fn split_arrow(ty: &Expr) -> Option<(Expr, Expr)> {
     }
 }
 
-/// First-order matching that solves the `sentinels` (the leading type binders of
-/// a referenced theorem) by structurally aligning a binder's `pattern` domain
-/// (which may mention sentinel fvars) with the `actual` embedded type of the
-/// supplied term argument. Each newly-solved sentinel is recorded in `solution`;
-/// already-solved or non-sentinel positions are left untouched. This is a
-/// one-sided match (`actual` carries no sentinels), so no occurs-check or
-/// unification of `actual`'s own structure is needed.
-/// Whether a closure entry's clean type is a **registered class-def axiom** — a
-/// `Π`-telescope whose conclusion is `@Eq Prop (isabelle.def.* …) …` (the LHS
-/// head being one of the registered `isabelle.def.<c_class>` consts). Used to gate
-/// the operation-binder fill in [`Ctx::apply_thm_expecting`] to exactly these
-/// entries, so no other PThm path changes behaviour.
-pub(crate) fn is_class_def_entry(ty: &Expr) -> bool {
-    use clean_kernel::expr::ExprKind;
-    let mut concl = ty.clone();
-    while let ExprKind::Pi(_, _, cod) = concl.kind() {
-        concl = (**cod).clone();
-    }
-    // concl = @Eq u T lhs rhs  →  App(App(App(App(Eq,T),lhs),rhs))? Actually
-    // `@Eq T a b` is App(App(App(Eq,T),a),b). Peel to find the LHS `a` and check
-    // its head const name.
-    let ExprKind::App(eq_a_lhs, _rhs) = concl.kind() else {
-        return false;
-    };
-    let ExprKind::App(eq_a, lhs) = eq_a_lhs.kind() else {
-        return false;
-    };
-    // eq_a = App(Eq, T); confirm head is `Eq`.
-    let ExprKind::App(eq_head, _t) = eq_a.kind() else {
-        return false;
-    };
-    if !matches!(eq_head.kind(), ExprKind::Const(n, _) if *n == Name::from_string("Eq")) {
-        return false;
-    }
-    // The LHS's head const must be a registered class def-const.
-    let mut head: Expr = (**lhs).clone();
-    while let ExprKind::App(f, _) = head.kind() {
-        let f = (**f).clone();
-        head = f;
-    }
-    matches!(head.kind(), ExprKind::Const(n, _) if n.to_string().starts_with("isabelle.def."))
-}
-
 /// Structural compatibility test between a binder domain `pattern` (which may
 /// still mention unsolved `sentinels`) and a candidate argument type `actual`.
 /// An unsolved sentinel position in `pattern` is a wildcard (matches anything);
 /// otherwise the two must agree shape-by-shape — a `Pi` only matches a `Pi`, a
 /// `Const` only the same `Const`, a `Sort` only the same `Sort`. Used by
-/// [`crate::hol::isabelle_pure_translate::Ctx::apply_thm_expecting`] to decide
+/// [`crate::hol::isabelle_pure_translate::Ctx::apply_thm_expecting_with_tables`] to decide
 /// whether the next spine *term* argument fills a given binder (explicit) or the
 /// binder is an implicit operation the conclusion determines. A conservative
 /// `false` (mismatch) simply makes the binder implicit; the kernel re-checks the

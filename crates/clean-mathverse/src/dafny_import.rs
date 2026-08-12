@@ -671,8 +671,6 @@ fn is_ident_continue(b: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shard::ShardReader;
-    use crate::types::{ContentDomain, ImportConfidence, SourceSystem};
 
     #[test]
     fn parse_dafny_decls_with_scopes_and_specs() {

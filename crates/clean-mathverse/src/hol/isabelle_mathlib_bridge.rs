@@ -156,9 +156,6 @@ pub struct IsabelleMathlibBridge {
     /// Dotted-suffix key → indices of curated aliases whose `isabelle` field
     /// equals that key.
     isa_alias_keys: HashMap<String, Vec<usize>>,
-    /// Dotted-suffix key → indices of curated aliases whose `mathlib` field
-    /// equals that key.
-    ml_alias_keys: HashMap<String, Vec<usize>>,
     isabelle_names: Vec<String>,
     mathlib_names: Vec<String>,
 }
@@ -185,18 +182,15 @@ impl IsabelleMathlibBridge {
     #[must_use]
     pub fn from_aliases(aliases: Vec<AliasEntry>) -> Self {
         let mut isa_alias_keys: HashMap<String, Vec<usize>> = HashMap::new();
-        let mut ml_alias_keys: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, a) in aliases.iter().enumerate() {
             isa_alias_keys
                 .entry(a.isabelle.clone())
                 .or_default()
                 .push(i);
-            ml_alias_keys.entry(a.mathlib.clone()).or_default().push(i);
         }
         Self {
             aliases,
             isa_alias_keys,
-            ml_alias_keys,
             isabelle_names: Vec::new(),
             mathlib_names: Vec::new(),
         }

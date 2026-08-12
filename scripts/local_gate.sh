@@ -12,7 +12,9 @@
 #   2. CLI feature coverage (descriptor registry ↔ clap paths ↔ referenced files)
 #   3. Ratchets: unchecked-decl + axiom audit surfaced from the cert golden pins;
 #      extend_constants_* bulk-bypass ratchet (fail-closed); path-to-3 TCB ratchet
-#      (domain-axiom count monotonic-down toward the 3-axiom goal, fail-closed)
+#      (domain-axiom count monotonic-down toward the 3-axiom goal, fail-closed);
+#      prelude/.olean collision ratchet (prelude names that DISCARD Lean's
+#      declaration at import, monotonic-down, fail-closed)
 #   4. Paragon quality ratchet (shrink-only: file-size, unwrap/expect,
 #      bare-pub, dead-code suppressions — data/paragon_ratchet.json)
 #   5. (full mode) workspace check + NON-VACUOUS KernelVerified gate (re-stamps a
@@ -86,6 +88,18 @@ python3 scripts/check_trust_verdict_emitters.py \
 echo "== local gate: path-to-3 TCB ratchet =="
 python3 scripts/tcb_target_ratchet.py \
   || fail "path-to-3 TCB ratchet — a domain axiom was added (moving away from the 3-axiom goal) or the foundational set drifted; see data/tcb_target_ratchet.json"
+
+echo "== local gate: prelude/.olean collision ratchet =="
+python3 scripts/check_prelude_collision_ratchet.py \
+  || fail "prelude/.olean collision ratchet — a prelude name now shadows (and discards) a differently-typed Lean declaration at import, so tactics see a statement the user never wrote; see data/prelude_collision_census.json"
+
+echo "== local gate: prelude instance-priority ratchet =="
+python3 scripts/check_prelude_instance_priority_ratchet.py \
+  || fail "prelude instance-priority ratchet — a hand-registered instance carries a priority the shipped .olean contradicts (or the measured denominator shrank), so synthInstance reaches a different candidate first and elaborated terms change shape; see data/prelude_instance_priority_census.json"
+
+echo "== local gate: silent-tactic ratchet =="
+python3 scripts/check_silent_tactic_ratchet.py \
+  || fail "silent-tactic ratchet — a tactic now fails with NO diagnostic naming it, so the declaration degrades to an unattributable synthetic sorry and every UnknownTactic-keyed coverage script under-reports the gap; see data/silent_tactic_census.json"
 
 echo "== local gate: paragon quality ratchet =="
 scripts/paragon_ratchet.sh || fail "paragon quality ratchet (see data/paragon_ratchet.json)"

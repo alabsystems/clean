@@ -32,13 +32,9 @@
 //!
 //! `DerivedProved`, empty axiom closures.
 
+use super::nf_head::HNF;
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
-
-/// The hereditary normal-form-head hypothesis.
-const HNF: &str = "(hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
-     Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (OptionType.some KExpr r) -> \
-     nf_head r) ";
 
 /// The recursion hypothesis (`proj` only — `const` is a leaf).
 const RECUR: &str = "(recur : forall (c1 : KExpr) (c2 : KExpr), rbelow_plus c1 x -> \

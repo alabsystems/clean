@@ -281,6 +281,20 @@ impl OptionsRegistry {
             "Use relaxed auto-implicit resolution (single-letter variables)",
         );
         self.register(
+            "clean.inductive.deepInduction",
+            OptionValue::Bool(false),
+            "Clean extension: after registering a nested inductive, also generate the \
+             elementwise deep-induction principle T.deep_ind (and the container's All \
+             family) as kernel-checked declarations",
+        );
+        self.register(
+            "clean.inductive.liftNestedLocals",
+            OptionValue::Bool(false),
+            "Clean extension: retry inductives that Lean rejects with 'nested inductive \
+             datatypes parameters cannot contain local variables' by lifting the captured \
+             locals into specialized auxiliary mutual families (kernel re-checks the result)",
+        );
+        self.register(
             "trace.Meta.isDefEq",
             OptionValue::Bool(false),
             "Trace definitional equality checks in the Meta framework",

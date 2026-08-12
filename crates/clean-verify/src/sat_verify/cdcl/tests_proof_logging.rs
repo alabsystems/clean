@@ -5,7 +5,7 @@
 //! Tests for DRAT/DRUP proof logging and verification.
 
 use super::proof_logging::*;
-use super::{Clause, Literal};
+use super::Clause;
 use crate::spec::ProofStatus;
 
 // ---- RUP verification tests ----
@@ -14,7 +14,7 @@ use crate::spec::ProofStatus;
 fn test_rup_unit_propagation_derives_conflict() {
     // Clauses: {1, 2}, {1, -2}, {-1, 2}, {-1, -2}
     // Adding empty clause: negate nothing, propagation should find conflict.
-    let clauses = [vec![1, 2], vec![1, -2], vec![-1, 2], vec![-1, -2]];
+    let _clauses = [vec![1, 2], vec![1, -2], vec![-1, 2], vec![-1, -2]];
     // Empty clause is RUP: no negated literals, every clause must be falsified
     // by unit propagation from existing clauses. Actually for empty clause,
     // we need to find a conflict with no assumptions at all.

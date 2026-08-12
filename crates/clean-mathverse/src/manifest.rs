@@ -505,7 +505,7 @@ pub fn verify_shard_integrity(path: &Path) -> MathverseResult<bool> {
     const FOOTER_SIZE: usize = 64;
     let data = std::fs::read(path)?;
     if data.len() < FOOTER_SIZE {
-        return Err(crate::error::MathverseError::Truncated {
+        return Err(MathverseError::Truncated {
             expected: FOOTER_SIZE,
             got: data.len(),
         });

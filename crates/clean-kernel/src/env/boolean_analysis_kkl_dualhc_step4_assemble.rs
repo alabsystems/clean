@@ -94,6 +94,8 @@ struct AsmConsts {
     noise_fn: Expr,
     subset_sum: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     subset_sum_congr: Expr,
     fin_sum_nonneg: Expr,
     mul_nonneg: Expr,
@@ -111,6 +113,7 @@ struct AsmConsts {
     desq: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl AsmConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

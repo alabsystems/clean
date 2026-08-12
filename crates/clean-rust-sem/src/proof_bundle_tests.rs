@@ -37,15 +37,8 @@ fn test_safe_shared_borrow_produces_satisfied_obligations() {
         "expected at least one ownership obligation"
     );
 
-    // All obligations from safe code should be satisfied
-    let violated: Vec<_> = bundle
-        .ownership_obligations
-        .iter()
-        .filter(|o| !o.satisfied)
-        .collect();
-    // The only potentially unsatisfied one is the aliasing check which
-    // may report "passed" depending on interpreter behavior. Check that
-    // borrow obligations specifically are satisfied.
+    // Check that borrow obligations specifically are satisfied. Other
+    // obligation kinds may conservatively remain open at this stage.
     let borrow_obligations: Vec<_> = bundle
         .ownership_obligations
         .iter()

@@ -2401,7 +2401,7 @@ fn par_reduces_p_app_dev_proof() -> String {
         "hf')"
     );
     // Goal at the lam branch: app f' a' ⇒_p instantiate (cd b0)(cd a) (= cd (app (lam A b0) a)).
-    let beta_goal_lam =
+    let _beta_goal_lam =
         "(par_reduces_p env (KExpr.app f' a') (instantiate (cd env b0) (cd env a)))";
     // First lam_inv: from (lam A b0) ⇒_p f' recover f' = lam A' b0', A ⇒_p A', b0 ⇒_p b0'.
     // Then SECOND lam_inv on (lam A' b0') ⇒_p lam (cd A)(cd b0) (= hf_dev_lam transported)

@@ -380,6 +380,9 @@ pub(crate) fn count_pis(expr: &Expr) -> usize {
 ///
 /// Returns `true` if the lemma was applied and all subgoals closed.
 /// On failure, the proof state is rolled back using scope-based undo.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn try_apply_and_solve(state: &mut ProofState, lemma_expr: Expr) -> bool {
     let saved_goals = state.goals.clone();
     state.metas_mut().push_scope();

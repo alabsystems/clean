@@ -203,10 +203,11 @@ lemma pair_true_e2e : True ∧ True := by
   sorry
 "#;
 
-    // Step 1: fillSorries with a tactic that solves the first but not second sorry
+    // Step 1: fillSorries with a tactic that is inapplicable to both True goals.
+    // This leaves both holes available for the caller-driven replacement step.
     let fill_params = FillSorriesParams {
         content: content.to_string(),
-        tactic_sequence: vec!["trivial".to_string()], // does not solve True in our kernel
+        tactic_sequence: vec!["rfl".to_string()],
         timeout_ms: Some(5000),
     };
     let fill_response = handle_fill_sorries(&state, RequestId::Number(1), fill_params).await;
@@ -221,6 +222,11 @@ lemma pair_true_e2e : True ∧ True := by
         .filter(|g| !g.solved)
         .map(|g| g.sorry_index)
         .collect();
+    assert_eq!(
+        unsolved_indices,
+        vec![0, 1],
+        "the setup must expose both holes to the replacement loop"
+    );
 
     // Step 2: Build replacement list for all unsolved sorries
     let replacements: Vec<SorryReplacement> = unsolved_indices

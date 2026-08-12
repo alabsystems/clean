@@ -25,16 +25,6 @@ fn binary_app(head: &str, lhs: Expr, rhs: Expr) -> Expr {
     Expr::app(Expr::app(const_expr(head), lhs), rhs)
 }
 
-fn push_hyp(state: &mut ProofState, name: &str, ty: Expr) {
-    let fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar,
-        name: name.to_string(),
-        ty,
-        value: None,
-    });
-}
-
 #[test]
 fn test_mono_config_default() {
     let config = MonoConfig::default();
@@ -163,9 +153,61 @@ fn test_mono_addition_closes_main_goal_with_checked_nat_proof() {
     let h1_ty = make_nat_le_tc(a.clone(), c.clone());
     let h2_ty = make_nat_le_tc(b.clone(), d.clone());
 
-    let mut state = ProofState::new(env.clone(), target.clone());
-    push_hyp(&mut state, "h1", h1_ty.clone());
-    push_hyp(&mut state, "h2", h2_ty.clone());
+    let mut state = ProofState::with_context(
+        env.clone(),
+        target.clone(),
+        vec![
+            LocalDecl {
+                fvar: FVarId::new(0),
+                name: "h1".into(),
+                ty: h1_ty.clone(),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(1),
+                name: "h2".into(),
+                ty: h2_ty.clone(),
+                value: None,
+            },
+        ],
+    );
+
+    // RC-N: `gcongr` — which `mono` delegates to for Nat addition — now
+    // discharges its own trivial subgoals, so `h1 : a ≤ c` and `h2 : b ≤ d`
+    // close the two congruence premises during the decomposition itself. What
+    // used to be "decompose, then two manual `assumption` calls" is therefore a
+    // single step that leaves NO goals. The subgoal SHAPE is still pinned, by
+    // the hypothesis-free sibling test below (and by
+    // `gcongr_discharge_tests::test_gcongr_leaves_undischargeable_subgoal_open`),
+    // where nothing in context can discharge them and both stay observable.
+    mono(&mut state).expect("mono should decompose Nat addition goals");
+    assert!(
+        state.is_complete(),
+        "mono should decompose AND discharge both Nat subgoals from h1/h2, leaving none; got {:?}",
+        state.goals
+    );
+}
+
+#[test]
+fn test_mono_addition_subgoal_shape_without_dischargeable_hypotheses() {
+    // Same decomposition as above with an EMPTY context: neither congruence
+    // premise is dischargeable, so both subgoals survive and their shape can be
+    // checked. This is the half of the old
+    // `test_mono_addition_closes_main_goal_with_checked_nat_proof` that the
+    // RC-N discharger would otherwise make unobservable.
+    let mut env = Environment::with_prelude();
+    let nat_ty = const_expr("Nat");
+    add_axioms(&mut env, &nat_ty, &["a", "b", "c", "d"]);
+
+    let a = const_expr("a");
+    let b = const_expr("b");
+    let c = const_expr("c");
+    let d = const_expr("d");
+    let target = make_nat_le_tc(
+        binary_app("Nat.add", a.clone(), b.clone()),
+        binary_app("Nat.add", c.clone(), d.clone()),
+    );
+    let mut state = ProofState::new(env, target);
 
     mono(&mut state).expect("mono should decompose Nat addition goals");
     assert_eq!(state.goals.len(), 2, "mono should create two Nat subgoals");
@@ -180,11 +222,6 @@ fn test_mono_addition_closes_main_goal_with_checked_nat_proof() {
     assert!(exprs_equal(&rhs1, &c));
     assert!(exprs_equal(&lhs2, &b));
     assert!(exprs_equal(&rhs2, &d));
-
-    assumption(&mut state).expect("first Nat inequality hypothesis should solve the first subgoal");
-    assumption(&mut state)
-        .expect("second Nat inequality hypothesis should solve the second subgoal");
-    assert!(state.is_complete());
 }
 
 #[test]
@@ -206,11 +243,15 @@ fn test_mono_monotone_hypothesis_fails_honestly_without_checked_application() {
     .unwrap();
     add_axioms(&mut env, &nat_ty, &["a", "b"]);
 
-    let mut state = ProofState::new(env, make_nat_le_tc(const_expr("a"), const_expr("b")));
-    push_hyp(
-        &mut state,
-        "hmono",
-        Expr::app(const_expr("Monotone"), const_expr("f")),
+    let mut state = ProofState::with_context(
+        env,
+        make_nat_le_tc(const_expr("a"), const_expr("b")),
+        vec![LocalDecl {
+            fvar: FVarId::new(0),
+            name: "hmono".into(),
+            ty: Expr::app(const_expr("Monotone"), const_expr("f")),
+            value: None,
+        }],
     );
 
     let err = mono(&mut state).unwrap_err();

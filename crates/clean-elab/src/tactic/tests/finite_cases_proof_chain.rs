@@ -205,33 +205,32 @@ fn test_interval_cases_dependent_target_succeeds() {
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
     // Goal: R(n) where n : Nat, with 2 ≤ n and n ≤ 4 in context
-    let mut state = ProofState::new(env, Expr::prop());
-    let n_fvar = state.fresh_fvar();
+    let n_fvar = FVarId::new(0);
     let target = Expr::app(r_const.clone(), Expr::fvar(n_fvar));
-    state.goals[0].target = target.clone();
-
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: n_fvar,
-        name: "n".to_string(),
-        ty: nat_ty.clone(),
-        value: None,
-    });
-
-    let h_lower_fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_lower_fvar,
-        name: "h_lower".to_string(),
-        ty: make_nat_le_tc(make_nat_literal(2), Expr::fvar(n_fvar)),
-        value: None,
-    });
-
-    let h_upper_fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_upper_fvar,
-        name: "h_upper".to_string(),
-        ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(4)),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target.clone(),
+        vec![
+            LocalDecl {
+                fvar: n_fvar,
+                name: "n".to_string(),
+                ty: nat_ty.clone(),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(1),
+                name: "h_lower".to_string(),
+                ty: make_nat_le_tc(make_nat_literal(2), Expr::fvar(n_fvar)),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(2),
+                name: "h_upper".to_string(),
+                ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(4)),
+                value: None,
+            },
+        ],
+    );
 
     let result = interval_cases(&mut state, "n");
     assert!(
@@ -243,14 +242,16 @@ fn test_interval_cases_dependent_target_succeeds() {
         3,
         "interval_cases should create 3 sub-goals"
     );
-    for goal in &state.goals {
+    let goal_count = state.goals.len();
+    for (idx, goal) in state.goals.iter().enumerate() {
         assert_eq!(
             goal.target, target,
             "dependent interval sub-goals should preserve the original target"
         );
-        assert!(
+        assert_eq!(
             goal.local_ctx.iter().any(|decl| decl.name == "n_eq"),
-            "dependent interval sub-goals should carry the generated equality hypothesis"
+            idx + 1 < goal_count,
+            "only branches backed by an equality lambda may carry n_eq"
         );
     }
 }
@@ -262,33 +263,32 @@ fn test_interval_cases_lt_dependent_target_succeeds() {
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
-    let mut state = ProofState::new(env, Expr::prop());
-    let n_fvar = state.fresh_fvar();
+    let n_fvar = FVarId::new(0);
     let target = Expr::app(r_const, Expr::fvar(n_fvar));
-    state.goals[0].target = target.clone();
-
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: n_fvar,
-        name: "n".to_string(),
-        ty: nat_ty.clone(),
-        value: None,
-    });
-
-    let h_lower_fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_lower_fvar,
-        name: "h_lower".to_string(),
-        ty: make_nat_lt_tc(make_nat_literal(1), Expr::fvar(n_fvar)),
-        value: None,
-    });
-
-    let h_upper_fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_upper_fvar,
-        name: "h_upper".to_string(),
-        ty: make_nat_lt_tc(Expr::fvar(n_fvar), make_nat_literal(5)),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target.clone(),
+        vec![
+            LocalDecl {
+                fvar: n_fvar,
+                name: "n".to_string(),
+                ty: nat_ty.clone(),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(1),
+                name: "h_lower".to_string(),
+                ty: make_nat_lt_tc(make_nat_literal(1), Expr::fvar(n_fvar)),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(2),
+                name: "h_upper".to_string(),
+                ty: make_nat_lt_tc(Expr::fvar(n_fvar), make_nat_literal(5)),
+                value: None,
+            },
+        ],
+    );
 
     let result = interval_cases(&mut state, "n");
     assert!(
@@ -300,9 +300,13 @@ fn test_interval_cases_lt_dependent_target_succeeds() {
         3,
         "strict interval should create 3 sub-goals"
     );
-    for goal in &state.goals {
+    let goal_count = state.goals.len();
+    for (idx, goal) in state.goals.iter().enumerate() {
         assert_eq!(goal.target, target);
-        assert!(goal.local_ctx.iter().any(|decl| decl.name == "n_eq"));
+        assert_eq!(
+            goal.local_ctx.iter().any(|decl| decl.name == "n_eq"),
+            idx + 1 < goal_count
+        );
     }
 }
 
@@ -313,33 +317,32 @@ fn test_interval_cases_single_value_dependent_target_succeeds() {
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
-    let mut state = ProofState::new(env, Expr::prop());
-    let n_fvar = state.fresh_fvar();
+    let n_fvar = FVarId::new(0);
     let target = Expr::app(r_const, Expr::fvar(n_fvar));
-    state.goals[0].target = target.clone();
-
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: n_fvar,
-        name: "n".to_string(),
-        ty: nat_ty.clone(),
-        value: None,
-    });
-
-    let h_lower_fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_lower_fvar,
-        name: "h_lower".to_string(),
-        ty: make_nat_le_tc(make_nat_literal(3), Expr::fvar(n_fvar)),
-        value: None,
-    });
-
-    let h_upper_fvar = state.fresh_fvar();
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_upper_fvar,
-        name: "h_upper".to_string(),
-        ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(3)),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target.clone(),
+        vec![
+            LocalDecl {
+                fvar: n_fvar,
+                name: "n".to_string(),
+                ty: nat_ty.clone(),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(1),
+                name: "h_lower".to_string(),
+                ty: make_nat_le_tc(make_nat_literal(3), Expr::fvar(n_fvar)),
+                value: None,
+            },
+            LocalDecl {
+                fvar: FVarId::new(2),
+                name: "h_upper".to_string(),
+                ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(3)),
+                value: None,
+            },
+        ],
+    );
 
     let result = interval_cases(&mut state, "n");
     assert!(
@@ -348,7 +351,7 @@ fn test_interval_cases_single_value_dependent_target_succeeds() {
     );
     assert_eq!(state.goals.len(), 1);
     assert_eq!(state.goals[0].target, target);
-    assert!(state.goals[0]
+    assert!(!state.goals[0]
         .local_ctx
         .iter()
         .any(|decl| decl.name == "n_eq"));

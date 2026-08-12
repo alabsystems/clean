@@ -45,6 +45,7 @@ use crate::name::Name;
 
 /// Shared constants for GF(2) Polynomial Calculus formalization.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct GF2PCConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,

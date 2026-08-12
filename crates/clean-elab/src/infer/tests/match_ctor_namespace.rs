@@ -47,7 +47,7 @@ fn color_env() -> Environment {
     })
     .expect("Color inductive should register");
 
-    env.add_decl(clean_kernel::env::Declaration::Axiom {
+    env.add_decl(Declaration::Axiom {
         name: Name::from_string("c"),
         level_params: vec![],
         type_: color_ref,
@@ -225,7 +225,7 @@ fn test_match_non_constructor_constant_is_bound_as_variable() {
     // is NOT a constructor (here the axiom `notACtor : Color`) must be treated
     // as a fresh catch-all variable binder, never mistaken for a ctor case.
     let mut env = color_env();
-    env.add_decl(clean_kernel::env::Declaration::Axiom {
+    env.add_decl(Declaration::Axiom {
         name: Name::from_string("notACtor"),
         level_params: vec![],
         type_: Expr::const_(Name::from_string("Color"), vec![]),
@@ -247,7 +247,7 @@ fn test_resolve_ctor_name_helper_paths() {
     // Direct unit coverage of the resolution helper: bare, qualified, opened
     // alias, and rejection of foreign / non-constructor names.
     let mut env = color_env();
-    env.add_decl(clean_kernel::env::Declaration::Axiom {
+    env.add_decl(Declaration::Axiom {
         name: Name::from_string("notACtor"),
         level_params: vec![],
         type_: Expr::const_(Name::from_string("Color"), vec![]),
@@ -314,7 +314,7 @@ fn pair_env() -> Environment {
         }],
     })
     .expect("Pair inductive should register");
-    env.add_decl(clean_kernel::env::Declaration::Axiom {
+    env.add_decl(Declaration::Axiom {
         name: Name::from_string("p"),
         level_params: vec![],
         type_: pair_ref,

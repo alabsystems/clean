@@ -7,6 +7,27 @@
 use super::*;
 
 impl<'a> ElabCtx<'a> {
+    /// Elaborate an ARGUMENT subterm with `@`-explicit mode scoped OFF.
+    ///
+    /// `@` marks binder consumption for the single application head it
+    /// prefixes (Lean 4 semantics); a nested non-`@` application inside an
+    /// argument must re-insert its own implicit binders. The flag previously
+    /// leaked into argument elaboration, positionally matching a nested
+    /// call's first explicit argument against a `{_ : Type}` implicit binder
+    /// — the App/FVar/Pi-vs-Sort mismatch family (regression lock:
+    /// data/graduation/clean-mtype/proof/elab_explicit_scope_regression.lean).
+    pub(super) fn elaborate_arg_with_expected_type(
+        &mut self,
+        expr: &SurfaceExpr,
+        expected_ty: Option<Expr>,
+    ) -> Result<Expr, ElabError> {
+        let saved = self.explicit_mode;
+        self.explicit_mode = false;
+        let result = self.elaborate_with_expected_type(expr, expected_ty);
+        self.explicit_mode = saved;
+        result
+    }
+
     pub(super) fn elaborate_with_expected_type(
         &mut self,
         expr: &SurfaceExpr,
@@ -242,8 +263,7 @@ impl<'a> ElabCtx<'a> {
         // Transparency-blind, complete def-eq: mirrors the kernel `add_decl`
         // re-check that would otherwise reject (or, on the synthetic-sorry
         // paths, launder) the term downstream.
-        let kernel_ok =
-            clean_kernel::TypeChecker::with_context(self.env, ctx).is_def_eq(&val_ty, &ty);
+        let kernel_ok = TypeChecker::with_context(self.env, ctx).is_def_eq(&val_ty, &ty);
         if kernel_ok {
             Ok(())
         } else {

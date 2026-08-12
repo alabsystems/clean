@@ -1816,14 +1816,9 @@ pub fn run(args: MathverseArgs) -> Result<(), MathverseCliError> {
         // so it runs the doctor with an UNKNOWN build identity (that check then
         // warns). The `clean` binary intercepts this verb in `cmd_mathverse.rs`
         // and supplies the real embedded identity from its `build.rs`.
-        MathverseCommands::IsabelleDoctor(a) => {
-            isabelle_doctor_dispatch::run_isabelle_doctor(a, BuildIdentity::unknown())
-        }
+        MathverseCommands::IsabelleDoctor(a) => run_isabelle_doctor(a, BuildIdentity::unknown()),
         MathverseCommands::IsabelleSnapshotPreserve(a) => {
-            isabelle_snapshot_preserve_dispatch::run_isabelle_snapshot_preserve(
-                a,
-                BuildIdentity::unknown(),
-            )
+            run_isabelle_snapshot_preserve(a, BuildIdentity::unknown())
         }
         // Per-constant verify and the trust-receipt corpus driver recurse deeply
         // through the kernel (def-eq / term reconstruction over large closures) on

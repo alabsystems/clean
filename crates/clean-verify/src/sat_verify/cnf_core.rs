@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use super::types::{CnfError, Lit, Var};
+use super::types::{CnfError, Lit};
 
 /// A literal in the MiniSat u32 encoding: `var * 2 + sign`.
 ///

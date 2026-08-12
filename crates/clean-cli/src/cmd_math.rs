@@ -14,6 +14,5 @@ mod proof_state;
 mod theorem_index;
 
 pub(crate) use args::MathCommands;
-pub(crate) use error::MathError;
 pub(crate) use features::FEATURES;
 pub(crate) use handlers::handle_math_command;

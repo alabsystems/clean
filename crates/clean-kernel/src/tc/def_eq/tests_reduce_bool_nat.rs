@@ -20,6 +20,7 @@ fn add_def(env: &mut Environment, name: &str, ty: Expr, value: Expr) {
 }
 
 /// Helper: add an opaque declaration to the environment.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn add_opaque(env: &mut Environment, name: &str, ty: Expr, value: Expr) {
     let mut info = ConstantInfo::new(Name::from_string(name), vec![], ty, Some(value), false);
     info.kind = ConstantKind::Opaque;

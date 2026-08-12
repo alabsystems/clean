@@ -94,8 +94,8 @@ async fn test_check_rejects_type_mismatch_theorem() {
         result
             .errors
             .iter()
-            .any(|err| err.message.contains("Type check error")),
-        "Expected kernel type-check diagnostics, got: {:?}",
+            .any(|err| err.message.contains("Elaboration error: Type mismatch")),
+        "Expected elaboration type-mismatch diagnostics, got: {:?}",
         result.errors
     );
 }
@@ -121,8 +121,8 @@ async fn test_check_rejects_type_mismatch_def() {
         result
             .errors
             .iter()
-            .any(|err| err.message.contains("Type check error")),
-        "Expected kernel type-check diagnostics, got: {:?}",
+            .any(|err| err.message.contains("Elaboration error: Type mismatch")),
+        "Expected elaboration type-mismatch diagnostics, got: {:?}",
         result.errors
     );
 }
@@ -131,7 +131,9 @@ async fn test_check_rejects_type_mismatch_def() {
 async fn test_check_rejects_non_prop_theorem_type() {
     let state = ServerState::new();
     let params = CheckParams {
-        code: "theorem not_a_prop : Type := Type".to_string(),
+        // `Prop : Type` is well-typed, so this reaches the declaration
+        // validator and exercises its theorem-specific Prop restriction.
+        code: "theorem not_a_prop : Type := Prop".to_string(),
         timeout_ms: None,
     };
 
@@ -185,7 +187,7 @@ async fn test_check_does_not_prefix_match_theorem_declaration() {
 }
 
 #[tokio::test]
-async fn test_check_rejects_skipped_declaration_kind() {
+async fn test_check_accepts_checked_example_declaration() {
     let state = prelude_state();
     let params = CheckParams {
         code: "example : True := True.intro".to_string(),
@@ -201,16 +203,13 @@ async fn test_check_rejects_skipped_declaration_kind() {
 
     let result: CheckResult = serde_json::from_value(response.result.unwrap()).unwrap();
     assert!(
-        !result.valid,
-        "Skipped declaration kinds must not be reported as valid"
+        result.valid,
+        "A fully elaborated and kernel-checked example should be valid, got: {:?}",
+        result.errors
     );
     assert!(
-        result
-            .errors
-            .iter()
-            .any(|err| err.message.contains("unsupported declaration kind")),
-        "Expected unsupported declaration diagnostic, got: {:?}",
-        result.errors
+        result.inferred_type.is_some(),
+        "A checked example should report its elaborated type"
     );
 }
 

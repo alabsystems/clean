@@ -84,6 +84,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for `NNReal.cube_minkowski_merge`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct MergeConsts {
     nnreal: Expr,
     nnreal_mul: Expr,
@@ -105,6 +106,7 @@ struct MergeConsts {
     congr_arg11: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl MergeConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

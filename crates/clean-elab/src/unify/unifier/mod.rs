@@ -7,7 +7,6 @@
 mod pattern;
 mod unify_expr;
 
-use crate::stack_safe;
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, ExprKind, Level, LocalContext, TypeChecker};
 use std::cell::RefCell;
@@ -224,14 +223,26 @@ impl<'a> Unifier<'a> {
     pub(super) fn push_binder_local(&self, ty: &Expr) -> Option<clean_kernel::FVarId> {
         let tc_cache = self.tc_cache.borrow();
         let tc = tc_cache.as_ref()?;
-        let historical: HashSet<_> = self
-            .metas
-            .iter()
-            .flat_map(|(_, meta)| meta.locals.iter().map(|(_, fvar, _)| *fvar))
-            .collect();
+        // The maintained superset replaces a per-crossing rebuild of the
+        // exact captured-locals set (long unifier sessions cross millions
+        // of binders; the rebuild was a measured constant-factor drag).
+        // Superset ⇒ only MORE candidates rejected ⇒ no-alias preserved.
+        let historical = self.metas.historical_local_fvars();
+        debug_assert!(
+            {
+                let exact: HashSet<_> = self
+                    .metas
+                    .iter()
+                    .flat_map(|(_, meta)| meta.locals.iter().map(|(_, fvar, _)| *fvar))
+                    .collect();
+                exact.iter().all(|f| historical.contains(f))
+            },
+            "historical_local_fvars must stay a superset of captured locals \
+             (a new MetaVar::locals writer forgot to extend it)"
+        );
         loop {
             let fvar = tc.push_binder_local(
-                clean_kernel::name::Name::anon(),
+                Name::anon(),
                 ty.clone(),
                 clean_kernel::BinderData::default(),
             );
@@ -290,14 +301,6 @@ impl<'a> Unifier<'a> {
             matches!(self.unify_meta(meta_id, hay), UnifyResult::Success)
         } else {
             false
-        }
-    }
-
-    #[inline]
-    fn add_level_constraint(&mut self, name: Name, level: Level) -> UnifyResult {
-        match self.metas.add_level_constraint(name, level) {
-            Ok(()) => UnifyResult::Success,
-            Err(message) => UnifyResult::Failure(message),
         }
     }
 
@@ -466,143 +469,12 @@ impl<'a> Unifier<'a> {
         }
     }
 
-    /// Level occurs-check: does the parameter `name` appear anywhere in `level`?
-    ///
-    /// Used before assigning a level metavariable `name := level` to a Max/IMax
-    /// expression. Assigning a metavar to a level that mentions the metavar
-    /// itself (e.g. `?v := max(?v, u)`) would loop during instantiation, so such
-    /// assignments are rejected and deferred to the conservative path.
-    fn level_param_occurs(name: &Name, level: &Level) -> bool {
-        let mut params = Vec::new();
-        level.collect_params(&mut params);
-        params.iter().any(|p| p == name)
-    }
-
     /// Unify two universe levels.
     ///
-    /// If one level is a parameter (like `u_0`) and the other is concrete,
-    /// add a constraint to the metavariable state.
+    /// Delegates to THE shared level solver (`unify::level_solve`, U2 rung
+    /// 3a) — one arm set for both this primary site and `unify_ext`.
     pub(crate) fn unify_levels(&mut self, l1: &Level, l2: &Level) -> UnifyResult {
-        stack_safe(|| {
-            // First, instantiate any already-solved level params
-            let l1 = self.metas.instantiate_level(l1);
-            let l2 = self.metas.instantiate_level(l2);
-
-            // If they're equal after instantiation, we're done
-            if l1 == l2 {
-                return UnifyResult::Success;
-            }
-
-            // Try to solve one param from the other
-            match (&l1, &l2) {
-                // If both are params, constrain the first to the second
-                // (handles `u_0 = u_1`). But NEVER rename a rigid declared
-                // universe parameter onto a fresh elaboration param: if `name1`
-                // is a declared `.{u}` (rigid) and `name2` is a fresh solvable
-                // param, assign `name2 := name1` so the fresh param collapses
-                // onto the declared one, preserving the user's universe name.
-                // Without this, elaborating `Inh.{u_0} α` inside
-                // `structure S (α : Sort u)` unions `u → u_0`, silently renaming
-                // the declaration's `u` to `u_0` and breaking every downstream
-                // use of `S`'s projections.
-                (Level::Param(name1), Level::Param(name2)) => {
-                    if self.metas.is_rigid_level_param(name1)
-                        && !self.metas.is_rigid_level_param(name2)
-                    {
-                        self.add_level_constraint(name2.clone(), l1.clone())
-                    } else {
-                        self.add_level_constraint(name1.clone(), l2.clone())
-                    }
-                }
-                // If l1 is a param and l2 is concrete, assign l1 := l2
-                (Level::Param(name), _) if !l2.has_params() => {
-                    self.add_level_constraint(name.clone(), l2.clone())
-                }
-                // If l2 is a param and l1 is concrete, assign l2 := l1
-                (_, Level::Param(name)) if !l1.has_params() => {
-                    self.add_level_constraint(name.clone(), l1.clone())
-                }
-                // Succ case: unify inner levels
-                (Level::Succ(inner1), Level::Succ(inner2)) => self.unify_levels(inner1, inner2),
-
-                // Handle u_1 = Succ(u_0) case (#168)
-                // If l1 is a param and l2 is Succ of something, try to constrain l1 := l2
-                // This allows u_1 to be unified with Succ(u_0) where u_0 might later resolve.
-                //
-                // Occurs-check (same discipline as the Max/IMax arms below): reject
-                // `u := Succ(... u ...)`. Such an equation (e.g. `u = Succ(u)`) is
-                // unsatisfiable, and assigning it would store a self-referential
-                // level that makes `instantiate_level` recurse forever. Defer the
-                // self-referential case to the conservative path instead.
-                (Level::Param(name), Level::Succ(_)) => {
-                    if Self::level_param_occurs(name, &l2) {
-                        UnifyResult::Failure(format!(
-                            "occurs check failed for level param {name:?} in {l2:?}"
-                        ))
-                    } else {
-                        self.add_level_constraint(name.clone(), l2.clone())
-                    }
-                }
-                // Symmetric case: Succ(u_0) = u_1
-                (Level::Succ(_), Level::Param(name)) => {
-                    if Self::level_param_occurs(name, &l1) {
-                        UnifyResult::Failure(format!(
-                            "occurs check failed for level param {name:?} in {l1:?}"
-                        ))
-                    } else {
-                        self.add_level_constraint(name.clone(), l1.clone())
-                    }
-                }
-
-                // Miller-style slice for Max/IMax (#level-maximax):
-                // When one side is an UNASSIGNED level metavariable (a residual
-                // `Level::Param` head — `instantiate_level` above has already
-                // replaced any solved param) and the other side is a Max/IMax
-                // expression, assign the metavar := that expression, provided the
-                // metavar does not occur in it (level occurs-check). This is the
-                // level analog of Miller-pattern discipline: assign-the-metavar
-                // when there is a genuine unassigned head, otherwise defer.
-                //
-                // The assignment is provisional — the resulting term is
-                // kernel-checked, which re-verifies universe constraints, so a
-                // wrong commitment fails downstream rather than producing
-                // unsoundness. The occurs-check rejects self-referential
-                // assignments like `?v := max(?v, u)` that would loop during
-                // instantiation, deferring them to the conservative path.
-                (Level::Param(name), Level::Max(_, _) | Level::IMax(_, _)) => {
-                    if Self::level_param_occurs(name, &l2) {
-                        UnifyResult::Failure(format!(
-                            "occurs check failed for level param {name:?} in {l2:?}"
-                        ))
-                    } else {
-                        self.add_level_constraint(name.clone(), l2.clone())
-                    }
-                }
-                // Commutative case: Max/IMax = ?v
-                (Level::Max(_, _) | Level::IMax(_, _), Level::Param(name)) => {
-                    if Self::level_param_occurs(name, &l1) {
-                        UnifyResult::Failure(format!(
-                            "occurs check failed for level param {name:?} in {l1:?}"
-                        ))
-                    } else {
-                        self.add_level_constraint(name.clone(), l1.clone())
-                    }
-                }
-
-                // Max/IMax with no metavar head: do not invent a solution.
-                // Normalize + is_def_eq and defer (Stuck/Failure) otherwise —
-                // unchanged conservative behavior.
-                _ => {
-                    if Level::is_def_eq(&l1, &l2) {
-                        UnifyResult::Success
-                    } else if !l1.has_params() && !l2.has_params() {
-                        UnifyResult::Failure(format!("universe level conflict: {l1:?} vs {l2:?}"))
-                    } else {
-                        UnifyResult::Failure(format!("level mismatch: {l1:?} vs {l2:?}"))
-                    }
-                }
-            }
-        })
+        crate::unify::level_solve::solve_level_eq(self.metas, l1, l2)
     }
 
     /// Try to unify two expressions

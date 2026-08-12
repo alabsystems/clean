@@ -38,6 +38,13 @@ FLAGSHIPS=(
   "CleanVerify.tc_infer_soundness"
   "CleanVerify.bootstrap_infer_sound"
   "CleanVerify.whnf_terminates_well_typed_dependent"
+  # C4 / the crystal: the bridge's keystone rule and its non-vacuity witness.
+  # NOTE: this array only greps output that `lean_export`'s DEFAULT_ROOTS
+  # decides to emit. Adding a name HERE alone reports "did NOT report a
+  # zero-axiom closure" for a declaration that is in fact axiom-free — the two
+  # lists must be changed together.
+  "CleanVerify.impl_bridge_fvar"
+  "CleanVerify.impl_bridge_fvar_witness"
 )
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

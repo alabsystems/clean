@@ -34,7 +34,6 @@ use super::mcmillan::{
 };
 use super::reverse::pudlak_interpolation;
 use super::PropFormula;
-use crate::sat_verify::cdcl::var_of;
 use std::collections::HashSet;
 use thiserror::Error;
 

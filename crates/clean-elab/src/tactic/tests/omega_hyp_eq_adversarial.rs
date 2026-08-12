@@ -71,7 +71,7 @@ fn collect_consts(e: &Expr, out: &mut HashSet<String>) {
 
 fn rejects(state: ProofState, label: &str) {
     let mut state = state;
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_err() && !state.is_complete(),
         "UNSOUND: omega closed non-following goal `{label}`: {result:?}"

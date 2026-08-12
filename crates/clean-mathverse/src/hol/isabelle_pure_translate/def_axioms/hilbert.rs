@@ -270,6 +270,7 @@ pub(crate) fn hol_the_definition_decl() -> Declaration {
 ///
 /// This is the clean image of `HOL.The P` when a witness `w` for the object type is
 /// available (a singleton predicate's point, or a bound object variable in scope).
+#[cfg(any(test, doc))]
 pub(crate) fn the_applied(alpha: &Expr, w: &Expr, p: &Expr) -> Expr {
     the_applied_ne(alpha, &nonempty_intro(alpha, w), p)
 }
@@ -485,7 +486,7 @@ impl Ctx {
     ) -> Result<Expr, TranslateError> {
         let alpha = self.embed_type(alpha_ty)?;
         let hne = self.term_param(&nonempty_param_key(&alpha), nonempty(&alpha));
-        let greatest = base_name.contains("Greatest");
+        let _greatest = base_name.contains("Greatest");
         // LHS bare `C` → `@isabelle.def.<C> α hne : (α→α→Prop)→(α→Prop)→α`.
         let lhs = Expr::apps(
             Expr::const_str(&extremum_def_name(base_name)),
@@ -814,7 +815,7 @@ mod tests {
     fn extremum_definitions_kernel_check_foundational() {
         let mut env = Environment::with_prelude();
         // Dependencies: HOL.conj def-const and the epsilon The.
-        for d in super::super::super::connective_definition_decls() {
+        for d in connective_definition_decls() {
             let _ = env.add_decl(d);
         }
         env.add_decl(hol_the_definition_decl())

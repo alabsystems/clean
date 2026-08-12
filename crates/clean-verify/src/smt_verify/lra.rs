@@ -33,6 +33,12 @@
 //!
 //! Reference: ay's `~/ay/crates/ay-proof/src/checker/lra_farkas.rs`
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use num_rational::Rational64;
 
 use super::dag::{SmtProofDag, SmtStepId, SmtSymbol, SmtTerm, SmtTermId};
@@ -43,7 +49,7 @@ pub(crate) const CHECKER_NAME: &str = "lra";
 
 /// An arithmetic relation extracted from an SMT term.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ArithRelation {
+pub enum ArithRelation {
     /// lhs <= rhs
     Le,
     /// lhs < rhs
@@ -483,9 +489,9 @@ mod tests {
         // Let me just test the extract and weighted sum pieces directly.
 
         let mut dag = SmtProofDag::new();
-        let x = dag.add_term(SmtTerm::Var("x".to_string(), SmtSort::Real));
-        let zero = dag.add_term(SmtTerm::Int(0));
-        let one = dag.add_term(SmtTerm::Int(1));
+        let _x = dag.add_term(SmtTerm::Var("x".to_string(), SmtSort::Real));
+        let _zero = dag.add_term(SmtTerm::Int(0));
+        let _one = dag.add_term(SmtTerm::Int(1));
 
         // Conflict: x <= -1 AND x >= 0
         // As blocking clause:

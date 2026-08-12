@@ -13,6 +13,7 @@
 //! - order_arith.rs: Arithmetic ordering (add/mul/sub/pow) and FATE-X stubs
 
 use crate::env::decl_builder::EnvDeclBuilder;
+use crate::env::order_structures::prop_rel_trans_levels;
 use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
@@ -610,19 +611,17 @@ impl Environment {
 
         let nat_lt_relation = nat_lt_relation();
 
-        // instTransNatLt : Trans.{1,1,1} Nat Nat Nat Nat.lt Nat.lt Nat.lt
-        // Homogeneous Trans: α = β = γ = Nat, r = s = t = Nat.lt
-        let level_one = Level::succ(Level::zero());
+        // instTransNatLt : Trans.{0,0,0,1,1,1} Nat Nat Nat Nat.lt Nat.lt Nat.lt
+        // Homogeneous Trans: α = β = γ = Nat, r = s = t = Nat.lt.
+        // Lean's `Trans` universe order is [rel_r, rel_s, rel_t, α, β, γ]; the
+        // relations are `Prop`-valued (`Sort 0`) and `Nat : Type 0` (`Sort 1`).
         let inst_trans_nat_lt_type = Expr::app(
             Expr::app(
                 Expr::app(
                     Expr::app(
                         Expr::app(
                             Expr::app(
-                                Expr::const_(
-                                    Name::from_string("Trans"),
-                                    vec![level_one.clone(), level_one.clone(), level_one.clone()],
-                                ),
+                                Expr::const_(Name::from_string("Trans"), prop_rel_trans_levels()),
                                 nat_const.clone(), // α = Nat
                             ),
                             nat_const.clone(), // β = Nat
@@ -649,7 +648,6 @@ impl Environment {
                     !matches!(info.kind, crate::env::types::ConstantKind::Definition)
                 })
         {
-            let one = Level::succ(Level::zero());
             let nat_lt = |a: Expr, b: Expr| {
                 Expr::apps(Expr::const_(Name::from_string("Nat.lt"), vec![]), [a, b])
             };
@@ -674,10 +672,7 @@ impl Environment {
                 b.finish(e)
             };
             let value = Expr::apps(
-                Expr::const_(
-                    Name::from_string("Trans.mk"),
-                    vec![one.clone(), one.clone(), one],
-                ),
+                Expr::const_(Name::from_string("Trans.mk"), prop_rel_trans_levels()),
                 [
                     nat_const.clone(),
                     nat_const.clone(),
@@ -827,9 +822,8 @@ impl Environment {
         if !self.suppress_lossy_structure_stubs {
             let nat_le_relation = nat_le_relation();
 
-            // instTransNatLe : Trans.{1,1,1} Nat Nat Nat Nat.le Nat.le Nat.le
+            // instTransNatLe : Trans.{0,0,0,1,1,1} Nat Nat Nat Nat.le Nat.le Nat.le
             // Homogeneous Trans: α = β = γ = Nat, r = s = t = Nat.le
-            let level_one = Level::succ(Level::zero());
             let inst_trans_nat_le_type = Expr::app(
                 Expr::app(
                     Expr::app(
@@ -838,11 +832,7 @@ impl Environment {
                                 Expr::app(
                                     Expr::const_(
                                         Name::from_string("Trans"),
-                                        vec![
-                                            level_one.clone(),
-                                            level_one.clone(),
-                                            level_one.clone(),
-                                        ],
+                                        prop_rel_trans_levels(),
                                     ),
                                     nat_const.clone(), // α = Nat
                                 ),

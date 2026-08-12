@@ -3144,6 +3144,7 @@ fn eq_mpr_mmthm(a1: Expr, a2: Expr, h: Expr, term: Expr) -> Expr {
 /// `Clean.MM.applySubst_compose s1 s2 e
 ///    : applySubst s1 (applySubst s2 e) = applySubst (comp s1 s2) e`.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn applysubst_compose_app(s1: Expr, s2: Expr, e: Expr) -> Expr {
     Expr::apps(Expr::const_str(names::APPLYSUBST_COMPOSE), [s1, s2, e])
 }

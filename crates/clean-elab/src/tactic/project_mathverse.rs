@@ -318,6 +318,9 @@ fn try_mathverse_attempt(
         &mut report,
         config.blocker_limit,
     );
+    if matches!(config.coerce_nat, NatCoercionPolicy::WithSideConditions) {
+        append_missing_nat_sub_side_condition_support(&mut report, config.blocker_limit);
+    }
     append_cert_simp_blockers(&candidate, &mut report, config.blocker_limit);
 
     if has_fatal_blocker(&report) {
@@ -385,10 +388,6 @@ fn run_nat_coercion_normalizer(
     report: &mut ProjectMathverseReport,
     config: &ProjectMathverseConfig,
 ) -> Result<(), TacticError> {
-    if matches!(config.coerce_nat, NatCoercionPolicy::WithSideConditions) {
-        report_missing_nat_sub_side_condition_support(scratch, report, config.blocker_limit);
-    }
-
     run_cast_rewrite_pass(scratch, report, CastRewriteFlavor::Zify, true)?;
     if scratch.current_goal().is_none() {
         return Ok(());
@@ -495,49 +494,24 @@ fn record_goal_delta(
     report.normalized_hyp_count += before.local_ctx.len().abs_diff(after.local_ctx.len());
 }
 
-fn report_missing_nat_sub_side_condition_support(
-    scratch: &ProofState,
+fn append_missing_nat_sub_side_condition_support(
     report: &mut ProjectMathverseReport,
     blocker_limit: usize,
 ) {
     if report.blockers.len() >= blocker_limit {
         return;
     }
-    let Some(snapshot) = first_nat_sub_snapshot(scratch) else {
+    let Some(mut blocker) = report
+        .blockers
+        .iter()
+        .find(|blocker| blocker.kind == MathverseBlockerKind::NatSubWithoutSideCondition)
+        .cloned()
+    else {
         return;
     };
-    report.blockers.push(make_blocker(
-        scratch.env(),
-        snapshot,
-        MathverseBlockerKind::MissingRewriteLemma,
-    ));
-}
-
-fn first_nat_sub_snapshot(state: &ProofState) -> Option<ExprSnapshot> {
-    let goal = state.current_goal()?;
-    let target = state.metas.instantiate(&goal.target);
-    if contains_nat_sub(&target) {
-        return Some(ExprSnapshot {
-            origin: BlockerOrigin::Target,
-            unsimplified: goal.target.clone(),
-            normalized: target,
-        });
-    }
-
-    for decl in &goal.local_ctx {
-        let ty = state.metas.instantiate(&decl.ty);
-        if contains_nat_sub(&ty) {
-            return Some(ExprSnapshot {
-                origin: BlockerOrigin::Hypothesis {
-                    name: decl.name.clone(),
-                },
-                unsimplified: decl.ty.clone(),
-                normalized: ty,
-            });
-        }
-    }
-
-    None
+    blocker.kind = MathverseBlockerKind::MissingRewriteLemma;
+    blocker.suggestion = suggestion_for(MathverseBlockerKind::MissingRewriteLemma);
+    report.blockers.push(blocker);
 }
 
 fn append_cert_simp_blockers(
@@ -659,7 +633,17 @@ fn record_snapshot_diagnostic(
     report: &mut ProjectMathverseReport,
     blocker_limit: usize,
 ) {
-    match classify_mathverse_expr(&snapshot.normalized) {
+    // Unfolding `Nat.sub` to `Nat.rec`/`Nat.pred` does not prove its side
+    // condition. Preserve the actionable source-level blocker unless the
+    // normalized expression is now an actually parseable constraint.
+    let diagnostic = if expr_to_mathverse_constraint(&snapshot.normalized, None).is_none()
+        && contains_nat_sub(&snapshot.unsimplified)
+    {
+        DiagnosticClass::Blocked(MathverseBlockerKind::NatSubWithoutSideCondition)
+    } else {
+        classify_mathverse_expr(&snapshot.normalized)
+    };
+    match diagnostic {
         DiagnosticClass::Parsed => report.parsed_constraint_count += 1,
         DiagnosticClass::Irrelevant => {}
         DiagnosticClass::Blocked(kind) => {

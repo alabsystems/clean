@@ -58,6 +58,8 @@ pub(crate) struct IsCauchyConsts {
     rat_add: Expr,
     rat_inv: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     rat_le: Expr,
     rat_lt: Expr,
     rat_ofnat: Expr,
@@ -143,6 +145,7 @@ impl IsCauchyConsts {
         Expr::app(self.rat_inv.clone(), a)
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn le(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.rat_le.clone(), [a, b])
     }

@@ -257,6 +257,7 @@ pub(super) fn build_galois_adjunction_type(c: &AbstractInterpConsts) -> Expr {
 /// zonotope view refines or over-approximates the interval view through
 /// the abstraction/concretization maps `alpha_iz` and `gamma_iz`.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) fn build_interval_zonotope_galois_type(c: &AbstractInterpConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let map_ty = Expr::pi(

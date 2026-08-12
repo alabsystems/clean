@@ -43,6 +43,7 @@ use crate::name::Name;
 
 /// Re-create a minimal constants struct for the complexity theorems.
 /// (Mirrors the subset of `BlockExtConsts` needed here.)
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct BlockComplexityConsts {
     nat: Expr,
     #[cfg(test)]
@@ -58,6 +59,7 @@ struct BlockComplexityConsts {
     nn_vec: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl BlockComplexityConsts {
     fn new() -> Self {
         Self {

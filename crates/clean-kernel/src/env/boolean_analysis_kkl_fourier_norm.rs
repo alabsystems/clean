@@ -97,6 +97,8 @@ struct FourierNormConsts {
     // Eq.{1}.
     eq1: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_refl1: Expr,
     eq_symm1: Expr,
     eq_trans1: Expr,

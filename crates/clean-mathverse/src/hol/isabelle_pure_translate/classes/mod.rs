@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::{BinderInfo, Declaration, Expr};
 
 use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
 use super::*;

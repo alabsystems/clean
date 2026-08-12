@@ -40,6 +40,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Shared constants for zonotope proof construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct ZonoProofConsts {
     pub(super) nat: Expr,
     #[cfg(test)]
@@ -159,6 +160,7 @@ impl ZonoProofConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn ib_of(&self, d: &Expr) -> Expr {
         Expr::app(self.ib.clone(), d.clone())
     }

@@ -44,6 +44,9 @@ pub(crate) enum DecreasingStrategy {
 
 /// Result of attempting to build a decreasing proof.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct DecreasingProof {
     /// The proof term of type `measure(arg') < measure(arg)`.
     pub(crate) proof: Expr,
@@ -93,6 +96,9 @@ pub(crate) fn build_nat_decreasing_goal(
     Expr::app(Expr::app(nat_lt, measure_rec), measure_cur)
 }
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 impl<'a> ElabCtx<'a> {
     /// Discharge a decreasing proof obligation, trying multiple strategies.
     ///

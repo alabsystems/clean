@@ -1066,6 +1066,8 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Opaque { span, .. }
         | SurfaceDecl::Inductive { span, .. }
         | SurfaceDecl::Coinductive { span, .. }
+        | SurfaceDecl::Codata { span, .. }
+        | SurfaceDecl::Codef { span, .. }
         | SurfaceDecl::Structure { span, .. }
         | SurfaceDecl::Class { span, .. }
         | SurfaceDecl::Instance { span, .. }

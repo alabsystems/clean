@@ -1,0 +1,2990 @@
+{
+  "schema_version": "clean-silent-tactic-probes-v1",
+  "description": "Denominator for the silent-tactic census: one minimal `by <tactic>` declaration per (tactic token, invocation shape). Tokens come from an extraction over Lean 4 v4.30.0-rc2 source (<lean4-src>/src/{Init,Lean/Elab/Tactic,Lean/Meta/Tactic,Lean/Parser,Std/Tactic}: `syntax|macro|elab ... : tactic` blocks whose LAST category marker is `tactic`, plus `@[builtin_tactic_parser]` declarations), widened with the ~54-token conv category and the Mathlib tokens Clean already registers. Invocation shapes are hand-written to match real Lean surface syntax, because a BARE token probe only reaches name lookup and misses every failure that lives in the ARGUMENT grammar -- which is where the whole silent class lived.",
+  "probes": [
+    {
+      "token": "exact",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  exact\n",
+      "tactic_text": "exact",
+      "intentional_sorry": false
+    },
+    {
+      "token": "exact",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  exact h\n",
+      "tactic_text": "exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply\n",
+      "tactic_text": "apply",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply h\n",
+      "tactic_text": "apply h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "intro",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  intro\n",
+      "tactic_text": "intro",
+      "intentional_sorry": false
+    },
+    {
+      "token": "intro",
+      "label": "names",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  intro hx\n",
+      "tactic_text": "intro hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "intros",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  intros\n",
+      "tactic_text": "intros",
+      "intentional_sorry": false
+    },
+    {
+      "token": "intros",
+      "label": "names",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  intros hx\n",
+      "tactic_text": "intros hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "refine",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  refine\n",
+      "tactic_text": "refine",
+      "intentional_sorry": false
+    },
+    {
+      "token": "refine",
+      "label": "hole",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  refine ?_\n",
+      "tactic_text": "refine ?_",
+      "intentional_sorry": false
+    },
+    {
+      "token": "refine",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  refine h\n",
+      "tactic_text": "refine h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "refine'",
+      "label": "hole",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  refine' ?_\n",
+      "tactic_text": "refine' ?_",
+      "intentional_sorry": false
+    },
+    {
+      "token": "refine_lift",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  refine_lift h\n",
+      "tactic_text": "refine_lift h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "refine_lift'",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  refine_lift' h\n",
+      "tactic_text": "refine_lift' h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "assumption",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  assumption\n",
+      "tactic_text": "assumption",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rfl",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  rfl\n",
+      "tactic_text": "rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rfl'",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  rfl'\n",
+      "tactic_text": "rfl'",
+      "intentional_sorry": false
+    },
+    {
+      "token": "eq_refl",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  eq_refl\n",
+      "tactic_text": "eq_refl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_rfl",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  apply_rfl\n",
+      "tactic_text": "apply_rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "trivial",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  trivial\n",
+      "tactic_text": "trivial",
+      "intentional_sorry": false
+    },
+    {
+      "token": "skip",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  skip\n  exact h\n",
+      "tactic_text": "skip\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "done",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  exact h\n  done\n",
+      "tactic_text": "exact h\n  done",
+      "intentional_sorry": false
+    },
+    {
+      "token": "sorry",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  sorry\n",
+      "tactic_text": "sorry",
+      "intentional_sorry": true
+    },
+    {
+      "token": "admit",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  admit\n",
+      "tactic_text": "admit",
+      "intentional_sorry": true
+    },
+    {
+      "token": "stop",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  stop\n",
+      "tactic_text": "stop",
+      "intentional_sorry": false
+    },
+    {
+      "token": "exfalso",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  exfalso\n",
+      "tactic_text": "exfalso",
+      "intentional_sorry": false
+    },
+    {
+      "token": "contradiction",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  contradiction\n",
+      "tactic_text": "contradiction",
+      "intentional_sorry": false
+    },
+    {
+      "token": "constructor",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  constructor\n",
+      "tactic_text": "constructor",
+      "intentional_sorry": false
+    },
+    {
+      "token": "and_intros",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  and_intros\n",
+      "tactic_text": "and_intros",
+      "intentional_sorry": false
+    },
+    {
+      "token": "left",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  left\n",
+      "tactic_text": "left",
+      "intentional_sorry": false
+    },
+    {
+      "token": "right",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  right\n",
+      "tactic_text": "right",
+      "intentional_sorry": false
+    },
+    {
+      "token": "exists",
+      "label": "args",
+      "kind": "core",
+      "source_text": "theorem probe : \u2203 n : Nat, n = 0 := by\n  exists 0\n",
+      "tactic_text": "exists 0",
+      "intentional_sorry": false
+    },
+    {
+      "token": "use",
+      "label": "args",
+      "kind": "core",
+      "source_text": "theorem probe : \u2203 n : Nat, n = 0 := by\n  use 0\n",
+      "tactic_text": "use 0",
+      "intentional_sorry": false
+    },
+    {
+      "token": "symm",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  symm\n",
+      "tactic_text": "symm",
+      "intentional_sorry": false
+    },
+    {
+      "token": "symm_saturate",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  symm_saturate\n",
+      "tactic_text": "symm_saturate",
+      "intentional_sorry": false
+    },
+    {
+      "token": "subst",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  subst\n",
+      "tactic_text": "subst",
+      "intentional_sorry": false
+    },
+    {
+      "token": "subst",
+      "label": "hyp",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  subst h\n",
+      "tactic_text": "subst h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "subst_vars",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  subst_vars\n",
+      "tactic_text": "subst_vars",
+      "intentional_sorry": false
+    },
+    {
+      "token": "subst_eqs",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  subst_eqs\n",
+      "tactic_text": "subst_eqs",
+      "intentional_sorry": false
+    },
+    {
+      "token": "revert",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  revert\n",
+      "tactic_text": "revert",
+      "intentional_sorry": false
+    },
+    {
+      "token": "revert",
+      "label": "hyp",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  revert h\n",
+      "tactic_text": "revert h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "clear",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  clear\n",
+      "tactic_text": "clear",
+      "intentional_sorry": false
+    },
+    {
+      "token": "clear",
+      "label": "hyp",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  clear h\n",
+      "tactic_text": "clear h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "clear_value",
+      "label": "hyp",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  clear_value h\n",
+      "tactic_text": "clear_value h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rename_i",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rename_i\n",
+      "tactic_text": "rename_i",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rename_i",
+      "label": "name",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rename_i x\n",
+      "tactic_text": "rename_i x",
+      "intentional_sorry": false
+    },
+    {
+      "token": "expose_names",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  expose_names\n",
+      "tactic_text": "expose_names",
+      "intentional_sorry": false
+    },
+    {
+      "token": "specialize",
+      "label": "args",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  specialize h\n",
+      "tactic_text": "specialize h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "replace",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  replace h : a = b := h\n",
+      "tactic_text": "replace h : a = b := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "generalize",
+      "label": "eq",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  generalize a = x\n",
+      "tactic_text": "generalize a = x",
+      "intentional_sorry": false
+    },
+    {
+      "token": "generalize",
+      "label": "hyp",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  generalize hx : a = x\n",
+      "tactic_text": "generalize hx : a = x",
+      "intentional_sorry": false
+    },
+    {
+      "token": "have",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  have hx : a = b := h\n",
+      "tactic_text": "have hx : a = b := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "have",
+      "label": "anon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  have := h\n",
+      "tactic_text": "have := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "have",
+      "label": "by",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  have hx : a = b := by exact h\n",
+      "tactic_text": "have hx : a = b := by exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "have'",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  have' hx : a = b := h\n",
+      "tactic_text": "have' hx : a = b := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "haveI",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  haveI hx : a = b := h\n",
+      "tactic_text": "haveI hx : a = b := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "let",
+      "label": "assign",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  let x := a\n",
+      "tactic_text": "let x := a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "let'",
+      "label": "assign",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  let' x := a\n",
+      "tactic_text": "let' x := a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "letI",
+      "label": "assign",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  letI x := a\n",
+      "tactic_text": "letI x := a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "suffices",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  suffices hx : a = b by exact hx\n",
+      "tactic_text": "suffices hx : a = b by exact hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "show",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  show a = b\n",
+      "tactic_text": "show a = b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "show",
+      "label": "hole",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  show a = _\n",
+      "tactic_text": "show a = _",
+      "intentional_sorry": false
+    },
+    {
+      "token": "show_term",
+      "label": "wrap",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  show_term exact h\n",
+      "tactic_text": "show_term exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "change",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  change a = b\n",
+      "tactic_text": "change a = b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "change",
+      "label": "hole",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  change a = _\n",
+      "tactic_text": "change a = _",
+      "intentional_sorry": false
+    },
+    {
+      "token": "change",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  change a = b at h\n",
+      "tactic_text": "change a = b at h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "case",
+      "label": "alt",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  case _ => exact h\n",
+      "tactic_text": "case _ => exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "next",
+      "label": "alt",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  next => exact h\n",
+      "tactic_text": "next => exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "focus",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  focus\n    exact h\n",
+      "tactic_text": "focus\n    exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "all_goals",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  all_goals exact h\n",
+      "tactic_text": "all_goals exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "any_goals",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  any_goals exact h\n",
+      "tactic_text": "any_goals exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "try",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  try exact h\n",
+      "tactic_text": "try exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "try?",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  try? exact h\n",
+      "tactic_text": "try? exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "repeat",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  repeat exact h\n",
+      "tactic_text": "repeat exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "repeat'",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  repeat' exact h\n",
+      "tactic_text": "repeat' exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "repeat1'",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  repeat1' exact h\n",
+      "tactic_text": "repeat1' exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "iterate",
+      "label": "n",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  iterate 1 exact h\n",
+      "tactic_text": "iterate 1 exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "first",
+      "label": "alts",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  first\n    | exact h\n",
+      "tactic_text": "first\n    | exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "first_par",
+      "label": "alts",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  first_par\n    | exact h\n",
+      "tactic_text": "first_par\n    | exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "attempt_all",
+      "label": "alts",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  attempt_all\n    | exact h\n",
+      "tactic_text": "attempt_all\n    | exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "attempt_all_par",
+      "label": "alts",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  attempt_all_par\n    | exact h\n",
+      "tactic_text": "attempt_all_par\n    | exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "solve",
+      "label": "alts",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  solve\n    | exact h\n",
+      "tactic_text": "solve\n    | exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rotate_left",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rotate_left\n  exact h\n",
+      "tactic_text": "rotate_left\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rotate_right",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rotate_right\n  exact h\n",
+      "tactic_text": "rotate_right\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "fail",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  fail\n",
+      "tactic_text": "fail",
+      "intentional_sorry": false
+    },
+    {
+      "token": "fail",
+      "label": "msg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  fail \"nope\"\n",
+      "tactic_text": "fail \"nope\"",
+      "intentional_sorry": false
+    },
+    {
+      "token": "fail_if_success",
+      "label": "wrap",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  fail_if_success rfl\n  exact h\n",
+      "tactic_text": "fail_if_success rfl\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "guard_expr",
+      "label": "args",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  guard_expr a = a\n",
+      "tactic_text": "guard_expr a = a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "guard_hyp",
+      "label": "args",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  guard_hyp h : a = b\n",
+      "tactic_text": "guard_hyp h : a = b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "guard_target",
+      "label": "args",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  guard_target = (a = b)\n",
+      "tactic_text": "guard_target = (a = b)",
+      "intentional_sorry": false
+    },
+    {
+      "token": "trace",
+      "label": "msg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  trace \"x\"\n  exact h\n",
+      "tactic_text": "trace \"x\"\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "trace_state",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  trace_state\n  exact h\n",
+      "tactic_text": "trace_state\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "dbg_trace",
+      "label": "msg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  dbg_trace \"x\"\n  exact h\n",
+      "tactic_text": "dbg_trace \"x\"\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "sleep",
+      "label": "n",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  sleep 1\n  exact h\n",
+      "tactic_text": "sleep 1\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "run_tac",
+      "label": "body",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  run_tac pure ()\n",
+      "tactic_text": "run_tac pure ()",
+      "intentional_sorry": false
+    },
+    {
+      "token": "checkpoint",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  checkpoint exact h\n",
+      "tactic_text": "checkpoint exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "save",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  save\n  exact h\n",
+      "tactic_text": "save\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "with_reducible",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  with_reducible exact h\n",
+      "tactic_text": "with_reducible exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "with_reducible_and_instances",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  with_reducible_and_instances exact h\n",
+      "tactic_text": "with_reducible_and_instances exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "with_unfolding_all",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  with_unfolding_all exact h\n",
+      "tactic_text": "with_unfolding_all exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "with_unfolding_none",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  with_unfolding_none exact h\n",
+      "tactic_text": "with_unfolding_none exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "with_annotate_state",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  with_annotate_state \"x\" exact h\n",
+      "tactic_text": "with_annotate_state \"x\" exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "unhygienic",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  unhygienic exact h\n",
+      "tactic_text": "unhygienic exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "classical",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  classical\n  exact h\n",
+      "tactic_text": "classical\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "open",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  open Nat in exact h\n",
+      "tactic_text": "open Nat in exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "set_option",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  set_option maxHeartbeats 400 in exact h\n",
+      "tactic_text": "set_option maxHeartbeats 400 in exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "infer_instance",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  infer_instance\n",
+      "tactic_text": "infer_instance",
+      "intentional_sorry": false
+    },
+    {
+      "token": "nofun",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  nofun\n",
+      "tactic_text": "nofun",
+      "intentional_sorry": false
+    },
+    {
+      "token": "nomatch",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  nomatch h\n",
+      "tactic_text": "nomatch h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "split",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  split\n",
+      "tactic_text": "split",
+      "intentional_sorry": false
+    },
+    {
+      "token": "injection",
+      "label": "hyp",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  injection h\n",
+      "tactic_text": "injection h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "injections",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  injections\n",
+      "tactic_text": "injections",
+      "intentional_sorry": false
+    },
+    {
+      "token": "congr",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  congr\n",
+      "tactic_text": "congr",
+      "intentional_sorry": false
+    },
+    {
+      "token": "congr",
+      "label": "n",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  congr 1\n",
+      "tactic_text": "congr 1",
+      "intentional_sorry": false
+    },
+    {
+      "token": "funext",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  funext\n",
+      "tactic_text": "funext",
+      "intentional_sorry": false
+    },
+    {
+      "token": "funext",
+      "label": "name",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  funext x\n",
+      "tactic_text": "funext x",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ext",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  ext\n",
+      "tactic_text": "ext",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ext",
+      "label": "name",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  ext x\n",
+      "tactic_text": "ext x",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ext1",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  ext1\n",
+      "tactic_text": "ext1",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_ext_theorem",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply_ext_theorem\n",
+      "tactic_text": "apply_ext_theorem",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_assumption",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply_assumption\n",
+      "tactic_text": "apply_assumption",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_rules",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply_rules\n",
+      "tactic_text": "apply_rules",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_rules",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply_rules [h]\n",
+      "tactic_text": "apply_rules [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "solve_by_elim",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  solve_by_elim\n",
+      "tactic_text": "solve_by_elim",
+      "intentional_sorry": false
+    },
+    {
+      "token": "by_cases",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  by_cases hx : a = b\n",
+      "tactic_text": "by_cases hx : a = b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "by_contra",
+      "label": "name",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  by_contra hx\n",
+      "tactic_text": "by_contra hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "false_or_by_contra",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  false_or_by_contra\n",
+      "tactic_text": "false_or_by_contra",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw\n",
+      "tactic_text": "rw",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw [h]\n",
+      "tactic_text": "rw [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw [h] at h\n",
+      "tactic_text": "rw [h] at h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw",
+      "label": "rev",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw [\u2190 h]\n",
+      "tactic_text": "rw [\u2190 h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw",
+      "label": "star",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw [h] at *\n",
+      "tactic_text": "rw [h] at *",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rewrite",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rewrite [h]\n",
+      "tactic_text": "rewrite [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "erw",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  erw [h]\n",
+      "tactic_text": "erw [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rwa",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rwa [h]\n",
+      "tactic_text": "rwa [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw_mod_cast",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw_mod_cast [h]\n",
+      "tactic_text": "rw_mod_cast [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rw?\n",
+      "tactic_text": "rw?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "unfold",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  unfold\n",
+      "tactic_text": "unfold",
+      "intentional_sorry": false
+    },
+    {
+      "token": "unfold",
+      "label": "one",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  unfold myid\n",
+      "tactic_text": "unfold myid",
+      "intentional_sorry": false
+    },
+    {
+      "token": "unfold",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  unfold myid at h\n",
+      "tactic_text": "unfold myid at h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "unfold",
+      "label": "many",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  unfold myid myid\n",
+      "tactic_text": "unfold myid myid",
+      "intentional_sorry": false
+    },
+    {
+      "token": "delta",
+      "label": "one",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  delta myid\n",
+      "tactic_text": "delta myid",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp\n",
+      "tactic_text": "simp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp [h]\n",
+      "tactic_text": "simp [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "only",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp only [h]\n",
+      "tactic_text": "simp only [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp at h\n",
+      "tactic_text": "simp at h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "star",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp [*]\n",
+      "tactic_text": "simp [*]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "cfg",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp (config := { decide := true })\n",
+      "tactic_text": "simp (config := { decide := true })",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "arrow",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp [\u2190 h]\n",
+      "tactic_text": "simp [\u2190 h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "minus",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp [-h]\n",
+      "tactic_text": "simp [-h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "wild",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp at *\n",
+      "tactic_text": "simp at *",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_all",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_all\n",
+      "tactic_text": "simp_all",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_all",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_all [h]\n",
+      "tactic_text": "simp_all [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_arith",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp_arith\n",
+      "tactic_text": "simp_arith",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_arith!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp_arith!\n",
+      "tactic_text": "simp_arith!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_all_arith",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_all_arith\n",
+      "tactic_text": "simp_all_arith",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_all_arith!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_all_arith!\n",
+      "tactic_text": "simp_all_arith!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_wf",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp_wf\n",
+      "tactic_text": "simp_wf",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simpa",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simpa\n",
+      "tactic_text": "simpa",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simpa",
+      "label": "using",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simpa using h\n",
+      "tactic_text": "simpa using h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simpa!",
+      "label": "using",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simpa! using h\n",
+      "tactic_text": "simpa! using h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simpa?",
+      "label": "using",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simpa? using h\n",
+      "tactic_text": "simpa? using h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simpa?!",
+      "label": "using",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simpa?! using h\n",
+      "tactic_text": "simpa?! using h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp?\n",
+      "tactic_text": "simp?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp?!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  simp?!\n",
+      "tactic_text": "simp?!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_all?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_all?\n",
+      "tactic_text": "simp_all?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_all?!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_all?!\n",
+      "tactic_text": "simp_all?!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_rw",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  simp_rw [h]\n",
+      "tactic_text": "simp_rw [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "dsimp",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  dsimp\n",
+      "tactic_text": "dsimp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "dsimp",
+      "label": "only",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  dsimp only [h]\n",
+      "tactic_text": "dsimp only [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "dsimp",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  dsimp at h\n",
+      "tactic_text": "dsimp at h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "dsimp?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  dsimp?\n",
+      "tactic_text": "dsimp?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "dsimp?!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  dsimp?!\n",
+      "tactic_text": "dsimp?!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_cast",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  norm_cast\n",
+      "tactic_text": "norm_cast",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_cast0",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  norm_cast0\n",
+      "tactic_text": "norm_cast0",
+      "intentional_sorry": false
+    },
+    {
+      "token": "push_cast",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  push_cast\n",
+      "tactic_text": "push_cast",
+      "intentional_sorry": false
+    },
+    {
+      "token": "exact_mod_cast",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  exact_mod_cast h\n",
+      "tactic_text": "exact_mod_cast h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_mod_cast",
+      "label": "term",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply_mod_cast h\n",
+      "tactic_text": "apply_mod_cast h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "assumption_mod_cast",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  assumption_mod_cast\n",
+      "tactic_text": "assumption_mod_cast",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ac_rfl",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  ac_rfl\n",
+      "tactic_text": "ac_rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ac_nf",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  ac_nf\n",
+      "tactic_text": "ac_nf",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ac_nf0",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  ac_nf0\n",
+      "tactic_text": "ac_nf0",
+      "intentional_sorry": false
+    },
+    {
+      "token": "calc",
+      "label": "chain",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  calc a = b := h\n",
+      "tactic_text": "calc a = b := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "calc",
+      "label": "multi",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  calc a = b := h\n    _ = b := rfl\n",
+      "tactic_text": "calc a = b := h\n    _ = b := rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cases",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  cases b\n",
+      "tactic_text": "cases b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cases",
+      "label": "with",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  cases b with\n  | true => rfl\n  | false => rfl\n",
+      "tactic_text": "cases b with\n  | true => rfl\n  | false => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cases",
+      "label": "wild",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  cases b with\n  | _ => rfl\n",
+      "tactic_text": "cases b with\n  | _ => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cases",
+      "label": "named",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  cases hb : b with\n  | true => rfl\n  | false => rfl\n",
+      "tactic_text": "cases hb : b with\n  | true => rfl\n  | false => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "induction",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  induction a\n",
+      "tactic_text": "induction a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "induction",
+      "label": "with",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  induction a with\n  | zero => rfl\n  | succ k ih => rfl\n",
+      "tactic_text": "induction a with\n  | zero => rfl\n  | succ k ih => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "induction",
+      "label": "using",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  induction a using Nat.rec with\n  | zero => rfl\n  | succ k ih => rfl\n",
+      "tactic_text": "induction a using Nat.rec with\n  | zero => rfl\n  | succ k ih => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "induction",
+      "label": "gen",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  induction a generalizing b\n",
+      "tactic_text": "induction a generalizing b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rcases",
+      "label": "pat",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rcases h with rfl\n",
+      "tactic_text": "rcases h with rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rcases",
+      "label": "alt",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  rcases b with _ | _\n",
+      "tactic_text": "rcases b with _ | _",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rcases",
+      "label": "dash",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rcases h with -\n",
+      "tactic_text": "rcases h with -",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rcases?",
+      "label": "pat",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  rcases? h\n",
+      "tactic_text": "rcases? h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "obtain",
+      "label": "pat",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  obtain rfl := h\n",
+      "tactic_text": "obtain rfl := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "obtain",
+      "label": "angle",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  obtain \u27e8x, hx\u27e9 := h\n",
+      "tactic_text": "obtain \u27e8x, hx\u27e9 := h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rintro",
+      "label": "pat",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  rintro hx\n",
+      "tactic_text": "rintro hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rintro",
+      "label": "angle",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  rintro \u27e8x, hx\u27e9\n",
+      "tactic_text": "rintro \u27e8x, hx\u27e9",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rintro?",
+      "label": "pat",
+      "kind": "core",
+      "source_text": "theorem probe (p q : Prop) (hp : p) : p \u2192 p := by\n  rintro? hx\n",
+      "tactic_text": "rintro? hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "match",
+      "label": "arm",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  match b with\n  | true => rfl\n  | false => rfl\n",
+      "tactic_text": "match b with\n  | true => rfl\n  | false => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "if",
+      "label": "arm",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  if h2 : a = b then exact h else exact h\n",
+      "tactic_text": "if h2 : a = b then exact h else exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "fin_cases",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  fin_cases a\n",
+      "tactic_text": "fin_cases a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "interval_cases",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  interval_cases a\n",
+      "tactic_text": "interval_cases a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "fun_cases",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  fun_cases myid a\n",
+      "tactic_text": "fun_cases myid a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "fun_induction",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  fun_induction myid a\n",
+      "tactic_text": "fun_induction myid a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cbv",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  cbv\n",
+      "tactic_text": "cbv",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decide_cbv",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decide_cbv\n",
+      "tactic_text": "decide_cbv",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decide",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decide\n",
+      "tactic_text": "decide",
+      "intentional_sorry": false
+    },
+    {
+      "token": "native_decide",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  native_decide\n",
+      "tactic_text": "native_decide",
+      "intentional_sorry": false
+    },
+    {
+      "token": "omega",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  omega\n",
+      "tactic_text": "omega",
+      "intentional_sorry": false
+    },
+    {
+      "token": "bv_omega",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  bv_omega\n",
+      "tactic_text": "bv_omega",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_num",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  norm_num\n",
+      "tactic_text": "norm_num",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_num",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  norm_num [h]\n",
+      "tactic_text": "norm_num [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "linarith",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  linarith\n",
+      "tactic_text": "linarith",
+      "intentional_sorry": false
+    },
+    {
+      "token": "linarith",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  linarith [h]\n",
+      "tactic_text": "linarith [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "nlinarith",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  nlinarith\n",
+      "tactic_text": "nlinarith",
+      "intentional_sorry": false
+    },
+    {
+      "token": "positivity",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  positivity\n",
+      "tactic_text": "positivity",
+      "intentional_sorry": false
+    },
+    {
+      "token": "polyrith",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  polyrith\n",
+      "tactic_text": "polyrith",
+      "intentional_sorry": false
+    },
+    {
+      "token": "gcongr",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  gcongr\n",
+      "tactic_text": "gcongr",
+      "intentional_sorry": false
+    },
+    {
+      "token": "aesop",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  aesop\n",
+      "tactic_text": "aesop",
+      "intentional_sorry": false
+    },
+    {
+      "token": "tauto",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  tauto\n",
+      "tactic_text": "tauto",
+      "intentional_sorry": false
+    },
+    {
+      "token": "grind",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  grind\n",
+      "tactic_text": "grind",
+      "intentional_sorry": false
+    },
+    {
+      "token": "grind?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  grind?\n",
+      "tactic_text": "grind?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "grind_linarith",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  grind_linarith\n",
+      "tactic_text": "grind_linarith",
+      "intentional_sorry": false
+    },
+    {
+      "token": "grind_order",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  grind_order\n",
+      "tactic_text": "grind_order",
+      "intentional_sorry": false
+    },
+    {
+      "token": "grobner",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  grobner\n",
+      "tactic_text": "grobner",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cutsat",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  cutsat\n",
+      "tactic_text": "cutsat",
+      "intentional_sorry": false
+    },
+    {
+      "token": "lia",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  lia\n",
+      "tactic_text": "lia",
+      "intentional_sorry": false
+    },
+    {
+      "token": "order",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  order\n",
+      "tactic_text": "order",
+      "intentional_sorry": false
+    },
+    {
+      "token": "cc",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  cc\n",
+      "tactic_text": "cc",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ring",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) : a + b = b + a := by\n  ring\n",
+      "tactic_text": "ring",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ring_nf",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) : a + b = b + a := by\n  ring_nf\n",
+      "tactic_text": "ring_nf",
+      "intentional_sorry": false
+    },
+    {
+      "token": "abel",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) : a + b = b + a := by\n  abel\n",
+      "tactic_text": "abel",
+      "intentional_sorry": false
+    },
+    {
+      "token": "group",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) : a + b = b + a := by\n  group\n",
+      "tactic_text": "group",
+      "intentional_sorry": false
+    },
+    {
+      "token": "module",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) : a + b = b + a := by\n  module\n",
+      "tactic_text": "module",
+      "intentional_sorry": false
+    },
+    {
+      "token": "field_simp",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) : a + b = b + a := by\n  field_simp\n",
+      "tactic_text": "field_simp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "exact?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  exact?\n",
+      "tactic_text": "exact?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  apply?\n",
+      "tactic_text": "apply?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "library_search",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  library_search\n",
+      "tactic_text": "library_search",
+      "intentional_sorry": false
+    },
+    {
+      "token": "suggestions",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  suggestions\n",
+      "tactic_text": "suggestions",
+      "intentional_sorry": false
+    },
+    {
+      "token": "try_suggestions",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  try_suggestions\n",
+      "tactic_text": "try_suggestions",
+      "intentional_sorry": false
+    },
+    {
+      "token": "push_neg",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  push_neg\n",
+      "tactic_text": "push_neg",
+      "intentional_sorry": false
+    },
+    {
+      "token": "push_neg",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  push_neg at h\n",
+      "tactic_text": "push_neg at h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "monotonicity",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  monotonicity\n",
+      "tactic_text": "monotonicity",
+      "intentional_sorry": false
+    },
+    {
+      "token": "bv_decide",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  bv_decide\n",
+      "tactic_text": "bv_decide",
+      "intentional_sorry": false
+    },
+    {
+      "token": "bv_decide?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  bv_decide?\n",
+      "tactic_text": "bv_decide?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "bv_check",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  bv_check \"f\"\n",
+      "tactic_text": "bv_check \"f\"",
+      "intentional_sorry": false
+    },
+    {
+      "token": "bv_normalize",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  bv_normalize\n",
+      "tactic_text": "bv_normalize",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decreasing_tactic",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decreasing_tactic\n",
+      "tactic_text": "decreasing_tactic",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decreasing_trivial",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decreasing_trivial\n",
+      "tactic_text": "decreasing_trivial",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decreasing_trivial_pre_omega",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decreasing_trivial_pre_omega\n",
+      "tactic_text": "decreasing_trivial_pre_omega",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decreasing_with",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decreasing_with rfl\n",
+      "tactic_text": "decreasing_with rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "clean_wf",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  clean_wf\n",
+      "tactic_text": "clean_wf",
+      "intentional_sorry": false
+    },
+    {
+      "token": "get_elem_tactic",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  get_elem_tactic\n",
+      "tactic_text": "get_elem_tactic",
+      "intentional_sorry": false
+    },
+    {
+      "token": "get_elem_tactic_extensible",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  get_elem_tactic_extensible\n",
+      "tactic_text": "get_elem_tactic_extensible",
+      "intentional_sorry": false
+    },
+    {
+      "token": "get_elem_tactic_trivial",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  get_elem_tactic_trivial\n",
+      "tactic_text": "get_elem_tactic_trivial",
+      "intentional_sorry": false
+    },
+    {
+      "token": "array_get_dec",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  array_get_dec\n",
+      "tactic_text": "array_get_dec",
+      "intentional_sorry": false
+    },
+    {
+      "token": "array_mem_dec",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  array_mem_dec\n",
+      "tactic_text": "array_mem_dec",
+      "intentional_sorry": false
+    },
+    {
+      "token": "sizeOf_list_dec",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  sizeOf_list_dec\n",
+      "tactic_text": "sizeOf_list_dec",
+      "intentional_sorry": false
+    },
+    {
+      "token": "my_trivial",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  my_trivial\n",
+      "tactic_text": "my_trivial",
+      "intentional_sorry": false
+    },
+    {
+      "token": "massumption",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  massumption\n",
+      "tactic_text": "massumption",
+      "intentional_sorry": false
+    },
+    {
+      "token": "extract_lets",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  extract_lets\n",
+      "tactic_text": "extract_lets",
+      "intentional_sorry": false
+    },
+    {
+      "token": "lift_lets",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  lift_lets\n",
+      "tactic_text": "lift_lets",
+      "intentional_sorry": false
+    },
+    {
+      "token": "let_to_have",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  let_to_have\n",
+      "tactic_text": "let_to_have",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply_fun",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a : Nat) : myid a = a := by\n  apply_fun myid\n",
+      "tactic_text": "apply_fun myid",
+      "intentional_sorry": false
+    },
+    {
+      "token": "wlog",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  wlog hx : a = b\n",
+      "tactic_text": "wlog hx : a = b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "nth_rewrite",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  nth_rewrite 1 [h]\n",
+      "tactic_text": "nth_rewrite 1 [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "nth_rw",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  nth_rw 1 [h]\n",
+      "tactic_text": "nth_rw 1 [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "choose",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  choose x hx using h\n",
+      "tactic_text": "choose x hx using h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "peel",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  peel h\n",
+      "tactic_text": "peel h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "bound",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  bound\n",
+      "tactic_text": "bound",
+      "intentional_sorry": false
+    },
+    {
+      "token": "swap",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  swap\n  exact h\n",
+      "tactic_text": "swap\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "pick_goal",
+      "label": "n",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  pick_goal 1\n  exact h\n",
+      "tactic_text": "pick_goal 1\n  exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "on_goal",
+      "label": "n",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  on_goal 1 => exact h\n",
+      "tactic_text": "on_goal 1 => exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "guard",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  guard\n",
+      "tactic_text": "guard",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_fin",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  norm_fin\n",
+      "tactic_text": "norm_fin",
+      "intentional_sorry": false
+    },
+    {
+      "token": "decide!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  decide!\n",
+      "tactic_text": "decide!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "trans",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  trans b\n",
+      "tactic_text": "trans b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "convert",
+      "label": "arg",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  convert h\n",
+      "tactic_text": "convert h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "congr!",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  congr!\n",
+      "tactic_text": "congr!",
+      "intentional_sorry": false
+    },
+    {
+      "token": "constructorm",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  constructorm\n",
+      "tactic_text": "constructorm",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rel",
+      "label": "lst",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  rel [h]\n",
+      "tactic_text": "rel [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "gcongr?",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a < b) : a < b := by\n  gcongr?\n",
+      "tactic_text": "gcongr?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "says",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  says\n",
+      "tactic_text": "says",
+      "intentional_sorry": false
+    },
+    {
+      "token": "observe",
+      "label": "colon",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  observe hx : a = b\n",
+      "tactic_text": "observe hx : a = b",
+      "intentional_sorry": false
+    },
+    {
+      "token": "set",
+      "label": "bare",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  set\n",
+      "tactic_text": "set",
+      "intentional_sorry": false
+    },
+    {
+      "token": "set",
+      "label": "assign",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  set x := a\n",
+      "tactic_text": "set x := a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "set",
+      "label": "with",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  set x := a with hx\n",
+      "tactic_text": "set x := a with hx",
+      "intentional_sorry": false
+    },
+    {
+      "token": "set!",
+      "label": "assign",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  set! x := a\n",
+      "tactic_text": "set! x := a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv",
+      "label": "goal",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  conv => rfl\n",
+      "tactic_text": "conv => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv",
+      "label": "lhs",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  conv =>\n    lhs\n    rfl\n",
+      "tactic_text": "conv =>\n    lhs\n    rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv",
+      "label": "at",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  conv at h => rfl\n",
+      "tactic_text": "conv at h => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv",
+      "label": "in",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  conv in a => rfl\n",
+      "tactic_text": "conv in a => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv",
+      "label": "tac",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  conv =>\n    tactic => rfl\n",
+      "tactic_text": "conv =>\n    tactic => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv_lhs",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  conv_lhs => rfl\n",
+      "tactic_text": "conv_lhs => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "conv_rhs",
+      "label": "blk",
+      "kind": "core",
+      "source_text": "theorem probe (a : Nat) : a = a := by\n  conv_rhs => rfl\n",
+      "tactic_text": "conv_rhs => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "<;>",
+      "label": "seq",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  constructor <;> exact hp\n",
+      "tactic_text": "constructor <;> exact hp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "\u00b7",
+      "label": "dot",
+      "kind": "core",
+      "source_text": "theorem probe (p : Prop) (hp : p) : p \u2227 p := by\n  constructor\n  \u00b7 exact hp\n  \u00b7 exact hp\n",
+      "tactic_text": "constructor\n  \u00b7 exact hp\n  \u00b7 exact hp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "(...)",
+      "label": "paren",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  (exact h)\n",
+      "tactic_text": "(exact h)",
+      "intentional_sorry": false
+    },
+    {
+      "token": "{...}",
+      "label": "brace",
+      "kind": "core",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  { exact h }\n",
+      "tactic_text": "{ exact h }",
+      "intentional_sorry": false
+    },
+    {
+      "token": "|",
+      "label": "altbar",
+      "kind": "core",
+      "source_text": "theorem probe (b : Bool) : b = b := by\n  cases b with\n  | true => rfl\n  | false => rfl\n",
+      "tactic_text": "cases b with\n  | true => rfl\n  | false => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "lhs",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    lhs\n",
+      "tactic_text": "lhs",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rhs",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    rhs\n",
+      "tactic_text": "rhs",
+      "intentional_sorry": false
+    },
+    {
+      "token": "arg",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    arg 1\n",
+      "tactic_text": "arg 1",
+      "intentional_sorry": false
+    },
+    {
+      "token": "args",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    args\n",
+      "tactic_text": "args",
+      "intentional_sorry": false
+    },
+    {
+      "token": "enter",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    enter [1]\n",
+      "tactic_text": "enter [1]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ext",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    ext x\n",
+      "tactic_text": "ext x",
+      "intentional_sorry": false
+    },
+    {
+      "token": "pattern",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    pattern a\n",
+      "tactic_text": "pattern a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "congr",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    congr\n",
+      "tactic_text": "congr",
+      "intentional_sorry": false
+    },
+    {
+      "token": "whnf",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    whnf\n",
+      "tactic_text": "whnf",
+      "intentional_sorry": false
+    },
+    {
+      "token": "reduce",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    reduce\n",
+      "tactic_text": "reduce",
+      "intentional_sorry": false
+    },
+    {
+      "token": "zeta",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    zeta\n",
+      "tactic_text": "zeta",
+      "intentional_sorry": false
+    },
+    {
+      "token": "delta",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    delta myid\n",
+      "tactic_text": "delta myid",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp_match",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    simp_match\n",
+      "tactic_text": "simp_match",
+      "intentional_sorry": false
+    },
+    {
+      "token": "extract_lets",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    extract_lets\n",
+      "tactic_text": "extract_lets",
+      "intentional_sorry": false
+    },
+    {
+      "token": "lift_lets",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    lift_lets\n",
+      "tactic_text": "lift_lets",
+      "intentional_sorry": false
+    },
+    {
+      "token": "let_to_have",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    let_to_have\n",
+      "tactic_text": "let_to_have",
+      "intentional_sorry": false
+    },
+    {
+      "token": "tactic",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    tactic => rfl\n",
+      "tactic_text": "tactic => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "tactic'",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    tactic' => rfl\n",
+      "tactic_text": "tactic' => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rw",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    rw [h]\n",
+      "tactic_text": "rw [h]",
+      "intentional_sorry": false
+    },
+    {
+      "token": "simp",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    simp\n",
+      "tactic_text": "simp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "change",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    change a\n",
+      "tactic_text": "change a",
+      "intentional_sorry": false
+    },
+    {
+      "token": "unfold",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    unfold myid\n",
+      "tactic_text": "unfold myid",
+      "intentional_sorry": false
+    },
+    {
+      "token": "skip",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    skip\n",
+      "tactic_text": "skip",
+      "intentional_sorry": false
+    },
+    {
+      "token": "rfl",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    rfl\n",
+      "tactic_text": "rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "done",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    done\n",
+      "tactic_text": "done",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_num",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    norm_num\n",
+      "tactic_text": "norm_num",
+      "intentional_sorry": false
+    },
+    {
+      "token": "ring_nf",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    ring_nf\n",
+      "tactic_text": "ring_nf",
+      "intentional_sorry": false
+    },
+    {
+      "token": "push_cast",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    push_cast\n",
+      "tactic_text": "push_cast",
+      "intentional_sorry": false
+    },
+    {
+      "token": "norm_cast",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    norm_cast\n",
+      "tactic_text": "norm_cast",
+      "intentional_sorry": false
+    },
+    {
+      "token": "apply",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    apply h\n",
+      "tactic_text": "apply h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "exact",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    exact h\n",
+      "tactic_text": "exact h",
+      "intentional_sorry": false
+    },
+    {
+      "token": "first",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    first\n      | rfl\n",
+      "tactic_text": "first\n      | rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "all_goals",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    all_goals rfl\n",
+      "tactic_text": "all_goals rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "repeat",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    repeat rfl\n",
+      "tactic_text": "repeat rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "try",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    try rfl\n",
+      "tactic_text": "try rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "case",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    case _ => rfl\n",
+      "tactic_text": "case _ => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "next",
+      "label": "conv-mode",
+      "kind": "conv",
+      "source_text": "def myid (n : Nat) : Nat := n\ntheorem probe (a b : Nat) (h : a = b) : a = a := by\n  conv =>\n    next => rfl\n",
+      "tactic_text": "next => rfl",
+      "intentional_sorry": false
+    },
+    {
+      "token": "deriving_LawfulEq_tactic",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  deriving_LawfulEq_tactic\n",
+      "tactic_text": "deriving_LawfulEq_tactic",
+      "intentional_sorry": false
+    },
+    {
+      "token": "deriving_LawfulEq_tactic_step",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  deriving_LawfulEq_tactic_step\n",
+      "tactic_text": "deriving_LawfulEq_tactic_step",
+      "intentional_sorry": false
+    },
+    {
+      "token": "deriving_ReflEq_tactic",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  deriving_ReflEq_tactic\n",
+      "tactic_text": "deriving_ReflEq_tactic",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mcases",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mcases\n",
+      "tactic_text": "mcases",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mclear",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mclear\n",
+      "tactic_text": "mclear",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mconstructor",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mconstructor\n",
+      "tactic_text": "mconstructor",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mexact",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mexact\n",
+      "tactic_text": "mexact",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mexfalso",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mexfalso\n",
+      "tactic_text": "mexfalso",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mexists",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mexists\n",
+      "tactic_text": "mexists",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mframe",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mframe\n",
+      "tactic_text": "mframe",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mhave",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mhave\n",
+      "tactic_text": "mhave",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mintro",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mintro\n",
+      "tactic_text": "mintro",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mleave",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mleave\n",
+      "tactic_text": "mleave",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mleft",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mleft\n",
+      "tactic_text": "mleft",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mpure",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mpure\n",
+      "tactic_text": "mpure",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mpure_intro",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mpure_intro\n",
+      "tactic_text": "mpure_intro",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mrefine",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mrefine\n",
+      "tactic_text": "mrefine",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mrename_i",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mrename_i\n",
+      "tactic_text": "mrename_i",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mreplace",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mreplace\n",
+      "tactic_text": "mreplace",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mrevert",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mrevert\n",
+      "tactic_text": "mrevert",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mright",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mright\n",
+      "tactic_text": "mright",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mspec",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mspec\n",
+      "tactic_text": "mspec",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mspec_no_bind",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mspec_no_bind\n",
+      "tactic_text": "mspec_no_bind",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mspec_no_simp",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mspec_no_simp\n",
+      "tactic_text": "mspec_no_simp",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mspecialize",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mspecialize\n",
+      "tactic_text": "mspecialize",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mspecialize_pure",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mspecialize_pure\n",
+      "tactic_text": "mspecialize_pure",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mstart",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mstart\n",
+      "tactic_text": "mstart",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mstop",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mstop\n",
+      "tactic_text": "mstop",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mvcgen",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mvcgen\n",
+      "tactic_text": "mvcgen",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mvcgen?",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mvcgen?\n",
+      "tactic_text": "mvcgen?",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mvcgen_trivial",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mvcgen_trivial\n",
+      "tactic_text": "mvcgen_trivial",
+      "intentional_sorry": false
+    },
+    {
+      "token": "mvcgen_trivial_extensible",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  mvcgen_trivial_extensible\n",
+      "tactic_text": "mvcgen_trivial_extensible",
+      "intentional_sorry": false
+    },
+    {
+      "token": "\u220e",
+      "label": "bare",
+      "kind": "core-bare",
+      "source_text": "theorem probe (a b : Nat) (h : a = b) : a = b := by\n  \u220e\n",
+      "tactic_text": "\u220e",
+      "intentional_sorry": false
+    }
+  ]
+}

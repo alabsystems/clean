@@ -614,3 +614,54 @@ fn test_fix_pi_leaked_fvars_error_on_ambiguous_multi_leak() {
         "fix_pi_leaked_fvars should error when all leaked FVars appear in domain, got: {result:?}"
     );
 }
+
+/// `clear` removes a local from the goal's context but does NOT re-mint the
+/// goal's metavariable, so the cleared local stays in that meta's immutable
+/// scope AND stays bound by a live `lambda` in the already-committed parent
+/// assignment. A subsequent `intro` must therefore not reuse its id: the
+/// id-to-depth arithmetic in `close_fvars` would resolve the new local to the
+/// cleared binder, and `assignment_scope_violation` cannot object because the
+/// reused id reads as the local it aliases.
+#[test]
+fn test_intro_after_clear_does_not_reuse_the_cleared_binder_id() {
+    let env = setup_env();
+    let a_ty = Expr::const_(Name::from_string("A"), vec![]);
+    let b_ty = Expr::const_(Name::from_string("B"), vec![]);
+    let goal_ty = Expr::arrow(
+        a_ty,
+        Expr::arrow(b_ty, Expr::const_(Name::from_string("A"), vec![])),
+    );
+    let mut state = ProofState::new(env, goal_ty);
+
+    intro(&mut state, "a").expect("intro a");
+    intro(&mut state, "b").expect("intro b");
+    let b_id = state.current_goal().unwrap().local_ctx[1].fvar;
+    let meta_before = state.current_goal().unwrap().meta_id;
+
+    clear(&mut state, "b").expect("clear b");
+
+    let goal = state.current_goal().unwrap().clone();
+    assert_eq!(
+        goal.meta_id, meta_before,
+        "precondition: clear narrows the context WITHOUT re-minting the meta"
+    );
+    assert!(
+        state
+            .metas
+            .get(goal.meta_id)
+            .expect("goal meta")
+            .locals
+            .iter()
+            .any(|(_, fvar, _)| *fvar == b_id),
+        "precondition: the cleared local is still in the meta's creation scope"
+    );
+    assert_eq!(
+        state.goal_fvar_base(&goal),
+        b_id.as_u64(),
+        "precondition: the narrowed CONTEXT alone would hand back the cleared id"
+    );
+    assert!(
+        state.goal_binder_base(&goal) > b_id.as_u64(),
+        "the next intro must mint strictly above the cleared-but-still-bound `b`"
+    );
+}

@@ -224,7 +224,7 @@ fn test_parse_struct_flexible_array_not_last_is_rejected() {
         .parse_function(code)
         .expect_err("FAM that is not the last member must be rejected");
     assert!(
-        matches!(err, super::ParseError::TypeError { .. }),
+        matches!(err, ParseError::TypeError { .. }),
         "expected a TypeError, got {err:?}"
     );
 }
@@ -241,7 +241,7 @@ fn test_parse_struct_flexible_array_sole_member_is_rejected() {
         .parse_function(code)
         .expect_err("FAM as sole member must be rejected");
     assert!(
-        matches!(err, super::ParseError::TypeError { .. }),
+        matches!(err, ParseError::TypeError { .. }),
         "expected a TypeError, got {err:?}"
     );
 }

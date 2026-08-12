@@ -20,6 +20,12 @@
 //!
 //! All proof status constants are `DerivedPending` pending formal derivation.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use super::ibp::Interval;
 use crate::spec::ProofStatus;
 
@@ -234,7 +240,7 @@ pub fn spectral_norm_interval(
     if interval_matrix.is_empty() {
         return Interval::new(0.0, 0.0);
     }
-    let m = interval_matrix.len();
+    let _m = interval_matrix.len();
     let n = interval_matrix[0].len();
     if n == 0 {
         return Interval::new(0.0, 0.0);

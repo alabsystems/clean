@@ -610,7 +610,7 @@ fn test_serve_phase2_verdict_audit_submit() {
     let core = tempfile::tempdir().expect("core tempdir");
     build_fixture_core(core.path());
     let raudit = tempfile::tempdir().expect("reauditor tempdir");
-    let (live, revoked, revoked_digest) = build_reauditor_output(raudit.path());
+    let (live, revoked, _revoked_digest) = build_reauditor_output(raudit.path());
 
     let queue = tempfile::tempdir().expect("submit queue tempdir");
     let service = start_service_with(core.path(), None, Some(raudit.path()), Some(queue.path()));

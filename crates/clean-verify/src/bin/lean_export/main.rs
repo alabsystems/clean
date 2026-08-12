@@ -62,10 +62,17 @@ struct Item {
     kind: ItemKind,
 }
 
-const DEFAULT_ROOTS: [&str; 3] = [
+const DEFAULT_ROOTS: [&str; 5] = [
     "tc_infer_soundness",
     "bootstrap_infer_sound",
     "whnf_terminates_well_typed_dependent",
+    // C4 / the crystal: the layer-1 -> layer-2 bridge's keystone rule, and the
+    // witness that keeps it from being a true-but-empty statement. Under
+    // `--all-spec` this list is ALSO the set of `#print axioms` audit roots —
+    // the only way a foreign kernel gets to confirm the zero-axiom claim
+    // instead of us confirming it ourselves.
+    "impl_bridge_fvar",
+    "impl_bridge_fvar_witness",
 ];
 
 fn main() {

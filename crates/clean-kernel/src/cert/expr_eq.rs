@@ -35,20 +35,38 @@ pub(super) trait CertExprEqContext {
         Level::is_def_eq(l1, l2)
     }
 
+    /// Type-directed equality rules (proof irrelevance, structure eta).
+    ///
+    /// `ctx` is the stack of binder types accumulated during the equality
+    /// recursion (entry `i` is expressed under `i` enclosing binders — the
+    /// same convention as `CertVerifier::context` / `verify_bvar`), seeded
+    /// by each implementor's entry wrapper.
+    ///
+    /// Default: disabled. An engine without a genuine type-inference
+    /// capability must stay fail-closed here: it simply lacks these
+    /// (kernel-supported) equations, which is strictly conservative —
+    /// acceptance remains a subset of kernel definitional equality.
+    fn try_type_directed_eq(&self, _ctx: &mut Vec<Expr>, _a: &Expr, _b: &Expr) -> bool {
+        false
+    }
+
     /// Recursive definitional equality after WHNF.
     ///
     /// After WHNF, decomposes matching heads and recursively calls `def_eq_impl`
     /// on subterms. This ensures nested subterms that are definitionally equal
     /// but not structurally equal are correctly handled.
     ///
+    /// `ctx` threads the binder types crossed by the recursion so that
+    /// type-directed rules (see `try_type_directed_eq`) can type loose BVars.
+    ///
     /// Fix for #2478/#2481: the previous per-type implementations delegated to
     /// `structural_eq_impl` which compared subterms without WHNF.
-    fn def_eq_impl(&self, a: &Expr, b: &Expr) -> bool {
-        stack_safe(|| self.def_eq_inner(a, b))
+    fn def_eq_impl(&self, ctx: &mut Vec<Expr>, a: &Expr, b: &Expr) -> bool {
+        stack_safe(|| self.def_eq_inner(ctx, a, b))
     }
 
     /// Recursive definitional equality inner loop.
-    fn def_eq_inner(&self, a: &Expr, b: &Expr) -> bool {
+    fn def_eq_inner(&self, ctx: &mut Vec<Expr>, a: &Expr, b: &Expr) -> bool {
         // Fast path: pointer/value equality before WHNF
         if a == b {
             return true;
@@ -74,22 +92,35 @@ pub(super) trait CertExprEqContext {
                         .all(|(l1, l2)| self.level_eq(l1, l2))
             }
             (ExprKind::App(f1, a1), ExprKind::App(f2, a2)) => {
-                self.def_eq_impl(f1, f2) && self.def_eq_impl(a1, a2)
+                self.def_eq_impl(ctx, f1, f2) && self.def_eq_impl(ctx, a1, a2)
             }
             // Binder info is irrelevant for definitional equality in CIC.
+            // The binder type (left side, already checked def-eq to the right)
+            // is pushed for the body comparison so type-directed rules can
+            // type BVars referring to it.
             (ExprKind::Lam(_bi1, ty1, b1), ExprKind::Lam(_bi2, ty2, b2))
             | (ExprKind::Pi(_bi1, ty1, b1), ExprKind::Pi(_bi2, ty2, b2)) => {
-                self.def_eq_impl(ty1, ty2) && self.def_eq_impl(b1, b2)
+                self.def_eq_impl(ctx, ty1, ty2) && {
+                    ctx.push(ty1.as_ref().clone());
+                    let r = self.def_eq_impl(ctx, b1, b2);
+                    ctx.pop();
+                    r
+                }
             }
             (ExprKind::Let(_, ty1, v1, b1, _), ExprKind::Let(_, ty2, v2, b2, _)) => {
-                self.def_eq_impl(ty1, ty2) && self.def_eq_impl(v1, v2) && self.def_eq_impl(b1, b2)
+                self.def_eq_impl(ctx, ty1, ty2) && self.def_eq_impl(ctx, v1, v2) && {
+                    ctx.push(ty1.as_ref().clone());
+                    let r = self.def_eq_impl(ctx, b1, b2);
+                    ctx.pop();
+                    r
+                }
             }
             (ExprKind::Lit(l1), ExprKind::Lit(l2)) => l1 == l2,
             (ExprKind::Proj(n1, i1, e1), ExprKind::Proj(n2, i2, e2)) => {
-                n1 == n2 && i1 == i2 && self.def_eq_impl(e1, e2)
+                n1 == n2 && i1 == i2 && self.def_eq_impl(ctx, e1, e2)
             }
             (ExprKind::MData(_, inner1), ExprKind::MData(_, inner2)) => {
-                self.def_eq_impl(inner1, inner2)
+                self.def_eq_impl(ctx, inner1, inner2)
             }
             // Mode-specific: leaf-like mode exprs (no subterms needing WHNF)
             (ExprKind::CubicalInterval, ExprKind::CubicalInterval)
@@ -107,14 +138,22 @@ pub(super) trait CertExprEqContext {
                     left: l2,
                     right: r2,
                 },
-            ) => self.def_eq_impl(ty1, ty2) && self.def_eq_impl(l1, l2) && self.def_eq_impl(r1, r2),
+            ) => {
+                self.def_eq_impl(ctx, ty1, ty2)
+                    && self.def_eq_impl(ctx, l1, l2)
+                    && self.def_eq_impl(ctx, r1, r2)
+            }
             (ExprKind::CubicalPathLam { body: b1 }, ExprKind::CubicalPathLam { body: b2 }) => {
-                self.def_eq_impl(b1, b2)
+                // Path-lambda bodies live under one interval binder.
+                ctx.push(Expr::from_kind(ExprKind::CubicalInterval));
+                let r = self.def_eq_impl(ctx, b1, b2);
+                ctx.pop();
+                r
             }
             (
                 ExprKind::CubicalPathApp { path: p1, arg: a1 },
                 ExprKind::CubicalPathApp { path: p2, arg: a2 },
-            ) => self.def_eq_impl(p1, p2) && self.def_eq_impl(a1, a2),
+            ) => self.def_eq_impl(ctx, p1, p2) && self.def_eq_impl(ctx, a1, a2),
             (
                 ExprKind::CubicalHComp {
                     ty: ty1,
@@ -129,10 +168,10 @@ pub(super) trait CertExprEqContext {
                     base: base2,
                 },
             ) => {
-                self.def_eq_impl(ty1, ty2)
-                    && self.def_eq_impl(phi1, phi2)
-                    && self.def_eq_impl(u1, u2)
-                    && self.def_eq_impl(base1, base2)
+                self.def_eq_impl(ctx, ty1, ty2)
+                    && self.def_eq_impl(ctx, phi1, phi2)
+                    && self.def_eq_impl(ctx, u1, u2)
+                    && self.def_eq_impl(ctx, base1, base2)
             }
             (
                 ExprKind::CubicalTransp {
@@ -146,9 +185,9 @@ pub(super) trait CertExprEqContext {
                     base: base2,
                 },
             ) => {
-                self.def_eq_impl(ty1, ty2)
-                    && self.def_eq_impl(phi1, phi2)
-                    && self.def_eq_impl(base1, base2)
+                self.def_eq_impl(ctx, ty1, ty2)
+                    && self.def_eq_impl(ctx, phi1, phi2)
+                    && self.def_eq_impl(ctx, base1, base2)
             }
             (
                 ExprKind::CubicalCoe {
@@ -164,12 +203,12 @@ pub(super) trait CertExprEqContext {
                     base: base2,
                 },
             ) => {
-                self.def_eq_impl(ty1, ty2)
-                    && self.def_eq_impl(r1, r2)
-                    && self.def_eq_impl(s1, s2)
-                    && self.def_eq_impl(base1, base2)
+                self.def_eq_impl(ctx, ty1, ty2)
+                    && self.def_eq_impl(ctx, r1, r2)
+                    && self.def_eq_impl(ctx, s1, s2)
+                    && self.def_eq_impl(ctx, base1, base2)
             }
-            (ExprKind::ZFCSet(s1), ExprKind::ZFCSet(s2)) => self.zfc_set_def_eq(s1, s2),
+            (ExprKind::ZFCSet(s1), ExprKind::ZFCSet(s2)) => self.zfc_set_def_eq(ctx, s1, s2),
             (
                 ExprKind::ZFCMem {
                     element: e1,
@@ -179,7 +218,7 @@ pub(super) trait CertExprEqContext {
                     element: e2,
                     set: s2,
                 },
-            ) => self.def_eq_impl(e1, e2) && self.def_eq_impl(s1, s2),
+            ) => self.def_eq_impl(ctx, e1, e2) && self.def_eq_impl(ctx, s1, s2),
             (
                 ExprKind::ZFCComprehension {
                     domain: d1,
@@ -189,8 +228,8 @@ pub(super) trait CertExprEqContext {
                     domain: d2,
                     pred: p2,
                 },
-            ) => self.def_eq_impl(d1, d2) && self.def_eq_impl(p1, p2),
-            (ExprKind::Squash(a), ExprKind::Squash(b)) => self.def_eq_impl(a, b),
+            ) => self.def_eq_impl(ctx, d1, d2) && self.def_eq_impl(ctx, p1, p2),
+            (ExprKind::Squash(a), ExprKind::Squash(b)) => self.def_eq_impl(ctx, a, b),
             _ => false,
         };
         if matched {
@@ -202,31 +241,46 @@ pub(super) trait CertExprEqContext {
         // closed-only native `reduce_nat` (in each side's WHNF) cannot evaluate
         // — e.g. `4` vs `Nat.succ a` with `a` an fvar that is def-eq to `3`.
         // Part of the cert-replay Nat-defeq fix (see `cert/nat_reduce.rs`).
-        if let Some(off) =
-            super::nat_reduce::is_def_eq_offset(&a_whnf, &b_whnf, &|x, y| self.def_eq_impl(x, y))
-        {
+        // The callback runs at the same binder depth; it gets a fresh clone of
+        // `ctx` per call because `is_def_eq_offset` takes a shared `Fn`.
+        if let Some(off) = super::nat_reduce::is_def_eq_offset(&a_whnf, &b_whnf, &|x, y| {
+            self.def_eq_impl(&mut ctx.clone(), x, y)
+        }) {
             return off;
         }
+        // Type-directed rules (proof irrelevance / structure eta), when the
+        // implementor provides them. Placed before lambda-eta, mirroring the
+        // kernel which tries proof irrelevance before eta expansion.
+        if self.try_type_directed_eq(ctx, &a_whnf, &b_whnf) {
+            return true;
+        }
         // Eta expansion: (λ x : A. f x) ≡ f when x ∉ FV(f)
-        self.try_eta_expansion(&a_whnf, &b_whnf)
+        self.try_eta_expansion(ctx, &a_whnf, &b_whnf)
     }
 
     /// Try eta expansion to prove equality.
     ///
     /// If one side is `Lam(bi, ty, body)` and the other is not, check whether
     /// `body ≡ other.lift(1) @ BVar(0)`. This is the standard eta rule:
-    /// `(λ x. f x) ≡ f` when `x ∉ FV(f)`.
-    fn try_eta_expansion(&self, a: &Expr, b: &Expr) -> bool {
+    /// `(λ x. f x) ≡ f` when `x ∉ FV(f)`. The comparison descends under the
+    /// lambda's binder, so its type is pushed onto `ctx`.
+    fn try_eta_expansion(&self, ctx: &mut Vec<Expr>, a: &Expr, b: &Expr) -> bool {
         match (&a.kind, &b.kind) {
-            (ExprKind::Lam(_, _ty, body), _) => {
+            (ExprKind::Lam(_, ty, body), _) => {
                 let other_lifted = b.lift_from(0, 1);
                 let other_applied = Expr::app(other_lifted, Expr::bvar(0));
-                self.def_eq_impl(body, &other_applied)
+                ctx.push(ty.as_ref().clone());
+                let r = self.def_eq_impl(ctx, body, &other_applied);
+                ctx.pop();
+                r
             }
-            (_, ExprKind::Lam(_, _ty, body)) => {
+            (_, ExprKind::Lam(_, ty, body)) => {
                 let other_lifted = a.lift_from(0, 1);
                 let other_applied = Expr::app(other_lifted, Expr::bvar(0));
-                self.def_eq_impl(body, &other_applied)
+                ctx.push(ty.as_ref().clone());
+                let r = self.def_eq_impl(ctx, body, &other_applied);
+                ctx.pop();
+                r
             }
             _ => false,
         }
@@ -412,25 +466,25 @@ pub(super) trait CertExprEqContext {
     ///
     /// Unlike `zfc_set_eq` (which uses `structural_eq_impl`), this recurses
     /// with `def_eq_impl` so nested subterms get WHNF reduction.
-    fn zfc_set_def_eq(&self, a: &ZFCSetExpr, b: &ZFCSetExpr) -> bool {
+    fn zfc_set_def_eq(&self, ctx: &mut Vec<Expr>, a: &ZFCSetExpr, b: &ZFCSetExpr) -> bool {
         match (a, b) {
             (ZFCSetExpr::Empty, ZFCSetExpr::Empty) => true,
             (ZFCSetExpr::Infinity, ZFCSetExpr::Infinity) => true,
-            (ZFCSetExpr::Singleton(e1), ZFCSetExpr::Singleton(e2)) => self.def_eq_impl(e1, e2),
+            (ZFCSetExpr::Singleton(e1), ZFCSetExpr::Singleton(e2)) => self.def_eq_impl(ctx, e1, e2),
             (ZFCSetExpr::Pair(a1, b1), ZFCSetExpr::Pair(a2, b2)) => {
-                self.def_eq_impl(a1, a2) && self.def_eq_impl(b1, b2)
+                self.def_eq_impl(ctx, a1, a2) && self.def_eq_impl(ctx, b1, b2)
             }
-            (ZFCSetExpr::Union(e1), ZFCSetExpr::Union(e2)) => self.def_eq_impl(e1, e2),
-            (ZFCSetExpr::PowerSet(e1), ZFCSetExpr::PowerSet(e2)) => self.def_eq_impl(e1, e2),
+            (ZFCSetExpr::Union(e1), ZFCSetExpr::Union(e2)) => self.def_eq_impl(ctx, e1, e2),
+            (ZFCSetExpr::PowerSet(e1), ZFCSetExpr::PowerSet(e2)) => self.def_eq_impl(ctx, e1, e2),
             (
                 ZFCSetExpr::Separation { set: s1, pred: p1 },
                 ZFCSetExpr::Separation { set: s2, pred: p2 },
-            ) => self.def_eq_impl(s1, s2) && self.def_eq_impl(p1, p2),
+            ) => self.def_eq_impl(ctx, s1, s2) && self.def_eq_impl(ctx, p1, p2),
             (
                 ZFCSetExpr::Replacement { set: s1, func: f1 },
                 ZFCSetExpr::Replacement { set: s2, func: f2 },
-            ) => self.def_eq_impl(s1, s2) && self.def_eq_impl(f1, f2),
-            (ZFCSetExpr::Choice(e1), ZFCSetExpr::Choice(e2)) => self.def_eq_impl(e1, e2),
+            ) => self.def_eq_impl(ctx, s1, s2) && self.def_eq_impl(ctx, f1, f2),
+            (ZFCSetExpr::Choice(e1), ZFCSetExpr::Choice(e2)) => self.def_eq_impl(ctx, e1, e2),
             _ => false,
         }
     }

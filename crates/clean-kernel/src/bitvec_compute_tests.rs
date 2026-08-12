@@ -260,7 +260,7 @@ fn test_bvadd_actually_computes_one_plus_one_equals_two() {
     let sum = Expr::apps(Expr::const_str(names::BV_ADD), [one.clone(), one]);
 
     // @Eq.{1} Clean.BV4 (bvAdd one one) two, proved by refl of `two`.
-    let u1 = crate::Level::succ(crate::Level::zero());
+    let u1 = Level::succ(Level::zero());
     let goal = Expr::apps(
         Expr::const_(Name::from_string("Eq"), vec![u1.clone()]),
         [Expr::const_str(names::BV), sum, two.clone()],

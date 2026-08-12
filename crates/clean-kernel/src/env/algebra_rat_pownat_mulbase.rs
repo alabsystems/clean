@@ -50,6 +50,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the two `powNat` primitives.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct PowMulConsts {
     nat: Expr,
     #[cfg(test)]
@@ -111,6 +112,7 @@ impl PowMulConsts {
         Expr::apps(self.pow_nat.clone(), [b.clone(), k.clone()])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn succ(&self, k: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), k.clone())
     }

@@ -13,7 +13,7 @@ use super::dag::{
     LiaDetail, SmtProofDag, SmtProofStep, SmtSort, SmtStepId, SmtSymbol, SmtTerm, SmtTermId,
     SmtTheory, TheoryLemmaDetail,
 };
-use super::trust::{SmtVerifyError, StepTrustLevel};
+use super::trust::SmtVerifyError;
 use super::{verify_smt_proof, VerifyMode};
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -729,7 +729,7 @@ fn test_mixed_euf_lra_two_theory_lemmas() {
     // We prove empty by combining EUF and LRA sub-derivations.
 
     let s0 = dag.add_step(SmtProofStep::Assume(eq_ab)); // {eq_ab}
-    let s1 = dag.add_step(SmtProofStep::Assume(not_eq_fa_fb)); // {not_eq_fa_fb}
+    let _s1 = dag.add_step(SmtProofStep::Assume(not_eq_fa_fb)); // {not_eq_fa_fb}
     let s2 = dag.add_step(SmtProofStep::Assume(ge_x_0)); // {ge_x_0}
     let s3 = dag.add_step(SmtProofStep::Assume(le_x_neg1)); // {le_x_neg1}
 
@@ -750,7 +750,7 @@ fn test_mixed_euf_lra_two_theory_lemmas() {
     });
 
     // Resolve s0 + s4 on eq_ab => {eq_fa_fb}
-    let s6 = dag.add_step(SmtProofStep::Resolution {
+    let _s6 = dag.add_step(SmtProofStep::Resolution {
         clause: vec![eq_fa_fb],
         premises: vec![s0, s4],
         pivot: Some(eq_ab),
@@ -1038,10 +1038,10 @@ fn test_invalid_resolution_fabricated_literal() {
     let mut dag = SmtProofDag::new();
     let p = dag.add_term(SmtTerm::Var("p".to_string(), SmtSort::Bool));
     let q = dag.add_term(SmtTerm::Var("q".to_string(), SmtSort::Bool));
-    let r = dag.add_term(SmtTerm::Var("r".to_string(), SmtSort::Bool));
+    let _r = dag.add_term(SmtTerm::Var("r".to_string(), SmtSort::Bool));
     let not_p = dag.add_term(SmtTerm::Not(p));
 
-    let s0 = dag.add_step(SmtProofStep::Assume(p));
+    let _s0 = dag.add_step(SmtProofStep::Assume(p));
     let s0b = dag.add_step(SmtProofStep::TheoryLemma {
         theory: SmtTheory::Core,
         kind: TheoryLemmaDetail::Generic,
@@ -1057,7 +1057,7 @@ fn test_invalid_resolution_fabricated_literal() {
         pivot: Some(p),
     });
 
-    let result = verify_smt_proof(&dag, VerifyMode::Permissive);
+    let _result = verify_smt_proof(&dag, VerifyMode::Permissive);
     // Resolution result mismatch: resolvent should be {q}, not {}.
     // The step should be marked as Trusted (mismatch).
     // The terminal clause IS empty, but it was derived incorrectly.

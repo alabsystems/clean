@@ -81,7 +81,7 @@ impl Environment {
             let (h_id, _) = b.fresh_local(not_p.clone());
             let r = Expr::app(decidable_const.clone(), p_var);
             let r = b.mk_pi(h_id, BinderInfo::Default, not_p, r);
-            let r = b.mk_pi(p_id, BinderInfo::Default, prop.clone(), r);
+            let r = b.mk_pi(p_id, BinderInfo::Implicit, prop.clone(), r);
             b.finish(r)
         };
 
@@ -92,7 +92,7 @@ impl Environment {
             let (h_id, _) = b.fresh_local(p_var.clone());
             let r = Expr::app(decidable_const.clone(), p_var.clone());
             let r = b.mk_pi(h_id, BinderInfo::Default, p_var, r);
-            let r = b.mk_pi(p_id, BinderInfo::Default, prop.clone(), r);
+            let r = b.mk_pi(p_id, BinderInfo::Implicit, prop.clone(), r);
             b.finish(r)
         };
 
@@ -168,7 +168,7 @@ impl Environment {
                     decidable_p,
                     bool_const.clone(),
                 );
-                let r = b.mk_pi(p_id, BinderInfo::Implicit, prop.clone(), r);
+                let r = b.mk_pi(p_id, BinderInfo::Default, prop.clone(), r);
                 b.finish(r)
             };
 
@@ -284,7 +284,7 @@ impl Environment {
                     decidable_p.clone(),
                     decidable_p,
                 );
-                let r = b.mk_pi(p_id, BinderInfo::Implicit, prop.clone(), r);
+                let r = b.mk_pi(p_id, BinderInfo::Default, prop.clone(), r);
                 b.finish(r)
             };
             let decide_value = {
@@ -380,7 +380,7 @@ impl Environment {
             let (v_id, _) = b.fresh_local(a_var.clone());
             let r = Expr::app(nonempty_const.clone(), a_var.clone());
             let r = b.mk_pi(v_id, BinderInfo::Default, a_var, r);
-            let r = b.mk_pi(a_id, BinderInfo::Default, sort_u.clone(), r);
+            let r = b.mk_pi(a_id, BinderInfo::Implicit, sort_u.clone(), r);
             b.finish(r)
         };
 

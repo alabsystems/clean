@@ -100,4 +100,11 @@ pub(super) enum UndoRecord {
         /// Previous concrete level (None if not present)
         old_level: Option<Level>,
     },
+    /// A compound (params-containing, non-param) level was assigned (U2 rung-1a)
+    LevelBound {
+        /// The root parameter name
+        name: Name,
+        /// Previous bound level (None if not present)
+        old_level: Option<Level>,
+    },
 }

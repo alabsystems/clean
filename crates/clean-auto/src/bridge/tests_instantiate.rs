@@ -59,7 +59,7 @@ fn test_flatten_forall_nested_dependent_pis() {
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     // ∀ x : A, ∀ y : A, BVar(0) (using x is BVar(1), y is BVar(0))
     let inner_body = Expr::bvar(0);
-    let inner_pi = Expr::pi(clean_kernel::BinderInfo::Default, a_ty.clone(), inner_body);
+    let inner_pi = Expr::pi(BinderInfo::Default, a_ty.clone(), inner_body);
     let (types, body) = bridge.flatten_forall(&a_ty, &inner_pi);
 
     assert_eq!(types.len(), 2, "nested Pi should produce 2 binder types");
@@ -77,7 +77,7 @@ fn test_flatten_forall_stops_at_non_dependent() {
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     // body is a Pi that doesn't use the bound variable (non-dependent)
     let non_dep_pi = Expr::pi(
-        clean_kernel::BinderInfo::Default,
+        BinderInfo::Default,
         a_ty.clone(),
         Expr::const_(Name::from_string("A"), vec![]), // no BVar
     );
@@ -114,11 +114,7 @@ fn test_flatten_exists_nested() {
             Expr::const_(Name::from_string("Exists"), vec![Level::zero()]),
             a_ty.clone(),
         ),
-        Expr::lam(
-            clean_kernel::BinderInfo::Default,
-            a_ty.clone(),
-            Expr::bvar(0),
-        ),
+        Expr::lam(BinderInfo::Default, a_ty.clone(), Expr::bvar(0)),
     );
     let (types, _body) = bridge.flatten_exists(&a_ty, &inner_exists);
 
@@ -223,7 +219,7 @@ fn test_substitute_bvar_adjusts_under_binder() {
 
     // Lambda body has BVar(1) which refers to the outer scope (idx=0 after shift)
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
-    let expr = Expr::lam(clean_kernel::BinderInfo::Default, a_ty, Expr::bvar(1));
+    let expr = Expr::lam(BinderInfo::Default, a_ty, Expr::bvar(1));
     let replacement = Expr::const_(Name::from_string("a"), vec![]);
     let result = bridge.substitute_bvar(&expr, 0, &replacement);
 

@@ -12,10 +12,9 @@
 
 use std::path::{Path, PathBuf};
 
-use clean_olean::parse_module_file;
-
 use crate::error::{MathverseError, MathverseResult};
 use crate::lean4::olean::alpha::{import_module, ImportStats};
+use crate::lean4::olean::olean_bridge::parse_target_module_with_proofs;
 use crate::shard::ShardWriter;
 
 // ---------------------------------------------------------------------------
@@ -173,10 +172,14 @@ impl Lean4BatchImporter {
         path: &Path,
         writer: &mut ShardWriter,
     ) -> MathverseResult<ImportStats> {
-        let module = parse_module_file(path).map_err(|e| MathverseError::ImportFailed {
-            system: "Lean4".to_string(),
-            reason: format!("{}: {e}", path.display()),
-        })?;
+        // MUST be the proof-merging parse, not the public-only `parse_module_file`.
+        // Under Lean's module system a public `.olean` stores every theorem as a
+        // value-less, axiom-shaped stub and the proof lives in `.olean.private`;
+        // parsing the base alone therefore imports AXIOMS where the source has
+        // PROOFS. `parse_target_module_with_proofs` is best-effort and returns the
+        // base module unchanged when no companion exists, so this is a strict
+        // superset of the old behaviour for every non-module-system import.
+        let module = parse_target_module_with_proofs(path)?;
         import_module(&module, writer)
     }
 
@@ -258,3 +261,5 @@ fn collect_olean_files(dir: &Path, out: &mut Vec<PathBuf>) -> MathverseResult<()
 mod tests;
 #[cfg(test)]
 mod tests_discover;
+#[cfg(test)]
+mod tests_module_system;

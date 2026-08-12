@@ -2186,7 +2186,7 @@ fn test_macro_rules_computed_monadic_bind_nonquotation_action_defers_honestly() 
         Box::new(SurfaceExpr::Ident(Span::dummy(), "y".to_string())),
     );
     let expansion = SurfaceExpr::Do(Span::dummy(), vec![bind, ret]);
-    let arm = clean_parser::MacroArm {
+    let arm = MacroArm {
         span: Span::dummy(),
         pattern: Box::new(pattern),
         expansion: Box::new(expansion),

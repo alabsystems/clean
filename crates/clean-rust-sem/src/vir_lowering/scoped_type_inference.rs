@@ -99,7 +99,7 @@ impl<'a> FunctionLoweringContext<'a> {
         scrutinee: &Expr,
         arms: &[MatchArm],
     ) -> Result<RustType, VirLoweringError> {
-        let Some(first_arm) = arms.first() else {
+        let Some(_first_arm) = arms.first() else {
             return Ok(RustType::Unit);
         };
 

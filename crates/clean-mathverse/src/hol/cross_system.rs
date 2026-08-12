@@ -41,9 +41,6 @@ pub(crate) struct HolConstantRecord {
     pub(crate) axiom_profile: AxiomProfile,
     /// Trust level assigned to this constant.
     pub(crate) trust_level: TrustLevel,
-    /// Original name in the source system (may differ from `name` after
-    /// namespace normalization).
-    pub(crate) original_name: String,
 }
 
 /// Statistics for a single source system's contribution to the unifier.
@@ -464,7 +461,6 @@ impl HolUnifier {
             type_repr: type_repr.to_owned(),
             axiom_profile,
             trust_level,
-            original_name: name.to_owned(),
         });
         id
     }
@@ -489,8 +485,7 @@ impl HolUnifier {
     #[must_use]
     pub(crate) fn find_equivalences(&self) -> Vec<EquivalencePair> {
         // Group constants by base name.
-        let mut by_base: std::collections::HashMap<String, Vec<&HolConstantRecord>> =
-            std::collections::HashMap::new();
+        let mut by_base: HashMap<String, Vec<&HolConstantRecord>> = HashMap::new();
         for record in &self.constants {
             let base = base_name(&record.name);
             by_base.entry(base).or_default().push(record);
@@ -942,6 +937,35 @@ mod tests {
 
         let all = u.unified_constants();
         assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn test_unify_constant_reports_alignment_evidence() {
+        let mut u = HolUnifier::new();
+        u.add_hol_light_constant(
+            "HOL.True",
+            "Prop",
+            profile(),
+            TrustLevel::CertificateReplayed,
+        );
+        u.add_hol4_constant(
+            "boolTheory.True",
+            "Prop",
+            profile(),
+            TrustLevel::CertificateReplayed,
+        );
+
+        let result = u.unify_constant("True");
+        assert!(result.is_confident());
+        assert_eq!(result.match_score, 1.0);
+        assert_eq!(result.alignment.system_count(), 2);
+        assert_eq!(
+            result.alignment_evidence,
+            [
+                "base name 'True' matched across 2 systems",
+                "all systems share identical type representation",
+            ]
+        );
     }
 
     #[test]

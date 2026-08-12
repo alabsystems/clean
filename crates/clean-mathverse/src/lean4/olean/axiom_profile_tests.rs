@@ -444,8 +444,8 @@ fn test_profile_stats_all_pure() {
 fn lower_to_shard_parts(
     module: &ParsedModule,
 ) -> (
-    Vec<crate::types::MathverseConstantHeader>,
-    Vec<clean_kernel::flat::FlatExpr>,
+    Vec<MathverseConstantHeader>,
+    Vec<FlatExpr>,
     Vec<String>,
 ) {
     let mut writer = crate::shard::ShardWriter::new();
@@ -458,10 +458,10 @@ fn lower_to_shard_parts(
 
 /// Find a constant header by name in a lowered shard.
 fn find_const<'a>(
-    constants: &'a [crate::types::MathverseConstantHeader],
+    constants: &'a [MathverseConstantHeader],
     strings: &[String],
     name: &str,
-) -> &'a crate::types::MathverseConstantHeader {
+) -> &'a MathverseConstantHeader {
     constants
         .iter()
         .find(|c| strings.get(c.name_idx as usize).map(String::as_str) == Some(name))
@@ -552,8 +552,8 @@ fn test_shard_closure_handles_dependency_cycle() {
 
 #[test]
 fn test_shard_closure_empty_is_noop() {
-    let mut constants: Vec<crate::types::MathverseConstantHeader> = Vec::new();
-    let exprs: Vec<clean_kernel::flat::FlatExpr> = Vec::new();
+    let mut constants: Vec<MathverseConstantHeader> = Vec::new();
+    let exprs: Vec<FlatExpr> = Vec::new();
     let strings: Vec<String> = Vec::new();
     assert_eq!(
         propagate_shard_axiom_profiles(&mut constants, &exprs, &strings),

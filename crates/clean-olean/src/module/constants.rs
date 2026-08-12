@@ -85,6 +85,7 @@ impl<'a> CompactedRegion<'a> {
         // 0 = axiomInfo, 1 = defnInfo, 2 = thmInfo, 3 = opaqueInfo,
         // 4 = quotInfo, 5 = inductInfo, 6 = ctorInfo, 7 = recInfo
         let kind = match header.tag {
+            0 => ConstantKind::Axiom,
             1 => ConstantKind::Definition,
             2 => ConstantKind::Theorem,
             3 => ConstantKind::Opaque,
@@ -92,7 +93,7 @@ impl<'a> CompactedRegion<'a> {
             5 => ConstantKind::Inductive,
             6 => ConstantKind::Constructor,
             7 => ConstantKind::Recursor,
-            _ => ConstantKind::Axiom,
+            tag => return Err(OleanError::InvalidObjectTag { tag, offset }),
         };
 
         // The XxxVal is the first (and only) field
@@ -118,7 +119,7 @@ impl<'a> CompactedRegion<'a> {
         // Read ReducibilityHints for definitions
         let hints = self.read_reducibility_hints(&kind, val_offset, &val_header)?;
 
-        // Read the DefinitionSafety flag for definitions
+        // Read declaration safety for definitions, axioms, and opaques.
         let definition_safety = self.read_definition_safety(&kind, val_offset, &val_header)?;
 
         // Parse extra fields based on kind
@@ -390,7 +391,7 @@ impl<'a> CompactedRegion<'a> {
         Ok(Some(hints))
     }
 
-    /// Read the `DefinitionSafety` flag for a definition constant.
+    /// Read the declaration-safety authority carried by a constant value.
     ///
     /// Two on-disk `DefnVal` layouts are recognized, discriminated by their
     /// exact `(other, cs_sz)` header shape:
@@ -416,68 +417,121 @@ impl<'a> CompactedRegion<'a> {
     /// `partial = 2`). Kept for round-trip compatibility with Clean-produced
     /// oleans.
     ///
-    /// Returns `None` only for non-definitions. A missing/pre-slot,
-    /// malformed/future modern layout, invalid scalar, or unknown safety tag
-    /// is an error: safety metadata is an authority boundary and must never
-    /// degrade to `safe`.
+    /// `AxiomVal.isUnsafe` and `OpaqueVal.isUnsafe` use the same authority
+    /// boundary. Real Lean v4.30 layouts are:
+    ///
+    /// - `AxiomVal`: `(other=1, cs_sz=24)`, raw Bool at `+16`;
+    /// - `OpaqueVal`: `(other=3, cs_sz=40)`, raw Bool at `+32` after
+    ///   `toConstantVal`, `value`, and pointer-reordered `all`.
+    ///
+    /// The legacy Clean writer used an extra boxed field and a tagged Bool:
+    /// `(2, 0)` at `+16` for axioms and `(4, 0)` at `+24` for opaques.
+    ///
+    /// Returns `None` only for kinds with no declaration-safety field. A
+    /// missing, malformed, future layout, invalid Bool, or unknown safety tag
+    /// is an error: safety metadata must never degrade to `safe`.
     pub(crate) fn read_definition_safety(
         &self,
         kind: &ConstantKind,
         val_offset: usize,
         val_header: &crate::region::ObjectHeader,
     ) -> OleanResult<Option<DefinitionSafety>> {
-        if *kind != ConstantKind::Definition {
-            return Ok(None);
-        }
-        match (val_header.other, val_header.cs_sz) {
-            // Real Lean layout: +32 is `all : List Name`; safety is the
-            // unboxed u8 at +40 in Lean declaration order.
-            (4, 48) => {
-                let scalar_off = val_offset + 40;
-                let tag = self
-                    .data
-                    .get(scalar_off)
-                    .copied()
-                    .ok_or(OleanError::OutOfBounds {
-                        offset: scalar_off,
-                        size: self.data.len(),
-                    })?;
-                DefinitionSafety::from_tag(u64::from(tag))
-                    .map(Some)
-                    .ok_or_else(|| {
+        let safety = match kind {
+            ConstantKind::Axiom => match (val_header.other, val_header.cs_sz) {
+                (1, 24) => {
+                    if self.read_inline_bool_exact(val_offset + 16, "AxiomVal.isUnsafe")? {
+                        DefinitionSafety::Unsafe
+                    } else {
+                        DefinitionSafety::Safe
+                    }
+                }
+                (2, 0) => {
+                    if self.read_boxed_bool_exact(val_offset + 16, "AxiomVal.isUnsafe")? {
+                        DefinitionSafety::Unsafe
+                    } else {
+                        DefinitionSafety::Safe
+                    }
+                }
+                (other, cs_sz) => {
+                    return Err(OleanError::Region(format!(
+                        "unrecognized AxiomVal safety layout \
+                         (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+                    )));
+                }
+            },
+            ConstantKind::Opaque => match (val_header.other, val_header.cs_sz) {
+                (3, 40) => {
+                    if self.read_inline_bool_exact(val_offset + 32, "OpaqueVal.isUnsafe")? {
+                        DefinitionSafety::Unsafe
+                    } else {
+                        DefinitionSafety::Safe
+                    }
+                }
+                (4, 0) => {
+                    if self.read_boxed_bool_exact(val_offset + 24, "OpaqueVal.isUnsafe")? {
+                        DefinitionSafety::Unsafe
+                    } else {
+                        DefinitionSafety::Safe
+                    }
+                }
+                (other, cs_sz) => {
+                    return Err(OleanError::Region(format!(
+                        "unrecognized OpaqueVal safety layout \
+                         (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+                    )));
+                }
+            },
+            ConstantKind::Definition => match (val_header.other, val_header.cs_sz) {
+                // Real Lean layout: +32 is `all : List Name`; safety is the
+                // unboxed u8 at +40 in Lean declaration order.
+                (4, 48) => {
+                    let scalar_off = val_offset + 40;
+                    let tag =
+                        self.data
+                            .get(scalar_off)
+                            .copied()
+                            .ok_or(OleanError::OutOfBounds {
+                                offset: scalar_off,
+                                size: self.data.len(),
+                            })?;
+                    DefinitionSafety::from_tag(u64::from(tag)).ok_or_else(|| {
                         OleanError::Region(format!(
                             "invalid DefinitionSafety tag {tag} at offset {scalar_off}"
                         ))
-                    })
-            }
-            // Exact legacy Clean-exporter layout: a boxed scalar at +32 in
-            // the historical Clean order safe=0, unsafe=1, partial=2.
-            (4, 0) => {
-                let raw = self.read_u64_at(val_offset + 32)?;
-                if !is_scalar(raw) {
-                    return Err(OleanError::Region(format!(
-                        "legacy DefinitionSafety at offset {} is not a tagged scalar",
-                        val_offset + 32
-                    )));
+                    })?
                 }
-                let safety = match unbox_scalar(raw) {
-                    0 => DefinitionSafety::Safe,
-                    1 => DefinitionSafety::Unsafe,
-                    2 => DefinitionSafety::Partial,
-                    tag => {
+                // Exact legacy Clean-exporter layout: a boxed scalar at +32 in
+                // the historical Clean order safe=0, unsafe=1, partial=2.
+                (4, 0) => {
+                    let raw = self.read_u64_at(val_offset + 32)?;
+                    if !is_scalar(raw) {
                         return Err(OleanError::Region(format!(
-                            "invalid legacy DefinitionSafety tag {tag} at offset {}",
+                            "legacy DefinitionSafety at offset {} is not a tagged scalar",
                             val_offset + 32
                         )));
                     }
-                };
-                Ok(Some(safety))
-            }
-            (other, cs_sz) => Err(OleanError::Region(format!(
-                "unrecognized DefinitionVal safety layout \
-                 (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
-            ))),
-        }
+                    match unbox_scalar(raw) {
+                        0 => DefinitionSafety::Safe,
+                        1 => DefinitionSafety::Unsafe,
+                        2 => DefinitionSafety::Partial,
+                        tag => {
+                            return Err(OleanError::Region(format!(
+                                "invalid legacy DefinitionSafety tag {tag} at offset {}",
+                                val_offset + 32
+                            )));
+                        }
+                    }
+                }
+                (other, cs_sz) => {
+                    return Err(OleanError::Region(format!(
+                        "unrecognized DefinitionVal safety layout \
+                         (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+                    )));
+                }
+            },
+            _ => return Ok(None),
+        };
+        Ok(Some(safety))
     }
 
     /// Read InductiveVal extra data
@@ -520,16 +574,54 @@ impl<'a> CompactedRegion<'a> {
             Vec::new()
         };
 
-        let num_nested = self.read_nat_at(val_offset + 48)?;
-        // Lean 4: isNested = numNested > 0 (see Declaration.lean:317)
-        let is_nested = num_nested > 0;
-
-        // Bool flags - they're packed as individual bytes, not as Lean scalars
-        // In Lean 4 runtime, Bool is a UInt8 (0 or 1) stored directly
-        // Look at raw bytes at +56, +57, +58
-        let is_rec = self.data.get(val_offset + 56).copied().unwrap_or(0) != 0;
-        let is_unsafe = self.data.get(val_offset + 57).copied().unwrap_or(0) != 0;
-        let is_reflexive = self.data.get(val_offset + 58).copied().unwrap_or(0) != 0;
+        // The header keys the field layout, so it must be read BEFORE
+        // `numNested` — two real Lean layouts exist for InductiveVal:
+        //
+        //   (6, 64) and legacy (7, 0): Lean >= 4.9 — `numNested : Nat` is the
+        //   sixth object field (+48) and the three Bool flags follow at +56.
+        //
+        //   (5, 56): Lean <= 4.8 — `InductiveVal` HAS NO `numNested` field.
+        //   The toolchain's own Lean/Declaration.lean (v4.8.0:220-258) ends
+        //   `... isRec : Bool, isUnsafe : Bool, isReflexive : Bool,
+        //   isNested : Bool`, so there are FOUR flags and they ARE the scalar
+        //   area at +48. The
+        //   pinned Lean<->Clean bridge toolchain (v4.8.0) emits this shape
+        //   for every core inductive — first caught failing on `PEmpty` in
+        //   Init.Prelude once the exact-layout check landed.
+        //
+        // Reading v4.8 bytes through the v4.9+ offsets would return `isRec`
+        // as `numNested` (every recursive inductive would read as "nested")
+        // and pull the Bool flags from the next object's bytes, so the shape
+        // selects the offsets and anything else stays fail-closed.
+        let header = self.read_header_at(val_offset)?;
+        // `nested_is_a_flag` distinguishes WHERE `isNested` comes from, which the
+        // two shapes disagree on: >=4.9 derives it from the `numNested` count,
+        // 4.8 stores it as the fourth raw Bool. Deriving it from a hardcoded
+        // `numNested = 0` on the 4.8 shape reads EVERY nested inductive as
+        // non-nested — silently, since 0 is a legal count.
+        let (num_nested, bools_at, nested_is_a_flag) = match (header.other, header.cs_sz) {
+            (6, 64) | (7, 0) => (self.read_nat_at(val_offset + 48)?, val_offset + 56, false),
+            (5, 56) => (0, val_offset + 48, true),
+            (other, cs_sz) => {
+                return Err(OleanError::Region(format!(
+                    "unrecognized InductiveVal Bool layout (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+                )));
+            }
+        };
+        // Bool flags are consecutive raw bytes in real Lean (both shapes) and
+        // Clean's legacy packed-word layout. Validate the exact 0/1 domain: an
+        // absent or future encoding must not turn `isUnsafe` into false.
+        let is_rec = self.read_inline_bool_exact(bools_at, "InductiveVal.isRec")?;
+        let is_unsafe = self.read_inline_bool_exact(bools_at + 1, "InductiveVal.isUnsafe")?;
+        let is_reflexive = self.read_inline_bool_exact(bools_at + 2, "InductiveVal.isReflexive")?;
+        // >=4.9: `isNested = numNested > 0` (Declaration.lean:317). 4.8: the
+        // fourth flag byte, validated to the same exact 0/1 domain as the
+        // others so a future encoding cannot silently read as `false`.
+        let is_nested = if nested_is_a_flag {
+            self.read_inline_bool_exact(bools_at + 3, "InductiveVal.isNested")?
+        } else {
+            num_nested > 0
+        };
 
         Ok(InductiveValData {
             num_params,
@@ -560,7 +652,17 @@ impl<'a> CompactedRegion<'a> {
         let cidx = self.read_u32_at(val_offset + 24, "cidx")?;
         let num_params = self.read_u32_at(val_offset + 32, "numParams")?;
         let num_fields = self.read_u32_at(val_offset + 40, "numFields")?;
-        let is_unsafe = self.read_bool_at(val_offset + 48)?;
+        let header = self.read_header_at(val_offset)?;
+        let is_unsafe = match (header.other, header.cs_sz) {
+            (5, 56) => self.read_inline_bool_exact(val_offset + 48, "ConstructorVal.isUnsafe")?,
+            (6, 0) => self.read_boxed_bool_exact(val_offset + 48, "ConstructorVal.isUnsafe")?,
+            (other, cs_sz) => {
+                return Err(OleanError::Region(format!(
+                    "unrecognized ConstructorVal Bool layout \
+                     (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+                )));
+            }
+        };
 
         Ok(ConstructorValData {
             induct,
@@ -596,8 +698,8 @@ impl<'a> CompactedRegion<'a> {
     ///   +40: numMotives (Nat, scalar)
     ///   +48: numMinors (Nat, scalar)
     ///   +56: rules (List RecursorRule)
-    ///   +64: k (Bool, scalar)
-    ///   +72: isUnsafe (Bool, scalar)
+    ///   +64: k (Bool, raw byte)
+    ///   +65: isUnsafe (Bool, raw byte)
     fn read_recursor_val_data(&self, val_offset: usize) -> OleanResult<RecursorValData> {
         let all_ptr = self.read_u64_at(val_offset + 16)?;
         let all = self.read_name_list(all_ptr)?;
@@ -610,8 +712,7 @@ impl<'a> CompactedRegion<'a> {
         let rules_ptr = self.read_u64_at(val_offset + 56)?;
         let rules = self.read_recursor_rules(rules_ptr)?;
 
-        let k = self.read_bool_at(val_offset + 64)?;
-        let is_unsafe = self.read_bool_at(val_offset + 72)?;
+        let (k, is_unsafe) = self.read_recursor_bool_flags(val_offset)?;
 
         Ok(RecursorValData {
             all,
@@ -623,6 +724,28 @@ impl<'a> CompactedRegion<'a> {
             k,
             is_unsafe,
         })
+    }
+
+    /// Decode the two trailing `RecursorVal` Bool fields in either supported
+    /// ABI. Real Lean packs them as raw bytes at `+64`/`+65` in a
+    /// `(other=7, cs_sz=72)` object. The historical Clean writer used tagged
+    /// scalar words at `+64`/`+72` with `(other=9, cs_sz=0)`.
+    pub(crate) fn read_recursor_bool_flags(&self, val_offset: usize) -> OleanResult<(bool, bool)> {
+        let header = self.read_header_at(val_offset)?;
+        match (header.other, header.cs_sz) {
+            (7, 72) => Ok((
+                self.read_inline_bool_exact(val_offset + 64, "RecursorVal.k")?,
+                self.read_inline_bool_exact(val_offset + 65, "RecursorVal.isUnsafe")?,
+            )),
+            (9, 0) => Ok((
+                self.read_boxed_bool_exact(val_offset + 64, "RecursorVal.k")?,
+                self.read_boxed_bool_exact(val_offset + 72, "RecursorVal.isUnsafe")?,
+            )),
+            (other, cs_sz) => Err(OleanError::Region(format!(
+                "unrecognized RecursorVal Bool layout \
+                 (other={other}, cs_sz={cs_sz}) at offset {val_offset}"
+            ))),
+        }
     }
 
     /// Read a list of RecursorRule
@@ -719,33 +842,42 @@ impl<'a> CompactedRegion<'a> {
         self.read_u32_at(offset, field)
     }
 
-    /// Read a `Bool` stored as an *inline scalar field* at `offset`.
-    ///
-    /// In Lean 4's compact-object layout, trivial scalar fields (`Bool`,
-    /// `UInt8`, …) that follow all of an object's boxed pointer fields are
-    /// packed into the object's scalar area as raw bytes — a `Bool` is a single
-    /// byte holding `1` (`true`) or `0` (`false`). It is NOT a runtime object,
-    /// so it carries no pointer tag.
-    ///
-    /// The previous implementation treated the field as a *boxed tagged scalar*
-    /// and applied `unbox_scalar` (i.e. `byte >> 1`), which silently turned the
-    /// `true` encoding (`0x01`) into `0` and therefore read every such `Bool`
-    /// as `false`. That is why `RecursorVal.k` (the subsingleton /
-    /// K-elimination flag, `true` for `Eq.rec` / `HEq.rec`) came back `false`,
-    /// disabling K-reduction and making valid heterogeneous-equality terms like
-    /// `eq_of_heq` and `cast_eq` fail to type-check (WS7). Reading the raw
-    /// inline byte fixes that completeness gap without changing any `false`
-    /// case (a `0x00` byte still reads `false`).
-    fn read_bool_at(&self, offset: usize) -> OleanResult<bool> {
-        // The inline scalar byte is the least-significant byte of the
-        // little-endian word at `offset`.
-        let val = self.read_u64_at(offset)?;
-        Ok((val & 0xFF) != 0)
+    /// Read an unboxed compact-object Bool and require Lean's exact `0 | 1`
+    /// representation.
+    fn read_inline_bool_exact(&self, offset: usize, field: &str) -> OleanResult<bool> {
+        let value = self
+            .data
+            .get(offset)
+            .copied()
+            .ok_or(OleanError::OutOfBounds {
+                offset,
+                size: self.data.len(),
+            })?;
+        match value {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(OleanError::Region(format!(
+                "invalid {field} Bool byte {value} at offset {offset}"
+            ))),
+        }
     }
 
-    /// Public wrapper for load-only parser (#2428).
-    pub(crate) fn read_bool_at_pub(&self, offset: usize) -> OleanResult<bool> {
-        self.read_bool_at(offset)
+    /// Read a legacy Clean boxed Bool and require a tagged scalar containing
+    /// exactly `0 | 1`.
+    fn read_boxed_bool_exact(&self, offset: usize, field: &str) -> OleanResult<bool> {
+        let raw = self.read_u64_at(offset)?;
+        if !is_scalar(raw) {
+            return Err(OleanError::Region(format!(
+                "{field} at offset {offset} is not a tagged scalar"
+            )));
+        }
+        match unbox_scalar(raw) {
+            0 => Ok(false),
+            1 => Ok(true),
+            value => Err(OleanError::Region(format!(
+                "invalid {field} Bool tag {value} at offset {offset}"
+            ))),
+        }
     }
 
     /// Read a list of names
@@ -954,7 +1086,9 @@ mod inline_scalar_bool_tests {
         let bytes = region_from_word(0x0000_0000_0000_0001);
         let region = CompactedRegion::new(&bytes, 0);
         assert!(
-            region.read_bool_at_pub(0).expect("read inline scalar bool"),
+            region
+                .read_inline_bool_exact(0, "Test.bool")
+                .expect("read inline scalar bool"),
             "inline scalar byte 0x01 must decode as true"
         );
     }
@@ -965,7 +1099,9 @@ mod inline_scalar_bool_tests {
         let bytes = region_from_word(0x0000_0000_0000_0000);
         let region = CompactedRegion::new(&bytes, 0);
         assert!(
-            !region.read_bool_at_pub(0).expect("read inline scalar bool"),
+            !region
+                .read_inline_bool_exact(0, "Test.bool")
+                .expect("read inline scalar bool"),
             "inline scalar byte 0x00 must decode as false"
         );
     }
@@ -977,7 +1113,9 @@ mod inline_scalar_bool_tests {
         let bytes = region_from_word(0x0701_0010_0000_0001);
         let region = CompactedRegion::new(&bytes, 0);
         assert!(
-            region.read_bool_at_pub(0).expect("read inline scalar bool"),
+            region
+                .read_inline_bool_exact(0, "Test.bool")
+                .expect("read inline scalar bool"),
             "only the low byte determines the Bool; high bytes are unrelated fields"
         );
 
@@ -985,10 +1123,17 @@ mod inline_scalar_bool_tests {
         let region_false = CompactedRegion::new(&bytes_false, 0);
         assert!(
             !region_false
-                .read_bool_at_pub(0)
+                .read_inline_bool_exact(0, "Test.bool")
                 .expect("read inline scalar bool"),
             "low byte 0x00 must decode false even with non-zero high bytes"
         );
+    }
+
+    #[test]
+    fn test_read_bool_at_rejects_non_bool_byte() {
+        let bytes = region_from_word(2);
+        let region = CompactedRegion::new(&bytes, 0);
+        assert!(region.read_inline_bool_exact(0, "Test.bool").is_err());
     }
 }
 
@@ -1153,5 +1298,157 @@ mod definition_safety_layout_tests {
         let mut pointer = vec![0u8; 48];
         pointer[32..40].copy_from_slice(&0x1000u64.to_le_bytes());
         assert!(decode(&pointer, &header).is_err());
+    }
+}
+
+#[cfg(test)]
+mod declaration_safety_layout_tests {
+    //! Exact authority-layout pins for AxiomVal, OpaqueVal, and RecursorVal.
+    use super::super::{ConstantKind, DefinitionSafety};
+    use crate::region::{CompactedRegion, ObjectHeader};
+
+    fn header(other: u8, cs_sz: u16) -> ObjectHeader {
+        ObjectHeader {
+            rc: 1,
+            cs_sz,
+            other,
+            tag: 0,
+        }
+    }
+
+    fn tagged_bool(value: u64) -> u64 {
+        (value << 1) | 1
+    }
+
+    #[test]
+    fn axiom_real_and_legacy_bool_layouts_decode_exactly() {
+        for (raw, expected) in [(0u8, DefinitionSafety::Safe), (1, DefinitionSafety::Unsafe)] {
+            let mut real = vec![0u8; 24];
+            real[16] = raw;
+            assert_eq!(
+                CompactedRegion::new(&real, 0)
+                    .read_definition_safety(&ConstantKind::Axiom, 0, &header(1, 24))
+                    .expect("real AxiomVal safety"),
+                Some(expected)
+            );
+
+            let mut legacy = vec![0u8; 24];
+            legacy[16..24].copy_from_slice(&tagged_bool(u64::from(raw)).to_le_bytes());
+            assert_eq!(
+                CompactedRegion::new(&legacy, 0)
+                    .read_definition_safety(&ConstantKind::Axiom, 0, &header(2, 0))
+                    .expect("legacy AxiomVal safety"),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn opaque_real_and_legacy_bool_layouts_decode_exactly() {
+        for (raw, expected) in [(0u8, DefinitionSafety::Safe), (1, DefinitionSafety::Unsafe)] {
+            let mut real = vec![0u8; 40];
+            real[32] = raw;
+            assert_eq!(
+                CompactedRegion::new(&real, 0)
+                    .read_definition_safety(&ConstantKind::Opaque, 0, &header(3, 40))
+                    .expect("real OpaqueVal safety"),
+                Some(expected)
+            );
+
+            let mut legacy = vec![0u8; 40];
+            legacy[24..32].copy_from_slice(&tagged_bool(u64::from(raw)).to_le_bytes());
+            assert_eq!(
+                CompactedRegion::new(&legacy, 0)
+                    .read_definition_safety(&ConstantKind::Opaque, 0, &header(4, 0))
+                    .expect("legacy OpaqueVal safety"),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn axiom_and_opaque_malformed_authority_fail_closed() {
+        let mut invalid_real = vec![0u8; 40];
+        invalid_real[16] = 2;
+        invalid_real[32] = 2;
+        let region = CompactedRegion::new(&invalid_real, 0);
+        assert!(region
+            .read_definition_safety(&ConstantKind::Axiom, 0, &header(1, 24))
+            .is_err());
+        assert!(region
+            .read_definition_safety(&ConstantKind::Opaque, 0, &header(3, 40))
+            .is_err());
+
+        let mut invalid_legacy = vec![0u8; 40];
+        invalid_legacy[16..24].copy_from_slice(&tagged_bool(2).to_le_bytes());
+        invalid_legacy[24..32].copy_from_slice(&tagged_bool(2).to_le_bytes());
+        let region = CompactedRegion::new(&invalid_legacy, 0);
+        assert!(region
+            .read_definition_safety(&ConstantKind::Axiom, 0, &header(2, 0))
+            .is_err());
+        assert!(region
+            .read_definition_safety(&ConstantKind::Opaque, 0, &header(4, 0))
+            .is_err());
+
+        assert!(region
+            .read_definition_safety(&ConstantKind::Axiom, 0, &header(1, 16))
+            .is_err());
+        assert!(region
+            .read_definition_safety(&ConstantKind::Opaque, 0, &header(4, 40))
+            .is_err());
+    }
+
+    fn write_object_header(bytes: &mut [u8], other: u8, cs_sz: u16) {
+        bytes[4..6].copy_from_slice(&cs_sz.to_le_bytes());
+        bytes[6] = other;
+    }
+
+    #[test]
+    fn recursor_real_and_legacy_flags_decode_at_their_exact_offsets() {
+        let mut real = vec![0u8; 72];
+        write_object_header(&mut real, 7, 72);
+        real[64] = 1;
+        real[65] = 1;
+        assert_eq!(
+            CompactedRegion::new(&real, 0)
+                .read_recursor_bool_flags(0)
+                .expect("real RecursorVal flags"),
+            (true, true)
+        );
+
+        let mut legacy = vec![0u8; 80];
+        write_object_header(&mut legacy, 9, 0);
+        legacy[64..72].copy_from_slice(&tagged_bool(1).to_le_bytes());
+        legacy[72..80].copy_from_slice(&tagged_bool(1).to_le_bytes());
+        assert_eq!(
+            CompactedRegion::new(&legacy, 0)
+                .read_recursor_bool_flags(0)
+                .expect("legacy RecursorVal flags"),
+            (true, true)
+        );
+    }
+
+    #[test]
+    fn recursor_wrong_offset_splice_and_invalid_bool_fail_closed() {
+        let mut real = vec![0u8; 80];
+        write_object_header(&mut real, 7, 72);
+        // The historical bug read +72. A true byte spliced there must not
+        // influence the real `isUnsafe` byte at +65.
+        real[72] = 1;
+        assert_eq!(
+            CompactedRegion::new(&real, 0)
+                .read_recursor_bool_flags(0)
+                .expect("real RecursorVal flags"),
+            (false, false)
+        );
+        real[65] = 2;
+        assert!(CompactedRegion::new(&real, 0)
+            .read_recursor_bool_flags(0)
+            .is_err());
+
+        write_object_header(&mut real, 8, 72);
+        assert!(CompactedRegion::new(&real, 0)
+            .read_recursor_bool_flags(0)
+            .is_err());
     }
 }

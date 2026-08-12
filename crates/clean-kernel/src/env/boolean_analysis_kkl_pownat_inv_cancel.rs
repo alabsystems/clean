@@ -49,6 +49,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the `powNat`-inv cancellation.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct CancelConsts {
     nat: Expr,
     rat: Expr,
@@ -83,6 +84,7 @@ struct CancelConsts {
     congr_arg1: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl CancelConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

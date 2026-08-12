@@ -64,6 +64,9 @@ pub(crate) enum DiagnosticSeverity {
 
 /// A diagnostic (error/warning) attached to a span.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct DiagnosticInfo {
     #[serde(skip)]
     pub(crate) span_start: usize,
@@ -131,6 +134,9 @@ pub(crate) enum DocumentSymbolKind {
 
 /// A symbol in the document outline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct DocumentSymbol {
     pub(crate) name: String,
     pub(crate) kind: DocumentSymbolKind,

@@ -5,7 +5,6 @@
 //! Tests (slice 6) for the `clean replacement` command group,
 //! split from the original single-file `cmd_replacement.rs` tests module.
 
-use super::support::*;
 use crate::cmd_replacement::*;
 
 #[test]
@@ -84,7 +83,27 @@ fn replacement_status_json_is_deterministic_for_rust_first_inventory() {
     let rust_owned_proofs = value["readiness_accounting"]["rust_owned_python_wrapper_proofs"]
         .as_array()
         .expect("rust_owned_python_wrapper_proofs should be an array");
-    assert_eq!(rust_owned_proofs.len(), 4);
+    // Commit fc6794736 ("release: remove ghost readiness dependencies") retired the fourth
+    // entry, `mathverse-download-pytest`. The Python command it claimed credit for replacing
+    // (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest
+    // tests/test_download_mathverse_library.py`) was never tracked in this repository, so
+    // counting it as a replaced Python wrapper was a ghost dependency — a migration proof for
+    // a wrapper that never existed. The Rust capability was not lost: the row is still
+    // Rust-owned, still replacement-critical, and still exposed as the `clean mathverse
+    // download` product surface — pinned by
+    // `part_03::retired_ghost_python_wrapper_keeps_its_rust_capability`. Assert survivors by
+    // name rather than by count, so a genuine drop reports which row disappeared.
+    assert_eq!(
+        rust_owned_proofs
+            .iter()
+            .filter_map(|proof| proof["id"].as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "system-health-release-json",
+            "trust-boundary-audit-report",
+            "release-issue-hygiene",
+        ]
+    );
     assert!(rust_owned_proofs
         .iter()
         .all(|proof| proof["python_path_certifying"] == false

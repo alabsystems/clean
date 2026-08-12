@@ -188,7 +188,7 @@ mod tests {
     fn test_extract_move_prover() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("example.move");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 module 0x1::example {

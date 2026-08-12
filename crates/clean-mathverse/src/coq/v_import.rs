@@ -29,18 +29,6 @@ pub(crate) enum DeclKind {
 }
 
 impl DeclKind {
-    fn has_value(self) -> bool {
-        !matches!(
-            self,
-            Self::Theorem
-                | Self::Lemma
-                | Self::Axiom
-                | Self::Parameter
-                | Self::Hypothesis
-                | Self::Variable
-        )
-    }
-
     /// Map Coq `.v` surface-syntax kind to the shard-level [`ShardDeclKind`].
     /// Theorem/Lemma → Theorem; Axiom/Parameter/Hypothesis/Variable → Axiom;
     /// Inductive/CoInductive/Record/Class → Inductive;

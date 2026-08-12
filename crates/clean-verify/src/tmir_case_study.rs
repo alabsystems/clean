@@ -31,7 +31,7 @@
 
 #[cfg(test)]
 mod tests {
-    use clean_kernel::{BinderInfo, Declaration, Environment, Expr, ExprKind, Level, Name};
+    use clean_kernel::{BinderInfo, Declaration, Environment, Expr, Level, Name};
 
     // =====================================================================
     // Helper: universe level 1 (Type)

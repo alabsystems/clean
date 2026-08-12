@@ -73,10 +73,7 @@ fn test_gen_function_abs() {
         }],
         body: Box::new(CStmt::if_else(
             CExpr::binop(BinOp::Lt, CExpr::var("n"), CExpr::int(0)),
-            CStmt::return_stmt(Some(CExpr::unary(
-                crate::expr::UnaryOp::Neg,
-                CExpr::var("n"),
-            ))),
+            CStmt::return_stmt(Some(CExpr::unary(UnaryOp::Neg, CExpr::var("n")))),
             CStmt::return_stmt(Some(CExpr::var("n"))),
         )),
         variadic: false,
@@ -111,7 +108,7 @@ fn test_division_vc() {
 fn test_pointer_deref_vc() {
     let mut vcgen = VCGen::new();
     let expr = CExpr::UnaryOp {
-        op: crate::expr::UnaryOp::Deref,
+        op: UnaryOp::Deref,
         operand: Box::new(CExpr::var("p")),
     };
     let postcond = Spec::True;
@@ -164,7 +161,7 @@ fn test_wp_while_auto_inference() {
     let while_stmt = CStmt::While {
         cond: CExpr::binop(BinOp::Lt, CExpr::var("i"), CExpr::var("n")),
         body: Box::new(CStmt::Expr(CExpr::UnaryOp {
-            op: crate::expr::UnaryOp::PostInc,
+            op: UnaryOp::PostInc,
             operand: Box::new(CExpr::var("i")),
         })),
     };
@@ -204,7 +201,7 @@ fn test_wp_while_search_inference() {
         cond: CExpr::BinOp {
             op: BinOp::LogAnd,
             left: Box::new(CExpr::UnaryOp {
-                op: crate::expr::UnaryOp::LogNot,
+                op: UnaryOp::LogNot,
                 operand: Box::new(CExpr::var("found")),
             }),
             right: Box::new(CExpr::binop(BinOp::Lt, CExpr::var("i"), CExpr::var("n"))),
@@ -226,7 +223,7 @@ fn test_wp_while_search_inference() {
                 else_stmt: None,
             },
             CStmt::Expr(CExpr::UnaryOp {
-                op: crate::expr::UnaryOp::PostInc,
+                op: UnaryOp::PostInc,
                 operand: Box::new(CExpr::var("i")),
             }),
         ])),
@@ -379,7 +376,7 @@ fn test_invariant_inference_counter_loop() {
     // for (i = 0; i < n; i++)
     let cond = CExpr::binop(BinOp::Lt, CExpr::var("i"), CExpr::var("n"));
     let body = CStmt::Expr(CExpr::UnaryOp {
-        op: crate::expr::UnaryOp::PostInc,
+        op: UnaryOp::PostInc,
         operand: Box::new(CExpr::var("i")),
     });
 
@@ -406,7 +403,7 @@ fn test_invariant_inference_decrementing_loop() {
     // while (i > 0) i--
     let cond = CExpr::binop(BinOp::Gt, CExpr::var("i"), CExpr::int(0));
     let body = CStmt::Expr(CExpr::UnaryOp {
-        op: crate::expr::UnaryOp::PostDec,
+        op: UnaryOp::PostDec,
         operand: Box::new(CExpr::var("i")),
     });
 
@@ -542,7 +539,7 @@ fn test_search_pattern() {
     let cond = CExpr::BinOp {
         op: BinOp::LogAnd,
         left: Box::new(CExpr::UnaryOp {
-            op: crate::expr::UnaryOp::LogNot,
+            op: UnaryOp::LogNot,
             operand: Box::new(CExpr::var("found")),
         }),
         right: Box::new(CExpr::BinOp {
@@ -1680,13 +1677,13 @@ fn test_collect_local_variables() {
     let stmt = CStmt::Block(vec![
         CStmt::Decl(VarDecl {
             name: "x".to_string(),
-            ty: crate::types::CType::int(),
+            ty: CType::int(),
             storage: StorageClass::Auto,
             init: None,
         }),
         CStmt::Decl(VarDecl {
             name: "y".to_string(),
-            ty: crate::types::CType::int(),
+            ty: CType::int(),
             storage: StorageClass::Auto,
             init: Some(Initializer::Expr(CExpr::IntLit(0))),
         }),
@@ -1706,7 +1703,7 @@ fn test_collect_local_variables_nested() {
     let stmt = CStmt::Block(vec![
         CStmt::Decl(VarDecl {
             name: "outer".to_string(),
-            ty: crate::types::CType::int(),
+            ty: CType::int(),
             storage: StorageClass::Auto,
             init: None,
         }),
@@ -1714,7 +1711,7 @@ fn test_collect_local_variables_nested() {
             cond: CExpr::IntLit(1),
             then_stmt: Box::new(CStmt::Decl(VarDecl {
                 name: "inner".to_string(),
-                ty: crate::types::CType::int(),
+                ty: CType::int(),
                 storage: StorageClass::Auto,
                 init: None,
             })),
@@ -1764,14 +1761,14 @@ fn test_gen_function_assigns_with_locals() {
     let func = FuncDef {
         is_noreturn: false,
         name: "foo".to_string(),
-        return_type: crate::types::CType::Void,
-        params: vec![FuncParam::new("n", crate::types::CType::int())],
+        return_type: CType::Void,
+        params: vec![FuncParam::new("n", CType::int())],
         variadic: false,
         storage: StorageClass::Auto,
         body: Box::new(CStmt::Block(vec![
             CStmt::Decl(VarDecl {
                 name: "x".to_string(),
-                ty: crate::types::CType::int(),
+                ty: CType::int(),
                 storage: StorageClass::Auto,
                 init: Some(Initializer::Expr(CExpr::IntLit(0))),
             }),
@@ -1829,8 +1826,8 @@ fn test_gen_function_assigns_violation() {
     let func = FuncDef {
         is_noreturn: false,
         name: "bar".to_string(),
-        return_type: crate::types::CType::Void,
-        params: vec![FuncParam::new("n", crate::types::CType::int())],
+        return_type: CType::Void,
+        params: vec![FuncParam::new("n", CType::int())],
         variadic: false,
         storage: StorageClass::Auto,
         body: Box::new(CStmt::Expr(CExpr::BinOp {

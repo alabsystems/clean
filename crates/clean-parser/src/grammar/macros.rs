@@ -639,6 +639,29 @@ impl Parser {
         self.pending_recovery_diagnostics.push(pending);
     }
 
+    /// Defer a recovery diagnostic that NAMES the tactic whose grammar failed.
+    ///
+    /// Measurement integrity (T0): a tactic-block recovery degrades the whole
+    /// declaration to a synthetic sorry. Without the tactic's name in the
+    /// message the user is told only that the declaration "uses synthetic
+    /// sorry" — no diagnostic anywhere names the construct that did nothing.
+    /// The name comes from `tactic_in_progress`, set by `Parser::tactic`.
+    pub(super) fn defer_tactic_parser_recovery(&mut self, construct: &str, err: &ParseError) {
+        let failure_byte = self.current_span().start;
+        let mut pending = self.pending_parser_recovery(construct, err, failure_byte);
+        if let Some(head) = self.tactic_chain.first().cloned() {
+            let chain = self
+                .tactic_chain
+                .iter()
+                .map(|t| format!("`{t}`"))
+                .collect::<Vec<_>>()
+                .join(" > ");
+            pending.message = format!("unsupported tactic syntax {chain}: {}", pending.message);
+            pending.tactic = Some(head);
+        }
+        self.pending_recovery_diagnostics.push(pending);
+    }
+
     pub(super) fn flush_pending_parser_recoveries(&mut self) {
         let pending = std::mem::take(&mut self.pending_recovery_diagnostics);
         for diag in pending {
@@ -693,6 +716,7 @@ impl Parser {
             expected_indent: indent_ctx.as_ref().map(|ctx| ctx.column),
             actual_indent: Some(failure_col),
             message: err.to_string(),
+            tactic: None,
         }
     }
 
@@ -715,6 +739,7 @@ impl Parser {
             expected_indent: pending.expected_indent,
             actual_indent: pending.actual_indent,
             message: pending.message,
+            tactic: pending.tactic,
         });
     }
 
@@ -729,6 +754,8 @@ impl Parser {
                 | TokenKind::Axiom
                 | TokenKind::Example
                 | TokenKind::Inductive
+                | TokenKind::Codata
+                | TokenKind::Codef
                 | TokenKind::Structure
                 | TokenKind::Class
                 | TokenKind::Instance

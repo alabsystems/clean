@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::types::AxiomProfile;
 
 /// Base axiom profile required by the shared HOL shallow embedding.
-pub(crate) const HOL_AXIOMS: AxiomProfile = AxiomProfile(
+pub const HOL_AXIOMS: AxiomProfile = AxiomProfile(
     AxiomProfile::CLASSICAL.0 | AxiomProfile::EXTENSIONALITY.0 | AxiomProfile::HOL_EMBEDDING.0,
 );
 
@@ -97,7 +97,7 @@ impl HolAxiom {
 }
 
 /// Translate a shared HOL type into a clean kernel expression.
-pub(crate) fn hol_type_to_clean(ty: &HolType) -> Expr {
+pub fn hol_type_to_clean(ty: &HolType) -> Expr {
     match ty {
         HolType::Bool => Expr::prop(),
         HolType::Ind => Expr::const_(hol_name("Ind"), vec![]),
@@ -113,7 +113,7 @@ pub(crate) fn hol_type_to_clean(ty: &HolType) -> Expr {
 }
 
 /// Translate a shared HOL term into a clean kernel expression.
-pub(crate) fn hol_term_to_clean(tm: &HolTerm) -> Expr {
+pub fn hol_term_to_clean(tm: &HolTerm) -> Expr {
     let mut binders = Vec::new();
     hol_term_to_clean_with_binders(tm, &mut binders)
 }

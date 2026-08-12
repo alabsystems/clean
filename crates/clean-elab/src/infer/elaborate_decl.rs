@@ -451,6 +451,18 @@ impl<'a> ElabCtx<'a> {
                 })
             }
 
+            SurfaceDecl::Codef { .. } => Err(ElabError::Unsupported {
+                feature: "codef is a top-level command (handled before per-decl \
+                          elaboration); it cannot appear nested inside namespaces, \
+                          sections, or mutual blocks yet"
+                    .to_string(),
+            }),
+            SurfaceDecl::Codata { .. } => Err(ElabError::Unsupported {
+                feature: "codata is a top-level command (handled before per-decl \
+                          elaboration); it cannot appear nested inside namespaces, \
+                          sections, or mutual blocks yet"
+                    .to_string(),
+            }),
             SurfaceDecl::Structure {
                 name,
                 universe_params,
@@ -837,14 +849,14 @@ fn decl_free_surface_idents(
 )> {
     use crate::where_desugar_ext::collect_free_idents;
     let mut free = std::collections::HashSet::new();
-    let mut collect_binders =
-        |binders: &[clean_parser::SurfaceBinder], free: &mut std::collections::HashSet<String>| {
-            for b in binders {
-                if let Some(ty) = &b.ty {
-                    free.extend(collect_free_idents(ty));
-                }
+    let collect_binders = |binders: &[clean_parser::SurfaceBinder],
+                           free: &mut std::collections::HashSet<String>| {
+        for b in binders {
+            if let Some(ty) = &b.ty {
+                free.extend(collect_free_idents(ty));
             }
-        };
+        }
+    };
     let own: std::collections::HashSet<String> = match decl {
         SurfaceDecl::Def {
             binders,

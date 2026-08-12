@@ -103,12 +103,10 @@ impl Specification {
         // Pure computation: ZERO axiom_deps.
         self.add_definition(SpecDefinition {
             name: "the_red_env_iota_nonvacuous".to_string(),
-            type_src: concat!(
-                "iota_step (red_rec the_red_env) \
+            type_src: "iota_step (red_rec the_red_env) \
                  kcre_witness_nat_zero_redex \
                  kcre_witness_nat_zero_reduct"
-            )
-            .to_string(),
+                .to_string(),
             value_src: Some(
                 "Eq.refl (OptionType KExpr) \
                  (OptionType.some KExpr kcre_witness_nat_zero_reduct)"
@@ -140,12 +138,10 @@ impl Specification {
         // computation: ZERO axiom_deps.
         self.add_definition(SpecDefinition {
             name: "the_red_env_delta_nonvacuous".to_string(),
-            type_src: concat!(
-                "delta_step (red_def the_red_env) \
+            type_src: "delta_step (red_def the_red_env) \
                  (KExpr.const kcre_witness_delta_head (ListType.nil Level)) \
                  kcre_witness_delta_value"
-            )
-            .to_string(),
+                .to_string(),
             value_src: Some(
                 "Eq.refl (OptionType KExpr) \
                  (OptionType.some KExpr kcre_witness_delta_value)"

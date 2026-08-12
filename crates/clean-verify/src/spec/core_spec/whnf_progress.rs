@@ -99,6 +99,23 @@ use crate::spec::error::SpecError;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 
+// ── The whnf loop's four source strings, shared ──────────────────────────────
+//
+// These are `pub(super)` constants rather than inline literals so that
+// `iota_prepass.rs` can DERIVE its pre-pass variants from them by explicit
+// substitution instead of re-typing them. A re-typed copy would drift the moment
+// either version changed, and four verbatim copies of one string is exactly what
+// turned a single false premise into nine vacuous declarations (see the `HNF`
+// dedup in `nf_head.rs`). One source, one place to change.
+
+pub(super) const SRC_OPT_APP_ILIFT: &str = r"def opt_app_ilift (renv : RedEnv) (f : KExpr) (a : KExpr) (o : OptionType KExpr) : OptionType KExpr := OptionType.rec KExpr (fun (_o : OptionType KExpr) => OptionType KExpr) (iota_reduct (red_rec renv) (KExpr.app f a)) (fun (f2 : KExpr) => OptionType.some KExpr (KExpr.app f2 a)) o";
+
+pub(super) const SRC_REDUCE_APP_HEAD_RED: &str = r"def reduce_app_head_red (renv : RedEnv) (a : KExpr) (f : KExpr) (cf : OptionType KExpr) : OptionType KExpr := KExpr.rec (fun (_e : KExpr) => OptionType KExpr) (fun (n : Level) => opt_app_ilift renv f a cf) (fun (i : Nat) => opt_app_ilift renv f a cf) (fun (g : KExpr) (b : KExpr) (_cg : OptionType KExpr) (_cb : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => OptionType.some KExpr (instantiate b a)) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (n : Name) (us : ListType Level) => opt_app_ilift renv f a cf) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_c1 : OptionType KExpr) (_c2 : OptionType KExpr) (_c3 : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (s : Name) (i : Nat) (sub : KExpr) (_csub : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (v : Nat) => opt_app_ilift renv f a cf) f";
+
+pub(super) const SRC_REDUCE_ONCE_RED: &str = r"def reduce_once_red (renv : RedEnv) (e : KExpr) : OptionType KExpr := KExpr.rec (fun (_e : KExpr) => OptionType KExpr) (fun (n : Level) => OptionType.none KExpr) (fun (i : Nat) => OptionType.none KExpr) (fun (f : KExpr) (a : KExpr) (cf : OptionType KExpr) (_ca : OptionType KExpr) => reduce_app_head_red renv a f cf) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => OptionType.none KExpr) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => OptionType.none KExpr) (fun (n : Name) (us : ListType Level) => defval_for (red_def renv) n) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_c1 : OptionType KExpr) (_c2 : OptionType KExpr) (_c3 : OptionType KExpr) => OptionType.some KExpr (instantiate b v)) (fun (s : Name) (i : Nat) (sub : KExpr) (csub : OptionType KExpr) => opt_proj_lift s i csub) (fun (v : Nat) => OptionType.none KExpr) e";
+
+pub(super) const SRC_WHNF_FUEL_RED: &str = r"def whnf_fuel_red (renv : RedEnv) (fuel : Nat) (e : KExpr) : OptionType KExpr := Nat.rec (fun (_k : Nat) => KExpr -> OptionType KExpr) (fun (e0 : KExpr) => OptionType.none KExpr) (fun (k : Nat) (ih : KExpr -> OptionType KExpr) => fun (e0 : KExpr) => loop_dispatch (reduce_once_red renv e0) e0 ih) fuel e";
+
 impl Specification {
     /// Register the const-free/bvar-free WHNF progress (exit-shape) brick.
     ///
@@ -522,7 +539,7 @@ impl Specification {
         // recursor ι at the current application node (the model's
         // `| none => iotaReduct renv (.app f a)` arm); a stepped head relifts.
         self.add_recursive_def(
-            r"def opt_app_ilift (renv : RedEnv) (f : KExpr) (a : KExpr) (o : OptionType KExpr) : OptionType KExpr := OptionType.rec KExpr (fun (_o : OptionType KExpr) => OptionType KExpr) (iota_reduct (red_rec renv) (KExpr.app f a)) (fun (f2 : KExpr) => OptionType.some KExpr (KExpr.app f2 a)) o",
+            SRC_OPT_APP_ILIFT,
             "opt_app_ilift renv f a o: the 3-way loop's application dispatch tail \
              — a stepped head relifts (some f2 becomes some (app f2 a)); a SILENT \
              head falls through to the whole-spine recursor ι attempt \
@@ -533,7 +550,7 @@ impl Specification {
         // The 3-way app-node head dispatch: lam β-fires, every other head
         // routes through the ι-aware lift.
         self.add_recursive_def(
-            r"def reduce_app_head_red (renv : RedEnv) (a : KExpr) (f : KExpr) (cf : OptionType KExpr) : OptionType KExpr := KExpr.rec (fun (_e : KExpr) => OptionType KExpr) (fun (n : Level) => opt_app_ilift renv f a cf) (fun (i : Nat) => opt_app_ilift renv f a cf) (fun (g : KExpr) (b : KExpr) (_cg : OptionType KExpr) (_cb : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => OptionType.some KExpr (instantiate b a)) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (n : Name) (us : ListType Level) => opt_app_ilift renv f a cf) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_c1 : OptionType KExpr) (_c2 : OptionType KExpr) (_c3 : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (s : Name) (i : Nat) (sub : KExpr) (_csub : OptionType KExpr) => opt_app_ilift renv f a cf) (fun (v : Nat) => opt_app_ilift renv f a cf) f",
+            SRC_REDUCE_APP_HEAD_RED,
             "reduce_app_head_red renv a f cf: the 3-way executable app-node \
              dispatch — a lam head β-fires (instantiate b a); any other head \
              lifts its own reduct through opt_app_ilift, whose none arm attempts \
@@ -542,7 +559,7 @@ impl Specification {
 
         // THE 3-WAY EXECUTABLE STEP (round-5 reduceOnceRed, 9-arm).
         self.add_recursive_def(
-            r"def reduce_once_red (renv : RedEnv) (e : KExpr) : OptionType KExpr := KExpr.rec (fun (_e : KExpr) => OptionType KExpr) (fun (n : Level) => OptionType.none KExpr) (fun (i : Nat) => OptionType.none KExpr) (fun (f : KExpr) (a : KExpr) (cf : OptionType KExpr) (_ca : OptionType KExpr) => reduce_app_head_red renv a f cf) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => OptionType.none KExpr) (fun (ty : KExpr) (b : KExpr) (_cty : OptionType KExpr) (_cb : OptionType KExpr) => OptionType.none KExpr) (fun (n : Name) (us : ListType Level) => defval_for (red_def renv) n) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_c1 : OptionType KExpr) (_c2 : OptionType KExpr) (_c3 : OptionType KExpr) => OptionType.some KExpr (instantiate b v)) (fun (s : Name) (i : Nat) (sub : KExpr) (csub : OptionType KExpr) => opt_proj_lift s i csub) (fun (v : Nat) => OptionType.none KExpr) e",
+            SRC_REDUCE_ONCE_RED,
             "reduce_once_red renv e: THE 3-WAY EXECUTABLE single weak-head step \
              (round-5 reduceOnceRed port, X17a) — β at a lam-headed application, \
              ζ at a let, bare-const δ against the DEFINITION component only \
@@ -555,7 +572,7 @@ impl Specification {
 
         // The 3-way fuel loop (same generic loop_dispatch).
         self.add_recursive_def(
-            r"def whnf_fuel_red (renv : RedEnv) (fuel : Nat) (e : KExpr) : OptionType KExpr := Nat.rec (fun (_k : Nat) => KExpr -> OptionType KExpr) (fun (e0 : KExpr) => OptionType.none KExpr) (fun (k : Nat) (ih : KExpr -> OptionType KExpr) => fun (e0 : KExpr) => loop_dispatch (reduce_once_red renv e0) e0 ih) fuel e",
+            SRC_WHNF_FUEL_RED,
             "whnf_fuel_red renv fuel e: the fuel-bounded 3-way \
              reduce-until-fixpoint loop over reduce_once_red — none is the \
              honest fuel bail, some r means the loop reached a reduce_once_red \

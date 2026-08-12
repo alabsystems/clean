@@ -6,14 +6,10 @@
 //! `embed_map_option`, `embed_id_bnf`. Moved verbatim from the original
 //! single-file `datatypes` module; behaviour is byte-identical.
 
-use std::collections::BTreeMap;
-
-use clean_kernel::expr::FVarId;
 use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::{BinderInfo, Expr};
 
-use super::super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
+use super::super::super::isabelle_pure::IsaType;
 use super::super::*;
 
 impl Ctx {

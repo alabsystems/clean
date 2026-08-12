@@ -54,7 +54,7 @@ fn domain_axioms(env: &Environment, name: &str) -> Vec<String> {
         .axiom_deps(&Name::from_string(name))
         .unwrap_or_else(|| panic!("{name} should be registered"))
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     v.sort();
     v
@@ -293,7 +293,7 @@ fn test_check_refutes_sound_opt_in_is_now_proved_theorem() {
         .axiom_deps(&Name::from_string(names::CHECK_REFUTES_SOUND))
         .expect("registered")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     axs.sort();
     assert!(

@@ -140,7 +140,7 @@ fn test_polymorphic_three_mut_do_state_projects_reassigns_and_kernel_checks() {
         ("y".to_string(), type_0.clone()),
         ("z".to_string(), type_1.clone()),
     ];
-    let sigma = super::super::elab_do_prod::build_sigma_type(&ctx, &state_types)
+    let sigma = elab_do_prod::build_sigma_type(&ctx, &state_types)
         .expect("polymorphic do-state product type");
     let acc_fvar = ctx.push_local("__do_acc".to_string(), sigma.clone());
     ctx.do_loop_ctx = Some(DoLoopContext {

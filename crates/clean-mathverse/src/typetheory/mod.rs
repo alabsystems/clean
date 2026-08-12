@@ -81,7 +81,7 @@ pub enum AgdaDeclKind {
 }
 
 /// Import declarations from an Agda `.agda` file.
-pub(crate) fn import_agda_file(path: &Path) -> Result<Vec<AgdaDeclaration>, TypeTheoryError> {
+pub fn import_agda_file(path: &Path) -> Result<Vec<AgdaDeclaration>, TypeTheoryError> {
     let raw_text = std::fs::read_to_string(path)?;
     let text = if path.to_string_lossy().ends_with(".lagda.md") {
         extract_literate_agda(&raw_text)
@@ -249,7 +249,7 @@ pub enum IdrisDeclKind {
 }
 
 /// Import declarations from an Idris 2 `.idr` file.
-pub(crate) fn import_idris_file(path: &Path) -> Result<Vec<IdrisDeclaration>, TypeTheoryError> {
+pub fn import_idris_file(path: &Path) -> Result<Vec<IdrisDeclaration>, TypeTheoryError> {
     let text = std::fs::read_to_string(path)?;
     let filename = path.display().to_string();
     let mut decls = Vec::new();
@@ -416,7 +416,7 @@ impl TypeTheoryImportStats {
 }
 
 /// Batch import Agda files from a directory.
-pub(crate) fn import_agda_dir(
+pub fn import_agda_dir(
     dir: &Path,
 ) -> Result<(Vec<AgdaDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -449,7 +449,7 @@ pub(crate) fn import_agda_dir(
 }
 
 /// Batch import Idris 2 files from a directory.
-pub(crate) fn import_idris_dir(
+pub fn import_idris_dir(
     dir: &Path,
 ) -> Result<(Vec<IdrisDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -483,7 +483,7 @@ pub(crate) fn import_idris_dir(
 // ─── Batch imports for new type-theory submodules ────────────────────────
 
 /// Batch import Dedukti files from a directory (covers `.dk` format).
-pub(crate) fn import_dedukti_dir(
+pub fn import_dedukti_dir(
     dir: &Path,
 ) -> Result<(Vec<dedukti::DeduktiDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -506,7 +506,7 @@ pub(crate) fn import_dedukti_dir(
 }
 
 /// Batch import Lambdapi files from a directory.
-pub(crate) fn import_lambdapi_dir(
+pub fn import_lambdapi_dir(
     dir: &Path,
 ) -> Result<(Vec<lambdapi::LambdapiDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -531,7 +531,7 @@ pub(crate) fn import_lambdapi_dir(
 /// Batch import cubical type theory files from a directory.
 ///
 /// Collects `.ctt`, `.cooltt`, and `.red` files.
-pub(crate) fn import_cubical_dir(
+pub fn import_cubical_dir(
     dir: &Path,
 ) -> Result<(Vec<cubical::CubicalDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -567,7 +567,7 @@ pub(crate) fn import_cubical_dir(
 ///
 /// Collects `.thm` (Abella), `.bel` (Beluga), `.elf` (Twelf),
 /// `.ftl` (Naproche), and `.scm` (Minlog) files.
-pub(crate) fn import_lf_dir(
+pub fn import_lf_dir(
     dir: &Path,
 ) -> Result<
     (
@@ -611,7 +611,7 @@ pub(crate) fn import_lf_dir(
 ///
 /// Collects `.ard` (Arend), `.mm0`/`.mm1` (Metamath Zero),
 /// `.kind2`/`.kind` (Kind2), and `.rzk` (Rzk) files.
-pub(crate) fn import_hott_dir(
+pub fn import_hott_dir(
     dir: &Path,
 ) -> Result<(Vec<hott::HottDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -649,7 +649,7 @@ pub(crate) fn import_hott_dir(
 /// Batch import "other" type theory files from a directory.
 ///
 /// Collects `.ced` (Cedille), `.sats`/`.dats` (ATS2), and `.clj` (LaTTe) files.
-pub(crate) fn import_other_tt_dir(
+pub fn import_other_tt_dir(
     dir: &Path,
 ) -> Result<(Vec<other::OtherTTDeclaration>, TypeTheoryImportStats), TypeTheoryError> {
     let mut all_decls = Vec::new();
@@ -684,7 +684,7 @@ pub(crate) fn import_other_tt_dir(
 
 /// Assign axiom profile for Agda.
 #[must_use]
-pub(crate) fn agda_axiom_profile(decl: &AgdaDeclaration) -> AxiomProfile {
+pub fn agda_axiom_profile(decl: &AgdaDeclaration) -> AxiomProfile {
     if decl.is_postulate {
         AxiomProfile::AGDA_CUBICAL
     } else {
@@ -694,7 +694,7 @@ pub(crate) fn agda_axiom_profile(decl: &AgdaDeclaration) -> AxiomProfile {
 
 /// Assign axiom profile for Idris 2.
 #[must_use]
-pub(crate) fn idris_axiom_profile(decl: &IdrisDeclaration) -> AxiomProfile {
+pub fn idris_axiom_profile(decl: &IdrisDeclaration) -> AxiomProfile {
     if matches!(decl.kind, IdrisDeclKind::Postulate) {
         AxiomProfile::IDRIS_QTT
     } else {
@@ -708,7 +708,7 @@ pub(crate) fn idris_axiom_profile(decl: &IdrisDeclaration) -> AxiomProfile {
 /// `PartiallyAxiomatized` until kernel-replay support arrives; the
 /// `decl` argument is kept for forward compatibility.
 #[must_use]
-pub(crate) fn agda_trust_level(_decl: &AgdaDeclaration) -> TrustLevel {
+pub fn agda_trust_level(_decl: &AgdaDeclaration) -> TrustLevel {
     TrustLevel::PartiallyAxiomatized
 }
 
@@ -718,13 +718,13 @@ pub(crate) fn agda_trust_level(_decl: &AgdaDeclaration) -> TrustLevel {
 /// currently land at `PartiallyAxiomatized`; the `decl` argument is kept
 /// for forward compatibility when these classes diverge.
 #[must_use]
-pub(crate) fn idris_trust_level(_decl: &IdrisDeclaration) -> TrustLevel {
+pub fn idris_trust_level(_decl: &IdrisDeclaration) -> TrustLevel {
     TrustLevel::PartiallyAxiomatized
 }
 
 /// Convert Agda declaration to Mathverse provenance.
 #[must_use]
-pub(crate) fn agda_provenance(decl: &AgdaDeclaration) -> Provenance {
+pub fn agda_provenance(decl: &AgdaDeclaration) -> Provenance {
     Provenance {
         source: SourceSystem::Agda,
         original_name: decl.name.clone(),
@@ -735,7 +735,7 @@ pub(crate) fn agda_provenance(decl: &AgdaDeclaration) -> Provenance {
 
 /// Convert Idris 2 declaration to Mathverse provenance.
 #[must_use]
-pub(crate) fn idris_provenance(decl: &IdrisDeclaration) -> Provenance {
+pub fn idris_provenance(decl: &IdrisDeclaration) -> Provenance {
     Provenance {
         source: SourceSystem::Idris2,
         original_name: decl.name.clone(),

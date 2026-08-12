@@ -14,6 +14,7 @@ pub(crate) const NAMESPACE: &str = "Topology.Suspension";
 pub(crate) const DECL_COUNT: usize = 22;
 
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const DECL_NAMES: [&str; DECL_COUNT] = [
     "Topology.Suspension",
     "Topology.Suspension.north",
@@ -46,6 +47,8 @@ struct SuspCtx {
     u_level: Level,
     v_level: Level,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     w_level: Level,
     type_u: Expr,
     type_v: Expr,

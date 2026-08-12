@@ -53,6 +53,17 @@ pub(crate) fn all_features() -> Vec<&'static FeatureDescriptor> {
     v.extend(crate::cmd_replacement::FEATURES);
     v.extend(crate::cmd_factory::FEATURES);
     v.extend(crate::cmd_math::FEATURES);
+    // `clean math-map ingest` + `clean math-map keys list|verify` — the
+    // user-facing entry point for the fail-closed MathMap/Harmonic Lean
+    // patch-bundle ingest pipeline in `clean_mathverse::math_map`.
+    v.extend(crate::cmd_math_map::FEATURES);
+    // `clean drift snapshot|diff` — the user-facing entry point for the
+    // statement-preservation snapshot/diff engine in `clean_mathverse::drift`.
+    v.extend(crate::cmd_drift::FEATURES);
+    // `clean false-controls run|replay-attempt` — the user-facing entry point
+    // for the known-bad-input probe engine in
+    // `clean_mathverse::false_control_suite`.
+    v.extend(crate::cmd_false_controls::FEATURES);
     v.extend(crate::cmd_project::FEATURES);
     v.extend(crate::cmd_attempts::FEATURES);
     // `clean prove run/status/list` — submit a Lean goal to a remote / automated

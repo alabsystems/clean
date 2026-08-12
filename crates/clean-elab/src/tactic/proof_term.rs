@@ -120,7 +120,13 @@ pub fn intro(state: &mut ProofState, name: &str) -> TacticResult {
             // earlier sibling's advanced `next_fvar` leak into the next sibling's
             // first `intro`, producing a too-high id that `close_fvars` could not
             // convert → fail-closed `ProofNotProduced`.
-            let base = state.goal_fvar_base(&goal);
+            // `goal_binder_base`, not `goal_fvar_base`: a goal whose context was
+            // narrowed by `clear` keeps the removed local in its meta scope and
+            // under a live `lambda`, so the context alone would hand back an id
+            // that is still bound (capture). Identical to `goal_fvar_base`
+            // wherever nothing has narrowed, so the sibling invariant below holds
+            // unchanged.
+            let base = state.goal_binder_base(&goal);
             let fvar = FVarId::new(base);
 
             // Keep the global counter monotonic past this allocation so unrelated

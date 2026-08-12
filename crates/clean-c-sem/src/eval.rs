@@ -883,7 +883,7 @@ impl State {
 fn resolve_field_designator<'a>(
     designator: &Designator,
     fields: &'a [crate::types::StructField],
-) -> UBResult<(usize, &'a crate::types::CType)> {
+) -> UBResult<(usize, &'a CType)> {
     let name = match designator {
         Designator::Field(name) => name,
         Designator::Chain(ds) => match ds.first() {
@@ -2248,8 +2248,8 @@ mod tests {
         let ty = CType::Struct {
             name: Some("Point".to_string()),
             fields: vec![
-                crate::types::StructField::new("x", CType::int()),
-                crate::types::StructField::new("y", CType::int()),
+                StructField::new("x", CType::int()),
+                StructField::new("y", CType::int()),
             ],
         };
         let val = state.eval_expr_to_value(&CExpr::AlignOf(ty)).unwrap();
@@ -2602,7 +2602,7 @@ mod tests {
         // struct { int (*cb)(int); } s; s.cb = inc; s.cb(7);  => 8
         let struct_ty = CType::Struct {
             name: Some("Ops".to_string()),
-            fields: vec![crate::types::StructField::new("cb", fn_ptr_int_to_int())],
+            fields: vec![StructField::new("cb", fn_ptr_int_to_int())],
         };
         let stmt = CStmt::block(vec![
             CStmt::decl("s", struct_ty),
@@ -2752,8 +2752,8 @@ mod tests {
         let complete = CType::Struct {
             name: Some("Pair".to_string()),
             fields: vec![
-                crate::types::StructField::new("a", CType::int()),
-                crate::types::StructField::new("b", CType::int()),
+                StructField::new("a", CType::int()),
+                StructField::new("b", CType::int()),
             ],
         };
         let val = state
@@ -2781,8 +2781,8 @@ mod tests {
         let struct_ty = CType::Struct {
             name: Some("S".to_string()),
             fields: vec![
-                crate::types::StructField::new("x", CType::int()),
-                crate::types::StructField::new("arr", CType::incomplete_array(CType::int())),
+                StructField::new("x", CType::int()),
+                StructField::new("arr", CType::incomplete_array(CType::int())),
             ],
         };
         let expr = CExpr::SizeOf(SizeOfArg::Type(struct_ty));

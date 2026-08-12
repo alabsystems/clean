@@ -66,6 +66,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the reverse-order keystone.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct RevSqConsts {
     #[cfg(test)]
     prop: Expr,
@@ -115,6 +116,7 @@ pub(crate) struct RevSqConsts {
     quot_mk: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl RevSqConsts {
     pub(crate) fn new() -> Self {
         let lvl1 = Level::succ(Level::zero());

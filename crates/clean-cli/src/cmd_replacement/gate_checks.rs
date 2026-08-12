@@ -179,11 +179,13 @@ pub(crate) fn validate_kernel_differential_artifacts(
     Ok(())
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn validate_kernel_soundness_gate_preflight() -> Result<(), ReplacementError> {
     let source = read_repo_artifact(KERNEL_SOUNDNESS_GATE_PATH)?;
     validate_kernel_soundness_gate_preflight_source(&source)
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn validate_kernel_soundness_gate_preflight_source(
     source: &str,
 ) -> Result<(), ReplacementError> {

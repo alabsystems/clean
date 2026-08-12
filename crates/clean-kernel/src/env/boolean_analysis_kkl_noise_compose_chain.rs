@@ -140,6 +140,7 @@ impl ComposeConsts {
     /// The eigen lemma's NATIVE z-integrand `fun z => W_{1/3}(z,y)·χ_S(z)` (the
     /// product in the order the landed `noiseDensity_apply_chi_eigen` spells it).
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eigen_native_zsum(&self, parent: &EnvDeclBuilder, n: &Expr, s: &Expr, y: &Expr) -> Expr {
         let mut zb = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);

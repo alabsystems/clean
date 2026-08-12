@@ -8,11 +8,24 @@
 //! `Declaration::Definition` (no axioms):
 //!
 //! ```text
-//! @[reducible] def flip {α : Sort u} {β : Sort v} {γ : Sort w}
-//!     (f : α → β → γ) (b : β) (a : α) : γ := f a b
+//! @[inline] def flip {α : Sort u} {β : Sort v} {φ : Sort w}
+//!     (f : α → β → φ) : β → α → φ := fun b a => f a b
 //! ```
 //!
-//! Lean source: `Init/Prelude.lean` (toolchain `v4.30.0-rc2`).
+//! Lean source: `Init/Core.lean:65` (toolchain `v4.30.0-rc2`) — re-read from
+//! the pinned toolchain 2026-07-30; the original citation here said
+//! `Init/Prelude.lean` / `@[reducible]`, and both were wrong. Clean registers
+//! the constant `is_reducible: true` while Lean marks it `@[inline]` (a
+//! compiler hint, not a transparency setting), so Clean unfolds `flip` at
+//! reducible transparency where Lean would not. That is a delta step either
+//! way — sound, and only defeq *completeness* differs — but it is a
+//! divergence, so do not cite this file as `@[reducible]` parity.
+//!
+//! Because the constant occupies the bare root name, a source file that writes
+//! its own `def flip …` is a genuine duplicate declaration and is rejected —
+//! which is also what `lean` does ("`flip` has already been declared").
+//! Pinned by `clean-cli`'s
+//! `tests::check_file_redefining_prelude_flip_is_a_loud_duplicate`.
 //!
 //! Like `Function.comp`, Clean already desugars the *partially applied* form at
 //! the surface level: `flip g` (one argument) rewrites to the defeq
@@ -43,10 +56,10 @@ impl Environment {
     /// `flip : {α : Sort u} → {β : Sort v} → {γ : Sort w} → (α → β → γ) → β → α → γ`
     /// `  := fun {α} {β} {γ} f b a => f a b`.
     ///
-    /// Lean fidelity: `Init/Prelude.lean`
-    /// `@[reducible] def flip {α β γ} (f : α → β → γ) (b : β) (a : α) : γ := f a b`.
-    /// Reducible (Clean's defeq-unfolding analog of Lean's `@[reducible]`),
-    /// value is the argument-flipped application, no axioms.
+    /// Lean fidelity: `Init/Core.lean:65`
+    /// `@[inline] def flip {α β φ} (f : α → β → φ) : β → α → φ := fun b a => f a b`.
+    /// Type and value match; the transparency does not (see the module header).
+    /// Value is the argument-flipped application, no axioms.
     ///
     /// Skipped when a `flip` constant is already present (e.g. restored from a
     /// real `.olean` import), so an imported definition always wins.

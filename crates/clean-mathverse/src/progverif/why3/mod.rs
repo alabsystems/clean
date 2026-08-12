@@ -261,7 +261,7 @@ pub fn parse_why3_session_xml(session_xml: &str) -> Result<Why3Session, Why3Erro
 
 /// Known prover categories for trust classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProverCategory {
+pub enum ProverCategory {
     /// SMT solvers (Z3, CVC5, Alt-Ergo, etc.).
     Smt,
     /// First-order ATP systems (E, Vampire, SPASS, etc.).

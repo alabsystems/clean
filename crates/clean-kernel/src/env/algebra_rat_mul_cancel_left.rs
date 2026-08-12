@@ -82,6 +82,8 @@ struct CancelLeftConsts {
     or_c: Expr,
     or_rec: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_c: Expr,
     eq_symm: Expr,
     eq_trans: Expr,
@@ -89,6 +91,7 @@ struct CancelLeftConsts {
     congr_arg: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl CancelLeftConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

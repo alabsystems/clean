@@ -138,7 +138,6 @@ pub(crate) fn decl_kind_name(byte: u8) -> &'static str {
         Ok(DeclKind::Constructor) => "constructor",
         Ok(DeclKind::Recursor) => "recursor",
         Ok(DeclKind::Quot) => "quotient",
-        Ok(_) => "other",
         Err(_) => "unknown",
     }
 }

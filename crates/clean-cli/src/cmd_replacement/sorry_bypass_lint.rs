@@ -93,6 +93,7 @@ pub(crate) fn sorry_bypass_lines_in_production(source: &str) -> Result<Vec<usize
     Ok(lines)
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn line_has_sorry_bypass(line: &str) -> bool {
     sorry_bypass_lines_in_production(line).is_ok_and(|lines| !lines.is_empty())
 }

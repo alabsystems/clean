@@ -918,7 +918,7 @@ mod tests {
         let mut dag = SmtProofDag::new();
         let a = dag.add_term(SmtTerm::Var("a".to_string(), SmtSort::Int));
         let b = dag.add_term(SmtTerm::Var("b".to_string(), SmtSort::Int));
-        let c = dag.add_term(SmtTerm::Var("c".to_string(), SmtSort::Int));
+        let _c = dag.add_term(SmtTerm::Var("c".to_string(), SmtSort::Int));
         let d = dag.add_term(SmtTerm::Var("d".to_string(), SmtSort::Int));
         let eq_ab = dag.add_term(SmtTerm::App(SmtSymbol::Named("=".to_string()), vec![a, b]));
         // Trying to prove a = d with only a = b.

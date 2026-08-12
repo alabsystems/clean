@@ -197,6 +197,7 @@ impl Environment {
     /// `NNVerify.certified_eval_composition` axiom.
     #[allow(clippy::too_many_arguments)]
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn register_certified_composition(
         &mut self,
         cc: &ComputeConsts,

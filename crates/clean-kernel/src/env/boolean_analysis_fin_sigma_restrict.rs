@@ -57,6 +57,8 @@ pub(super) struct SigmaRestrictConsts {
     pub(super) nat_lt_of_le_ne: Expr,
     pub(super) false_c: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) false_elim_l1: Expr,
     pub(super) eq1: Expr,
     pub(super) eq_symm: Expr,
@@ -115,6 +117,7 @@ impl SigmaRestrictConsts {
     }
     /// `σ x`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn app1(&self, f: &Expr, x: Expr) -> Expr {
         Expr::app(f.clone(), x)
     }

@@ -58,7 +58,7 @@ pub struct ConceptLink {
 /// Find Mathlib concepts referenced in a LaTeX statement using the seed dictionary.
 /// In production, this would also use the Mathverse Library's 5 search modes.
 #[must_use]
-pub(crate) fn find_concepts(latex: &str) -> Vec<ConceptLink> {
+pub fn find_concepts(latex: &str) -> Vec<ConceptLink> {
     let lower = latex.to_lowercase();
     let mut found = Vec::new();
 
@@ -189,7 +189,7 @@ pub struct PaperFormalization {
 
 /// An item to formalize, with metadata for dependency ordering.
 #[derive(Clone, Debug)]
-pub(crate) struct OrderableItem {
+pub struct OrderableItem {
     pub kind: String,
     pub label: String,
     pub ref_label: String,
@@ -200,7 +200,7 @@ pub(crate) struct OrderableItem {
 
 /// Order items by dependencies: definitions first (in dependency order), then theorems.
 #[must_use]
-pub(crate) fn order_by_dependencies(items: &[OrderableItem]) -> Vec<usize> {
+pub fn order_by_dependencies(items: &[OrderableItem]) -> Vec<usize> {
     use std::collections::{HashMap, HashSet};
 
     let by_label: HashMap<&str, usize> = items
@@ -261,7 +261,7 @@ pub(crate) fn order_by_dependencies(items: &[OrderableItem]) -> Vec<usize> {
 
 /// Build an LLM prompt for formalizing a LaTeX statement.
 #[must_use]
-pub(crate) fn build_formalization_prompt(
+pub fn build_formalization_prompt(
     statement_latex: &str,
     kind: &str,
     concepts: &[ConceptLink],
@@ -321,7 +321,7 @@ pub(crate) fn build_formalization_prompt(
 /// Extract Lean 4 code from an LLM response that may contain markdown fencing
 /// and explanatory text.
 #[must_use]
-pub(crate) fn extract_lean_code(response: &str) -> String {
+pub fn extract_lean_code(response: &str) -> String {
     // Look for ```lean ... ``` blocks
     if let Some(start) = response.find("```lean\n") {
         let code_start = start + 8;

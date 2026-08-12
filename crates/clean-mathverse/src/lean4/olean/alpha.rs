@@ -1220,7 +1220,7 @@ mod tests {
             ConstantKind::Axiom,
             false,
         )]);
-        let verified_names = std::collections::HashSet::from([String::from("verified_axiom")]);
+        let verified_names = HashSet::from([String::from("verified_axiom")]);
         let mut writer = ShardWriter::new();
 
         let stats = import_module_verified(&module, &mut writer, Some(&verified_names)).unwrap();
@@ -1247,7 +1247,7 @@ mod tests {
             ConstantKind::Axiom,
             false,
         )]);
-        let verified_names = std::collections::HashSet::from([String::from("other_constant")]);
+        let verified_names = HashSet::from([String::from("other_constant")]);
         let mut writer = ShardWriter::new();
 
         let stats = import_module_verified(&module, &mut writer, Some(&verified_names)).unwrap();
@@ -1311,7 +1311,7 @@ mod tests {
             ConstantKind::Theorem,
             true,
         )]);
-        let verified_names = std::collections::HashSet::from([String::from("my_theorem")]);
+        let verified_names = HashSet::from([String::from("my_theorem")]);
         let mut writer = ShardWriter::new();
 
         let stats = import_module_verified(&module, &mut writer, Some(&verified_names)).unwrap();
@@ -1330,8 +1330,7 @@ mod tests {
             mock_constant("thm1", ConstantKind::Theorem, true),
             mock_constant("ax2", ConstantKind::Axiom, false),
         ]);
-        let verified_names =
-            std::collections::HashSet::from([String::from("ax1"), String::from("thm1")]);
+        let verified_names = HashSet::from([String::from("ax1"), String::from("thm1")]);
         let mut writer = ShardWriter::new();
 
         let stats = import_module_verified(&module, &mut writer, Some(&verified_names)).unwrap();

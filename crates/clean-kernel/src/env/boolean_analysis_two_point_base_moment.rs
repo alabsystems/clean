@@ -69,12 +69,15 @@ struct MomentConsts {
     quot_mk: Expr,
     quot_sound: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq1: Expr,
     eq_refl1: Expr,
     eq_trans1: Expr,
     congr_arg: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl MomentConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

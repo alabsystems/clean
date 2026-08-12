@@ -571,10 +571,7 @@ mod tests {
         Expr::app(
             Expr::app(
                 Expr::app(
-                    Expr::const_str_levels(
-                        "Eq",
-                        vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
-                    ),
+                    Expr::const_str_levels("Eq", vec![Level::succ(Level::zero())]),
                     Expr::const_str("Nat"),
                 ),
                 Expr::nat_lit(0),
@@ -617,10 +614,7 @@ mod tests {
         let eq_body = Expr::app(
             Expr::app(
                 Expr::app(
-                    Expr::const_str_levels(
-                        "Eq",
-                        vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
-                    ),
+                    Expr::const_str_levels("Eq", vec![Level::succ(Level::zero())]),
                     Expr::const_str("Nat"),
                 ),
                 Expr::bvar(0),
@@ -680,10 +674,7 @@ mod tests {
         let eq_body = Expr::app(
             Expr::app(
                 Expr::app(
-                    Expr::const_str_levels(
-                        "Eq",
-                        vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
-                    ),
+                    Expr::const_str_levels("Eq", vec![Level::succ(Level::zero())]),
                     Expr::const_str("Nat"),
                 ),
                 Expr::bvar(0),
@@ -723,11 +714,11 @@ mod tests {
         // `∀ {G : Type u} (a : G), @Eq.{u+1} G a a` — the leading `Type u` binder
         // that used to be the universe-polymorphic wall. (G : Type u = Sort(u+1),
         // so equality on G is at level u+1.)
-        let u = || clean_kernel::Level::param(Name::from_string("u"));
+        let u = || Level::param(Name::from_string("u"));
         let eq_body = Expr::app(
             Expr::app(
                 Expr::app(
-                    Expr::const_str_levels("Eq", vec![clean_kernel::Level::succ(u())]),
+                    Expr::const_str_levels("Eq", vec![Level::succ(u())]),
                     Expr::bvar(1),
                 ),
                 Expr::bvar(0),
@@ -736,7 +727,7 @@ mod tests {
         );
         let goal = Expr::pi(
             clean_kernel::BinderInfo::Implicit,
-            Expr::sort(clean_kernel::Level::succ(u())),
+            Expr::sort(Level::succ(u())),
             Expr::pi(clean_kernel::BinderInfo::Default, Expr::bvar(0), eq_body),
         );
         // The wall is GONE: the universe-polymorphic goal is tier-2 accepted and

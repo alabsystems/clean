@@ -1,0 +1,3441 @@
+{
+  "generated_by": "cargo test --offline -p clean-elab --test silent_tactic_census (CLEAN_SILENT_CENSUS_UPDATE=1)",
+  "prelude": "builtin",
+  "rows": [
+    {
+      "detail": "elaboration error: TacticFailed(MissingArgument { tactic: \"exact\", expected: \"an argument\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "exact",
+      "token": "exact",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "exact h",
+      "token": "exact",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(MissingArgument { tactic: \"apply\", expected: \"an argument\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "apply",
+      "token": "apply",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "apply h",
+      "token": "apply",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\np : Sort(Zero)\\nq : Sort(Zero)\\nhp : FVar(FVarId(0))\\nh : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "intro",
+      "token": "intro",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\np : Sort(Zero)\\nq : Sort(Zero)\\nhp : FVar(FVarId(0))\\nhx : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "names",
+      "tactic": "intro hx",
+      "token": "intro",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\np : Sort(Zero)\\nq : Sort(Zero)\\nhp : FVar(FVarId(0))\\nh_0 : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "intros",
+      "token": "intros",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"hx\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "names",
+      "tactic": "intros hx",
+      "token": "intros",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(MissingArgument { tactic: \"refine\", expected: \"an argument\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "refine",
+      "token": "refine",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hole",
+      "tactic": "refine ?_",
+      "token": "refine",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "refine h",
+      "token": "refine",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"refine'\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hole",
+      "tactic": "refine' ?_",
+      "token": "refine'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"refine_lift\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "refine_lift h",
+      "token": "refine_lift",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"refine_lift'\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "refine_lift' h",
+      "token": "refine_lift'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "assumption",
+      "token": "assumption",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rfl",
+      "token": "rfl",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"rfl'\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rfl'",
+      "token": "rfl'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"eq_refl\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "eq_refl",
+      "token": "eq_refl",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_rfl\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "apply_rfl",
+      "token": "apply_rfl",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "trivial",
+      "token": "trivial",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "skip\n  exact h",
+      "token": "skip",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "exact h\n  done",
+      "token": "done",
+      "verdict": "pass"
+    },
+    {
+      "detail": "(no diagnostic; declaration degraded to a sorry)",
+      "intentional_sorry": true,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "sorry",
+      "token": "sorry",
+      "verdict": "silent"
+    },
+    {
+      "detail": "(no diagnostic; declaration degraded to a sorry)",
+      "intentional_sorry": true,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "admit",
+      "token": "admit",
+      "verdict": "silent"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"stop\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "stop",
+      "token": "stop",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "exfalso",
+      "token": "exfalso",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoProgress { tactic: \"contradiction\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "contradiction",
+      "token": "contradiction",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\np : Sort(Zero)\\nhp : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\\np : Sort(Zero)\\nhp : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "constructor",
+      "token": "constructor",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\np : Sort(Zero)\\nhp : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\\np : Sort(Zero)\\nhp : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "and_intros",
+      "token": "and_intros",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"left requires goal of form Or a b\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "left",
+      "token": "left",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"right requires goal of form Or a b\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "right",
+      "token": "right",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "args",
+      "tactic": "exists 0",
+      "token": "exists",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "args",
+      "tactic": "use 0",
+      "token": "use",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "symm",
+      "token": "symm",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"symm_saturate\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "symm_saturate",
+      "token": "symm_saturate",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `subst`]: unsupported tactic syntax `subst`: Unexpected token at 3:60: expected at least one identifier in subst",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "subst",
+      "token": "subst",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hyp",
+      "tactic": "subst h",
+      "token": "subst",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"subst_vars\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "subst_vars",
+      "token": "subst_vars",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "subst_eqs",
+      "token": "subst_eqs",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "parser recovery [tactic `revert`]: unsupported tactic syntax `revert`: Unexpected token at 3:61: expected at least one identifier in revert",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "revert",
+      "token": "revert",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ Pi(…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hyp",
+      "tactic": "revert h",
+      "token": "revert",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "parser recovery [tactic `clear`]: unsupported tactic syntax `clear`: Unexpected token at 3:60: expected at least one identifier in clear",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "clear",
+      "token": "clear",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hyp",
+      "tactic": "clear h",
+      "token": "clear",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"clear_value\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hyp",
+      "tactic": "clear_value h",
+      "token": "clear_value",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `rename_i`]: unsupported tactic syntax `rename_i`: Unexpected token at 3:63: expected at least one identifier in rename_i",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rename_i",
+      "token": "rename_i",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "name",
+      "tactic": "rename_i x",
+      "token": "rename_i",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"expose_names\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "expose_names",
+      "token": "expose_names",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `specialize`]: unsupported tactic syntax `specialize`: Unexpected token at 3:67: specialize expects at least one argument term",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "args",
+      "tactic": "specialize h",
+      "token": "specialize",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"replace\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Colon  a  b  h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "replace h : a = b := h",
+      "token": "replace",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "eq",
+      "tactic": "generalize a = x",
+      "token": "generalize",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hyp",
+      "tactic": "generalize hx : a = x",
+      "token": "generalize",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "have hx : a = b := h",
+      "token": "have",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "anon",
+      "tactic": "have := h",
+      "token": "have",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "by",
+      "tactic": "have hx : a = b := by exact h",
+      "token": "have",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"have'\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Colon  a  b  h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "have' hx : a = b := h",
+      "token": "have'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"haveI\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Colon  a  b  h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "haveI hx : a = b := h",
+      "token": "haveI",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "assign",
+      "tactic": "let x := a",
+      "token": "let",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "parser recovery [tactic `let'`]: unsupported tactic syntax `let'` > `:=`: Unexpected token at 2:61: unexpected token: ColonEq",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "assign",
+      "tactic": "let' x := a",
+      "token": "let'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `letI`]: unsupported tactic syntax `letI` > `:=`: Unexpected token at 2:61: unexpected token: ColonEq",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "assign",
+      "tactic": "letI x := a",
+      "token": "letI",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "suffices hx : a = b by exact hx",
+      "token": "suffices",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "show a = b",
+      "token": "show",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"change: new type is not definitionally equal to current target\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hole",
+      "tactic": "show a = _",
+      "token": "show",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"show_term\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "wrap",
+      "tactic": "show_term exact h",
+      "token": "show_term",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "change a = b",
+      "token": "change",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"change: new type is not definitionally equal to current target\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hole",
+      "tactic": "change a = _",
+      "token": "change",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TooManyArguments { func_type: \"Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\", remaining_args: 2 }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "change a = b at h",
+      "token": "change",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alt",
+      "tactic": "case _ => exact h",
+      "token": "case",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alt",
+      "tactic": "next => exact h",
+      "token": "next",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "focus\n    exact h",
+      "token": "focus",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "all_goals exact h",
+      "token": "all_goals",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "any_goals exact h",
+      "token": "any_goals",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "try exact h",
+      "token": "try",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"try?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "try? exact h",
+      "token": "try?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "repeat exact h",
+      "token": "repeat",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"repeat'\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "repeat' exact h",
+      "token": "repeat'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"repeat1'\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "repeat1' exact h",
+      "token": "repeat1'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"iterate\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "n",
+      "tactic": "iterate 1 exact h",
+      "token": "iterate",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alts",
+      "tactic": "first\n    | exact h",
+      "token": "first",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"first_par\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Pipe  exact h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alts",
+      "tactic": "first_par\n    | exact h",
+      "token": "first_par",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"attempt_all\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Pipe  exact h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alts",
+      "tactic": "attempt_all\n    | exact h",
+      "token": "attempt_all",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"attempt_all_par\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Pipe  exact h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alts",
+      "tactic": "attempt_all_par\n    | exact h",
+      "token": "attempt_all_par",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"solve\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Pipe  exact h\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alts",
+      "tactic": "solve\n    | exact h",
+      "token": "solve",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: UnknownIdentWithSuggestions { name: \"exact\", suggestions: [\"Eq.subst\", \"Eq.trans\", \"HEq.trans\", \"Iff.trans\", \"Classical.em\"] }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rotate_left\n  exact h",
+      "token": "rotate_left",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: UnknownIdentWithSuggestions { name: \"exact\", suggestions: [\"Eq.subst\", \"Eq.trans\", \"HEq.trans\", \"Iff.trans\", \"Classical.em\"] }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rotate_right\n  exact h",
+      "token": "rotate_right",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"fail\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "fail",
+      "token": "fail",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"fail\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "msg",
+      "tactic": "fail \"nope\"",
+      "token": "fail",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"fail_if_success\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "wrap",
+      "tactic": "fail_if_success rfl\n  exact h",
+      "token": "fail_if_success",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"guard_expr\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "args",
+      "tactic": "guard_expr a = a",
+      "token": "guard_expr",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"guard_hyp\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Colon  a  b\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "args",
+      "tactic": "guard_hyp h : a = b",
+      "token": "guard_hyp",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `guard_target`]: unsupported tactic syntax `guard_target`: Unexpected token at 2:67: unexpected token: Eq",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "args",
+      "tactic": "guard_target = (a = b)",
+      "token": "guard_target",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"trace\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "msg",
+      "tactic": "trace \"x\"\n  exact h",
+      "token": "trace",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "trace_state\n  exact h",
+      "token": "trace_state",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"dbg_trace\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "msg",
+      "tactic": "dbg_trace \"x\"\n  exact h",
+      "token": "dbg_trace",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"sleep\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "n",
+      "tactic": "sleep 1\n  exact h",
+      "token": "sleep",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"run_tac\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "body",
+      "tactic": "run_tac pure ()",
+      "token": "run_tac",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"checkpoint\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "checkpoint exact h",
+      "token": "checkpoint",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"save\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "save\n  exact h",
+      "token": "save",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"with_reducible\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "with_reducible exact h",
+      "token": "with_reducible",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"with_reducible_and_instances\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "with_reducible_and_instances exact h",
+      "token": "with_reducible_and_instances",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"with_unfolding_all\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "with_unfolding_all exact h",
+      "token": "with_unfolding_all",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"with_unfolding_none\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "with_unfolding_none exact h",
+      "token": "with_unfolding_none",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"with_annotate_state\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "with_annotate_state \"x\" exact h",
+      "token": "with_annotate_state",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"unhygienic\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "unhygienic exact h",
+      "token": "unhygienic",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "classical\n  exact h",
+      "token": "classical",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: UnknownIdentWithSuggestions { name: \"exact\", suggestions: [\"Eq.subst\", \"Eq.trans\", \"HEq.trans\", \"Iff.trans\", \"Classical.em\"] }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "open Nat in exact h",
+      "token": "open",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: UnknownIdent(\"set_option\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "set_option maxHeartbeats 400 in exact h",
+      "token": "set_option",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(InstanceSynthesisFailed { class: \"Eq\", ty: \"App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "infer_instance",
+      "token": "infer_instance",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"nofun\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "nofun",
+      "token": "nofun",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"nomatch\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "nomatch h",
+      "token": "nomatch",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"split requires goal of form And a b, Iff a b, or one containing an if-then-else\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "split",
+      "token": "split",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"injection: left-hand side is not a constructor application\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "hyp",
+      "tactic": "injection h",
+      "token": "injection",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"injections\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "injections",
+      "token": "injections",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"congr: functions on both sides must be equal\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "congr",
+      "token": "congr",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"congr: functions on both sides must be equal\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "n",
+      "tactic": "congr 1",
+      "token": "congr",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"funext: equality is not between functions\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "funext",
+      "token": "funext",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"funext: equality is not between functions\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "name",
+      "tactic": "funext x",
+      "token": "funext",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"ext: left-hand side is not a function\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ext",
+      "token": "ext",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"ext: left-hand side is not a function\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "name",
+      "tactic": "ext x",
+      "token": "ext",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"ext1\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ext1",
+      "token": "ext1",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_ext_theorem\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "apply_ext_theorem",
+      "token": "apply_ext_theorem",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_assumption\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "apply_assumption",
+      "token": "apply_assumption",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_rules\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "apply_rules",
+      "token": "apply_rules",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_rules\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "apply_rules [h]",
+      "token": "apply_rules",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "solve_by_elim",
+      "token": "solve_by_elim",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "by_cases hx : a = b",
+      "token": "by_cases",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "name",
+      "tactic": "by_contra hx",
+      "token": "by_contra",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"false_or_by_contra\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "false_or_by_contra",
+      "token": "false_or_by_contra",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `rw`]: unsupported tactic syntax `rw`: Unexpected token at 3:0: expected LBracket, got Eof",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rw",
+      "token": "rw",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "rw [h]",
+      "token": "rw",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "rw [h] at h",
+      "token": "rw",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "rev",
+      "tactic": "rw [← h]",
+      "token": "rw",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "star",
+      "tactic": "rw [h] at *",
+      "token": "rw",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "rewrite [h]",
+      "token": "rewrite",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"erw\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "erw [h]",
+      "token": "erw",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoGoals)",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "rwa [h]",
+      "token": "rwa",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"rw_mod_cast\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "rw_mod_cast [h]",
+      "token": "rw_mod_cast",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "rw?",
+      "token": "rw?",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "parser recovery [tactic `unfold`]: unsupported tactic syntax `unfold`: Unexpected token at 4:82: expected identifier, got Eof",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "unfold",
+      "token": "unfold",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "one",
+      "tactic": "unfold myid",
+      "token": "unfold",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnfoldFailed { name: \"myid\", reason: \"is not a constant\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "unfold myid at h",
+      "token": "unfold",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"myid\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "many",
+      "tactic": "unfold myid myid",
+      "token": "unfold",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"myid\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "one",
+      "tactic": "delta myid",
+      "token": "delta",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp",
+      "token": "simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "simp [h]",
+      "token": "simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "only",
+      "tactic": "simp only [h]",
+      "token": "simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoProgress { tactic: \"simp at h\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "simp at h",
+      "token": "simp",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `simp`]: unsupported tactic syntax `simp`: Unexpected token at 2:60: unexpected token: Star || elaboration error: ParseError(\"parser recovery produced raw declaration: RBracket \")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "star",
+      "tactic": "simp [*]",
+      "token": "simp",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `simp`]: unsupported tactic syntax `simp` > `(` > `config`: Unexpected token at 2:53: unexpected token: ColonEq || elaboration error: ParseError(\"parser recovery produced raw declaration: RParen \")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "cfg",
+      "tactic": "simp (config := { decide := true })",
+      "token": "simp",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arrow",
+      "tactic": "simp [← h]",
+      "token": "simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "minus",
+      "tactic": "simp [-h]",
+      "token": "simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "wild",
+      "tactic": "simp at *",
+      "token": "simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_all",
+      "token": "simp_all",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TypeMismatch { expected: \"FVar(FVarId(9223372036854775810))\", actual: \"level mismatch: Succ(Param(Name { depth: 1, suffix: [\\\"u_2\\\"], lean4_hash: cb90faf345ab737f })) vs Zero\" }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "simp_all [h]",
+      "token": "simp_all",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_arith\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_arith",
+      "token": "simp_arith",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_arith!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_arith!",
+      "token": "simp_arith!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_all_arith\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_all_arith",
+      "token": "simp_all_arith",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_all_arith!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_all_arith!",
+      "token": "simp_all_arith!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_wf\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_wf",
+      "token": "simp_wf",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simpa",
+      "token": "simpa",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "using",
+      "tactic": "simpa using h",
+      "token": "simpa",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simpa!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "using",
+      "tactic": "simpa! using h",
+      "token": "simpa!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simpa?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "using",
+      "tactic": "simpa? using h",
+      "token": "simpa?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simpa?!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "using",
+      "tactic": "simpa?! using h",
+      "token": "simpa?!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp?",
+      "token": "simp?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp?!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp?!",
+      "token": "simp?!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_all?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_all?",
+      "token": "simp_all?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_all?!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "simp_all?!",
+      "token": "simp_all?!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "simp_rw [h]",
+      "token": "simp_rw",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "dsimp",
+      "token": "dsimp",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"only\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "only",
+      "tactic": "dsimp only [h]",
+      "token": "dsimp",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "dsimp at h",
+      "token": "dsimp",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"dsimp?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "dsimp?",
+      "token": "dsimp?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"dsimp?!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "dsimp?!",
+      "token": "dsimp?!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: ProofTypeMismatch { expected: \"App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])), FVar(FVarI…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "norm_cast",
+      "token": "norm_cast",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"norm_cast0\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "norm_cast0",
+      "token": "norm_cast0",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "push_cast",
+      "token": "push_cast",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"exact_mod_cast\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "exact_mod_cast h",
+      "token": "exact_mod_cast",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_mod_cast\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "term",
+      "tactic": "apply_mod_cast h",
+      "token": "apply_mod_cast",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"assumption_mod_cast\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "assumption_mod_cast",
+      "token": "assumption_mod_cast",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"ac_rfl\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ac_rfl",
+      "token": "ac_rfl",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"ac_nf\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ac_nf",
+      "token": "ac_nf",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"ac_nf0\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ac_nf0",
+      "token": "ac_nf0",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "chain",
+      "tactic": "calc a = b := h",
+      "token": "calc",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "multi",
+      "tactic": "calc a = b := h\n    _ = b := rfl",
+      "token": "calc",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Bool\\\"], lean4_hash: b2c7c3b8d8c62c…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "cases b",
+      "token": "cases",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "with",
+      "tactic": "cases b with\n  | true => rfl\n  | false => rfl",
+      "token": "cases",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "wild",
+      "tactic": "cases b with\n  | _ => rfl",
+      "token": "cases",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownIdent(\"hb\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Colon  b   true    false  \")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "named",
+      "tactic": "cases hb : b with\n  | true => rfl\n  | false => rfl",
+      "token": "cases",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "induction a",
+      "token": "induction",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "with",
+      "tactic": "induction a with\n  | zero => rfl\n  | succ k ih => rfl",
+      "token": "induction",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "using",
+      "tactic": "induction a using Nat.rec with\n  | zero => rfl\n  | succ k ih => rfl",
+      "token": "induction",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f },…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "gen",
+      "tactic": "induction a generalizing b",
+      "token": "induction",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "pat",
+      "tactic": "rcases h with rfl",
+      "token": "rcases",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Bool\\\"], lean4_hash: b2c7c3b8d8c62c…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "alt",
+      "tactic": "rcases b with _ | _",
+      "token": "rcases",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "parser recovery [tactic `rcases`]: unsupported tactic syntax `rcases`: Unexpected token at 2:68: expected identifier in rcases pattern, got Minus",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "dash",
+      "tactic": "rcases h with -",
+      "token": "rcases",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"rcases?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "pat",
+      "tactic": "rcases? h",
+      "token": "rcases?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "pat",
+      "tactic": "obtain rfl := h",
+      "token": "obtain",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(InvalidTarget { tactic: \"rcases\", detail: \"pattern has 2 components but hypothesis 'h' is not destructurable (its type is not a single-constructor inductive)\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "angle",
+      "tactic": "obtain ⟨x, hx⟩ := h",
+      "token": "obtain",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\np : Sort(Zero)\\nq : Sort(Zero)\\nhp : FVar(FVarId(0))\\nhx : FVar(FVarId(0))\\n⊢ FVar(FVarId(0))\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "pat",
+      "tactic": "rintro hx",
+      "token": "rintro",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(InvalidTarget { tactic: \"rcases\", detail: \"pattern has 2 components but hypothesis '_rintro3' is not destructurable (its type is not a single-constructor inductive)\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "angle",
+      "tactic": "rintro ⟨x, hx⟩",
+      "token": "rintro",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"rintro?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "pat",
+      "tactic": "rintro? hx",
+      "token": "rintro?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arm",
+      "tactic": "match b with\n  | true => rfl\n  | false => rfl",
+      "token": "match",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: UnknownIdentWithSuggestions { name: \"exact\", suggestions: [\"Eq.subst\", \"Eq.trans\", \"HEq.trans\", \"Iff.trans\", \"Classical.em\"] }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arm",
+      "tactic": "if h2 : a = b then exact h else exact h",
+      "token": "if",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(InvalidTarget { tactic: \"fin_cases\", detail: \"Nat is not a recognized finite type\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "fin_cases a",
+      "token": "fin_cases",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(InvalidTarget { tactic: \"interval_cases\", detail: \"no bounds found in context; add ≤ or < hypotheses\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "interval_cases a",
+      "token": "interval_cases",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"fun_cases\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "fun_cases myid a",
+      "token": "fun_cases",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"fun_induction\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "fun_induction myid a",
+      "token": "fun_induction",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"cbv\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "cbv",
+      "token": "cbv",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"decide_cbv\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "decide_cbv",
+      "token": "decide_cbv",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "decide",
+      "token": "decide",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "native_decide",
+      "token": "native_decide",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "omega",
+      "token": "omega",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"bv_omega\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "bv_omega",
+      "token": "bv_omega",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "norm_num",
+      "token": "norm_num",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(ArithmeticFailed { tactic: \"norm_num\", reason: \"could not evaluate numeric goal\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "norm_num [h]",
+      "token": "norm_num",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "linarith",
+      "token": "linarith",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TypeMismatch { expected: \"FVar(FVarId(9223372036854775812))\", actual: \"level mismatch: Succ(Param(Name { depth: 1, suffix: [\\\"u_2\\\"], lean4_hash: cb90faf345ab737f })) vs Zero\" }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "linarith [h]",
+      "token": "linarith",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "nlinarith",
+      "token": "nlinarith",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "positivity",
+      "token": "positivity",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"polyrith: goal must be an equality\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "polyrith",
+      "token": "polyrith",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(SearchExhausted { tactic: \"gcongr\", detail: \"cannot apply congruence rules (only addition and multiplication monotonicity are currently supported)\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "gcongr",
+      "token": "gcongr",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "aesop",
+      "token": "aesop",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "tauto",
+      "token": "tauto",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "grind",
+      "token": "grind",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"grind?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "grind?",
+      "token": "grind?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"grind_linarith\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "grind_linarith",
+      "token": "grind_linarith",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"grind_order\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "grind_order",
+      "token": "grind_order",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"grobner\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "grobner",
+      "token": "grobner",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"cutsat\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "cutsat",
+      "token": "cutsat",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"lia\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "lia",
+      "token": "lia",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"order\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "order",
+      "token": "order",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(TypeMismatch { expected: \"App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])), FV…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "cc",
+      "token": "cc",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ring",
+      "token": "ring",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "ring_nf",
+      "token": "ring_nf",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(ArithmeticFailed { tactic: \"abel\", reason: \"terms do not normalize to equal values. Difference: {0: 1, 1: -1}\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "abel",
+      "token": "abel",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(ArithmeticFailed { tactic: \"group\", reason: \"terms do not normalize to equal values. lhs: [(0, 1)], rhs: [(1, 1)]\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "group",
+      "token": "group",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `module`]: unsupported tactic syntax `module`: Unexpected token at 2:50: unexpected token: Module",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "module",
+      "token": "module",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "field_simp",
+      "token": "field_simp",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "exact?",
+      "token": "exact?",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "apply?",
+      "token": "apply?",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "library_search",
+      "token": "library_search",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"suggestions\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "suggestions",
+      "token": "suggestions",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"try_suggestions\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "try_suggestions",
+      "token": "try_suggestions",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoProgress { tactic: \"push_neg\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "push_neg",
+      "token": "push_neg",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "push_neg at h",
+      "token": "push_neg",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"monotonicity\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "monotonicity",
+      "token": "monotonicity",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"bv_decide\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "bv_decide",
+      "token": "bv_decide",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"bv_decide?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "bv_decide?",
+      "token": "bv_decide?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"bv_check\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "bv_check \"f\"",
+      "token": "bv_check",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"bv_normalize\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "bv_normalize",
+      "token": "bv_normalize",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"decreasing_tactic\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "decreasing_tactic",
+      "token": "decreasing_tactic",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"decreasing_trivial\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "decreasing_trivial",
+      "token": "decreasing_trivial",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"decreasing_trivial_pre_omega\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "decreasing_trivial_pre_omega",
+      "token": "decreasing_trivial_pre_omega",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"decreasing_with\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "decreasing_with rfl",
+      "token": "decreasing_with",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"clean_wf\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "clean_wf",
+      "token": "clean_wf",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"get_elem_tactic\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "get_elem_tactic",
+      "token": "get_elem_tactic",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"get_elem_tactic_extensible\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "get_elem_tactic_extensible",
+      "token": "get_elem_tactic_extensible",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"get_elem_tactic_trivial\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "get_elem_tactic_trivial",
+      "token": "get_elem_tactic_trivial",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"array_get_dec\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "array_get_dec",
+      "token": "array_get_dec",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"array_mem_dec\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "array_mem_dec",
+      "token": "array_mem_dec",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"sizeOf_list_dec\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "sizeOf_list_dec",
+      "token": "sizeOf_list_dec",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"my_trivial\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "my_trivial",
+      "token": "my_trivial",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"massumption\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "massumption",
+      "token": "massumption",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"extract_lets\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "extract_lets",
+      "token": "extract_lets",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"lift_lets\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "lift_lets",
+      "token": "lift_lets",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"let_to_have\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "let_to_have",
+      "token": "let_to_have",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"apply_fun\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "apply_fun myid",
+      "token": "apply_fun",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "wlog hx : a = b",
+      "token": "wlog",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"nth_rewrite\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "nth_rewrite 1 [h]",
+      "token": "nth_rewrite",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"nth_rw\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "nth_rw 1 [h]",
+      "token": "nth_rw",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: UnknownIdentWithSuggestions { name: \"x\", suggestions: [\"Classical.em\", \"Int.NonNeg.add\", \"Int.NonNeg.mul\", \"Nat.divmodAux.key\"] }",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "choose x hx using h",
+      "token": "choose",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(InvalidTarget { tactic: \"peel\", detail: \"hypothesis is not universally quantified\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "peel h",
+      "token": "peel",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"bound\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "bound",
+      "token": "bound",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"swap\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "swap\n  exact h",
+      "token": "swap",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"pick_goal\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "n",
+      "tactic": "pick_goal 1\n  exact h",
+      "token": "pick_goal",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `on_goal`]: unsupported tactic syntax `on_goal` > `=>`: Unexpected token at 2:64: unexpected token: FatArrow",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "n",
+      "tactic": "on_goal 1 => exact h",
+      "token": "on_goal",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"guard\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "guard",
+      "token": "guard",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"norm_fin\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "norm_fin",
+      "token": "norm_fin",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"decide!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "decide!",
+      "token": "decide!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 2, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "trans b",
+      "token": "trans",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "arg",
+      "tactic": "convert h",
+      "token": "convert",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"congr!\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "congr!",
+      "token": "congr!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"constructorm\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "constructorm",
+      "token": "constructorm",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"rel\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lst",
+      "tactic": "rel [h]",
+      "token": "rel",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"gcongr?\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "gcongr?",
+      "token": "gcongr?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"says\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "says",
+      "token": "says",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"observe\")) || elaboration error: ParseError(\"parser recovery produced raw declaration: Colon  a  b\")",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "colon",
+      "tactic": "observe hx : a = b",
+      "token": "observe",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"set\"))",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "bare",
+      "tactic": "set",
+      "token": "set",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `set`]: unsupported tactic syntax `set` > `:=`: Unexpected token at 2:60: unexpected token: ColonEq",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "assign",
+      "tactic": "set x := a",
+      "token": "set",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `set`]: unsupported tactic syntax `set` > `:=`: Unexpected token at 2:60: unexpected token: ColonEq",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "with",
+      "tactic": "set x := a with hx",
+      "token": "set",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `set!`]: unsupported tactic syntax `set!` > `:=`: Unexpected token at 2:61: unexpected token: ColonEq",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "assign",
+      "tactic": "set! x := a",
+      "token": "set!",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\n⊢ App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, […",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "goal",
+      "tactic": "conv => rfl",
+      "token": "conv",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(TypeMismatch { expected: \"FVar(FVarId(0))\", actual: \"cannot unify expressions of different shape: Discriminant(4) vs Discriminant(1)\" })",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "lhs",
+      "tactic": "conv =>\n    lhs\n    rfl",
+      "token": "conv",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(TypeMismatch { expected: \"App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])), FV…",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "at",
+      "tactic": "conv at h => rfl",
+      "token": "conv",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "parser recovery [tactic `conv`]: unsupported tactic syntax `conv`: Unexpected token at 2:7: expected FatArrow, got In",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "in",
+      "tactic": "conv in a => rfl",
+      "token": "conv",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `conv`]: unsupported tactic syntax `conv` > `tactic`: Unexpected token at 3:59: unexpected token: FatArrow",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "tac",
+      "tactic": "conv =>\n    tactic => rfl",
+      "token": "conv",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `conv_lhs`]: unsupported tactic syntax `conv_lhs`: Unexpected token at 2:49: unexpected token: FatArrow",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "conv_lhs => rfl",
+      "token": "conv_lhs",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `conv_rhs`]: unsupported tactic syntax `conv_rhs`: Unexpected token at 2:49: unexpected token: FatArrow",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "blk",
+      "tactic": "conv_rhs => rfl",
+      "token": "conv_rhs",
+      "verdict": "loud"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "seq",
+      "tactic": "constructor <;> exact hp",
+      "token": "<;>",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "dot",
+      "tactic": "constructor\n  · exact hp\n  · exact hp",
+      "token": "·",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "paren",
+      "tactic": "(exact h)",
+      "token": "(...)",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "brace",
+      "tactic": "{ exact h }",
+      "token": "{...}",
+      "verdict": "pass"
+    },
+    {
+      "detail": "",
+      "intentional_sorry": false,
+      "kind": "core",
+      "label": "altbar",
+      "tactic": "cases b with\n  | true => rfl\n  | false => rfl",
+      "token": "|",
+      "verdict": "pass"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "lhs",
+      "token": "lhs",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "rhs",
+      "token": "rhs",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "arg 1",
+      "token": "arg",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"args\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "args",
+      "token": "args",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "enter [1]",
+      "token": "enter",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"ext: left-hand side is not a function\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "ext x",
+      "token": "ext",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"pattern\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "pattern a",
+      "token": "pattern",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "congr",
+      "token": "congr",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoProgress { tactic: \"whnf\" })",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "whnf",
+      "token": "whnf",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoProgress { tactic: \"reduce\" })",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "reduce",
+      "token": "reduce",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"zeta\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "zeta",
+      "token": "zeta",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(NoProgress { tactic: \"delta\" })",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "delta myid",
+      "token": "delta",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"simp_match\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "simp_match",
+      "token": "simp_match",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"extract_lets\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "extract_lets",
+      "token": "extract_lets",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"lift_lets\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "lift_lets",
+      "token": "lift_lets",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"let_to_have\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "let_to_have",
+      "token": "let_to_have",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `conv`]: unsupported tactic syntax `conv` > `tactic`: Unexpected token at 4:103: unexpected token: FatArrow",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "tactic => rfl",
+      "token": "tactic",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `conv`]: unsupported tactic syntax `conv` > `tactic'`: Unexpected token at 4:104: unexpected token: FatArrow",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "tactic' => rfl",
+      "token": "tactic'",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "rw [h]",
+      "token": "rw",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "simp",
+      "token": "simp",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(GoalMismatch(\"change: new type is not definitionally equal to current target\"))",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "change a",
+      "token": "change",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnfoldFailed { name: \"myid\", reason: \"does not appear in the goal\" })",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "unfold myid",
+      "token": "unfold",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "skip",
+      "token": "skip",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "rfl",
+      "token": "rfl",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\" })",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "done",
+      "token": "done",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "norm_num",
+      "token": "norm_num",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "ring_nf",
+      "token": "ring_nf",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "push_cast",
+      "token": "push_cast",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "norm_cast",
+      "token": "norm_cast",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(TypeMismatch { expected: \"App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])), FV…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "apply h",
+      "token": "apply",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(TypeMismatch { expected: \"App(App(App(Const(Name { depth: 1, suffix: [\\\"Eq\\\"], lean4_hash: dfbff609f865258f }, [Succ(Zero)]), Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])), FV…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "exact h",
+      "token": "exact",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "first\n      | rfl",
+      "token": "first",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "all_goals rfl",
+      "token": "all_goals",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "repeat rfl",
+      "token": "repeat",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "try rfl",
+      "token": "try",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "case _ => rfl",
+      "token": "case",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnsolvedGoals { count: 1, detail: \"\\na : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nb : Const(Name { depth: 1, suffix: [\\\"Nat\\\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])\\nh : A…",
+      "intentional_sorry": false,
+      "kind": "conv",
+      "label": "conv-mode",
+      "tactic": "next => rfl",
+      "token": "next",
+      "verdict": "unnamed"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"deriving_LawfulEq_tactic\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "deriving_LawfulEq_tactic",
+      "token": "deriving_LawfulEq_tactic",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"deriving_LawfulEq_tactic_step\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "deriving_LawfulEq_tactic_step",
+      "token": "deriving_LawfulEq_tactic_step",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"deriving_ReflEq_tactic\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "deriving_ReflEq_tactic",
+      "token": "deriving_ReflEq_tactic",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mcases\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mcases",
+      "token": "mcases",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mclear\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mclear",
+      "token": "mclear",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mconstructor\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mconstructor",
+      "token": "mconstructor",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mexact\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mexact",
+      "token": "mexact",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mexfalso\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mexfalso",
+      "token": "mexfalso",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mexists\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mexists",
+      "token": "mexists",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mframe\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mframe",
+      "token": "mframe",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mhave\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mhave",
+      "token": "mhave",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mintro\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mintro",
+      "token": "mintro",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mleave\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mleave",
+      "token": "mleave",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mleft\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mleft",
+      "token": "mleft",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mpure\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mpure",
+      "token": "mpure",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mpure_intro\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mpure_intro",
+      "token": "mpure_intro",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mrefine\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mrefine",
+      "token": "mrefine",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mrename_i\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mrename_i",
+      "token": "mrename_i",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mreplace\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mreplace",
+      "token": "mreplace",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mrevert\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mrevert",
+      "token": "mrevert",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mright\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mright",
+      "token": "mright",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mspec\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mspec",
+      "token": "mspec",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mspec_no_bind\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mspec_no_bind",
+      "token": "mspec_no_bind",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mspec_no_simp\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mspec_no_simp",
+      "token": "mspec_no_simp",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mspecialize\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mspecialize",
+      "token": "mspecialize",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mspecialize_pure\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mspecialize_pure",
+      "token": "mspecialize_pure",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mstart\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mstart",
+      "token": "mstart",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mstop\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mstop",
+      "token": "mstop",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mvcgen\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mvcgen",
+      "token": "mvcgen",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mvcgen?\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mvcgen?",
+      "token": "mvcgen?",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mvcgen_trivial\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mvcgen_trivial",
+      "token": "mvcgen_trivial",
+      "verdict": "loud"
+    },
+    {
+      "detail": "elaboration error: TacticFailed(UnknownTactic(\"mvcgen_trivial_extensible\"))",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "mvcgen_trivial_extensible",
+      "token": "mvcgen_trivial_extensible",
+      "verdict": "loud"
+    },
+    {
+      "detail": "parser recovery [tactic `∎`]: unsupported tactic syntax `∎`: Unexpected token at 2:54: unknown operator or character '∎' (no infix/prefix rule for it)",
+      "intentional_sorry": false,
+      "kind": "core-bare",
+      "label": "bare",
+      "tactic": "∎",
+      "token": "∎",
+      "verdict": "loud"
+    }
+  ],
+  "schema_version": "clean-silent-tactic-census-v1",
+  "silent_tokens": [],
+  "totals": {
+    "intentional_sorry": 2,
+    "loud": 220,
+    "pass": 63,
+    "probes": 373,
+    "silent": 0,
+    "unnamed": 88
+  },
+  "unnamed_tokens": [
+    "all_goals",
+    "and_intros",
+    "apply",
+    "arg",
+    "by_cases",
+    "by_contra",
+    "case",
+    "cases",
+    "cc",
+    "change",
+    "choose",
+    "clear",
+    "congr",
+    "constructor",
+    "conv",
+    "delta",
+    "done",
+    "dsimp",
+    "enter",
+    "exact",
+    "exfalso",
+    "first",
+    "generalize",
+    "have",
+    "if",
+    "induction",
+    "infer_instance",
+    "intro",
+    "intros",
+    "let",
+    "lhs",
+    "linarith",
+    "next",
+    "norm_cast",
+    "norm_num",
+    "obtain",
+    "open",
+    "push_cast",
+    "push_neg",
+    "rcases",
+    "refine",
+    "rename_i",
+    "repeat",
+    "revert",
+    "rfl",
+    "rhs",
+    "ring_nf",
+    "rintro",
+    "rotate_left",
+    "rotate_right",
+    "rw",
+    "rw?",
+    "rwa",
+    "show",
+    "simp",
+    "simp_all",
+    "simp_rw",
+    "skip",
+    "subst",
+    "subst_eqs",
+    "suffices",
+    "symm",
+    "trans",
+    "try",
+    "unfold",
+    "wlog"
+  ]
+}

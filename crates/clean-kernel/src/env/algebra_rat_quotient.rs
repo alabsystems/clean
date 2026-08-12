@@ -44,6 +44,7 @@ use crate::name::Name;
 /// Pre-resolved constant handles + small smart-constructors for the quotient
 /// `Rat` carrier swap. Mirrors the `LeTransConsts` idiom in
 /// `algebra_rat_le_trans_proof.rs`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct RatRawConsts {
     // Sorts.
     prop: Expr,
@@ -3656,6 +3657,7 @@ impl Environment {
     /// dependency-light additive step callable from the foundational `init_rat`
     /// (which guarantees `init_eq` ran first).
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn register_rat_raw_carrier(&mut self, c: &RatRawConsts) -> Result<(), EnvError> {
         self.register_rat_raw(c)?;
         self.register_rat_raw_projections(c)?;
@@ -8008,6 +8010,7 @@ impl Environment {
     /// to a `Quot.sound` of the raw cross-Equiv
     /// `(np·(neg nq))·(ep·eq) = (neg(np·nq))·(ep·eq)`, closed by
     /// `Int.neg_mul_right` under `congrArg (·*(ep·eq))`.
+    #[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
     pub(crate) fn register_rat_q_mul_neg(&mut self, c: &RatRawConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Rat.mul_neg");
         if self.get_const(&name).is_some() {

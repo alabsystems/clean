@@ -97,7 +97,7 @@ fn test_graduate_v32_lean_core_base_carries_shadow_free() {
         &pilot_request(),
         &GraduationBaseline::empty(),
         tmp.path(),
-        crate::graduate::RecheckBase::LeanCore,
+        RecheckBase::LeanCore,
     )
     .expect("graduation run");
     assert_eq!(

@@ -13,7 +13,7 @@
 
 use crate::eval::Interpreter;
 use crate::expr::{EvalResult, Expr, Pattern, Stmt};
-use crate::types::{Mutability, RustType, UintType};
+use crate::types::{RustType, UintType};
 use crate::values::{BinOp, Value};
 use std::collections::BTreeMap;
 

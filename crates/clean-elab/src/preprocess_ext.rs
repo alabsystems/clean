@@ -7,14 +7,19 @@
 //! resolution, import expansion, syntax desugaring, dependency ordering, and
 //! statistics tracking.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use clean_parser::{SurfaceDecl, SurfaceExpr};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Errors from extended preprocessing.
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) enum PreprocessError {
     #[error("cyclic dependency between declarations: {0:?}")]
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     CyclicDependency(Vec<String>),
     #[error("unknown attribute on '{decl_name}': {attr}")]
     UnknownAttribute { decl_name: String, attr: String },
@@ -26,6 +31,7 @@ pub(crate) enum PreprocessError {
 
 /// Docstring extracted from source and associated with a declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct Docstring {
     pub(crate) text: String,
     pub(crate) decl_name: String,
@@ -33,6 +39,7 @@ pub(crate) struct Docstring {
 
 /// Group of mutually-recursive declarations detected by reference analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct MutualGroup {
     pub(crate) indices: Vec<usize>,
     pub(crate) names: Vec<String>,
@@ -40,6 +47,7 @@ pub(crate) struct MutualGroup {
 
 /// Collected universe parameter from a declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct UniverseParam {
     pub(crate) name: String,
     pub(crate) decl_name: String,
@@ -47,6 +55,7 @@ pub(crate) struct UniverseParam {
 
 /// Statistics from a preprocessing run.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct PreprocessStats {
     pub(crate) decls_preprocessed: usize,
     pub(crate) mutual_blocks_found: usize,
@@ -61,6 +70,7 @@ pub(crate) struct PreprocessStats {
 
 /// Result of the full preprocessing pipeline.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct PreprocessResult {
     pub(crate) decls: Vec<SurfaceDecl>,
     pub(crate) docstrings: Vec<Docstring>,
@@ -87,6 +97,7 @@ pub(crate) fn decl_name(decl: &SurfaceDecl) -> Option<&str> {
     }
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn decl_universe_params(decl: &SurfaceDecl) -> &[String] {
     match decl {
         SurfaceDecl::Def {
@@ -120,6 +131,7 @@ fn decl_universe_params(decl: &SurfaceDecl) -> &[String] {
     }
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn decl_attr_count(decl: &SurfaceDecl) -> usize {
     match decl {
         SurfaceDecl::Def { attrs, .. }
@@ -134,6 +146,7 @@ fn decl_attr_count(decl: &SurfaceDecl) -> usize {
 
 /// Extract docstrings (`/-- ... -/` or `-- ...`) and associate with declarations.
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn extract_docstrings(comments: &[&str], decls: &[SurfaceDecl]) -> Vec<Docstring> {
     let mut result = Vec::new();
     for (i, &comment) in comments.iter().enumerate() {
@@ -160,6 +173,7 @@ pub(crate) fn extract_docstrings(comments: &[&str], decls: &[SurfaceDecl]) -> Ve
 // Step 2: Mutual block detection
 
 /// Collect identifiers referenced in a surface expression.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn collect_idents(expr: &SurfaceExpr, out: &mut HashSet<String>) {
     match expr {
         SurfaceExpr::Ident(_, name) => {
@@ -187,6 +201,7 @@ pub(crate) fn collect_idents(expr: &SurfaceExpr, out: &mut HashSet<String>) {
     }
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn collect_decl_refs(decl: &SurfaceDecl) -> HashSet<String> {
     let mut refs = HashSet::new();
     match decl {
@@ -210,6 +225,7 @@ fn collect_decl_refs(decl: &SurfaceDecl) -> HashSet<String> {
 
 /// Detect mutually-recursive declaration groups via SCC analysis.
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn detect_mutual_groups(decls: &[SurfaceDecl]) -> Vec<MutualGroup> {
     let name_to_idx: HashMap<&str, usize> = decls
         .iter()
@@ -240,6 +256,7 @@ pub(crate) fn detect_mutual_groups(decls: &[SurfaceDecl]) -> Vec<MutualGroup> {
         .collect()
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn tarjan_sccs(adj: &[Vec<usize>], n: usize) -> Vec<Vec<usize>> {
     let mut idx = 0usize;
     let mut stack: Vec<usize> = Vec::new();
@@ -298,6 +315,7 @@ fn tarjan_sccs(adj: &[Vec<usize>], n: usize) -> Vec<Vec<usize>> {
 // Step 3: Universe parameter collection
 
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn collect_universe_params(decls: &[SurfaceDecl]) -> Vec<UniverseParam> {
     decls
         .iter()
@@ -315,12 +333,14 @@ pub(crate) fn collect_universe_params(decls: &[SurfaceDecl]) -> Vec<UniversePara
 
 // Step 4: Attribute validation
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn validate_attributes(decls: &[SurfaceDecl]) -> Result<usize, PreprocessError> {
     Ok(decls.iter().map(decl_attr_count).sum())
 }
 
 // Step 5: Namespace resolution
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn resolve_namespaces(
     decls: &[SurfaceDecl],
     opened: &[String],
@@ -334,6 +354,7 @@ pub(crate) fn resolve_namespaces(
     (out, count)
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn resolve_decl(
     decl: &SurfaceDecl,
     opened: &[String],
@@ -393,6 +414,7 @@ fn resolve_decl(
     }
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn resolve_expr(
     expr: &SurfaceExpr,
     opened: &[String],
@@ -434,6 +456,7 @@ fn resolve_expr(
 
 /// Expand `open Foo` declarations into opened namespace prefixes.
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn expand_imports(decls: &[SurfaceDecl]) -> Vec<String> {
     decls
         .iter()
@@ -447,6 +470,7 @@ pub(crate) fn expand_imports(decls: &[SurfaceDecl]) -> Vec<String> {
 
 // Step 7: Syntax desugaring
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn desugar_decls(decls: &[SurfaceDecl]) -> (Vec<SurfaceDecl>, usize) {
     let mut count = 0;
     let result = decls
@@ -481,6 +505,7 @@ pub(crate) fn desugar_decls(decls: &[SurfaceDecl]) -> (Vec<SurfaceDecl>, usize) 
 // Step 8: Dependency ordering
 
 /// Topologically sort declarations. Cycles are kept in original order.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn order_by_deps(
     decls: &[SurfaceDecl],
 ) -> Result<(Vec<SurfaceDecl>, usize), PreprocessError> {
@@ -531,6 +556,7 @@ pub(crate) fn order_by_deps(
 // Step 9: Full pipeline
 
 /// Run the full preprocessing pipeline.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn preprocess_pipeline(
     decls: &[SurfaceDecl],
     comments: &[&str],

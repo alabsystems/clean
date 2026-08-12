@@ -46,6 +46,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Shared constants for the flip-roundtrip proofs.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct RtConsts {
     nat: Expr,
     bool_ty: Expr,
@@ -158,6 +159,7 @@ impl RtConsts {
     }
     /// `(h : a = b → False)`-shaped pi (a `Nat`-disequality).
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn ne_nat_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::pi(BinderInfo::Default, self.eq_nat(a, b), self.false_c.clone())
     }

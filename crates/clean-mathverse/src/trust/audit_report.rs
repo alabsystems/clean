@@ -315,6 +315,140 @@ impl AuditReport {
                 f.severity == AuditSeverity::Error || f.severity == AuditSeverity::Critical
             })
     }
+
+    /// Compute the trust-relevant delta from `self` (pre) to `new` (post).
+    ///
+    /// This is the input to authority gates that must decide whether a patch
+    /// introduced trust debt that the producer did not declare.
+    #[must_use]
+    pub fn diff(&self, new: &AuditReport) -> AuditDelta {
+        AuditDelta::between(self, new)
+    }
+}
+
+/// Trust-relevant changes between two audit reports.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditDelta {
+    /// Axiom declarations newly present in the newer report.
+    pub added_axioms: Vec<String>,
+    /// Axiom declarations no longer present in the newer report.
+    pub removed_axioms: Vec<String>,
+    /// Opaque constants newly present in the newer report.
+    pub added_opaques: Vec<String>,
+    /// Opaque constants no longer present in the newer report.
+    pub removed_opaques: Vec<String>,
+    /// Unsafe declarations newly present in the newer report.
+    pub added_unsafe: Vec<String>,
+    /// Unsafe declarations no longer present in the newer report.
+    pub removed_unsafe: Vec<String>,
+    /// External solver trust boundaries newly present in the newer report.
+    pub added_external_solvers: Vec<String>,
+    /// External solver trust boundaries no longer present in the newer report.
+    pub removed_external_solvers: Vec<String>,
+    /// Critical findings newly present in the newer report.
+    pub added_critical_findings: Vec<String>,
+    /// Critical findings no longer present in the newer report.
+    pub removed_critical_findings: Vec<String>,
+}
+
+impl AuditDelta {
+    /// Compute a trust-relevant delta from `old` to `new`.
+    #[must_use]
+    pub fn between(old: &AuditReport, new: &AuditReport) -> Self {
+        Self {
+            added_axioms: added_items(old, new, is_axiom_finding),
+            removed_axioms: removed_items(old, new, is_axiom_finding),
+            added_opaques: added_items(old, new, is_opaque_finding),
+            removed_opaques: removed_items(old, new, is_opaque_finding),
+            added_unsafe: added_items(old, new, is_unsafe_finding),
+            removed_unsafe: removed_items(old, new, is_unsafe_finding),
+            added_external_solvers: added_items(old, new, is_external_solver_finding),
+            removed_external_solvers: removed_items(old, new, is_external_solver_finding),
+            added_critical_findings: added_items(old, new, is_critical_finding),
+            removed_critical_findings: removed_items(old, new, is_critical_finding),
+        }
+    }
+
+    /// Whether the delta introduced any new trust debt.
+    #[must_use]
+    pub fn has_new_trust_debt(&self) -> bool {
+        !self.added_axioms.is_empty()
+            || !self.added_opaques.is_empty()
+            || !self.added_unsafe.is_empty()
+            || !self.added_external_solvers.is_empty()
+            || !self.added_critical_findings.is_empty()
+    }
+}
+
+fn added_items(
+    old: &AuditReport,
+    new: &AuditReport,
+    predicate: fn(&AuditFinding) -> bool,
+) -> Vec<String> {
+    let old_items = finding_items(old, predicate);
+    let new_items = finding_items(new, predicate);
+    sorted_difference(&new_items, &old_items)
+}
+
+fn removed_items(
+    old: &AuditReport,
+    new: &AuditReport,
+    predicate: fn(&AuditFinding) -> bool,
+) -> Vec<String> {
+    let old_items = finding_items(old, predicate);
+    let new_items = finding_items(new, predicate);
+    sorted_difference(&old_items, &new_items)
+}
+
+fn finding_items(report: &AuditReport, predicate: fn(&AuditFinding) -> bool) -> HashSet<String> {
+    report
+        .findings
+        .iter()
+        .filter(|finding| predicate(finding))
+        .map(finding_identity)
+        .collect()
+}
+
+fn sorted_difference(left: &HashSet<String>, right: &HashSet<String>) -> Vec<String> {
+    let mut items: Vec<_> = left.difference(right).cloned().collect();
+    items.sort();
+    items
+}
+
+fn finding_identity(finding: &AuditFinding) -> String {
+    format!("{}: {}", finding.category, finding.message)
+}
+
+fn is_axiom_finding(finding: &AuditFinding) -> bool {
+    matches!(
+        finding.structured_category(),
+        AuditFindingCategory::AxiomDeclaration
+    )
+}
+
+fn is_opaque_finding(finding: &AuditFinding) -> bool {
+    matches!(
+        finding.structured_category(),
+        AuditFindingCategory::OpaqueConstant
+    )
+}
+
+fn is_unsafe_finding(finding: &AuditFinding) -> bool {
+    matches!(
+        finding.structured_category(),
+        AuditFindingCategory::UnsafeDeclaration
+    )
+}
+
+fn is_external_solver_finding(finding: &AuditFinding) -> bool {
+    matches!(
+        finding.structured_category(),
+        AuditFindingCategory::ExternalSolver { .. }
+    )
+}
+
+fn is_critical_finding(finding: &AuditFinding) -> bool {
+    finding.severity == AuditSeverity::Critical
 }
 
 /// Builder for constructing an [`AuditReport`] incrementally.

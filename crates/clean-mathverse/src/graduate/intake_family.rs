@@ -89,12 +89,9 @@ pub(super) struct CarriedFamilyState {
 /// literals, universe levels, projections, let-binder names, `nonDep`
 /// hints, and the QTT multiplicity carried alongside the binder info
 /// (stricter than strictly necessary — fail closed).
-pub(super) fn exprs_equal_ignoring_binder_info(
-    a: &clean_kernel::Expr,
-    b: &clean_kernel::Expr,
-) -> bool {
+pub(super) fn exprs_equal_ignoring_binder_info(a: &Expr, b: &Expr) -> bool {
     use clean_kernel::expr::ExprKind;
-    let mut stack: Vec<(&clean_kernel::Expr, &clean_kernel::Expr)> = vec![(a, b)];
+    let mut stack: Vec<(&Expr, &Expr)> = vec![(a, b)];
     while let Some((a, b)) = stack.pop() {
         match (a.kind(), b.kind()) {
             (ExprKind::App(f1, a1), ExprKind::App(f2, a2)) => {

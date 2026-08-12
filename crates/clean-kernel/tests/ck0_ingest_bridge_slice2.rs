@@ -577,6 +577,12 @@ struct Pipeline {
     env: MinimalEnv,
     target_ty: Term,
     target_proof: Term,
+    // 2026-07-31: written by `run_pipeline` but never read back — the tests
+    // assert over `admitted` (the human-readable log) instead. Kept (not
+    // deleted) because it is the pipeline's own record of what the closure
+    // computation produced; dropping it would mean a future closure assertion
+    // has to re-run `dependency_closure` to see it.
+    #[allow(dead_code)]
     closure: Vec<AdmitItem>,
     admitted: AdmittedNames,
 }

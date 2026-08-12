@@ -22,9 +22,16 @@ pub(crate) enum NativeTypeError {
     #[error("type {0:?} has no defined layout (e.g. Bool has no fixed byte size)")]
     NoLayout(NativeType),
 
+    // Both are staged halves of this module's error contract.
+    // `is_layout_compatible` answers `Ok(false)` for a mismatch instead of
+    // rejecting, and `TargetConfig` is only ever built from the fixed 32/64
+    // constructors, so neither condition can be reached until an
+    // assert-compatible API and a parsed-target constructor land — 2026-07-31.
+    #[allow(dead_code)]
     #[error("types {0:?} and {1:?} are not layout-compatible")]
     IncompatibleLayout(NativeType, NativeType),
 
+    #[allow(dead_code)]
     #[error("unsupported target pointer width: {0}")]
     UnsupportedPointerWidth(u32),
 }

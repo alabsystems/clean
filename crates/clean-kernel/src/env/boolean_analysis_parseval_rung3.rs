@@ -40,6 +40,8 @@ struct Rung3aConsts {
     subset_sum_congr: Expr,
     fin: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fin_sum: Expr,
     fin_sum_mul_sum: Expr,
     fin_sum_swap: Expr,

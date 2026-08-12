@@ -80,7 +80,9 @@ fn head_const_levels(ty: &Expr) -> Vec<Level> {
 pub(in crate::infer) enum StructureKind {
     /// A plain `structure`: projections keep the declared parameter binder
     /// infos and an explicit `self` (current Clean behavior; Lean additionally
-    /// makes structure params implicit — tracked as a separate fidelity gap).
+    /// makes structure params implicit in projections — tracked as a separate
+    /// fidelity gap. The CONSTRUCTOR's params are implicit, matching Lean —
+    /// see the ctor abstraction pass).
     Structure,
     /// A `class`: projections take implicit params and inst-implicit `self`.
     Class,
@@ -1614,11 +1616,15 @@ impl<'a> ElabCtx<'a> {
             projections.push((proj_name, proj_ty, proj_val));
         }
 
-        // Abstract constructor type over parameters
+        // Abstract constructor type over parameters. Lean 4 makes structure
+        // parameters IMPLICIT in the constructor (`@Prod.mk : {α : Type u} →
+        // {β : Type v} → α → β → α × β`), exactly as `elab_inductive` already
+        // does for inductive constructors; the application elaborator's
+        // skip-loop fits-probe keeps legacy explicit-param call sites
+        // (`S.mk Nat x`) working unchanged (U2 rung 2).
         for i in (0..binders.len()).rev() {
             ctor_ty = ctor_ty.abstract_fvar(param_fvars[i]);
-            let bi = convert_binder_info(binders[i].info);
-            ctor_ty = Expr::pi(bi, binder_types[i].clone(), ctor_ty);
+            ctor_ty = Expr::pi(BinderInfo::Implicit, binder_types[i].clone(), ctor_ty);
         }
 
         // Pop param fvars

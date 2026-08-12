@@ -49,6 +49,7 @@
 //!
 //! `DerivedProved`, empty axiom closures.
 
+use super::nf_head::HNF;
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
@@ -61,10 +62,6 @@ const I_BINDERS: &str = "(i1 : RecEnvReductNotRedex (red_rec the_red_env)) \
      (i6 : DefEnvLiftClosed (red_def the_red_env)) \
      (i7 : RecEnvDefEnvDisjoint the_red_env) \
      (i8 : RecEnvCtorNoDefVal the_red_env) ";
-
-const HNF: &str = "(hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
-     Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (OptionType.some KExpr r) -> \
-     nf_head r) ";
 
 const RECUR: &str = "(recur : forall (c1 : KExpr) (c2 : KExpr), rbelow_plus c1 x -> \
      DefEq c1 c2 -> rbelow_plus_acc c2 -> DefEqFuelAccepts c1 c2) ";
@@ -105,7 +102,7 @@ impl Specification {
         self.add_recursive_def(
             &Self::dispatch_src(),
             "def_eq_dispatch: select and run the completeness round matching the first normal \
-             form's head. Eight leaves — nf_head's four arms with rigid fanning out to five — of \
+             form's head. Nine leaves — nf_head's four arms with rigid fanning out to six — of \
              which six are one-line calls and the two application leaves shape-force the other \
              side, invert both legs with nf_app_leg_inv and hand the witnesses to the \
              evidence-agnostic application round. \
@@ -173,7 +170,12 @@ impl Specification {
              (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
              (OptionType.some KExpr (KExpr.proj rs ri rsub))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.proj rs ri rsub) nb) => \
-             def_eq_round_proj hnf n x bb nb rs ri rsub hxz hb hjz accb recur) ",
+             def_eq_round_proj hnf n x bb nb rs ri rsub hxz hb hjz accb recur) \
+             (fun (rbi : Nat) \
+             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (OptionType.some KExpr (KExpr.bvar rbi))) \
+             (hjz : par_strips_witness_cd_star the_red_env (KExpr.bvar rbi) nb) => \
+             def_eq_round_bvar hnf n x bb nb rbi hxz hb hjz) ",
             app = app_leaf(
                 "(raf : KExpr) (raa : KExpr) (hraf : rigid_app_head raf) \
                  (_ihr : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
@@ -191,10 +193,7 @@ impl Specification {
         .replace("// pi\n", "")
         .replace("// lit\n", "")
         .replace("// proj\n", "")
-        .replace("// sort", "")
-        .replace("", "")
-        .replace("", "")
-        .replace("", "");
+        .replace("// sort", "");
 
         format!(
             "def def_eq_dispatch {HNF}(n : Nat) (x : KExpr) (bb : KExpr) (nx : KExpr) \
@@ -222,6 +221,11 @@ impl Specification {
              (OptionType.some KExpr (KExpr.const cn cus))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.const cn cus) nb) => \
              def_eq_round_const hnf n x bb nb cn cus hxz hb hjz) \
+             (fun (bi : Nat) \
+             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (OptionType.some KExpr (KExpr.bvar bi))) \
+             (hjz : par_strips_witness_cd_star the_red_env (KExpr.bvar bi) nb) => \
+             def_eq_round_bvar hnf n x bb nb bi hxz hb hjz) \
              nx (hnf n x nx hx) hx hj",
             mz = motive("z"),
             neutral = app_leaf(

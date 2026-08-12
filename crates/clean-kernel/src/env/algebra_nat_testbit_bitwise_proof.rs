@@ -83,6 +83,8 @@ struct C {
     rec0: Expr, // Nat.rec.{0} — Prop motive
     bool_ty: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     btrue: Expr,
     bfalse: Expr,
     div2: Expr,
@@ -158,6 +160,7 @@ impl C {
         Expr::apps(self.eq_refl1.clone(), [self.bool_ty.clone(), a])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn symm_nat(&self, a: Expr, b: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm1.clone(), [self.nat.clone(), a, b, h])
     }

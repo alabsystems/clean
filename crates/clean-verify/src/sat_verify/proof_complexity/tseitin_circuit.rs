@@ -8,7 +8,7 @@
 //! equisatisfiable CNF via the Tseitin (1968) transformation. Introduces
 //! one auxiliary variable per gate and O(1) clauses per gate.
 
-use crate::sat_verify::cdcl::{Clause, Literal};
+use crate::sat_verify::cdcl::Clause;
 
 // ---------------------------------------------------------------------------
 // Circuit types

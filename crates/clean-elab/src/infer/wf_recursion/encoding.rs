@@ -32,6 +32,18 @@ use clean_kernel::{Expr, ExprFolder, FVarId};
 /// * `func_fvar` - FVarId of the function being defined (used during elaboration)
 /// * `rec_fvar` - FVarId of the `rec` parameter from the fix body
 /// * `rec_type` - Type of the `rec` parameter (includes proof obligation in domain)
+/// Does `target` occur free anywhere in `e`?
+///
+/// Implemented by reusing the kernel's own `abstract_fvar`, which already
+/// walks every `ExprKind` variant (including the non-core extension
+/// variants). A hand-rolled walker with a `_ => false` catch-all would
+/// silently answer "no recursive call" for any variant it forgot, which is
+/// exactly the direction that must never be wrong: the answer gates whether
+/// we are allowed to emit a `WellFounded.fix` term at all.
+pub(crate) fn contains_fvar(e: &Expr, target: FVarId) -> bool {
+    e.abstract_fvar(target) != *e
+}
+
 pub(crate) fn replace_rec_calls(body: &Expr, func_fvar: FVarId, rec_fvar: FVarId) -> Expr {
     struct RecCallReplacer {
         func_fvar: FVarId,

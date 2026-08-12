@@ -283,7 +283,10 @@ fn cases_core(
     // returns None → `ProofNotProduced` (e.g. `by tauto` on `(a∧b) ↔ (a∧b)`,
     // whose Iff branch proves each side via `intro h; cases h`). This is the same
     // fix `intro` carries (#2533); the two now share `goal_fvar_base`.
-    let branch_fvar_base = state.goal_fvar_base(&goal);
+    // `goal_binder_base`: identical to `goal_fvar_base` unless the goal's
+    // context was narrowed by `clear`, in which case the context alone would
+    // hand back an id still bound by a live `lambda` (capture).
+    let branch_fvar_base = state.goal_binder_base(&goal);
     let mut branch_fvar_max = branch_fvar_base;
 
     for ctor_name in &ind_info.constructor_names {

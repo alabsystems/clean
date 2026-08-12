@@ -52,6 +52,7 @@ use crate::name::Name;
 /// Unlike NN-specific `AbstractDomainConsts`, these are program-analysis
 /// primitives parameterized by a lattice structure.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct AbstractInterpConsts {
     pub(super) nat: Expr,
     pub(super) prop: Expr,

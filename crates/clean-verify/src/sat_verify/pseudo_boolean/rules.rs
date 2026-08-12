@@ -20,6 +20,12 @@
 //! - **Rounding**: divide all by GCD of coefficients, ceiling on degree.
 //! - **Generalized resolution**: resolve two PB constraints on a variable.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use std::collections::HashMap;
 
 use super::types::{PbConstraint, PbFormula};
@@ -500,8 +506,7 @@ mod tests {
         // After simplification: (4-1)*x1 + 2*x2 + 3*x3 >= 7 - 1 = 3*x1 + 2*x2 + 3*x3 >= 6
         let c = PbConstraint::new(vec![(4, 1), (1, -1), (2, 2), (3, 3)], 7);
         let result = simplify_mixed_polarity(&c, 1);
-        let coeff_map: std::collections::HashMap<i32, i64> =
-            result.terms.iter().map(|&(c, l)| (l, c)).collect();
+        let coeff_map: HashMap<i32, i64> = result.terms.iter().map(|&(c, l)| (l, c)).collect();
         assert_eq!(coeff_map.get(&1), Some(&3));
         assert_eq!(coeff_map.get(&2), Some(&2));
         assert_eq!(coeff_map.get(&3), Some(&3));

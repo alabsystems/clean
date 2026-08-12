@@ -4,6 +4,7 @@
 
 //! `clean factory ...` release health surfaces (#3706).
 
+use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,7 +27,47 @@ const AY_MANIFEST_KEYS: [&str; 7] = [
     "ay-frontend",
     "ay-translate",
 ];
-const AY_LOCK_SOURCE_COUNT: usize = 37;
+const AY_LOCK_PACKAGE_NAMES: [&str; 38] = [
+    "ay",
+    "ay-allsat",
+    "ay-arrays",
+    "ay-bv",
+    "ay-chc",
+    "ay-core",
+    "ay-count",
+    "ay-diff-logic",
+    "ay-dispatch",
+    "ay-dpll",
+    "ay-drat-check",
+    "ay-dt",
+    "ay-euf",
+    "ay-fp",
+    "ay-frontend",
+    "ay-intsat",
+    "ay-jit",
+    "ay-lean-bridge",
+    "ay-lia",
+    "ay-lra",
+    "ay-map",
+    "ay-milp",
+    "ay-model-check",
+    "ay-multiset",
+    "ay-nia",
+    "ay-nonlinear-common",
+    "ay-nra",
+    "ay-pb-core",
+    "ay-prefetch",
+    "ay-proof",
+    "ay-proof-common",
+    "ay-sat",
+    "ay-sat-congruence-core",
+    "ay-seq",
+    "ay-set",
+    "ay-strings",
+    "ay-sys",
+    "ay-translate",
+];
+const AY_LOCK_SOURCE_COUNT: usize = 38;
 
 /// Verbs under `clean factory`.
 #[derive(Debug, Clone, Subcommand)]
@@ -303,7 +344,7 @@ fn check_cargo_lock(repo_root: &Path) -> HealthCheck {
 // The serialized `ay_path` / `ay_updates` keys predate the migration from a
 // sibling path dependency to an immutable Git dependency. Keep the keys for
 // consumers of the v1 status schema, but validate the committed graph they now
-// represent: seven root manifest entries, all 37 AY lockfile sources, and the
+// represent: seven root manifest entries, all 38 AY lockfile sources, and the
 // intended remote revision. No sibling checkout participates in this evidence.
 
 fn check_ay_path(repo_root: &Path) -> HealthCheck {
@@ -479,6 +520,7 @@ fn read_ay_pin_evidence(repo_root: &Path) -> Result<AyPinEvidence, String> {
         .ok_or_else(|| "Cargo.lock has no package inventory".to_owned())?;
     let source_prefix = format!("git+{AY_REPO_URL}");
     let mut ay_sources = Vec::new();
+    let mut ay_package_names = Vec::new();
     for package in packages {
         let package = package
             .as_table()
@@ -501,6 +543,7 @@ fn read_ay_pin_evidence(repo_root: &Path) -> Result<AyPinEvidence, String> {
             ));
         }
         if is_ay_package {
+            ay_package_names.push(name);
             ay_sources.push(
                 source.ok_or_else(|| format!("Cargo.lock AY package `{name}` has no source"))?,
             );
@@ -510,6 +553,26 @@ fn read_ay_pin_evidence(repo_root: &Path) -> Result<AyPinEvidence, String> {
         return Err(format!(
             "Cargo.lock must contain exactly {AY_LOCK_SOURCE_COUNT} ay Git sources, found {}",
             ay_sources.len()
+        ));
+    }
+    let actual_names: BTreeSet<_> = ay_package_names.iter().copied().collect();
+    let expected_names: BTreeSet<_> = AY_LOCK_PACKAGE_NAMES.iter().copied().collect();
+    if actual_names != expected_names || actual_names.len() != ay_package_names.len() {
+        let missing: Vec<_> = expected_names.difference(&actual_names).copied().collect();
+        let unexpected: Vec<_> = actual_names.difference(&expected_names).copied().collect();
+        let duplicates: Vec<_> = actual_names
+            .iter()
+            .copied()
+            .filter(|name| {
+                ay_package_names
+                    .iter()
+                    .filter(|candidate| *candidate == name)
+                    .count()
+                    > 1
+            })
+            .collect();
+        return Err(format!(
+            "Cargo.lock AY package inventory must exactly match the audited graph (missing={missing:?}, unexpected={unexpected:?}, duplicates={duplicates:?})"
         ));
     }
 
@@ -1261,9 +1324,9 @@ mod tests {
         std::fs::write(repo_root.join("Cargo.toml"), manifest).expect("write Cargo.toml");
 
         let mut lock = String::new();
-        for index in 0..lock_sources {
+        for name in AY_LOCK_PACKAGE_NAMES.iter().take(lock_sources) {
             lock.push_str(&format!(
-                "[[package]]\nname = \"ay-fixture-{index}\"\nsource = \"git+{AY_REPO_URL}?rev={lock_query_rev}#{lock_resolved_rev}\"\n"
+                "[[package]]\nname = \"{name}\"\nsource = \"git+{AY_REPO_URL}?rev={lock_query_rev}#{lock_resolved_rev}\"\n"
             ));
         }
         std::fs::write(repo_root.join("Cargo.lock"), lock).expect("write Cargo.lock");
@@ -1341,7 +1404,7 @@ mod tests {
         assert_eq!(check.status, CHECK_PASS);
         assert!(check.message.contains("committed ay Git graph is coherent"));
         assert!(check.message.contains("7 manifest pins"));
-        assert!(check.message.contains("37 lock sources"));
+        assert!(check.message.contains("38 lock sources"));
         assert!(check.message.contains(TEST_REV));
     }
 
@@ -1425,7 +1488,7 @@ mod tests {
     }
 
     #[test]
-    fn ay_pin_graph_fails_closed_unless_all_37_lock_sources_are_present() {
+    fn ay_pin_graph_fails_closed_unless_all_38_lock_sources_are_present() {
         let repo = tempfile::tempdir().expect("tempdir");
         write_ay_pin_fixture(
             repo.path(),
@@ -1438,8 +1501,32 @@ mod tests {
         let check = check_ay_path(repo.path());
 
         assert_eq!(check.status, CHECK_FAIL);
-        assert!(check.message.contains("exactly 37 ay Git sources"));
-        assert!(check.message.contains("found 36"));
+        assert!(check.message.contains("exactly 38 ay Git sources"));
+        assert!(check.message.contains("found 37"));
+    }
+
+    #[test]
+    fn ay_pin_graph_rejects_a_same_size_substituted_lock_inventory() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        write_ay_pin_fixture(
+            repo.path(),
+            &[TEST_REV; 7],
+            TEST_REV,
+            TEST_REV,
+            AY_LOCK_SOURCE_COUNT,
+        );
+        let lock_path = repo.path().join("Cargo.lock");
+        let lock = std::fs::read_to_string(&lock_path)
+            .expect("read Cargo.lock")
+            .replace("name = \"ay-translate\"", "name = \"ay-unexpected\"");
+        std::fs::write(lock_path, lock).expect("rewrite Cargo.lock");
+
+        let check = check_ay_path(repo.path());
+
+        assert_eq!(check.status, CHECK_FAIL);
+        assert!(check.message.contains("must exactly match"));
+        assert!(check.message.contains("ay-translate"));
+        assert!(check.message.contains("ay-unexpected"));
     }
 
     #[test]

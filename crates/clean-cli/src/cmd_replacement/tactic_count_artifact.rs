@@ -146,6 +146,7 @@ pub(crate) fn tactic_full_corpus_list_fingerprint(items: &[&str]) -> String {
         .collect::<String>()
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn validate_generated_tactic_case_backing(
     artifact: &TacticParityCountArtifact,
 ) -> Result<(), Vec<String>> {

@@ -30,6 +30,7 @@ use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct SkipNePConsts {
     nat: Expr,
     nat_succ: Expr,

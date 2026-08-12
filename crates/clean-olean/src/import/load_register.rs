@@ -30,30 +30,47 @@ use clean_kernel::inductive::{allows_large_elim, Constructor};
 use clean_kernel::name::Name;
 use hashbrown::{HashMap, HashSet};
 
-/// Preserve non-safe definition authority after trusted `.olean` registration.
+/// Preserve non-safe declaration authority after trusted `.olean` registration.
 ///
-/// Lean's replay checker excludes both `unsafe` and `partial` definitions.
-/// Keeping only the former silently upgraded partial implementation
-/// declarations to ordinary safe definitions in Clean's strict checker and
-/// axiom audit.
-fn apply_definition_safety_marks(
+/// Lean excludes unsafe axioms, opaques, definitions, and inductive-family
+/// declarations, plus partial definitions, from the trusted logical fragment.
+/// A mark is applied only when the accepted declaration still has the exact
+/// source kind. This prevents a failed `.olean.private` definition/opaque
+/// upgrade from leaving authority on the surviving axiom stub, and prevents a
+/// rejected family declaration from leaving a latent name-only mark.
+fn apply_declaration_safety_marks(
     env: &mut Environment,
-    marks: impl IntoIterator<Item = (Name, DefinitionSafety)>,
+    marks: impl IntoIterator<Item = (Name, ConstantKind, DefinitionSafety)>,
 ) {
-    for (name, safety) in marks {
-        // Conversion/structural validation or an axiom-stub upgrade can reject
-        // a definition. Require the accepted kernel declaration itself to be a
-        // definition: name presence alone is insufficient because a failed
-        // `.olean.private` upgrade leaves the original axiom stub in place.
-        let Some(info) = env.get_const(&name) else {
-            continue;
+    for (name, kind, safety) in marks {
+        let accepted = match kind {
+            ConstantKind::Definition => env
+                .get_const(&name)
+                .is_some_and(|info| info.kind == KernelConstantKind::Definition),
+            ConstantKind::Axiom => env
+                .get_const(&name)
+                .is_some_and(|info| info.kind == KernelConstantKind::Axiom),
+            ConstantKind::Opaque => env
+                .get_const(&name)
+                .is_some_and(|info| info.kind == KernelConstantKind::Opaque),
+            ConstantKind::Inductive => env.get_inductive(&name).is_some(),
+            ConstantKind::Constructor => env.get_constructor(&name).is_some(),
+            ConstantKind::Recursor => env.get_recursor(&name).is_some(),
+            // TheoremVal and QuotVal have no declaration-safety field.
+            ConstantKind::Theorem | ConstantKind::Quot => false,
         };
-        if info.kind != KernelConstantKind::Definition {
+        if !accepted {
             continue;
         }
         match safety {
             DefinitionSafety::Unsafe => env.mark_unsafe(name),
-            DefinitionSafety::Partial => env.mark_partial(name),
+            DefinitionSafety::Partial if kind == ConstantKind::Definition => {
+                env.mark_partial(name);
+            }
+            // `partial` is not a valid state for the other declaration kinds.
+            // Treat an internally-constructed impossible mark as unsafe rather
+            // than granting ordinary safe authority.
+            DefinitionSafety::Partial => env.mark_unsafe(name),
             DefinitionSafety::Safe => {}
         }
     }
@@ -411,6 +428,21 @@ fn load_extension_entries(
 ///   over-approximation rather than silently dropping them (`attr_kind` /
 ///   `scope_ns` stay available on the parsed entry for a future increment).
 ///
+/// **Already-registered names ADOPT Lean's priority.** Clean's hand-rolled
+/// prelude registers many of these same instances with a GUESSED priority, and
+/// first-registered-wins used to freeze that guess in place: `instOfNatNat`
+/// (guessed 100, Lean 1000, `8d80c9d98`), `instLTNat` (guessed 100, Lean 1000,
+/// ranked 30th of 43 `LT` candidates, `066a1173f`) and the B101 hetero bridges
+/// (`28e7834a1`) were each dug out one at a time. This bridge now overwrites the
+/// priority — and ONLY the priority — of an already-registered twin with the
+/// value Lean serialized, via [`Environment::adopt_instance_priority`], so the
+/// whole class is retired structurally instead of row by row. The hand-rolled
+/// entry keeps its `class_name`/`type_`/`value` (the prelude sets those for
+/// binder-info fidelity the persisted entry does not carry), and a name Lean
+/// never registers keeps Clean's value untouched. Census + ratchet:
+/// `data/prelude_instance_priority_census.json`,
+/// `crates/clean-olean/tests/prelude_instance_priority_census.rs`.
+///
 /// SOUNDNESS: instance registrations are elaboration metadata — they steer
 /// which candidate `resolve_instance` tries first; every synthesized term is
 /// still kernel-checked by the caller. A wrong or extra entry can only cost
@@ -444,10 +476,15 @@ fn register_real_instance_entries(env: &mut Environment, extensions: &[ParsedExt
         .collect();
 
     for (name, priority, synth_order) in decoded {
-        // Idempotent across repeated/overlapping loads (base + companion
-        // parts re-list the same entries) and first-writer-wins vs the
-        // heuristic backfill, which runs after this bridge.
+        // Already registered — by the hand-rolled prelude, by an earlier
+        // module, or by a repeated/overlapping load (base + companion parts
+        // re-list the same entries). ADOPT the serialized priority rather than
+        // letting first-registered-wins freeze a guess: this is the structural
+        // retirement of the `instOfNatNat`/`instLTNat` defect class. Adoption
+        // is idempotent (re-listing the same entry re-writes the same value),
+        // and every other field of the existing entry is left alone.
         if env.is_instance(&name) {
+            env.adopt_instance_priority(&name, priority);
             continue;
         }
         let Some(class) = env
@@ -622,7 +659,16 @@ fn register_real_class_entries(
 /// expression from `env.get_const(name)` when these are absent (see #443), so
 /// the imported constant's own type/value are used — consistent with how natively
 /// declared instances without overridden binders are handled.
-fn register_instances_from_extension(env: &mut Environment) {
+/// Bridge imported typeclass instances from the persistent extension into the
+/// kernel registry.
+///
+/// `run_global_backfill` controls the O(env) HEURISTIC pass
+/// ([`register_class_typed_definitions_as_instances`]): `true` runs it inline
+/// (historical per-module schedule); `false` skips it so the closure loader can
+/// run it ONCE at the end (see
+/// [`OleanImportPolicy::defer_global_instance_backfill`]). The cheap typed-state
+/// bridge below always runs — it is bounded by THIS module's extension entries.
+fn register_instances_from_extension(env: &mut Environment, run_global_backfill: bool) {
     let idx = instance_ext_idx();
 
     // Snapshot (name, priority, decoded-class) for every imported instance entry.
@@ -682,6 +728,22 @@ fn register_instances_from_extension(env: &mut Environment) {
     // resolved proof term is re-checked by the kernel in `close_goal`; an extra
     // candidate can only cost completeness, never admit a false proof. It can
     // over-register a non-`@[instance]` class-typed def, which is harmless.
+    //
+    // This is the O(env) pass; the closure loader may DEFER it to a single
+    // end-of-closure run (`run_global_backfill == false`) to avoid the
+    // O(modules × env) quadratic during a large multi-module import.
+    if run_global_backfill {
+        register_class_typed_definitions_as_instances(env);
+    }
+}
+
+/// Run the deferred O(env) heuristic instance backfill ONCE, after a whole import
+/// closure has loaded. Paired with
+/// [`OleanImportPolicy::defer_global_instance_backfill`]: when that flag skips the
+/// per-module heuristic, the closure entry calls this exactly once so the final
+/// instance registry is identical to the per-module schedule (the pass is
+/// additive + idempotent) at a single O(env) cost instead of O(modules × env).
+pub(crate) fn finalize_global_instance_backfill(env: &mut Environment) {
     register_class_typed_definitions_as_instances(env);
 }
 
@@ -1368,8 +1430,25 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         .copied()
         .chain(upgrade_indices.iter().map(|&i| &module.constants[i]))
         .filter_map(|c| {
-            c.definition_safety
-                .map(|safety| (Name::interned(&c.name), safety))
+            let safety = match c.kind {
+                ConstantKind::Definition | ConstantKind::Axiom | ConstantKind::Opaque => {
+                    c.definition_safety
+                }
+                ConstantKind::Inductive => c
+                    .inductive_val
+                    .as_ref()
+                    .and_then(|v| v.is_unsafe.then_some(DefinitionSafety::Unsafe)),
+                ConstantKind::Constructor => c
+                    .constructor_val
+                    .as_ref()
+                    .and_then(|v| v.is_unsafe.then_some(DefinitionSafety::Unsafe)),
+                ConstantKind::Recursor => c
+                    .recursor_val
+                    .as_ref()
+                    .and_then(|v| v.is_unsafe.then_some(DefinitionSafety::Unsafe)),
+                ConstantKind::Theorem | ConstantKind::Quot => None,
+            };
+            safety.map(|safety| (Name::interned(&c.name), c.kind.clone(), safety))
         })
         .collect();
 
@@ -1456,7 +1535,7 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         summary.added_constants += upgraded;
     }
 
-    apply_definition_safety_marks(env, safety_marks);
+    apply_declaration_safety_marks(env, safety_marks);
 
     if !module.entries.is_empty() {
         summary.extension_undecoded_entries =
@@ -1490,7 +1569,10 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         register_structure_fields_from_projections(env);
         // Re-register imported typeclass instances into the kernel registry so
         // the elaborator's instance synthesis can see them (#instance-import).
-        register_instances_from_extension(env);
+        // The O(env) heuristic pass inside is deferred to a single end-of-closure
+        // run when the policy requests it (see
+        // `OleanImportPolicy::defer_global_instance_backfill`).
+        register_instances_from_extension(env, !policy.defer_global_instance_backfill());
         // Re-register imported `@[simp]` lemmas into the kernel registry so the
         // simp tactic can use them (#simp-import).
         register_simp_lemmas_from_extension(env);
@@ -1630,8 +1712,25 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         .copied()
         .chain(upgrade_indices.iter().map(|&i| &module.constants[i]))
         .filter_map(|c| {
-            c.definition_safety
-                .map(|safety| (Name::interned(&c.name), safety))
+            let safety = match c.kind {
+                ConstantKind::Definition | ConstantKind::Axiom | ConstantKind::Opaque => {
+                    c.definition_safety
+                }
+                ConstantKind::Inductive => c
+                    .inductive_val
+                    .as_ref()
+                    .and_then(|v| v.is_unsafe.then_some(DefinitionSafety::Unsafe)),
+                ConstantKind::Constructor => c
+                    .constructor_val
+                    .as_ref()
+                    .and_then(|v| v.is_unsafe.then_some(DefinitionSafety::Unsafe)),
+                ConstantKind::Recursor => c
+                    .recursor_val
+                    .as_ref()
+                    .and_then(|v| v.is_unsafe.then_some(DefinitionSafety::Unsafe)),
+                ConstantKind::Theorem | ConstantKind::Quot => None,
+            };
+            safety.map(|safety| (Name::interned(&c.name), c.kind.clone(), safety))
         })
         .collect();
 
@@ -1717,7 +1816,7 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         summary.added_constants += upgraded;
     }
 
-    apply_definition_safety_marks(env, safety_marks);
+    apply_declaration_safety_marks(env, safety_marks);
 
     if !module.entries.is_empty() {
         summary.extension_undecoded_entries =
@@ -1751,7 +1850,10 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         register_structure_fields_from_projections(env);
         // Re-register imported typeclass instances into the kernel registry so
         // the elaborator's instance synthesis can see them (#instance-import).
-        register_instances_from_extension(env);
+        // The O(env) heuristic pass inside is deferred to a single end-of-closure
+        // run when the policy requests it (see
+        // `OleanImportPolicy::defer_global_instance_backfill`).
+        register_instances_from_extension(env, !policy.defer_global_instance_backfill());
         // Re-register imported `@[simp]` lemmas into the kernel registry so the
         // simp tactic can use them (#simp-import).
         register_simp_lemmas_from_extension(env);
@@ -1981,8 +2083,8 @@ fn register_converted_constants(
 
 #[cfg(test)]
 mod definition_safety_registration_tests {
-    use super::apply_definition_safety_marks;
-    use crate::module::DefinitionSafety;
+    use super::apply_declaration_safety_marks;
+    use crate::module::{ConstantKind as ModuleConstantKind, DefinitionSafety};
     use clean_kernel::env::{ConstantInfo, ConstantKind, Environment, Reducibility, TrustedEnvExt};
     use clean_kernel::expr::Expr;
     use clean_kernel::name::Name;
@@ -1999,6 +2101,20 @@ mod definition_safety_registration_tests {
         name
     }
 
+    fn seed_kind(env: &mut Environment, name: &str, kind: ConstantKind) -> Name {
+        let name = Name::from_string(name);
+        let value = (kind != ConstantKind::Axiom).then_some(Expr::prop());
+        env.extend_constants_unchecked(std::iter::once(ConstantInfo::new_with_reducibility(
+            name.clone(),
+            vec![],
+            Expr::type_(),
+            value,
+            Reducibility::Opaque,
+            kind,
+        )));
+        name
+    }
+
     #[test]
     fn unsafe_and_partial_are_both_preserved_as_non_safe_authority() {
         let mut env = Environment::new();
@@ -2006,12 +2122,24 @@ mod definition_safety_registration_tests {
         let partial_name = seed(&mut env, "Test.ImportedPartial");
         let safe_name = seed(&mut env, "Test.ImportedSafe");
 
-        apply_definition_safety_marks(
+        apply_declaration_safety_marks(
             &mut env,
             [
-                (unsafe_name.clone(), DefinitionSafety::Unsafe),
-                (partial_name.clone(), DefinitionSafety::Partial),
-                (safe_name.clone(), DefinitionSafety::Safe),
+                (
+                    unsafe_name.clone(),
+                    ModuleConstantKind::Definition,
+                    DefinitionSafety::Unsafe,
+                ),
+                (
+                    partial_name.clone(),
+                    ModuleConstantKind::Definition,
+                    DefinitionSafety::Partial,
+                ),
+                (
+                    safe_name.clone(),
+                    ModuleConstantKind::Definition,
+                    DefinitionSafety::Safe,
+                ),
             ],
         );
 
@@ -2027,7 +2155,14 @@ mod definition_safety_registration_tests {
     fn rejected_or_absent_constant_does_not_leave_a_latent_mark() {
         let mut env = Environment::new();
         let absent = Name::from_string("Test.AbsentPartial");
-        apply_definition_safety_marks(&mut env, [(absent.clone(), DefinitionSafety::Partial)]);
+        apply_declaration_safety_marks(
+            &mut env,
+            [(
+                absent.clone(),
+                ModuleConstantKind::Definition,
+                DefinitionSafety::Partial,
+            )],
+        );
         assert!(!env.is_partial(&absent));
 
         let axiom_stub = Name::from_string("Test.RejectedPrivateUpgrade");
@@ -2039,11 +2174,63 @@ mod definition_safety_registration_tests {
             Reducibility::Opaque,
             ConstantKind::Axiom,
         )));
-        apply_definition_safety_marks(&mut env, [(axiom_stub.clone(), DefinitionSafety::Partial)]);
+        apply_declaration_safety_marks(
+            &mut env,
+            [(
+                axiom_stub.clone(),
+                ModuleConstantKind::Definition,
+                DefinitionSafety::Partial,
+            )],
+        );
         assert!(
             !env.is_partial(&axiom_stub),
             "a rejected private upgrade must not mark the surviving axiom stub"
         );
+    }
+
+    #[test]
+    fn axiom_and_opaque_marks_require_and_preserve_exact_kernel_kinds() {
+        let mut env = Environment::new();
+        let axiom = seed_kind(&mut env, "Test.UnsafeAxiom", ConstantKind::Axiom);
+        let opaque = seed_kind(&mut env, "Test.UnsafeOpaque", ConstantKind::Opaque);
+
+        apply_declaration_safety_marks(
+            &mut env,
+            [
+                (
+                    axiom.clone(),
+                    ModuleConstantKind::Axiom,
+                    DefinitionSafety::Unsafe,
+                ),
+                (
+                    opaque.clone(),
+                    ModuleConstantKind::Opaque,
+                    DefinitionSafety::Unsafe,
+                ),
+            ],
+        );
+        assert!(env.is_unsafe(&axiom));
+        assert!(env.is_unsafe(&opaque));
+
+        let mismatched_axiom = seed_kind(&mut env, "Test.MismatchedAxiom", ConstantKind::Axiom);
+        let mismatched_opaque = seed_kind(&mut env, "Test.MismatchedOpaque", ConstantKind::Opaque);
+        apply_declaration_safety_marks(
+            &mut env,
+            [
+                (
+                    mismatched_axiom.clone(),
+                    ModuleConstantKind::Opaque,
+                    DefinitionSafety::Unsafe,
+                ),
+                (
+                    mismatched_opaque.clone(),
+                    ModuleConstantKind::Axiom,
+                    DefinitionSafety::Unsafe,
+                ),
+            ],
+        );
+        assert!(!env.is_unsafe(&mismatched_axiom));
+        assert!(!env.is_unsafe(&mismatched_opaque));
     }
 }
 

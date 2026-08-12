@@ -17,7 +17,10 @@ use super::equality::match_equality;
 use super::nat_expr_eval;
 use super::norm_num_kernel::norm_num_kernel_proof;
 use super::proof_term::{reduce_eq, rfl};
-use super::smt::decide;
+// Kernel-evaluating `decide` ladder, not the bare SMT bridge — see the note in
+// `norm_num.rs`. `smt::decide` refutes true ground goals; `eval_decide` proves
+// them and still falls through to `smt::decide` last.
+use super::decide::eval_decide as decide;
 
 // Re-export for existing test surface (tests call `crate::tactic::norm::eval_nat_expr`)
 pub(crate) use nat_expr_eval::eval_nat_expr;

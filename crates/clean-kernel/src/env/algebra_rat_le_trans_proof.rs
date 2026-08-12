@@ -110,6 +110,8 @@ struct LeTransConsts {
     or_rec: Expr,
     eq_subst: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_symm: Expr,
     eq_trans: Expr,
     congr_arg: Expr,
@@ -199,6 +201,7 @@ impl LeTransConsts {
 
     /// `@Eq.symm.{1} Int x y h : Eq Int y x`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn symm(&self, x: Expr, y: Expr, h: Expr) -> Expr {
         Expr::apps(self.eq_symm.clone(), [self.int.clone(), x, y, h])
     }

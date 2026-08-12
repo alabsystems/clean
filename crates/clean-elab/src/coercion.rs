@@ -39,6 +39,9 @@ const MAX_COERCION_CHAIN_LENGTH: usize = 8;
 /// Kind of coercion, distinguishing how the coercion was registered.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum CoercionKind {
     /// Direct `@[coe]` attribute coercion.
     Direct,
@@ -79,6 +82,9 @@ impl CoercionPath {
 
     /// Whether this path is empty (no coercions needed).
     #[must_use]
+    // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+    // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn is_empty(&self) -> bool {
         self.steps.is_empty()
     }
@@ -96,9 +102,15 @@ pub(crate) struct CoercionRegistry {
     /// Used for BFS chain resolution.
     by_source: HashMap<Name, Vec<CoercionEntry>>,
     /// Set of all registered coercion function names for quick membership check.
+    // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+    // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[cfg_attr(not(test), allow(dead_code))]
     registered_names: HashSet<Name>,
 }
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 impl CoercionRegistry {
     /// Create a new, empty coercion registry.
     #[must_use]
@@ -298,6 +310,9 @@ pub(crate) fn head_type_name(ty: &Expr) -> Option<Name> {
 /// # ENSURES
 /// - On `Ok(expr)`, the returned expression has been wrapped with coercions
 /// - On `Err`, no applicable coercion was found
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn try_coerce(
     registry: &CoercionRegistry,
     expr: Expr,

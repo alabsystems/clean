@@ -49,6 +49,113 @@ const I_BINDERS: &str = "(i1 : RecEnvReductNotRedex (red_rec the_red_env)) \
      (i7 : RecEnvDefEnvDisjoint the_red_env) \
      (i8 : RecEnvCtorNoDefVal the_red_env) ";
 
+/// Both source forms of the join: the original, and the faithful-loop variant
+/// DERIVED from it. They are produced together, by one function, so the derived
+/// form can never be taken from a stale copy of the original.
+///
+/// They are REGISTERED in different places — the original here, the variant in
+/// `wh_soundness.rs` after `whnf_fuel_red_wh_par`, the par leg it consumes.
+/// Registering the variant next to its original placed it 62 stages before that
+/// leg existed, and the spec build rejected it.
+pub(super) fn join_sources() -> (String, String, String) {
+    // Three diamonds again, but the conclusion keeps the meet instead of
+    // reading a tag off it.
+    let body = "\
+         @par_strips_witness_cd_star.rec the_red_env a b \
+         (fun (_w0 : par_strips_witness_cd_star the_red_env a b) => \
+         par_strips_witness_cd_star the_red_env na nb) \
+         (fun (m : KExpr) (ham : par_reduces_cd_star the_red_env a m) \
+         (hbm : par_reduces_cd_star the_red_env b m) => \
+         @par_strips_witness_cd_star.rec the_red_env na m \
+         (fun (_w1 : par_strips_witness_cd_star the_red_env na m) => \
+         par_strips_witness_cd_star the_red_env na nb) \
+         (fun (p1 : KExpr) (hnap1 : par_reduces_cd_star the_red_env na p1) \
+         (hmp1 : par_reduces_cd_star the_red_env m p1) => \
+         @par_strips_witness_cd_star.rec the_red_env nb m \
+         (fun (_w2 : par_strips_witness_cd_star the_red_env nb m) => \
+         par_strips_witness_cd_star the_red_env na nb) \
+         (fun (p2 : KExpr) (hnbp2 : par_reduces_cd_star the_red_env nb p2) \
+         (hmp2 : par_reduces_cd_star the_red_env m p2) => \
+         @par_strips_witness_cd_star.rec the_red_env p1 p2 \
+         (fun (_w3 : par_strips_witness_cd_star the_red_env p1 p2) => \
+         par_strips_witness_cd_star the_red_env na nb) \
+         (fun (w : KExpr) (hp1w : par_reduces_cd_star the_red_env p1 w) \
+         (hp2w : par_reduces_cd_star the_red_env p2 w) => \
+         par_strips_witness_cd_star.intro the_red_env na nb w \
+         (par_reduces_cd_star_trans the_red_env na p1 w hnap1 hp1w) \
+         (par_reduces_cd_star_trans the_red_env nb p2 w hnbp2 hp2w)) \
+         (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 m p1 p2 \
+         hmp1 hmp2)) \
+         (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 b nb m \
+         (whnf_fuel_red_par_leg n b nb hb) hbm)) \
+         (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 a na m \
+         (whnf_fuel_red_par_leg n a na ha) ham)) \
+         (def_eq_joinable i1 i2 i3 i4 i5 i6 i7 i8 a b hde)";
+
+    let join_src = format!(
+        "def def_eq_whnf_join {I_BINDERS}(n : Nat) (a : KExpr) (b : KExpr) \
+             (na : KExpr) (nb : KExpr) (hde : DefEq a b) \
+             (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+             (OptionType.some KExpr na)) \
+             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
+             (OptionType.some KExpr nb)) : \
+         par_strips_witness_cd_star the_red_env na nb := {body}"
+    );
+    // The FAITHFUL-loop variant, DERIVED from the same source by exactly two
+    // substitutions — the whnf function and the par leg. The body is
+    // untouched: confluence does not care which whnf produced the endpoints,
+    // only that both are par_reduces_cd_star reducts, which is precisely what
+    // whnf_fuel_red_wh_par supplies. The whole confluence layer therefore
+    // transfers to the faithful algorithm with NO new mathematics.
+    //
+    // The count assertion means a change to the original fails loudly here
+    // rather than silently deriving from a stale shape.
+    let hiotap = "forall (w2 : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) \
+         (r : KExpr), Eq (OptionType KExpr) \
+         (iota_reduct_whc (red_rec the_red_env) w2 (KExpr.app g x)) \
+         (OptionType.some KExpr r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r";
+    let wh_src = join_src
+        .replace(
+            "def def_eq_whnf_join ",
+            &format!("def def_eq_whnf_join_wh (hiotap : {hiotap}) "),
+        )
+        .replace("whnf_fuel_red the_red_env", "whnf_fuel_red_wh the_red_env")
+        .replace("whnf_fuel_red_par_leg n", "whnf_fuel_red_wh_par hiotap n");
+    assert_eq!(
+        wh_src.matches("whnf_fuel_red_wh_par hiotap n").count(),
+        2,
+        "the derived join must route BOTH legs through the faithful par leg"
+    );
+    // The THREE-WAY variant, by the same two substitutions. The argument is
+    // again untouched, and for the same reason: confluence does not care which
+    // whnf produced the endpoints, only that both are `par_reduces_cd_star`
+    // reducts — which `whnf_fuel_red_wh3_par` now supplies.
+    //
+    // Its residual is over `iota_reduct_whc3` and so is stated at `WhStepR`,
+    // matching `hiota3` in `wh3_soundness.rs`. Everything else is the original.
+    let hiotap3 = "forall (w2 : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) \
+         (r : KExpr), Eq WhStepR \
+         (iota_reduct_whc3 (red_rec the_red_env) w2 (KExpr.app g x)) \
+         (WhStepR.wstep r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r";
+    let wh3_src = join_src
+        .replace(
+            "def def_eq_whnf_join ",
+            &format!("def def_eq_whnf_join_wh3 (hiotap3 : {hiotap3}) "),
+        )
+        .replace("whnf_fuel_red the_red_env", "whnf_fuel_red_wh3 the_red_env")
+        .replace("whnf_fuel_red_par_leg n", "whnf_fuel_red_wh3_par hiotap3 n");
+    assert_eq!(
+        wh3_src.matches("whnf_fuel_red_wh3_par hiotap3 n").count(),
+        2,
+        "the three-way join must route BOTH legs through the three-way par leg"
+    );
+    assert!(
+        !wh3_src.contains("whnf_fuel_red the_red_env"),
+        "no leg may still reduce with the ORIGINAL loop"
+    );
+    (join_src, wh_src, wh3_src)
+}
+
 impl Specification {
     /// Joinability of the two whnf results, and the descent relation.
     pub(super) fn add_defeq_whnf_join(&mut self) -> Result<(), SpecError> {
@@ -78,50 +185,9 @@ impl Specification {
     }
 
     fn add_whnf_join(&mut self) -> Result<(), SpecError> {
-        // Three diamonds again, but the conclusion keeps the meet instead of
-        // reading a tag off it.
-        let body = "\
-             @par_strips_witness_cd_star.rec the_red_env a b \
-             (fun (_w0 : par_strips_witness_cd_star the_red_env a b) => \
-             par_strips_witness_cd_star the_red_env na nb) \
-             (fun (m : KExpr) (ham : par_reduces_cd_star the_red_env a m) \
-             (hbm : par_reduces_cd_star the_red_env b m) => \
-             @par_strips_witness_cd_star.rec the_red_env na m \
-             (fun (_w1 : par_strips_witness_cd_star the_red_env na m) => \
-             par_strips_witness_cd_star the_red_env na nb) \
-             (fun (p1 : KExpr) (hnap1 : par_reduces_cd_star the_red_env na p1) \
-             (hmp1 : par_reduces_cd_star the_red_env m p1) => \
-             @par_strips_witness_cd_star.rec the_red_env nb m \
-             (fun (_w2 : par_strips_witness_cd_star the_red_env nb m) => \
-             par_strips_witness_cd_star the_red_env na nb) \
-             (fun (p2 : KExpr) (hnbp2 : par_reduces_cd_star the_red_env nb p2) \
-             (hmp2 : par_reduces_cd_star the_red_env m p2) => \
-             @par_strips_witness_cd_star.rec the_red_env p1 p2 \
-             (fun (_w3 : par_strips_witness_cd_star the_red_env p1 p2) => \
-             par_strips_witness_cd_star the_red_env na nb) \
-             (fun (w : KExpr) (hp1w : par_reduces_cd_star the_red_env p1 w) \
-             (hp2w : par_reduces_cd_star the_red_env p2 w) => \
-             par_strips_witness_cd_star.intro the_red_env na nb w \
-             (par_reduces_cd_star_trans the_red_env na p1 w hnap1 hp1w) \
-             (par_reduces_cd_star_trans the_red_env nb p2 w hnbp2 hp2w)) \
-             (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 m p1 p2 \
-             hmp1 hmp2)) \
-             (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 b nb m \
-             (whnf_fuel_red_par_leg n b nb hb) hbm)) \
-             (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 a na m \
-             (whnf_fuel_red_par_leg n a na ha) ham)) \
-             (def_eq_joinable i1 i2 i3 i4 i5 i6 i7 i8 a b hde)";
-
+        let (join_src, _, _) = join_sources();
         self.add_recursive_def(
-            &format!(
-                "def def_eq_whnf_join {I_BINDERS}(n : Nat) (a : KExpr) (b : KExpr) \
-                 (na : KExpr) (nb : KExpr) (hde : DefEq a b) \
-                 (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-                 (OptionType.some KExpr na)) \
-                 (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
-                 (OptionType.some KExpr nb)) : \
-                 par_strips_witness_cd_star the_red_env na nb := {body}"
-            ),
+            &join_src,
             "def_eq_whnf_join: if a and b are definitionally equal, the two results the executable \
              whnf loop returns at a common fuel are JOINABLE. \
              \
@@ -142,7 +208,6 @@ impl Specification {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     /// Three diamonds, four join eliminations, both legs bridged — the same
     /// skeleton as the tag version, differing only in what it keeps.

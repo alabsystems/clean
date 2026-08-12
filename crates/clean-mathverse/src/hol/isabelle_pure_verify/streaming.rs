@@ -135,11 +135,11 @@ pub(super) fn stream_with_recorder(
     let (
         mut env,
         mut closure,
-        mut class_registry,
-        mut method_registry,
-        mut instance_op_registry,
-        mut list_fn_registry,
-        mut poly_inst_registry,
+        class_registry,
+        method_registry,
+        instance_op_registry,
+        list_fn_registry,
+        poly_inst_registry,
         elide,
         mut out,
         start_line,
@@ -343,10 +343,7 @@ pub(super) fn stream_with_recorder(
                 out.rejection_specifics.clone(),
             )
         } else {
-            (
-                std::collections::BTreeMap::new(),
-                std::collections::BTreeMap::new(),
-            )
+            (BTreeMap::new(), BTreeMap::new())
         };
         let line_serial = if let Ok(thm) = parse_proven_theorem(line) {
             let serial = thm.serial;

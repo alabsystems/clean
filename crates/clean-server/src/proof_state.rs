@@ -2558,15 +2558,6 @@ fn profile_keywords(domain_profile: ObligationDomainProfile) -> &'static [&'stat
     }
 }
 
-/// Select relevant lemmas for the current proof state using MePo
-fn select_relevant_lemmas(
-    state: &InternalProofState,
-    env: &Environment,
-    max_lemmas: usize,
-) -> Vec<RelevantLemma> {
-    select_relevant_lemmas_for_goal(state.goals().front(), env, max_lemmas)
-}
-
 fn select_relevant_lemmas_for_goal(
     goal: Option<&Goal>,
     env: &Environment,
@@ -2679,20 +2670,6 @@ fn generate_search_hints_for_goal(goal: Option<&Goal>, env: &Environment) -> Vec
     }
 
     hints
-}
-
-/// Suggest tactic names for the focused goal in machine-friendly form.
-fn suggest_tactics_for_state(state: &InternalProofState, env: &Environment) -> Vec<String> {
-    suggest_tactics_for_state_and_profile(state, env, ObligationDomainProfile::General)
-}
-
-/// Suggest tactic names for the focused goal using a domain profile as the first signal.
-fn suggest_tactics_for_state_and_profile(
-    state: &InternalProofState,
-    env: &Environment,
-    domain_profile: ObligationDomainProfile,
-) -> Vec<String> {
-    suggest_tactics_for_goal_and_profile(state.goals().front(), env, domain_profile)
 }
 
 fn suggest_tactics_for_goal_and_profile(

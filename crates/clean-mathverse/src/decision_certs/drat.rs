@@ -291,8 +291,8 @@ fn encode_lit(lit: i32) -> u64 {
     }
 }
 
-/// Encode DRAT steps into binary format (for testing round-trips).
-pub(crate) fn encode_drat_binary(steps: &[DratStep]) -> Vec<u8> {
+/// Encode DRAT steps into binary format.
+pub fn encode_drat_binary(steps: &[DratStep]) -> Vec<u8> {
     let mut buf = Vec::new();
     for step in steps {
         let marker = match step.kind {

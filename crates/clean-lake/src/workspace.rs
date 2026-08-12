@@ -8,7 +8,7 @@
 //! manifest, and build state.
 
 use crate::cli::toolchain;
-use crate::config::{LakeConfig, LeanLib};
+use crate::config::LakeConfig;
 use crate::error::{LakeError, LakeResult};
 use crate::manifest::{LakeManifest, ManifestPackage};
 use std::collections::HashMap;
@@ -636,7 +636,7 @@ mod tests {
         let src = tmp.path().join("Test.lean");
         fs::write(&src, "-- Test module").unwrap();
         fs::copy(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../tests/fixtures/lean_toolchain/repo-root/lean-toolchain"),
             tmp.path().join("lean-toolchain"),
         )

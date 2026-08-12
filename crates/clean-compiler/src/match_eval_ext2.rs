@@ -139,6 +139,10 @@ impl EvalCache {
 // ---------------------------------------------------------------------------
 
 /// A symbolic value that may be concrete or unknown.
+// Staged input type for `symbolic_eval`: the pass currently takes the unknown
+// set as bare `&[Name]`. Kept for the partial-information evaluator that will
+// carry concrete/unknown values per scrutinee — 2026-07-31.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub(crate) enum SymbolicValue {

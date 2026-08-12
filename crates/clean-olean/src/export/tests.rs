@@ -572,6 +572,42 @@ fn test_definition_safety_roundtrip_safe_explicit() {
 }
 
 #[test]
+fn test_constant_export_rejects_unrepresentable_authority_and_shapes() {
+    let mut exporter = OleanExporter::new();
+
+    let mut theorem = safety_test_definition("Test.UnsafeTheorem");
+    theorem.kind = clean_kernel::env::ConstantKind::Theorem;
+    assert!(exporter
+        .write_constant_info_with_definition_safety(&theorem, DefinitionSafety::Unsafe)
+        .is_err());
+
+    let mut opaque = safety_test_definition("Test.PartialOpaque");
+    opaque.kind = clean_kernel::env::ConstantKind::Opaque;
+    assert!(exporter
+        .write_constant_info_with_definition_safety(&opaque, DefinitionSafety::Partial)
+        .is_err());
+
+    let mut axiom = safety_test_definition("Test.PartialAxiom");
+    axiom.kind = clean_kernel::env::ConstantKind::Axiom;
+    axiom.value = None;
+    assert!(exporter
+        .write_constant_info_with_definition_safety(&axiom, DefinitionSafety::Partial)
+        .is_err());
+
+    let mut valueless_definition = safety_test_definition("Test.ValuelessDefinition");
+    valueless_definition.value = None;
+    assert!(exporter
+        .write_constant_info_with_definition_safety(&valueless_definition, DefinitionSafety::Safe)
+        .is_err());
+
+    let mut valued_axiom = safety_test_definition("Test.ValuedAxiom");
+    valued_axiom.kind = clean_kernel::env::ConstantKind::Axiom;
+    assert!(exporter
+        .write_constant_info_with_definition_safety(&valued_axiom, DefinitionSafety::Safe)
+        .is_err());
+}
+
+#[test]
 fn test_environment_export_preserves_unsafe_and_partial_in_both_import_paths() {
     let unsafe_name = Name::from_string("Test.EnvUnsafe");
     let partial_name = Name::from_string("Test.EnvPartial");
@@ -647,6 +683,159 @@ fn test_environment_export_preserves_unsafe_and_partial_in_both_import_paths() {
 }
 
 #[test]
+fn test_environment_export_preserves_all_unsafe_declaration_kinds_in_both_import_paths() {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let axiom_name = Name::from_string("Test.UnsafeAxiom");
+    let opaque_name = Name::from_string("Test.UnsafeOpaque");
+    let ind_name = Name::from_string("Test.UnsafeBool");
+    let false_name = Name::from_string("Test.UnsafeBool.false");
+    let true_name = Name::from_string("Test.UnsafeBool.true");
+    let rec_name = Name::from_string("Test.UnsafeBool.rec");
+
+    let mut source = Environment::new();
+    source.extend_constants_unchecked(
+        [
+            ConstantInfo {
+                name: axiom_name.clone(),
+                level_params: vec![],
+                type_: Expr::type_(),
+                value: None,
+                is_reducible: false,
+                reducibility: Reducibility::Opaque,
+                kind: clean_kernel::env::ConstantKind::Axiom,
+            },
+            ConstantInfo {
+                name: opaque_name.clone(),
+                level_params: vec![],
+                type_: Expr::type_(),
+                value: Some(Expr::prop()),
+                is_reducible: false,
+                reducibility: Reducibility::Opaque,
+                kind: clean_kernel::env::ConstantKind::Opaque,
+            },
+        ]
+        .into_iter(),
+    );
+
+    let bool_ref = Expr::const_(ind_name.clone(), vec![]);
+    source
+        .add_inductive(InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: ind_name.clone(),
+                type_: Expr::type_(),
+                constructors: vec![
+                    Constructor {
+                        name: false_name.clone(),
+                        type_: bool_ref.clone(),
+                    },
+                    Constructor {
+                        name: true_name.clone(),
+                        type_: bool_ref,
+                    },
+                ],
+            }],
+        })
+        .expect("construct valid synthetic family");
+
+    let unsafe_names = [
+        axiom_name.clone(),
+        opaque_name.clone(),
+        ind_name.clone(),
+        false_name.clone(),
+        true_name.clone(),
+        rec_name.clone(),
+    ];
+    for name in &unsafe_names {
+        source.mark_unsafe(name.clone());
+    }
+
+    let mut exporter = OleanExporter::new();
+    let module_offset = exporter
+        .write_module_data_with_env(&source, &[], &[])
+        .expect("environment export");
+    exporter.set_root(module_offset);
+    let bytes = exporter
+        .finalize("5afe7900000000000000000000000000000000e1")
+        .expect("finalize environment export");
+
+    let parsed = crate::parse_module(&bytes).expect("parse exported module");
+    let constant = |name: &str| {
+        parsed
+            .constants
+            .iter()
+            .find(|constant| constant.name == name)
+            .unwrap_or_else(|| panic!("missing parsed constant {name}"))
+    };
+    assert_eq!(
+        constant("Test.UnsafeAxiom").definition_safety,
+        Some(DefinitionSafety::Unsafe)
+    );
+    assert_eq!(
+        constant("Test.UnsafeOpaque").definition_safety,
+        Some(DefinitionSafety::Unsafe)
+    );
+    assert!(
+        constant("Test.UnsafeBool")
+            .inductive_val
+            .as_ref()
+            .expect("inductive data")
+            .is_unsafe
+    );
+    assert!(
+        constant("Test.UnsafeBool.false")
+            .constructor_val
+            .as_ref()
+            .expect("constructor data")
+            .is_unsafe
+    );
+    assert!(
+        constant("Test.UnsafeBool.true")
+            .constructor_val
+            .as_ref()
+            .expect("constructor data")
+            .is_unsafe
+    );
+    assert!(
+        constant("Test.UnsafeBool.rec")
+            .recursor_val
+            .as_ref()
+            .expect("recursor data")
+            .is_unsafe
+    );
+
+    let assert_imported_marks = |env: &Environment| {
+        for name in &unsafe_names {
+            assert!(env.is_unsafe(name), "{} lost unsafe authority", name);
+            assert!(!env.is_partial(name), "{} was spuriously partial", name);
+        }
+    };
+
+    let mut parsed_env = Environment::new();
+    load_parsed_module(
+        &mut parsed_env,
+        &parsed,
+        Some("Test.AllSafetyParsed".into()),
+    )
+    .expect("parsed import");
+    assert_imported_marks(&parsed_env);
+
+    let load_module = parse_load_module(bytes).expect("direct parse");
+    let mut direct_env = Environment::new();
+    let mut cache = ExprInternCache::default();
+    load_module_direct_with_cache(
+        &mut direct_env,
+        &load_module,
+        Some("Test.AllSafetyDirect".into()),
+        &mut cache,
+    )
+    .expect("direct import");
+    assert_imported_marks(&direct_env);
+}
+
+#[test]
 fn test_definition_safety_unknown_tag_fails_closed() {
     // Build a defnInfo whose safety scalar carries an out-of-range tag (7);
     // the loader must reject it rather than fabricate safe authority.
@@ -698,8 +887,7 @@ fn test_definition_safety_unknown_tag_fails_closed() {
 }
 
 #[test]
-fn test_definition_safety_absent_for_axiom() {
-    // Axioms carry no DefinitionSafety; the field must be None.
+fn test_safe_axiom_declaration_safety_roundtrips() {
     let mut env = Environment::default();
     env.extend_constants_unchecked(std::iter::once(ConstantInfo {
         name: Name::from_string("Test.axiomNoSafety"),
@@ -725,8 +913,9 @@ fn test_definition_safety_absent_for_axiom() {
         .find(|c| c.name == "Test.axiomNoSafety")
         .expect("axiom should be present");
     assert_eq!(
-        constant.definition_safety, None,
-        "axioms have no DefinitionSafety"
+        constant.definition_safety,
+        Some(DefinitionSafety::Safe),
+        "AxiomVal.isUnsafe=false must be represented explicitly as Safe"
     );
 }
 
@@ -1981,5 +2170,135 @@ fn test_mutual_inductive_roundtrip_lean4_constants_array_path() {
     assert_eq!(
         odd_rec_data.num_motives, 2,
         "Odd.rec num_motives must round-trip as 2 for the mutual block"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Lean 4.8 `InductiveVal` shape (other=5, cs_sz=56) — the four-flag layout.
+//
+// Two real Lean layouts exist and they disagree about `isNested`:
+//   >= 4.9  (6, 64): `numNested : Nat` is the 6th OBJECT field at +48, the
+//                    three flags follow at +56, and `isNested = numNested > 0`.
+//   <= 4.8  (5, 56): there is no `numNested`. Declaration.lean v4.8.0:220-258
+//                    ends `isRec, isUnsafe, isReflexive, isNested` — FOUR raw
+//                    flag bytes, and they are the scalar area at +48.
+//
+// This matters because the pinned bridge toolchain IS v4.8.0
+// (vendor/lean-core-oleans, commit df668f00e6c0) and every core inductive it
+// ships uses the 4.8 shape: 674 of them across the vendored set. Before the
+// exact-layout guard landed, the reader took the >=4.9 offsets on those bytes
+// and read all three flags from PAST THE END of a 56-byte object, where
+// `.unwrap_or(0)` turned every one into `false`. The guard caught that; this
+// test pins the decode that replaced it, including the fourth flag, which the
+// first repair still derived from a hardcoded `numNested = 0` and therefore
+// always read as `false`.
+// ---------------------------------------------------------------------------
+
+/// Assemble one Lean-4.8-shaped `InductiveVal` object and decode it.
+///
+/// Byte-exact, not produced by our own writer: the point is to pin the layout
+/// REAL Lean emits, so a round-trip through Clean's exporter could not catch a
+/// disagreement with it.
+fn decode_lean48_inductive(flags: [u8; 4]) -> crate::module::InductiveValData {
+    const BASE: u64 = 0x1000;
+    // Object map: +0 InductiveVal(other=5, cs_sz=56) | +56 ConstantVal(other=3, cs_sz=32)
+    let mut data = vec![0u8; 96];
+    // InductiveVal header: rc=0, cs_sz=56, other=5, tag=0
+    data[4..6].copy_from_slice(&56u16.to_le_bytes());
+    data[6] = 5;
+    // +8 toConstantVal -> the ConstantVal object at file offset 56
+    data[8..16].copy_from_slice(&(BASE + 56).to_le_bytes());
+    // +16 numParams, +24 numIndices: boxed scalars, Lean tags them `(n << 1) | 1`
+    data[16..24].copy_from_slice(&((2u64 << 1) | 1).to_le_bytes());
+    data[24..32].copy_from_slice(&((1u64 << 1) | 1).to_le_bytes());
+    // +32 all, +40 ctors: `List.nil` is the tagged scalar 0, not a pointer
+    data[32..40].copy_from_slice(&1u64.to_le_bytes());
+    data[40..48].copy_from_slice(&1u64.to_le_bytes());
+    // +48.. the FOUR flags: isRec, isUnsafe, isReflexive, isNested
+    data[48..52].copy_from_slice(&flags);
+    // ConstantVal header at +56: rc=0, cs_sz=32, other=3
+    data[60..62].copy_from_slice(&32u16.to_le_bytes());
+    data[62] = 3;
+
+    let region = CompactedRegion::new(&data, BASE);
+    region
+        .read_inductive_val_data(0)
+        .expect("Lean 4.8 InductiveVal must decode")
+}
+
+#[test]
+fn lean48_inductive_val_decodes_all_four_flags() {
+    // All clear — the common case (655 of the 674 vendored 4.8 inductives).
+    let d = decode_lean48_inductive([0, 0, 0, 0]);
+    assert_eq!(
+        (d.is_rec, d.is_unsafe, d.is_reflexive, d.is_nested),
+        (false, false, false, false)
+    );
+    assert_eq!(
+        (d.num_params, d.num_indices),
+        (2, 1),
+        "scalars must survive the 4.8 offsets"
+    );
+
+    // Each flag independently, so a wrong offset shows up as the WRONG flag
+    // rather than as a blanket failure. `isUnsafe` is the one that carries
+    // kernel-declaration authority.
+    for (i, name) in ["isRec", "isUnsafe", "isReflexive", "isNested"]
+        .iter()
+        .enumerate()
+    {
+        let mut flags = [0u8; 4];
+        flags[i] = 1;
+        let d = decode_lean48_inductive(flags);
+        let got = [d.is_rec, d.is_unsafe, d.is_reflexive, d.is_nested];
+        for (j, actual) in got.iter().enumerate() {
+            assert_eq!(
+                *actual,
+                i == j,
+                "setting {name} (flag byte +{i}) lit flag {j} instead; the 4.8 flag \
+                 offsets are misaligned"
+            );
+        }
+    }
+
+    // The two multi-flag shapes that actually occur in the vendored set:
+    // `01 00 01 00` (isRec + isReflexive, x2 in Init/WF — well-founded
+    // recursion's `Acc` is reflexive) and `01 00 00 01` (isRec + isNested, x1
+    // in Init/Prelude). The second is the case the first repair got wrong.
+    let d = decode_lean48_inductive([1, 0, 1, 0]);
+    assert_eq!((d.is_rec, d.is_reflexive, d.is_nested), (true, true, false));
+    let d = decode_lean48_inductive([1, 0, 0, 1]);
+    assert_eq!(
+        (d.is_rec, d.is_reflexive, d.is_nested),
+        (true, false, true),
+        "isNested must come from the fourth flag byte, not from a hardcoded numNested = 0"
+    );
+}
+
+#[test]
+fn lean48_inductive_val_rejects_a_non_bool_flag() {
+    // Fail closed on anything outside {0, 1}: the whole reason the exact-domain
+    // check exists is that an unrecognized encoding must not resolve to
+    // `isUnsafe = false`.
+    const BASE: u64 = 0x1000;
+    let mut data = vec![0u8; 96];
+    data[4..6].copy_from_slice(&56u16.to_le_bytes());
+    data[6] = 5;
+    data[8..16].copy_from_slice(&(BASE + 56).to_le_bytes());
+    data[16..24].copy_from_slice(&1u64.to_le_bytes());
+    data[24..32].copy_from_slice(&1u64.to_le_bytes());
+    data[32..40].copy_from_slice(&1u64.to_le_bytes());
+    data[40..48].copy_from_slice(&1u64.to_le_bytes());
+    data[49] = 2; // isUnsafe = 2 is not a Bool
+    data[60..62].copy_from_slice(&32u16.to_le_bytes());
+    data[62] = 3;
+    let region = CompactedRegion::new(&data, BASE);
+    let err = region
+        .read_inductive_val_data(0)
+        .expect_err("a non-Bool flag must fail closed");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("isUnsafe"),
+        "the error must name the offending flag: {msg}"
     );
 }

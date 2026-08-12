@@ -67,6 +67,8 @@ pub(crate) struct IsCauchyAddConsts {
     exists_elim: Expr,
     // Eq.{1} over Rat.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_rat: Expr,
     eq_symm: Expr,
     eq_trans: Expr,

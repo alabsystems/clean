@@ -9,6 +9,8 @@
 //!
 //! Builds on [`mutual_decl`] and [`mutual_decl_ext`].
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use crate::dep_graph::DependencyGraph;
 use crate::error::ElabError;
 use crate::mutual_decl::MutualBlock;
@@ -216,7 +218,11 @@ pub(crate) fn stratify_definitions(block: &MutualBlock) -> Vec<DefinitionStratum
 #[derive(Debug, Clone)]
 pub(crate) struct ForwardRefEntry {
     pub(crate) name: String,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) index: usize,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) placeholder_ty: Expr,
     pub(crate) resolved: bool,
 }
@@ -295,6 +301,8 @@ impl ForwardRefResolver {
 pub(crate) struct InferredMutualType {
     pub(crate) name: String,
     pub(crate) index: usize,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) ty: Expr,
     pub(crate) is_user_provided: bool,
 }
@@ -421,9 +429,13 @@ pub(crate) fn compute_compilation_order(block: &MutualBlock) -> Result<Vec<usize
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UnfoldHint {
     Always,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     Never,
     OnConstructor,
-    Bounded { max_depth: u32 },
+    Bounded {
+        max_depth: u32,
+    },
 }
 
 /// Assign unfolding hints based on recursion kind.
@@ -510,6 +522,8 @@ pub(crate) struct MutualDeclExt2Result {
     pub(crate) compilation_order: Vec<usize>,
     pub(crate) inferred_types: Vec<InferredMutualType>,
     pub(crate) recursion_kinds: Vec<RecursionKind>,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) wf_markers: Vec<WfRecursionMarker>,
     pub(crate) unfold_hints: Vec<(String, UnfoldHint)>,
     pub(crate) universe_params: MutualUniverseParams,

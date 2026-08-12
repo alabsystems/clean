@@ -233,7 +233,7 @@ impl<'a> ElabCtx<'a> {
         // only let currently-failing-but-valid proofs through, never an unsound
         // one. Mirrors Lean's `getMainTarget` (instantiateMVars before the
         // tactic block sees the goal).
-        let target = crate::tactic::simp::beta_reduce(&self.metas.instantiate(&target));
+        let target = tactic::simp::beta_reduce(&self.metas.instantiate(&target));
 
         let elab_locals: Vec<_> = self
             .locals

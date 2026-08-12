@@ -34,6 +34,22 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
+/// The conversion algorithm's source, shared so the faithful variant is DERIVED
+/// from it rather than re-typed.
+///
+/// Same discipline as the whnf loop's four source constants: a hand-copy drifts
+/// the moment either version changes, and four verbatim copies of one string is
+/// what turned a single false premise into nine vacuous declarations.
+pub(super) const SRC_DEF_EQ_FUEL: &str =
+    "def def_eq_fuel (renv : RedEnv) (fuel : Nat) : KExpr -> KExpr -> Bool := \
+     Nat.rec (fun (_ : Nat) => KExpr -> KExpr -> Bool) \
+     (fun (_ : KExpr) (_ : KExpr) => Bool.false) \
+     (fun (k : Nat) (ih : KExpr -> KExpr -> Bool) => fun (a : KExpr) (b : KExpr) => \
+     OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+     (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+     Bool.false (fun (nb : KExpr) => def_eq_struct ih na nb) (whnf_fuel_red renv k b)) \
+     (whnf_fuel_red renv k a)) fuel";
+
 impl Specification {
     /// The first conversion ALGORITHM on `KExpr`, plus its soundness.
     pub(super) fn add_defeq_fuel(&mut self) -> Result<(), SpecError> {
@@ -299,14 +315,7 @@ impl Specification {
         // its fuel-adequacy hypothesis. What this does is make the statement
         // EXPRESSIBLE about an algorithm that could satisfy it.
         self.add_recursive_def(
-            "def def_eq_fuel (renv : RedEnv) (fuel : Nat) : KExpr -> KExpr -> Bool := \
-             Nat.rec (fun (_ : Nat) => KExpr -> KExpr -> Bool) \
-             (fun (_ : KExpr) (_ : KExpr) => Bool.false) \
-             (fun (k : Nat) (ih : KExpr -> KExpr -> Bool) => fun (a : KExpr) (b : KExpr) => \
-             OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
-             (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
-             Bool.false (fun (nb : KExpr) => def_eq_struct ih na nb) (whnf_fuel_red renv k b)) \
-             (whnf_fuel_red renv k a)) fuel",
+            SRC_DEF_EQ_FUEL,
             "def_eq_fuel renv fuel a b: THE STRUCTURAL CONVERSION ALGORITHM — at each fuel level \
              reduce both sides to whnf, then compare structurally, recursing on components at \
              fuel-1. Fails CLOSED at fuel 0. Unlike def_eq_whnf_fuel it accepts convertible terms \
@@ -466,6 +475,144 @@ impl Specification {
         // once and did exactly that, costing a validation cycle. Nothing above
         // consumes it, so last is both safe and cheaper to iterate on.
         self.add_iota_immunity()?;
+        // Last: needs cx_stuck from the refutation above. Makes the
+        // deployed-vs-reflected divergence executable rather than argued.
+        self.add_iota_prepass()?;
+        // Last: needs the faithful loop above. The convergence hypothesis hnf_conv
+        // will carry, its non-vacuity witnesses, and the bvar refutation.
+        self.add_hnf_conv()?;
+        // AFTER add_hnf_conv, which registers def_eq_fuel_wh and its computation
+        // rules — the soundness chain names all three. Registration is sequential;
+        // placing this earlier fails at elaboration 26 minutes later, and the
+        // scratchpad cannot catch it because it appends to a fully-built spec.
+        self.add_wh_soundness()?;
+        // AFTER add_wh_soundness, which registers const_delta_step — the
+        // three-way step's const arm cites it. Targets par_reduces_cd_star
+        // because a three-way step does not embed into whnf_red_step at any
+        // strength; wh3_fires_here settles that by computation.
+        self.add_wh3_soundness()?;
+        // The stuck-recursor case, first slice. Needs the boundary absurdity and
+        // the cd arm table; registered last so a failure here cannot mask the
+        // refutation and the immunity supply above it.
+        self.add_stuck_recursor()?;
+        // LAST. Needs the faithful loop (add_iota_prepass) for whnf_fuel_red_wh
+        // and reduce_once_red_wh, and hnf_conv's stuck_at predicate, which it
+        // reuses rather than restates. Nothing above consumes it, so a failure
+        // here cannot mask anything earlier.
+        // Before the fuel layer: the delta-dead-spine fact that step
+        // monotonicity turns on. Needs opt_app_ilift_wh / reduce_app_head_red_wh
+        // from add_iota_prepass and is_neutral_red from whnf_progress.
+        // The list-level under-application boundary. Independent of the
+        // faithful loop; only Le and the list lemmas from iota_core.
+        self.add_wh_under_applied()?;
+        self.add_wh_neutral_stuck()?;
+        // The two fences that confine the step's budget-dependence to the iota
+        // slot. Needs the boundary lemmas above and all three iota exits.
+        self.add_wh_step_mono()?;
+        // The two non-trivial arms plus the boundary contradiction. Needs the
+        // fences above, both iota inverters, and the re-assembly.
+        self.add_wh_step_arms()?;
+        // STEP MONOTONICITY itself. Needs every arm above plus both iota
+        // inverters; nothing before it consumes it.
+        self.add_wh_step_mono_proof()?;
+        // The wstuck half of step stability for the THREE-way loop.
+        self.add_wh3_step_stability()?;
+        // The first layer that was blocked by FALSITY, now reachable.
+        self.add_defeq_fuel_wh3_mono()?;
+        // AFTER the wh3 fuel layer. Turns the capstone's FALSE hnf premise into
+        // a conditional one: the three-way loop's result carries its own
+        // stuckness certificate, so hnf_conv's every-budget convergence
+        // hypothesis is discharged rather than carried. The app case survives as
+        // an honest, satisfiable residual.
+        self.add_hnf_discharge3()?;
+        self.add_wh_fuel_adequacy()?;
+        // AFTER add_wh_fuel_adequacy (Le/order facts) and after the wh3 stability
+        // layer, whose UNRESTRICTED le and monotone this consumes. Fuel comes
+        // from a normalisation derivation, not accessibility: rbelow cannot see
+        // a budget-indexed step.
+        self.add_wh3_fuel_adequacy()?;
+        // The descent order over the loop's OWN step. rbelow cannot serve here:
+        // its red arm is whnf_red_step, which a three-way step does not embed
+        // into. Defining the order over the actual step makes the descent fact a
+        // plain fuel induction with no bridge lemma at all.
+        self.add_wbelow3()?;
+        // LAST: the completeness spine itself. Needs every wh3 layer above —
+        // the rounds cite the descent premises, the dispatch cites the rounds,
+        // the capstone cites the dispatch and the join. Nothing consumes it.
+        self.add_wh3_spine()?;
+        // LAST: the same spine over fuel-carrying accessibility, which removes
+        // the capstone's global `wfuel` premise by making it a projection.
+        // Cites the four leaf rounds from add_wh3_spine unchanged.
+        self.add_wh3_norm_acc()?;
+        // LAST: the same chain with the iota residual CONSTRAINED to a sound
+        // pre-pass. The blanket form is false — it lets an arbitrary pre-pass
+        // fire the rule with the wrong constructor's fields — so everything
+        // carrying it is vacuous. This is the version to build on.
+        self.add_wh3_hiota_repair()?;
+        // The TWO-WAY half of the same repair. More serious: it includes
+        // def_eq_fuel_wh_sound, the faithful algorithm's SOUNDNESS, which the
+        // false blanket premise made vacuous.
+        self.add_wh_hiota_repair()?;
+        // LAST: the iota residual, DISCHARGED. It stops being a hypothesis.
+        self.add_hiotap3_discharge()?;
+        // LAST: three new suppliers for hnf3's residual — and the REFUTATION of
+        // that residual as stated. Needs stuck_recursor's iota_immune_of_* and
+        // hnf_discharge3's wh3_stuck_at, so it goes at the tail.
+        self.add_hnf3_residual()?;
+        // LAST: what stuckness actually forces about a spine head. The first
+        // lemmas in the tree that USE wh3_stuck_at rather than binding it
+        // unused, and they close two holes in the case analysis' argument.
+        self.add_wh3_stuck_head()?;
+        // LAST: the spine-head -> whole-spine bridge (without which the
+        // residual's rigid rows never closed), the lam descent, and the
+        // ten-of-eleven supplier.
+        self.add_rigid_bridge()?;
+        // LAST: narrow the residual's remaining row to its two open sub-cases,
+        // selecting between the two suppliers that already existed.
+        self.add_residual_narrowing()?;
+        // LAST: length invariant -> slot invariant, which is stable under
+        // appending and so reaches the OVER-APPLIED bvar class that the exact
+        // length equation excluded by construction.
+        self.add_bvar_slot()?;
+        // LAST: collapse the residual's two open premises into one. Needs the
+        // slot invariant above and nat_le_trichotomy_t below it.
+        self.add_slot_collapse()?;
+        // LAST: the confluence core for the residual's one remaining premise,
+        // and an explicit statement of where it stops. i8 enters here and only
+        // here, which is correct — the residual is false environment-generically
+        // without it.
+        self.add_stuck_major_confluence()?;
+
+        // The two prerequisites for the budget induction that will discharge
+        // the residual's last premise: a STRICTLY decreasing budget measure,
+        // and a wstuck inverter for the iota chain. Registered after everything
+        // else so their dependencies are in scope however the stages above are
+        // ordered.
+        self.add_budget_induction_prereqs()?;
+
+        // Head CONSTANT-NAME preservation -- the companion to the tag lemma,
+        // and the form the residual's confluence argument actually compares.
+        self.add_nf_head_const_name()?;
+
+        // The stuck-major classification's fourth alternative -- the case
+        // stuck_major_confluence.rs recorded as circular. It closes once
+        // nf_head is supplied at a strictly smaller budget.
+        self.add_stuck_major_recmeta()?;
+
+        // THE BRIDGE: a fully-applied recursor spine with a stuck major is
+        // permanently iota-dead. One entangled induction -- the iota arm is
+        // refuted in line, because preservation holds only given that iota
+        // never fires.
+        self.add_stuck_major_immune()?;
+
+        // Fixed-budget retypes of the slot dispatcher: the budget induction can
+        // supply slot_res at its own budget and below, never at every budget at
+        // once, so the polymorphic premise is unsuppliable from inside it.
+        self.add_slot_dispatch_at()?;
+
+        // The inhabitation FLOOR for Wh3NormAcc, and the completeness capstone
+        // run at it. Registered last because the witness applies the capstone.
+        self.add_wh3_norm_acc_witness()?;
 
         Ok(())
     }

@@ -229,7 +229,7 @@ fn record_coverage(e: &Expr, cov: &mut [bool; 6]) {
 pub fn structural_key(e: &Expr) -> u64 {
     fn fold(e: &Expr, h: &mut u64) {
         const PRIME: u64 = 0x0000_0100_0000_01B3;
-        let mut byte = |b: u8, h: &mut u64| {
+        let byte = |b: u8, h: &mut u64| {
             *h ^= u64::from(b);
             *h = h.wrapping_mul(PRIME);
         };
@@ -570,7 +570,7 @@ pub fn run_gate(terms: &[Expr]) -> FidelityMetric {
 /// Anonymous non-dependent let node (Expr::let_ is deprecated in favor of
 /// the explicit-name constructor; the gate only needs the anonymous shape).
 fn let_anon(ty: Expr, val: Expr, body: Expr) -> Expr {
-    Expr::let_named(clean_kernel::Name::anon(), ty, val, body, false)
+    Expr::let_named(Name::anon(), ty, val, body, false)
 }
 
 /// A deterministic, proptest-free corpus of small closed in-fragment terms,
@@ -655,7 +655,7 @@ pub fn deterministic_core_corpus() -> Vec<Expr> {
         // let x : typeof(S) := S in x — well-typed zeta shape.
         corpus.push(let_anon(
             Expr::sort(Level::succ(match s.kind() {
-                clean_kernel::ExprKind::Sort(l) => l.clone(),
+                ExprKind::Sort(l) => l.clone(),
                 _ => Level::zero(),
             })),
             s.clone(),
@@ -672,7 +672,7 @@ pub fn deterministic_core_corpus() -> Vec<Expr> {
         // let x := S in (λ (y:x). y) — let value used as a type downstream.
         corpus.push(let_anon(
             Expr::sort(Level::succ(match s.kind() {
-                clean_kernel::ExprKind::Sort(l) => l.clone(),
+                ExprKind::Sort(l) => l.clone(),
                 _ => Level::zero(),
             })),
             s.clone(),
@@ -839,16 +839,12 @@ pub fn audit_whnf_delta_fidelity() -> Result<usize, String> {
         Expr::app(Expr::const_str("FidelityGate.DeltaFn"), prop.clone()),
         Expr::app(Expr::const_str("FidelityGate.DeltaFnOpaque"), prop.clone()),
         Expr::lam(
-            clean_kernel::BinderInfo::Default,
+            BinderInfo::Default,
             prop.clone(),
             Expr::const_str("FidelityGate.DeltaRed"),
         ),
         Expr::app(
-            Expr::lam(
-                clean_kernel::BinderInfo::Default,
-                sort1.clone(),
-                Expr::bvar(0),
-            ),
+            Expr::lam(BinderInfo::Default, sort1.clone(), Expr::bvar(0)),
             Expr::const_str("FidelityGate.DeltaRed"),
         ),
         let_anon(
@@ -1234,7 +1230,7 @@ mod tests {
                 Expr::prop(),
             ),
             // let x : Type 0 := Prop in x — the 6th fragment ctor (task #28).
-            super::let_anon(Expr::type_(), Expr::prop(), Expr::bvar(0)),
+            let_anon(Expr::type_(), Expr::prop(), Expr::bvar(0)),
         ]
     }
 
@@ -1400,7 +1396,7 @@ mod tests {
         assert_ne!(agreed, redex, "the reduction genuinely fired");
 
         // Zeta: let x : Type 0 := Prop in x — reduces to Prop on both sides.
-        let zeta = super::let_anon(Expr::type_(), Expr::prop(), Expr::bvar(0));
+        let zeta = let_anon(Expr::type_(), Expr::prop(), Expr::bvar(0));
         let agreed = checker
             .recheck_kernel_whnf(&zeta)
             .expect("zeta redex must whnf-agree");
@@ -1455,7 +1451,7 @@ mod tests {
     fn test_supported_fragment_predicate_excludes_with_reason() {
         // Const / Lit are out of fragment with the ctor name as reason
         // (Let joined the fragment with the let promotion, task #28).
-        let const_term = Expr::const_(clean_kernel::Name::anon(), Vec::<Level>::new());
+        let const_term = Expr::const_(Name::anon(), Vec::<Level>::new());
         assert_eq!(in_supported_fragment(&const_term, 0), Err("Const"));
 
         // A closed let is IN fragment; its body binder scopes one bvar.
@@ -1487,8 +1483,8 @@ mod tests {
     #[test]
     fn test_exclusion_histogram_counts_each_reason() {
         let corpus = vec![
-            Expr::const_(clean_kernel::Name::anon(), Vec::<Level>::new()),
-            Expr::const_(clean_kernel::Name::anon(), Vec::<Level>::new()),
+            Expr::const_(Name::anon(), Vec::<Level>::new()),
+            Expr::const_(Name::anon(), Vec::<Level>::new()),
             Expr::nat_lit(1),
             Expr::prop(), // supported
         ];

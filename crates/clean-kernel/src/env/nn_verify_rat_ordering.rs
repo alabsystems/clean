@@ -375,6 +375,7 @@ impl Environment {
 
     /// Check if Rat field→order lemmas have been initialized.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_nn_verify_rat_ordering(&self) -> bool {
         self.nn_verify_rat_ordering_init
     }

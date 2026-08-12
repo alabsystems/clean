@@ -29,6 +29,9 @@ fn simple_macro(name: &str, template: SurfaceExpr, scoping: MacroScoping) -> Mac
     }
 }
 
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn empty_macro(name: &str, template: SurfaceExpr) -> MacroDef {
     MacroDef {
         name: name.to_owned(),

@@ -2,6 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![cfg_attr(not(test), allow(dead_code))]
 use super::options_registry::{FileOptions, OptionDecl, OptionError, OptionValue, OptionsRegistry};
 use serde::{Deserialize, Serialize};
 use std::{

@@ -29,6 +29,7 @@ impl Environment {
     ///
     /// Subtraction distributes over finite sums (linearity).
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn register_fin_sum_sub(&mut self, c: &FinSumConsts) -> Result<(), EnvError> {
         let sum_sub_type = {
             let mut b = EnvDeclBuilder::new();

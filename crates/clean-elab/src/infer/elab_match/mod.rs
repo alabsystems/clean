@@ -227,8 +227,8 @@ impl<'a> ElabCtx<'a> {
                 Span::dummy(),
                 Box::new(SurfaceExpr::Ident(Span::dummy(), "BEq.beq".to_string())),
                 vec![
-                    clean_parser::SurfaceArg::positional(scrutinee_surface.clone()),
-                    clean_parser::SurfaceArg::positional(SurfaceExpr::Lit(Span::dummy(), lit)),
+                    SurfaceArg::positional(scrutinee_surface.clone()),
+                    SurfaceArg::positional(SurfaceExpr::Lit(Span::dummy(), lit)),
                 ],
             );
             acc = SurfaceExpr::If(
@@ -400,6 +400,9 @@ pub(in crate::infer) fn generalize_with_extra_params(
 /// with the scrutinee's type arguments first, so each `Auxᵢ` here is a closed term
 /// even for a parametric primary (e.g. `Rose α`). Returns fewer than `num_motives`
 /// entries (caller rejects the result) if the telescope is malformed.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(in crate::infer) fn motive_domains_from_rec_type(
     rec_type: &Expr,
     num_motives: usize,
@@ -1013,10 +1016,10 @@ impl<'a> ElabCtx<'a> {
                         pattern: arm.pattern.clone(),
                         body: SurfaceExpr::Lambda(
                             arm.span,
-                            vec![clean_parser::SurfaceBinder::new(
+                            vec![SurfaceBinder::new(
                                 h.to_string(),
                                 None,
-                                clean_parser::SurfaceBinderInfo::Explicit,
+                                SurfaceBinderInfo::Explicit,
                             )],
                             Box::new(arm.body.clone()),
                         ),

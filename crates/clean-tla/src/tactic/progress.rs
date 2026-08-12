@@ -40,13 +40,12 @@ impl TlaTacticEngine {
         // "steps"), certifying genuinely-false liveness such as
         // `(counter=0) ~> (counter=5)` and `(n>0) ~> (n=0)` with no fairness.
         //
-        // We keep `extract_variant_pattern` / `try_lattice_decomposition` as
-        // pure detectors (they are exercised by unit tests and could feed a
-        // future sound backend), but this dispatch never mints a "proved"
-        // verdict from them. It returns `Ok(None)` so the caller reports the
+        // `extract_variant_pattern` remains a pure detector that could feed a
+        // future sound backend, but this dispatch never mints a "proved"
+        // verdict from it. It returns `Ok(None)` so the caller reports the
         // obligation as not-proved. Genuinely-true liveness continues to be
         // discharged by the sound leads-to rules upstream (reflexivity,
-        // □(P→Q), transitivity, chain transitivity, disjunction) in
+        // ex-falso, □(P→Q), transitivity, chain transitivity, disjunction) in
         // `temporal.rs`, which run before this progress-measure fallback.
         if self.trace {
             if let Some((_variant, domain)) = self.extract_variant_pattern(p, q) {
@@ -208,40 +207,5 @@ impl TlaTacticEngine {
             }
             _ => {}
         }
-    }
-
-    /// Try lattice rule decomposition for P ~> Q.
-    ///
-    /// SOUNDNESS: the only accept here is ex-falso — `FALSE ~> Q` holds for any
-    /// Q because P is never satisfied. Everything else is fail-closed.
-    ///
-    /// Two former accepts were unsound and are removed:
-    /// * "bounded variant": finding a `<`-subterm anywhere in P is NOT a proof
-    ///   of `P ~> Q`. Nothing checks that the term is a well-founded variant,
-    ///   that it strictly decreases on the (absent) transition relation, or
-    ///   that Q is reached. This certified false liveness like `(x<5) ~> FALSE`.
-    /// * `is_trivially_true(Q) ⊢ P ~> Q`: a leads-to is `□(P ⇒ ◇Q)`, so even a
-    ///   currently-true Q does not discharge it without the box; this is not a
-    ///   sound leads-to rule and is dropped.
-    pub(super) fn try_lattice_decomposition(
-        &self,
-        p: &Expr,
-        q: &Expr,
-    ) -> Result<Option<String>, TlaError> {
-        // Ex falso: FALSE ~> Q is valid for any Q (P is unsatisfiable).
-        if self.is_trivially_false(p) {
-            if self.trace {
-                eprintln!("[TLA] lattice: P is FALSE, P ~> Q holds ex falso");
-            }
-            return Ok(Some(
-                "{\"tactic\":\"lattice_rule\",\"method\":\"ex_falso\",\"status\":\"proved\"}"
-                    .to_string(),
-            ));
-        }
-
-        // No sound structural discharge available: fail-closed. `q` is unused
-        // for acceptance but kept in the signature for the detector API.
-        let _ = q;
-        Ok(None)
     }
 }

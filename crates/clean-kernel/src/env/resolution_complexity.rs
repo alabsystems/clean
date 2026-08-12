@@ -40,6 +40,8 @@ pub(super) struct ResComplexityConsts {
     pub(super) tree_res_proof: Expr,
     /// ResComplexity.PHP (n : Nat) : CNF
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) php: Expr,
 }
 

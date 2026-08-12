@@ -38,6 +38,8 @@ pub(super) struct ProofHierarchyConsts {
     /// ProofTheory.FregeProof : Type
     pub(super) frege_proof: Expr,
     /// ProofTheory.ExtendedFregeProof : Type
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) extended_frege_proof: Expr,
 }
 

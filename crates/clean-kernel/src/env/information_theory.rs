@@ -174,6 +174,7 @@ impl Environment {
     /// ENSURES: Returns `true` iff `init_information_theory` has completed successfully
     /// ENSURES: Pure - no side effects
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_information_theory(&self) -> bool {
         self.information_theory_init
     }

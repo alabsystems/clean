@@ -13,6 +13,7 @@ fn u_not(p: Expr) -> Expr {
     Expr::app(Expr::const_(Name::from_string("Not"), vec![]), p)
 }
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn u_not_pi(parent: &EnvDeclBuilder, p: Expr) -> Expr {
     let mut ch = EnvDeclBuilder::child_of(parent);
     let false_ = Expr::const_(Name::from_string("False"), vec![]);
@@ -23,6 +24,7 @@ fn u_and(p: Expr, q: Expr) -> Expr {
     Expr::apps(Expr::const_(Name::from_string("And"), vec![]), [p, q])
 }
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn u_and_intro(p: Expr, q: Expr, hp: Expr, hq: Expr) -> Expr {
     Expr::apps(
         Expr::const_(Name::from_string("And.intro"), vec![]),

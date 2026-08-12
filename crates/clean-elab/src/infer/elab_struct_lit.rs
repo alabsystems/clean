@@ -24,7 +24,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         struct_type: &Option<Box<SurfaceExpr>>,
         base: &Option<Box<SurfaceExpr>>,
-        fields: &[clean_parser::SurfaceFieldAssign],
+        fields: &[SurfaceFieldAssign],
     ) -> Result<Expr, ElabError> {
         // Elaborate base if present (with-syntax)
         let base_val = if let Some(base_expr) = base {
@@ -176,7 +176,7 @@ impl<'a> ElabCtx<'a> {
         // Resolving by index (not name) keeps native and imported structures on
         // the same path: imported field names are mapped through Lean's own
         // projection functions.
-        let mut field_updates: HashMap<usize, &clean_parser::SurfaceFieldAssign> = HashMap::new();
+        let mut field_updates: HashMap<usize, &SurfaceFieldAssign> = HashMap::new();
         for field_assign in fields {
             let idx = self
                 .struct_field_index(&struct_name, &field_assign.name)

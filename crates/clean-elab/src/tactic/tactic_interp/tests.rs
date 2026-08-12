@@ -22,6 +22,9 @@ fn prop_goal_state() -> ProofState {
 }
 
 /// Create a proof state with a Pi goal `(A : Prop) -> Prop` to test `intro`.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 fn pi_goal_state() -> ProofState {
     let env = mk_env();
     let target = Expr::pi(

@@ -37,6 +37,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the carrier mul algebra.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct MulAlgConsts {
     nat: Expr,
     nat_zero: Expr,
@@ -164,6 +165,7 @@ impl MulAlgConsts {
         Expr::apps(self.eq1.clone(), [self.nnreal(), a, b])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_rat_ty(&self, a: Expr, b: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), a, b])
     }

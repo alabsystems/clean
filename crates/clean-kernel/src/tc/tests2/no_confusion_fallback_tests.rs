@@ -18,7 +18,7 @@
 
 use super::support::make_nat_env_with_eq;
 use super::*;
-use crate::env::{ConstantInfo, TrustedEnvExt};
+use crate::env::ConstantInfo;
 use crate::inductive::{Constructor, InductiveDecl, InductiveType};
 
 /// Helper: create an environment with Nat, Eq, and an opaque constant

@@ -63,6 +63,9 @@ fn mk_pi_type(depth: usize) -> Expr {
 }
 
 /// Build a lambda body that references `name` as a Const (simulating recursion).
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn mk_recursive_body(name: &str, num_params: usize) -> Expr {
     // \x0 \x1 ... \xn => name (BVar 0)
     let inner = Expr::app(Expr::const_str(name), Expr::bvar(0));

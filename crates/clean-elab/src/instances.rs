@@ -43,6 +43,7 @@
 
 use clean_kernel::expr::Expr;
 use clean_kernel::expr::ExprKind;
+use clean_kernel::level::Level;
 use clean_kernel::name::Name;
 use std::collections::HashMap;
 
@@ -94,10 +95,15 @@ pub struct InstanceInfo {
 /// newer low-priority instance silently beat an older default-priority one
 /// (r82 `instprio_low_loses_recency`: 5 provable where Lean proves 4). B99.
 ///
-/// NOTE: the kernel env's hand-registered prelude instances still record the
-/// kernel-side `DEFAULT_INSTANCE_PRIORITY` (100), so user instances at 1000
-/// out-prioritize them — the same winner Lean's recency tie-break at 1000
-/// picks, since user instances are always newer than the prelude.
+/// NOTE: every hand-registered prelude instance that Lean also declares now
+/// records the priority the shipped `.olean` serializes — 1000 for all but
+/// `instBEqOfDecidableEq` (500) — so a user instance no longer OUT-prioritizes
+/// it but TIES with it, and the most-recent-first tie-break decides. The winner
+/// is unchanged (a user instance is always newer than the prelude) and it is
+/// now the winner for Lean's reason rather than by accident. Prelude instances
+/// with no Lean twin still carry the fabricated
+/// `clean_kernel::DEFAULT_INSTANCE_PRIORITY` (100). Census + ratchet:
+/// `data/prelude_instance_priority_census.json`.
 pub const DEFAULT_PRIORITY: u32 = 1000;
 
 /// Instance table for efficient lookup
@@ -243,6 +249,9 @@ impl InstanceTable {
 
 /// Result of instance resolution
 #[derive(Clone, Debug)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub enum ResolveResult {
     /// Successfully resolved to an instance expression
     Success(Expr),
@@ -256,6 +265,34 @@ pub enum ResolveResult {
 ///
 /// For `Add Nat`, returns `Some((Add, [Nat]))`
 /// For non-class types, returns `None`
+/// Like [`extract_class_app`], but also returns the class constant's
+/// UNIVERSE LEVELS.
+///
+/// Instance search matches a candidate against a goal by class name and
+/// argument list; the levels on the class constant itself were dropped on
+/// the floor. That is fine while every class is universe-monomorphic at the
+/// use site, but a class with a level the ARGUMENTS do not mention — Lean's
+/// `class HasEquiv.{u,v} (α : Sort u) where Equiv : α → α → Sort v`, whose
+/// `v` appears only in a FIELD — leaves that level an unsolved metavariable
+/// in the goal (`HasEquiv {1, ?v} Nat`), and no amount of argument
+/// unification can pin it. Unifying the level lists at the match site
+/// solves it from the candidate (`instHasEquivOfSetoid : HasEquiv.{u,0} α`
+/// gives `?v := 0`), which is what makes the `≈` notation resolve.
+pub fn extract_class_app_with_levels(ty: &Expr) -> Option<(Name, Vec<Level>, Vec<Expr>)> {
+    let mut args = Vec::new();
+    let mut current = ty;
+    while let ExprKind::App(func, arg) = current.kind() {
+        args.push(arg.as_ref().clone());
+        current = func.as_ref();
+    }
+    if let ExprKind::Const(name, levels) = current.kind() {
+        args.reverse();
+        Some((name.clone(), levels.to_vec(), args))
+    } else {
+        None
+    }
+}
+
 pub fn extract_class_app(ty: &Expr) -> Option<(Name, Vec<Expr>)> {
     let mut args = Vec::new();
     let mut current = ty;

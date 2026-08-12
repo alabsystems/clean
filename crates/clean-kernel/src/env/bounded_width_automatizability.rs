@@ -39,6 +39,8 @@ pub(super) struct BoundedWidthConsts {
     /// ResComplexity.CNF : Type (reused from resolution_complexity)
     pub(super) cnf: Expr,
     /// ResComplexity.Clause : Type (reused)
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) clause: Expr,
     /// BoundedWidth.PartialAssignment : Type
     pub(super) partial_assignment: Expr,

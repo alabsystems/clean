@@ -28,6 +28,9 @@ pub(super) struct PendingRecoveryDiagnostic {
     pub(super) expected_indent: Option<u32>,
     pub(super) actual_indent: Option<u32>,
     pub(super) message: String,
+    /// Tactic token whose grammar failed (T0 measurement integrity); see
+    /// [`crate::ParserRecoveryDiagnostic::tactic`].
+    pub(super) tactic: Option<String>,
 }
 
 /// Display symbol for a binary operator token that has NO rule in the
@@ -148,6 +151,20 @@ pub struct Parser {
     recovery_diagnostics: Vec<ParserRecoveryDiagnostic>,
     /// Indentation diagnostics waiting for the skip/resume location.
     pending_recovery_diagnostics: Vec<PendingRecoveryDiagnostic>,
+    /// Outer-to-inner chain of tactic tokens whose parse is still in progress.
+    ///
+    /// Measurement integrity (T0, `docs/plans/TACTICS_TO_100_2026-07-29.md`
+    /// §RC-Q): when a tactic's argument grammar fails, `by_body` recovers the
+    /// whole block to a `SyntheticSorry` and the *only* thing the user ever saw
+    /// was `declaration uses synthetic sorry` — with nothing naming the tactic
+    /// that failed to parse. `Parser::tactic` pushes on entry and pops on
+    /// success, so on failure this holds the full nesting chain, outermost
+    /// first. Purely diagnostic: it never changes what parses.
+    tactic_chain: Vec<String>,
+    /// Whole source text, kept so a diagnostic can quote a token's exact
+    /// spelling (`module`, `:=`, `·`) instead of a `TokenKind` debug name.
+    /// Diagnostics only.
+    source: String,
     /// Tactic argument patterns for registry-known tactics.
     /// When present, `parse_ident_tactic`'s `Named` fallback uses these patterns
     /// for argument-aware parsing instead of generic expression-list parsing.
@@ -173,6 +190,17 @@ pub struct Parser {
     /// full-expression entry (`expr()`), and only read when the file declared
     /// custom notation. See `custom_notation.rs` (B100).
     custom_min_prec: u32,
+    /// Guards harvested from PARENTHESIZED bounded quantifier binders
+    /// (`∀ (x ∈ s), p`, `∃ (n > 0), p`) while `explicit_binders` parses them.
+    /// Lean desugars `∀ (x ∈ s), p` to `∀ x, x ∈ s → p` (and `∃ (x ∈ s), p`
+    /// to `∃ x, x ∈ s ∧ p`) — the guard must survive the binder parse so the
+    /// enclosing quantifier can wrap the body. Previously the guard was parsed
+    /// and DISCARDED, silently dropping the hypothesis. Each entry is the
+    /// desugared guard proposition (`Membership.mem s x`, `GT.gt n 0`, …),
+    /// already referencing the bound name; the enclosing quantifier drains
+    /// this via [`Parser::quant_binders`]. Non-quantifier callers of
+    /// `binders()` clear it, so a stale guard can never leak between binders.
+    pending_binder_guards: Vec<SurfaceExpr>,
 }
 
 impl Parser {
@@ -219,11 +247,14 @@ impl Parser {
             indent_context_stack: Vec::new(),
             recovery_diagnostics: Vec::new(),
             pending_recovery_diagnostics: Vec::new(),
+            tactic_chain: Vec::new(),
+            source: input.to_owned(),
             tactic_patterns,
             expr_depth: 0,
             custom_operators: Vec::new(),
             custom_mixfixes: Vec::new(),
             custom_min_prec: custom_notation::CUSTOM_PREC_FLOOR,
+            pending_binder_guards: Vec::new(),
         }
     }
 
@@ -597,6 +628,8 @@ mod tests_tactic_dispatch;
 mod tests_tactic_generalize;
 #[cfg(test)]
 mod tests_tactic_seq_conv;
+#[cfg(test)]
+mod tests_tactic_silence;
 #[cfg(test)]
 mod tests_termination;
 #[cfg(test)]

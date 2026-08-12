@@ -8,7 +8,6 @@ use super::extract::{
     extract_interpolant_from_parts, ExtractionAlgorithm, ExtractionError, InterpolantExtractor,
 };
 use super::property::verify_all_properties;
-use super::PropFormula;
 
 /// Build a simple refutation: A = {x}, B = {!x}, resolve on x.
 fn simple_refutation() -> InterpolantExtractor {

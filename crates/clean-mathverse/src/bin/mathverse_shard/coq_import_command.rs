@@ -303,6 +303,7 @@ fn coq_import_fingerprint() -> StampEnvFingerprint {
 ///
 /// Pure function of paths + options (no argv) so the command internals are
 /// end-to-end testable.
+#[cfg(test)]
 pub(crate) fn run_coq_import_library(
     name: &str,
     sexp_dir: &Path,

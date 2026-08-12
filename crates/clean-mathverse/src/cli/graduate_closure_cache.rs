@@ -83,7 +83,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use clean_kernel::env::{ConstantInfo, ConstantSource, ProofValueElision, TrustedEnvExt};
-use clean_kernel::{Environment, Name};
+use clean_kernel::Environment;
 use clean_olean::{
     load_module_with_deps_bounded_shared_with_policy, parse_imports_only, ImportKinds,
     OleanImportPolicy,

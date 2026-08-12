@@ -451,7 +451,7 @@ fn reconstruct_single_expr(
     }
 }
 
-pub(crate) fn reconstruct_level_from_shard(
+pub fn reconstruct_level_from_shard(
     levels: &[FlatLevel],
     strings: &[String],
     level_idx: u32,

@@ -49,9 +49,6 @@ mod types;
 mod verification;
 
 pub use definition::SpecDefinition;
-pub(crate) use definition::{
-    certification_axiom_deps, certification_integrity_errors, dependencies_from_value,
-};
 pub use error::SpecError;
 pub use type_checker_spec::{
     check_defeq_spec, check_type_spec, CompletenessWitness, DefeqAlgorithm, TypeCheckStep,

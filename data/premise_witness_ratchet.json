@@ -1,5 +1,5 @@
 {
-  "_comment": "Premise-satisfiability ratchet (vacuity firewall item 9). Predicates ASSUMED as a hypothesis somewhere in the clean-verify spec that NO registered definition concludes. Constructors and recursors are excluded from the supply side on purpose: a constructor builds P only if something supplies its fields. See crates/clean-verify/src/premise_witness.rs. This list may only shrink.\n\nWHY IT EXISTS: def_eq_fuel_complete passed a census of 0 axioms / 0 domain axioms / 0 DerivedProved debt and proved nothing, because its hnf premise is false (hnf_is_false). Zero axioms is not zero assumptions.\n\nIT WOULD HAVE CAUGHT THAT: hnf concludes nf_head r, and before nf_head_neutral_app_witness nothing in the tree concluded nf_head.\n\nTWO KNOWN LIMITS. (1) Head-only: iota_immune PASSES because iota_immune_sort_witness concludes it at a SORT, while nf_head.neutral needs it at an APPLICATION. A green run is not a non-vacuity proof. (2) Noisy: ordinary Type-valued DATA (BinderData, Char, CtorDecl, ImplEnv, BinderInfo ...) is reported next to genuine open obligations, because both conclude in a Sort. Nothing constructs a BinderData by definition and nothing should have to. Discriminating them (a judgment head is APPLIED to indices in hypothesis position; a data parameter is not) is an unmade refinement.\n\nGENUINE OPEN OBLIGATIONS IN THIS LIST, worth attention: red_env_good (discharged nowhere in the tree), def_env_good, typing_is_def_eq, const_whnf (still unwitnessed even after iota_neutral_of_dead_const, which concludes iota_neutral rather than const_whnf), CandModel, CtxTyping, CtorsWellTyped, DefEnvWellformed.",
+  "_comment": "Premise-satisfiability ratchet (vacuity firewall item 9). Predicates ASSUMED as a hypothesis somewhere in the clean-verify spec that NO registered definition concludes. Constructors and recursors are excluded from the supply side on purpose: a constructor builds P only if something supplies its fields. See crates/clean-verify/src/premise_witness.rs. This list may only shrink.\n\nWHY IT EXISTS: def_eq_fuel_complete passed a census of 0 axioms / 0 domain axioms / 0 DerivedProved debt and proved nothing, because its hnf premise is false (hnf_is_false). Zero axioms is not zero assumptions.\n\nIT WOULD HAVE CAUGHT THAT: hnf concludes nf_head r, and before nf_head_neutral_app_witness nothing in the tree concluded nf_head.\n\nTWO KNOWN LIMITS. (1) Head-only: iota_immune PASSES because iota_immune_sort_witness concludes it at a SORT, while nf_head.neutral needs it at an APPLICATION. A green run is not a non-vacuity proof. (2) Noisy: ordinary Type-valued DATA (BinderData, Char, CtorDecl, ImplEnv, BinderInfo ...) is reported next to genuine open obligations, because both conclude in a Sort. Nothing constructs a BinderData by definition and nothing should have to. Discriminating them (a judgment head is APPLIED to indices in hypothesis position; a data parameter is not) is an unmade refinement.\n\nGENUINE OPEN OBLIGATIONS IN THIS LIST, worth attention: red_env_good (discharged nowhere in the tree), def_env_good, typing_is_def_eq, const_whnf (still unwitnessed even after iota_neutral_of_dead_const, which concludes iota_neutral rather than const_whnf), CandModel, CtxTyping, CtorsWellTyped, DefEnvWellformed.  ||  outParam (added 2026-08: JUSTIFIED, not an open obligation). It is not a clean-verify predicate at all \u2014 it is Lean's class-resolution marker, which the kernel registers byte-for-byte as Lean declares it (env/order_structures.rs:65) so .olean import collides on a type-EQUAL name. It is the IDENTITY on Sorts. It is also UNWITNESSABLE through the spec surface, measured twice: a definition declared at `outParam Nat` and one declared at `forall (x : outParam Nat), outParam Nat` both still leave it flagged, because the spec elaborator delta-reduces `outParam A` to `A` in the stored type, so conclusion_head \u2014 which is purely syntactic \u2014 never sees the marker. The kernel-side declarations that ASSUME it keep it literal because they are built as Exprs directly. Every other entry that was live at this point (19 across the EvalIR, ImplInfer-mode, eval_ir-mode and faithful-whnf lanes) was WITNESSED rather than listed here \u2014 see spec/core_spec/premise_witnesses.rs.",
   "carriers": [
     {
       "assumed_by": [
@@ -1767,7 +1767,7 @@
       "predicate": "typing_is_def_eq"
     }
   ],
-  "count": 103,
+  "count": 104,
   "unwitnessed": [
     "AppInferWitness",
     "BCPStep",
@@ -1870,6 +1870,7 @@
     "is_normal_bd",
     "is_normal_c",
     "minimal_or_inner",
+    "outParam",
     "red_env_good",
     "typing_is_def_eq"
   ]

@@ -52,6 +52,7 @@ pub struct ShardStats {
 /// set.mm is built on ZFC which requires the axiom of choice and the law
 /// of excluded middle (classical logic).
 #[must_use]
+#[cfg(any(test, doc))]
 pub(crate) fn zfc_axiom_profile() -> AxiomProfile {
     AxiomProfile::new(AxiomProfile::CHOICE.0 | AxiomProfile::LEM.0)
 }

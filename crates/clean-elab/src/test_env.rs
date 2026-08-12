@@ -16,6 +16,8 @@
 //! everywhere else. (`unknown_lints` keeps the stock-rustc build green — the
 //! lint name is Trust-only.)
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 /// One process-wide lock for all environment mutation in a test binary.
@@ -84,6 +86,7 @@ impl Drop for ScopedEnvVar {
 
 /// Run `f` with `vars` set, serialized behind the process-wide env lock;
 /// previous values are restored afterwards (also on panic).
+#[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
 pub(crate) fn with_serialized_env_vars<T>(vars: &[(&str, &str)], f: impl FnOnce() -> T) -> T {
     let _env_lock = lock_env();
     let _guards: Vec<_> = vars
@@ -95,6 +98,7 @@ pub(crate) fn with_serialized_env_vars<T>(vars: &[(&str, &str)], f: impl FnOnce(
 
 /// Run `f` with `vars` removed, serialized behind the process-wide env lock;
 /// previous values are restored afterwards (also on panic).
+#[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
 pub(crate) fn with_serialized_env_vars_removed<T>(vars: &[&str], f: impl FnOnce() -> T) -> T {
     let _env_lock = lock_env();
     let _guards: Vec<_> = vars.iter().map(|key| ScopedEnvVar::unset(key)).collect();
@@ -106,11 +110,13 @@ pub(crate) fn with_serialized_env_vars_removed<T>(vars: &[&str], f: impl FnOnce(
 ///
 /// Every key touched is captured once on first touch and restored when the
 /// [`with_env_edits`] scope ends (also on panic).
+#[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
 pub(crate) struct EnvEditor {
     saved: Vec<(String, Option<String>)>,
 }
 
 impl EnvEditor {
+    #[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
     fn save_once(&mut self, key: &str) {
         if !self.saved.iter().any(|(k, _)| k == key) {
             self.saved.push((key.to_owned(), std::env::var(key).ok()));
@@ -118,6 +124,7 @@ impl EnvEditor {
     }
 
     /// Set `key=value` until the end of the scope or the next edit of `key`.
+    #[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
     pub(crate) fn set(&mut self, key: &str, value: &str) {
         self.save_once(key);
         // Blessed choke point: serialized by with_env_edits, restored on exit.
@@ -126,6 +133,7 @@ impl EnvEditor {
     }
 
     /// Remove `key` until the end of the scope or the next edit of `key`.
+    #[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
     pub(crate) fn remove(&mut self, key: &str) {
         self.save_once(key);
         // Blessed choke point: serialized by with_env_edits, restored on exit.
@@ -149,6 +157,7 @@ impl Drop for EnvEditor {
 
 /// Run `f` with exclusive, restore-on-exit access to the process environment
 /// via an [`EnvEditor`].
+#[allow(dead_code)] // 2026-08-04: no caller in this crate's test build; shared env harness kept in sync across crates.
 pub(crate) fn with_env_edits<T>(f: impl FnOnce(&mut EnvEditor) -> T) -> T {
     let _env_lock = lock_env();
     let mut editor = EnvEditor { saved: Vec::new() };

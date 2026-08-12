@@ -374,6 +374,7 @@ fn build_smul_value(c: &FinSumSmulConsts) -> Expr {
 // ── NNReal.mul_zero ──────────────────────────────────────────────────────────
 
 /// Handles for `NNReal.mul_zero`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct MulZeroConsts {
     nat: Expr,
     nat_zero: Expr,
@@ -413,6 +414,7 @@ struct MulZeroConsts {
     quot_ind: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl MulZeroConsts {
     fn new() -> Self {
         let lvl1 = Level::succ(Level::zero());

@@ -21,7 +21,13 @@ use super::equality::match_equality;
 use super::nat_expr_eval::eval_nat_expr;
 use super::norm_num_kernel::norm_num_kernel_proof;
 use super::proof_term::{reduce_eq, rfl};
-use super::smt::decide;
+// The in-crate `decide` fallback MUST be the kernel-evaluating ladder
+// (`decide::eval_decide`, the same function the `decide` token is registered
+// to), not the bare SMT bridge. `smt::decide` answers "found counterexample —
+// goal is not valid" on TRUE ground goals such as `(2:Nat) ≤ 3`, which
+// `eval_decide` proves outright; `eval_decide` still ends in `smt::decide`, so
+// this is strictly additive. Do not "simplify" this back to `super::smt::decide`.
+use super::decide::eval_decide as decide;
 
 /// Evaluate an Int expression to a concrete `i64` value.
 ///

@@ -39,6 +39,10 @@ pub(crate) enum LitPattern {
     /// Natural number literal.
     Nat(u64),
     /// String literal.
+    // Lean's literal patterns include strings; the exhaustiveness front end
+    // only lowers `Nat`/`Bool` literals so far. Kept so the pattern language
+    // stays complete against `LitPattern`'s Lean counterpart — 2026-07-31.
+    #[allow(dead_code)]
     String(String),
     /// Boolean literal.
     Bool(bool),
@@ -56,6 +60,9 @@ pub(crate) struct TypeInfo {
     /// The constructors of this type.
     pub constructors: Vec<ConstructorInfo>,
     /// Whether this type is recursive (e.g. List, Nat).
+    // Populated by every `TypeInfo` producer; the depth-limiting witness
+    // generator that reads it is not wired yet — 2026-07-31.
+    #[allow(dead_code)]
     pub is_recursive: bool,
 }
 

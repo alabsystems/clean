@@ -60,6 +60,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants for the Rat ordering proof terms.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct RatOrderConsts {
     #[cfg(test)]
     rat: Expr,
@@ -114,6 +115,7 @@ struct RatOrderConsts {
     not_const: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl RatOrderConsts {
     fn new() -> Self {
         #[cfg(test)]
@@ -234,6 +236,7 @@ impl RatOrderConsts {
     }
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     /// Register the genuinely-provable Rat ordering lemmas as
     /// kernel-checked `Declaration::Theorem`s, replacing the prior

@@ -77,6 +77,7 @@ impl Environment {
         field_idx: usize,
         nf: usize,
         ih_offset: usize,
+        num_motives: usize,
         n_pis: usize,
     ) -> Expr {
         Self::remap_residual_bvars_impl(expr, n_pis, &|ctor_k| {
@@ -90,9 +91,14 @@ impl Environment {
                 // remap_residual_index_bvars where the double reversal
                 // (np-1-offset then np-1-param_j) cancels out, here we
                 // use the offset directly since the target formula adds
-                // param_j without reversing.
+                // param_j without reversing. ALL motive binders sit between
+                // the params and the minor's field telescope — the shift is
+                // `num_motives`, not a hardcoded 1 (mutual-block fix
+                // 2026-08-04; the old constant was correct only for
+                // single-type blocks and pointed a param reference at a
+                // motive whenever num_motives > 1).
                 let param_j = ctor_k - field_idx;
-                ih_offset + nf + 1 + param_j
+                ih_offset + nf + num_motives + param_j
             }
         })
     }
@@ -178,7 +184,6 @@ impl Environment {
         rec_level_params: &[Name],
         num_params: u32,
         num_motives: u32,
-        num_indices: u32,
         num_fields: u32,
         recursive_flags: &[bool],
         field_types: &[Expr],
@@ -270,15 +275,22 @@ impl Environment {
                 }
 
                 // Apply index arguments for indexed inductives (#1782, #1784).
-                if num_indices > 0 {
-                    if let Some(field_ty) = field_types.get(i) {
-                        let indices = self.get_constructor_return_indices(field_ty, num_params);
-                        for idx_expr in indices {
-                            let remapped = Self::remap_residual_index_bvars(
-                                &idx_expr, i, np, nf, n_minors, nm, n_pis,
-                            );
-                            ih = Expr::app(ih, remapped);
-                        }
+                // The index count is intrinsic to the FIELD's target type: its
+                // return-type args after the shared params are exactly that
+                // target's residual indices (empty for a 0-index target). It
+                // must NOT be gated on the num_indices of the type whose rule
+                // is being built — a mutual SIBLING field can carry residual
+                // indices even when the current type has none, and the old
+                // gate dropped them, minting an IH the subject-reduction
+                // validator rejects (found via the nested-local lift's
+                // indexed-container fixture, 2026-08-04).
+                if let Some(field_ty) = field_types.get(i) {
+                    let indices = self.get_constructor_return_indices(field_ty, num_params);
+                    for idx_expr in indices {
+                        let remapped = Self::remap_residual_index_bvars(
+                            &idx_expr, i, np, nf, n_minors, nm, n_pis,
+                        );
+                        ih = Expr::app(ih, remapped);
                     }
                 }
 

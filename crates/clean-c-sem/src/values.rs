@@ -1084,7 +1084,7 @@ mod tests {
             Err(UBKind::FloatToIntOverflow)
         ));
 
-        let too_big = CValue::Double((crate::types::IntKind::Int.unsigned_max() as f64) + 1024.0);
+        let too_big = CValue::Double((IntKind::Int.unsigned_max() as f64) + 1024.0);
         assert!(matches!(
             too_big.cast(&float_ty, &uint_ty),
             Err(UBKind::FloatToIntOverflow)

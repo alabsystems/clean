@@ -3035,7 +3035,7 @@ mod tests {
         // matrix check; a stub artifact has no `api_coverage_matrix`
         // section. Skip cleanly on machines that don't carry the full
         // generated report.
-        if let Ok(text) = std::fs::read_to_string(&report_path) {
+        if let Ok(text) = fs::read_to_string(&report_path) {
             if text.contains("\"stub\": true") {
                 eprintln!("SKIP: {} is a stub artifact", report_path.display());
                 return;

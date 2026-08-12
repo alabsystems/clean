@@ -244,7 +244,10 @@ fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
     // `Decidable.casesOn`, both at binder depth 1 — so, exactly as in
     // `by_cases`, they can share ONE fvar id numbered from the goal's tactic
     // base without violating `close_fvars`' `(n - base) < depth` invariant.
-    let h_fvar = FVarId::new(state.goal_fvar_base(goal));
+    // `goal_binder_base`: identical to `goal_fvar_base` unless the goal's
+    // context was narrowed by `clear`, in which case the context alone would
+    // hand back an id still bound by a live `lambda` (capture).
+    let h_fvar = FVarId::new(state.goal_binder_base(goal));
 
     // ¬c = c → False (matches `Decidable.isFalse`'s argument type).
     let false_const = Expr::const_(Name::from_string("False"), vec![]);

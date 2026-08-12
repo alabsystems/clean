@@ -51,7 +51,6 @@ pub(crate) use super::super::ring_helpers::{
     make_add, make_mul, make_neg, make_pow, ring_expr_to_expr, ring_flatten_add, ring_flatten_mul,
     ring_normalize, RingExpr,
 };
-pub(crate) use super::super::search::{can_apply_to_produce, types_unify};
 pub(crate) use super::super::simp::{
     beta_reduce, collect_simp_lemmas, contains_bvar, eta_reduce, is_trivial_equality,
     is_true_const, shift_expr,

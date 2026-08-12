@@ -52,8 +52,8 @@
 //!   with a non-variable argument fall outside the envelope.
 
 use clean_parser::{
-    Projection, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr,
-    SurfaceLit, SurfaceMatchArm, SurfacePattern,
+    Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr, SurfaceLit,
+    SurfaceMatchArm, SurfacePattern,
 };
 
 /// If `decls` is a packable mutual block, return the desugared declaration

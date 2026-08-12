@@ -106,7 +106,7 @@ fn assert_omega_proves(mut state: ProofState, label: &str) -> ProofState {
     reset_all_counters();
     let axiom_before = axiom_snapshot();
 
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_ok(),
         "omega should prove `{label}`, got: {result:?}"
@@ -135,7 +135,7 @@ fn assert_omega_proves(mut state: ProofState, label: &str) -> ProofState {
 /// Run omega on `state` and assert it does NOT close (false inequality).
 fn assert_omega_rejects(mut state: ProofState, label: &str) {
     reset_all_counters();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_err() && !state.is_complete(),
         "omega must REJECT the false inequality `{label}`, but it closed: {result:?}"
@@ -202,7 +202,7 @@ fn test_omega_proves_with_hypothesis_a_le_b_plus_1() {
         ],
     );
     let axiom_before = axiom_snapshot();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_ok(),
         "omega should prove `(h : a ≤ b) ⊢ a ≤ b + 1`, got: {result:?}"
@@ -236,7 +236,7 @@ fn test_omega_proves_false_from_n_plus_2_le_n_hyp() {
         ],
     );
     let axiom_before = axiom_snapshot();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_ok(),
         "omega should derive False from `n + 2 ≤ n`, got: {result:?}"

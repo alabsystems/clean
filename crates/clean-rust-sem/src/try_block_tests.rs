@@ -351,7 +351,7 @@ fn test_try_block_preserves_non_error_return() {
                     assert!(
                         matches!(&args[0], Expr::Return(Some(_))),
                         "non-error return should be preserved, got {:?}",
-                        &args[0]
+                        args[0]
                     );
                 }
                 other => panic!("expected Ok variant, got {other:?}"),

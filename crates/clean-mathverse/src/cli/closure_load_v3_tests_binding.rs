@@ -14,7 +14,7 @@
 
 use super::*;
 use crate::closure_source::ShardConstantSource;
-use crate::shard::{ShardMmapReader, ShardReader, ShardWriter};
+use crate::shard::{ShardReader, ShardWriter};
 use clean_kernel::env::ConstantSource as KernelConstantSource;
 
 /// Path to the committed `Minimal.olean` fixture (def identity + theorem id_id).
@@ -125,7 +125,7 @@ fn test_independent_eager_vs_lazy_parity_minimal() {
 
             // LAZY: serve the closure from the source.
             let mut lazy_env = Environment::with_prelude();
-            lazy_env.set_constant_source(std::sync::Arc::new(source));
+            lazy_env.set_constant_source(Arc::new(source));
             let lazy_ok = lazy_env.add_decl(decl).is_ok();
             assert_eq!(eager_ok, lazy_ok, "add_decl(id_id) Ok-parity eager==lazy");
         }

@@ -37,8 +37,8 @@ fn test_char_code_point_olean_two_field_shape() {
         Expr::app(Expr::const_(Name::from_string("Char.mk"), vec![]), u32v),
         valid,
     );
-    assert_eq!(super::char_code_point(&ch), Some(90));
-    assert_eq!(super::get_char_val(&ch), Some('Z'));
+    assert_eq!(char_code_point(&ch), Some(90));
+    assert_eq!(get_char_val(&ch), Some('Z'));
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_char_code_point_bitvec_ofnatlt_reads_value_not_width() {
         Expr::const_(Name::from_string("trivial"), vec![]),
     );
     assert_eq!(
-        super::char_code_point(&ch),
+        char_code_point(&ch),
         Some(90),
         "must read the value (90), not the width (32)"
     );
@@ -77,7 +77,7 @@ fn test_char_code_point_bitvec_ofnatlt_reads_value_not_width() {
 #[test]
 fn test_char_code_point_pure_clean_one_field_shape() {
     // pure-clean: Char.mk <nat>
-    assert_eq!(super::char_code_point(&mk_char_expr('Z')), Some(90));
+    assert_eq!(char_code_point(&mk_char_expr('Z')), Some(90));
 }
 
 // === Char.toNat tests ===

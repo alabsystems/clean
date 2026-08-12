@@ -8,6 +8,7 @@ use super::*;
 
 /// Fingerprint-contract checks split out of
 /// `validate_tactic_count_artifact_consistency` (same checks, same order).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn validate_tactic_count_artifact_fingerprints(
     artifact: &TacticParityCountArtifact,
     failures: &mut Vec<String>,

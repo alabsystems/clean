@@ -31,6 +31,8 @@
 //! 13. **Sep** (`sep.rs`): Separation logic for heap reasoning
 //! 14. **VCGen** (`vcgen/`): Verification condition generation
 //! 15. **Verified** (`verified.rs`): Verified function wrappers
+//! 16. **Denotation** (`denotation.rs`): Deterministic per-step translation
+//!     denotation hashes, and their fail-closed validation
 //!
 //! ## Memory Model
 //!
@@ -71,6 +73,7 @@
 
 pub mod auto;
 pub mod cli;
+pub mod denotation;
 pub mod eval;
 pub mod examples;
 pub mod expr;

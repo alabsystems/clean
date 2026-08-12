@@ -163,10 +163,16 @@ pub(crate) fn instantiate(body: &Expr, arg: &Expr) -> Expr {
     instantiate_bvar(body, arg, 0)
 }
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn instantiate_at(body: &Expr, arg: &Expr, idx: u32) -> Expr {
     instantiate_bvar(body, arg, idx)
 }
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn abstract_over(expr: &Expr, target: &Expr) -> Expr {
     abstract_bvar(expr, target, 0)
 }
@@ -175,14 +181,23 @@ pub(crate) fn lift_bvars(expr: &Expr, amount: u32) -> Expr {
     lift_bvar(expr, i64::from(amount), 0)
 }
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn lift_bvars_from(expr: &Expr, start: u32, amount: u32) -> Expr {
     lift_bvar(expr, i64::from(amount), start)
 }
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn lower_bvars(expr: &Expr, amount: u32) -> Expr {
     lift_bvar(expr, -i64::from(amount), 0)
 }
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn has_free_bvar(expr: &Expr, idx: u32) -> bool {
     has_loose_bvar(expr, idx)
 }

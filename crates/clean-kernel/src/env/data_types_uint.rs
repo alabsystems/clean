@@ -11,6 +11,7 @@ use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     /// Shared helper for init_uint{8,16,32,64}/init_usize: creates the v4.30
     /// BitVec-backed carrier — the inductive `<Name>` with constructor

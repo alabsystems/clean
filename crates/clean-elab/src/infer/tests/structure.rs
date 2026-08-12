@@ -635,8 +635,8 @@ fn test_derived_decidable_eq_monomorphic_no_universe_params() {
             // Verify no Level::Param remains in the instance type or value.
             // Fixes #3408: sorry.{u_0} had a spurious universe param that
             // caused kernel type check failures.
-            let ty_params = elab_types::collect_level_params(&[&inst.ty]);
-            let val_params = elab_types::collect_level_params(&[&inst.val]);
+            let ty_params = collect_level_params(&[&inst.ty]);
+            let val_params = collect_level_params(&[&inst.val]);
             assert!(
                 ty_params.is_empty(),
                 "Instance type should have no Level::Param, got: {ty_params:?}"
@@ -993,7 +993,7 @@ fn test_issue165_struct_literal_syntax() {
                 );
                 // Check the argument is 42
                 assert!(
-                    matches!(arg.kind(), ExprKind::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(42)),
+                    matches!(arg.kind(), ExprKind::Lit(Literal::Nat(n)) if n.to_u64() == Some(42)),
                     "expected Nat(42) argument, got {:?}",
                     arg
                 );

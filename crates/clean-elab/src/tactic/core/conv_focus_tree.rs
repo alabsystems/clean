@@ -30,6 +30,9 @@ use crate::tactic::conv::ConvPosition;
 pub(crate) struct ConvFocus {
     /// Path FROM this node's expr down to its hole (for `arg`/`enter` inside
     /// a congr'd focus). Empty for a freshly-opened leaf.
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(crate) sub_path: Vec<ConvPosition>,
     /// Sub-expr at the hole on entry (the actual `f` or `ai`).
     pub(crate) before: Expr,

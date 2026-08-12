@@ -938,7 +938,7 @@ mod tests {
     /// Full pipeline mirror of the production `coq-import` lane: mine → install
     /// → registry pre-passes → import → kernel verify (cumulative, as
     /// `coq_import_command` sets it). Returns the post-verify env and report.
-    fn import_and_verify(input: &str) -> (clean_kernel::Environment, IncrementalVerifyReport) {
+    fn import_and_verify(input: &str) -> (Environment, IncrementalVerifyReport) {
         let mut miner = UniverseConstraintMiner::default();
         miner.scan_signatures(input).expect("signature scan");
         miner.scan_constraints(input).expect("constraint scan");
@@ -961,8 +961,7 @@ mod tests {
         let reader = ShardReader::from_bytes(&buf).expect("shard reader");
         let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
         lib.load_shard(&reader).expect("shard load");
-        let mut prelude =
-            clean_kernel::Environment::try_with_prelude().expect("kernel prelude environment");
+        let mut prelude = Environment::try_with_prelude().expect("kernel prelude environment");
         prelude.set_cumulative(true);
         verify_corpus_incremental_with_env(&lib, prelude)
     }
@@ -996,7 +995,7 @@ mod tests {
 
     /// An env with the `Coq.Init.Logic.eq` inductive registered exactly as the
     /// production import lane does (cumulative, for `Prop ≤ Type` coercion).
-    fn env_with_eq() -> clean_kernel::Environment {
+    fn env_with_eq() -> Environment {
         let (env, _report) = import_and_verify(RAW_EQ_IND);
         assert!(
             env.get_const(&Name::from_string(EQ_CONST)).is_some(),
@@ -1133,7 +1132,7 @@ mod tests {
     #[test]
     fn test_missing_eq_constructor_returns_none() {
         // Bare prelude, no Coq eq inductive registered.
-        let env = clean_kernel::Environment::try_with_prelude().expect("prelude");
+        let env = Environment::try_with_prelude().expect("prelude");
         let ty = false_eq_type();
         assert!(
             build_eq_refl_of_lhs(&env, &ty).is_none(),
@@ -1182,7 +1181,7 @@ mod tests {
         let reader = ShardReader::from_bytes(&buf).expect("reader");
         let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
         lib.load_shard(&reader).expect("load");
-        let mut env = clean_kernel::Environment::try_with_prelude().expect("prelude");
+        let mut env = Environment::try_with_prelude().expect("prelude");
         env.set_cumulative(true);
         let report = verify_corpus_incremental(&lib, env);
         assert_eq!(report.failed, 0, "eq import must not fail");
@@ -1207,7 +1206,7 @@ mod tests {
     }
 
     /// Register a value-free axiom `name : ty` (panics on kernel rejection).
-    fn add_axiom(env: &mut clean_kernel::Environment, name: &str, ty: Expr) {
+    fn add_axiom(env: &mut Environment, name: &str, ty: Expr) {
         env.add_decl(Declaration::Axiom {
             name: Name::from_string(name),
             level_params: vec![],
@@ -1216,7 +1215,7 @@ mod tests {
         .unwrap_or_else(|e| panic!("axiom {name}: {e}"));
     }
 
-    fn is_value_free(env: &clean_kernel::Environment, name: &str) -> bool {
+    fn is_value_free(env: &Environment, name: &str) -> bool {
         env.get_const(&Name::from_string(name))
             .expect("constant present")
             .value
@@ -1225,7 +1224,7 @@ mod tests {
 
     /// Env with `eq`, a carrier `Test.T : Type 0`, an inhabitant `Test.a : T`,
     /// and the value-free LOCKED constant `Test.f : T`.
-    fn env_with_lock_scaffold() -> clean_kernel::Environment {
+    fn env_with_lock_scaffold() -> Environment {
         let mut env = env_with_eq();
         add_axiom(&mut env, "Test.T", type0());
         add_axiom(&mut env, "Test.a", c("Test.T"));

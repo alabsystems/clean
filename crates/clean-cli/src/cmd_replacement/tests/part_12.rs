@@ -5,7 +5,6 @@
 //! Tests (slice 12) for the `clean replacement` command group,
 //! split from the original single-file `cmd_replacement.rs` tests module.
 
-use super::support::*;
 use crate::cmd_replacement::*;
 
 #[test]

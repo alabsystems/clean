@@ -6,7 +6,7 @@
 
 use super::certificate::{export_certificate, export_veripb, hash_formula};
 use super::cnf_bridge::{cnf_to_pb, is_cnf_representable, pb_to_cnf};
-use super::normalize::{is_tautology, normalize, saturate, simplify_formula};
+use super::normalize::{normalize, saturate, simplify_formula};
 use super::opb_format::{parse_opb, write_opb};
 use super::rules::{verify_pb_proof, verify_rule, PbRule};
 use super::types::{PbConstraint, PbFormula, PbObjective};

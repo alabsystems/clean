@@ -53,7 +53,7 @@ use crate::spec::Specification;
 
 /// The five `rigid_app_head` arms, as `(payload binders, applied form,
 /// recursive sub-head or None)`.
-const RIGID_ARMS: [(&str, &str, Option<&str>); 5] = [
+const RIGID_ARMS: [(&str, &str, Option<&str>); 6] = [
     ("(n : Level)", "(KExpr.sort n)", None),
     (
         "(pty : KExpr) (pbody : KExpr)",
@@ -67,6 +67,9 @@ const RIGID_ARMS: [(&str, &str, Option<&str>); 5] = [
         "(KExpr.proj s i sub)",
         None,
     ),
+    // APPENDED LAST, deliberately: every `.rec` site keeps its existing arm
+    // positions and merely gains one, and `RIGID_ARMS[4]` stays `proj`.
+    ("(i : Nat)", "(KExpr.bvar i)", None),
 ];
 
 impl Specification {
@@ -88,9 +91,10 @@ impl Specification {
              | app : forall (af : KExpr) (aa : KExpr), rigid_app_head af -> \
              rigid_app_head (KExpr.app af aa)\n\
              | proj : forall (s : Name) (i : Nat) (sub : KExpr), \
-             rigid_app_head (KExpr.proj s i sub)",
-            "rigid_app_head e: e's SPINE HEAD is rigid — a sort, pi, literal, or projection, \
-             possibly under application. Deliberately SHAPE-ONLY: unlike whnf_stuck_head it \
+             rigid_app_head (KExpr.proj s i sub)\n\
+             | bvar : forall (i : Nat), rigid_app_head (KExpr.bvar i)",
+            "rigid_app_head e: e's SPINE HEAD is rigid — a sort, pi, literal, projection or BOUND \
+             VARIABLE, possibly under application. Deliberately SHAPE-ONLY: unlike whnf_stuck_head it \
              imposes no condition on subterms, and in particular its proj arm accepts ANY \
              subject. That is the entire point. whnf_stuck_head is NOT preserved by reduction — \
              its projw arm needs is_whnf of the subject, and a const-headed subject can \
@@ -161,7 +165,7 @@ impl Specification {
                  Eq KExpr x (KExpr.lam lty lbd) -> C) \
                  {not_lam_arms}f hr"
             ),
-            "rigid_app_head_not_lam: a rigid head is never a lambda. All five arms conclude at a \
+            "rigid_app_head_not_lam: a rigid head is never a lambda. All six arms conclude at a \
              different head constructor and die by generic discrimination — the same \
              argument-from-an-absent-arm as whnf_stuck_head_not_lam, restated over the preserved \
              predicate. Rules out the beta case when inverting reduction. DerivedProved, zero \
@@ -317,7 +321,7 @@ mod tests {
             "only the app arm may recurse; any other recursive arm reintroduces a subterm \
              side condition and breaks preservation"
         );
-        assert_eq!(RIGID_ARMS.len(), 5);
+        assert_eq!(RIGID_ARMS.len(), 6);
     }
 
     /// Every generated term must be paren-balanced and reference only bound
@@ -352,7 +356,7 @@ mod tests {
         assert_eq!(depth, 0, "arms must be paren-balanced");
         assert_eq!(
             arms.matches("(fun ").count(),
-            5,
+            6,
             "one minor premise per rigid_app_head constructor"
         );
         // `ih` is referenced exactly where it is bound.

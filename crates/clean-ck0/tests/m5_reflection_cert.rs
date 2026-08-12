@@ -83,6 +83,11 @@ fn r_lam(dom: RawExpr, body: RawExpr) -> RawExpr {
 fn r_bvar(i: u32) -> RawExpr {
     RawExpr::BVar(i)
 }
+// The `Sort 0`/`Prop` level of the raw-level helper set (`lzero`/`lone`/`lparam`);
+// the M5 fixtures currently only reach `lone`/`lparam`. Kept alongside its
+// siblings so a Prop-universe reflection fixture needs no re-derivation
+// — 2026-07-31.
+#[allow(dead_code)]
 fn lzero() -> RawLevel {
     RawLevel::Zero
 }

@@ -85,6 +85,8 @@ struct LevelSplitConsts {
     rat_mul: Expr,
     pow_nat: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fin_prod: Expr,
     level_wt: Expr,
     set_size_nat: Expr,

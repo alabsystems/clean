@@ -1227,7 +1227,7 @@ fn test_recursive_repr_is_materialized_from_registered_constructor_metadata() {
 
     fn mentions_string(expr: &Expr, expected: &str) -> bool {
         match expr.kind() {
-            ExprKind::Lit(clean_kernel::Literal::String(value)) => value.as_ref() == expected,
+            ExprKind::Lit(Literal::String(value)) => value.as_ref() == expected,
             ExprKind::App(fun, arg) => {
                 mentions_string(fun, expected) || mentions_string(arg, expected)
             }

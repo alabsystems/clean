@@ -94,6 +94,7 @@ enum Outcome {
     Crashed,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Outcome {
     fn token(self) -> &'static str {
         match self {
@@ -1565,6 +1566,7 @@ fn run_spec_big_stack(spec: &Spec) -> Outcome {
 /// Subprocess entry: run a single spec by index and print its outcome token to
 /// stdout (`OUTCOME <idx> <token>`). Diagnostics go to stderr. Always exits 0 on
 /// a graceful outcome; a stack overflow aborts the process (caught by parent).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn run_one(idx: usize) {
     let specs = build_specs();
     let spec = specs

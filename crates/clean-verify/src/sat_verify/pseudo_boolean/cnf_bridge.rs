@@ -15,6 +15,12 @@
 //! be applied to SAT instances, and allows clause-only PB formulas to be
 //! exported to standard DIMACS format for SAT solvers.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use super::types::{PbConstraint, PbFormula};
 
 /// Convert a CNF formula (list of clauses) to a PB formula.

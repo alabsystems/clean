@@ -545,6 +545,9 @@ pub(crate) fn synthesize_compound_decidable(
 }
 
 /// REQUIRES: `state.goals` is non-empty. ENSURES: Closes the current goal with `mathverse` when it is a ground Nat/Int arithmetic proposition.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn try_mathverse_decide(
     state: &mut ProofState,
     config: &DecideExtConfig,

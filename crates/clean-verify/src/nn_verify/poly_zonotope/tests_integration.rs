@@ -8,8 +8,7 @@
 //! through attention bound computation and tightness verification.
 
 use super::attention::{
-    attention_bound_linear, attention_bound_poly, compare_attention_bounds,
-    verify_attention_soundness,
+    attention_bound_poly, compare_attention_bounds, verify_attention_soundness,
 };
 use super::c015_spec::c015_theorem_entries;
 use super::tightness::{analyze_tightness, verify_o_eps_tightness};

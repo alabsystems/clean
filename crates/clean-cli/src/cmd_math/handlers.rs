@@ -4,7 +4,6 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use clean_kernel::{env::DeclarationTrustSummary, Environment, Expr};
@@ -1129,6 +1128,7 @@ pub(super) fn load_project_args(path: &Path) -> Result<(PathBuf, MathProjectMani
     Ok((resolved, manifest))
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn obligation_id_from_arg(arg: &str) -> String {
     let path = Path::new(arg);
     if path.exists() {

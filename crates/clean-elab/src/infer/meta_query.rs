@@ -77,7 +77,7 @@
 use super::ElabCtx;
 use crate::error::ElabError;
 use clean_kernel::Expr;
-use clean_parser::{DoElem, SurfaceArg, SurfaceExpr};
+use clean_parser::{DoElem, SurfaceExpr};
 
 /// Query head identifiers for the single-argument `inferType e` query. Its value
 /// is the inferred type of `e` (a kernel `Expr` computed from elaboration state).
@@ -399,6 +399,9 @@ impl<'a> ElabCtx<'a> {
         }
     }
 }
+
+#[cfg(test)]
+use clean_parser::SurfaceArg;
 
 /// Test-only constructor for a positional single-argument `App` query call with
 /// the given head, kept here so the recognizer tests can build the surface shapes

@@ -59,20 +59,24 @@ mod tests_saturation_regression;
 #[cfg(test)]
 mod tests_deletion_regression;
 
-pub(crate) use certificate::{export_certificate, export_veripb, hash_formula, PbCertificate};
-pub(crate) use cnf_bridge::{cnf_to_pb, is_cnf_representable, pb_to_cnf};
-pub(crate) use conflict_analysis::{
-    PbConflict, PbConflictAnalysisResult, PbConflictAnalyzer, PbTrail, PbTrailEntry, ProofChain,
-};
-pub(crate) use normalize::{is_tautology, normalize, saturate, simplify_formula};
-pub(crate) use opb_format::{parse_opb, write_opb};
-pub(crate) use rules::{verify_pb_proof, verify_rule, PbRule};
-pub(crate) use soundness::{
-    verify_division_soundness, verify_generalized_resolution_soundness, verify_rounding_soundness,
-    verify_saturation_soundness,
-};
-pub(crate) use types::{PbConstraint, PbFormula, PbObjective};
-pub(crate) use veripb::{cutting_planes_to_veripb, VeriPbProof, VeriPbStep};
+pub(crate) use opb_format::parse_opb;
+pub(crate) use rules::{verify_rule, PbRule};
+pub(crate) use types::{PbConstraint, PbFormula};
+
+// 2026-07-31: these re-exports have no production consumer — the crate's own
+// `#[cfg(test)]` fuzz and proptest modules reach the PB surface through this
+// module root, while production code goes to the submodules directly. Gated on
+// `cfg(test)` rather than exported unconditionally so the non-test `lib` build
+// does not carry an unused import.
+#[cfg(test)]
+pub(crate) use cnf_bridge::cnf_to_pb;
+#[cfg(test)]
+pub(crate) use normalize::{is_tautology, normalize};
+#[cfg(test)]
+pub(crate) use opb_format::write_opb;
+#[cfg(test)]
+pub(crate) use veripb::{VeriPbProof, VeriPbStep};
+#[cfg(test)]
 pub(crate) use veripb_parser::parse_veripb;
 
 use thiserror::Error;

@@ -79,6 +79,7 @@ impl<K: Eq + Hash, V> FrozenMap<K, V> {
         unsafe { &*ptr }
     }
 
+    #[cfg(test)]
     pub(crate) fn contains_key(&self, key: &K) -> bool {
         self.map
             .lock()
@@ -91,10 +92,6 @@ impl<K: Eq + Hash, V> FrozenMap<K, V> {
             .lock()
             .expect("invariant: FrozenMap mutex poisoned")
             .len()
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 

@@ -141,6 +141,7 @@ impl HolderResConsts {
         self.o.rat.clone()
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn zero(&self) -> Expr {
         self.o.rat_zero.clone()
     }

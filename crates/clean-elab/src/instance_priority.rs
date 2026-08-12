@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+// 2026-08-10: staged instance-priority prototype. Module-level rather than
+// ~26 per-item annotations, which pushed this file 493 -> 519, past the 500-line rule.
 // Copyright 2026 Andrew Yates
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
@@ -49,6 +52,8 @@
 //!
 //! Lean 4 `src/Lean/Meta/SynthInstance.lean`, `src/Lean/Attributes.lean`
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use crate::instances::{InstanceInfo, InstanceTable};
 use clean_kernel::expr::Expr;
 use clean_kernel::name::Name;

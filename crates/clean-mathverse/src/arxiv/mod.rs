@@ -22,7 +22,7 @@
 pub mod error_categories;
 pub mod formalize;
 pub(crate) mod formalize_prompt;
-pub(crate) mod import_validation;
+pub mod import_validation;
 pub mod importer;
 pub mod mathverse_bridge;
 pub mod parser;

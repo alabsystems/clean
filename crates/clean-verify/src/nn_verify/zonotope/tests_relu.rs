@@ -118,7 +118,7 @@ fn test_relu_crossing_hull_contains_zero_and_positive() {
     // After ReLU crossing, the interval hull may extend below 0
     let z = ConcreteZonotope::new(vec![1.0], vec![vec![3.0]]);
     let result = zonotope_relu(&z);
-    let (lo, hi) = result.to_interval();
+    let (_lo, _hi) = result.to_interval();
     // The interval hull is an overapproximation of the zonotope.
 }
 

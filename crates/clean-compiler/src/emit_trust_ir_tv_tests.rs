@@ -97,6 +97,10 @@ fn test_mint_certifies_the_corpus_decl_end_to_end() {
     assert_eq!(obl.kind, ObligationKind::TranslationValidation);
     assert_eq!(obl.status, ProofStatus::Certified);
     assert_eq!(obl.function, Some(module.functions[0].id));
+    assert_eq!(
+        obl.site, None,
+        "whole-function TV must not claim an instruction site"
+    );
 
     // The certificate: CleanCic, lineage-bound, decodable payload, directive
     // citing the re-derivable theorem under the TV anchor, FOUNDATIONAL
@@ -597,6 +601,7 @@ fn test_mint_allocates_fresh_obligation_ids() {
         formula: None,
         function: None,
         source: None,
+        site: None,
     });
     let originals = vec![("tv_demo".to_string(), tv_demo_original())];
     let report = certify_backend_translation(&mut module, &originals);

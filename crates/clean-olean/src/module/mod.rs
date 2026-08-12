@@ -72,16 +72,18 @@ pub struct ParsedConstant {
     pub recursor_val: Option<RecursorValData>,
     /// Reducibility hints (for definitions only)
     pub hints: Option<ReducibilityHintsData>,
-    /// Definition safety (for `ConstantKind::Definition` only).
+    /// Declaration safety metadata.
     ///
-    /// `DefinitionVal` (`ConstantInfo.defnInfo`, tag 1) carries a `safety`
-    /// field (`DefinitionSafety`) distinguishing `safe` / `unsafe` /
-    /// `partial` definitions. This flag governs how the kernel treats the
-    /// declaration (unsafe and partial definitions bypass termination and
-    /// positivity checking), so dropping it silently upgrades an `unsafe`
-    /// or `partial` definition to `safe`. The field preserves it so a
-    /// parsed definition round-trips losslessly. `None` for non-definitions
-    /// or when the `DefinitionVal` predates the `safety` slot.
+    /// The historical field name reflects its original `DefinitionVal`-only
+    /// scope. It now also carries `AxiomVal.isUnsafe` and
+    /// `OpaqueVal.isUnsafe`: `Some(Safe | Unsafe)` for axioms/opaques and
+    /// `Some(Safe | Unsafe | Partial)` for definitions. Inductive-family
+    /// declarations retain their corresponding `is_unsafe` field in the
+    /// kind-specific value below. Dropping any of these flags silently grants
+    /// safe logical authority to a declaration Lean excluded from its trusted
+    /// kernel fragment, so recognized layouts fail closed instead of
+    /// fabricating `Safe`. `None` is reserved for declaration kinds with no
+    /// safety field.
     pub definition_safety: Option<DefinitionSafety>,
     /// Which quotient primitive this is (for `ConstantKind::Quot` only).
     ///

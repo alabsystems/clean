@@ -5,7 +5,7 @@
 use super::super::SourceError;
 use super::Parser;
 use crate::stmt::{GenericParam, WherePredicate};
-use crate::types::{Lifetime, RustType, TypeParamDef};
+use crate::types::{Lifetime, TypeParamDef};
 
 impl Parser {
     pub(crate) fn fresh_anon_lifetime(&mut self) -> Lifetime {
@@ -161,34 +161,13 @@ impl Parser {
             })
     }
 
-    /// Extract the universally-quantified lifetimes from a higher-ranked trait
-    /// bound (`for<'a, 'b> ...`).
-    ///
-    /// Returns the bound lifetime names (without the leading `'`) in source
-    /// order, or an empty list when the bound is not higher-ranked. Only
-    /// lifetime binders are accepted; higher-ranked type/const binders (a
-    /// nightly feature) are rejected by the caller path that needs them.
-    pub(crate) fn hrtb_bound_lifetimes(trait_bound: &syn::TraitBound) -> Vec<String> {
-        trait_bound
-            .lifetimes
-            .as_ref()
-            .into_iter()
-            .flat_map(|binder| binder.lifetimes.iter())
-            .filter_map(|param| match param {
-                syn::GenericParam::Lifetime(lifetime) => Some(lifetime.lifetime.ident.to_string()),
-                _ => None,
-            })
-            .collect()
-    }
-
     /// Resolve a trait bound to its trait name, accepting higher-ranked bounds.
     ///
     /// A higher-ranked trait bound such as `for<'a> Fn(&'a T)` is treated as a
     /// quantified bound: the universally-quantified lifetimes are erased and the
     /// bound simplifies to the underlying trait obligation (`Fn`). This is sound
     /// for the name-based trait dispatch the evaluator performs — the bound
-    /// lifetimes do not affect which trait must be implemented. They can be
-    /// recovered separately via [`Self::hrtb_bound_lifetimes`].
+    /// lifetimes do not affect which trait must be implemented and are erased.
     pub(crate) fn plain_trait_bound_name(
         trait_bound: &syn::TraitBound,
         context: &'static str,

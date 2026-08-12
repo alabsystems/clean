@@ -361,7 +361,7 @@ impl DiscTreeNode {
 
 // ─── Retrieval index ─────────────────────────────────────────────────────
 
-/// Main retrieval index combining name lookup, Bloom filter, and disc tree.
+/// Main retrieval index combining name, source, and Bloom-filtered lookup.
 pub struct RetrievalIndex {
     /// Name → constant index.
     name_index: HashMap<String, Vec<u32>>,
@@ -369,8 +369,6 @@ pub struct RetrievalIndex {
     source_index: HashMap<SourceSystem, Vec<u32>>,
     /// Bloom filter on names.
     bloom: BloomFilter,
-    /// Discrimination tree for structural matching.
-    disc_tree: DiscTreeNode,
     /// All entries.
     entries: Vec<IndexEntry>,
 }
@@ -383,7 +381,6 @@ impl RetrievalIndex {
             name_index: HashMap::new(),
             source_index: HashMap::new(),
             bloom: BloomFilter::new(expected_size.max(1), 0.01),
-            disc_tree: DiscTreeNode::new(),
             entries: Vec::new(),
         }
     }

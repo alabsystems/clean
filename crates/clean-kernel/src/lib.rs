@@ -120,6 +120,7 @@ pub use env::{
     AttrExtEntry,
     AttrExtState,
     AttrRegistration,
+    BridgeOutcome,
     CanonicalAmbientAxiomKind,
     CertificationAudit,
     CertificationIssue,
@@ -129,6 +130,8 @@ pub use env::{
     ConstantOriginInfo,
     Declaration,
     DeclarationVerification,
+    DeepIndError,
+    DeepIndOutcome,
     EnvError,
     EnvExtensionEntry,
     EnvExtensionEntryData,
@@ -141,6 +144,10 @@ pub use env::{
     InstanceInfo,
     KernelClassInfo,
     KernelInstanceInfo,
+    LiftedFamilyInfo,
+    LocalLift,
+    LocalLiftBridgeError,
+    LocalLiftError,
     // Pillar-1 G1: RAII guard establishing the sanctioned two-pass sentinel
     MmAxiomOnlyGuard,
     NoConfusionRegenerationDiagnostic,
@@ -159,6 +166,7 @@ pub use env::{
     SoundnessReport,
     TransparencyMode,
     DEFAULT_INSTANCE_PRIORITY,
+    LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
 pub use expr::{
     iterative_drop, AppArgs, AppArgsIter, BigNat, BinderData, BinderInfo, Expr, ExprFolder,

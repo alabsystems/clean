@@ -931,7 +931,6 @@ mod tests {
     #[test]
     fn test_extract_symbols_pi() {
         use clean_kernel::expr::BinderInfo;
-        use clean_kernel::level::Level;
 
         // Pi(Nat, Bool) should yield ["Bool", "Nat"]
         let nat = Expr::const_str("Nat");
@@ -944,8 +943,6 @@ mod tests {
 
     #[test]
     fn test_extract_symbols_nested() {
-        use clean_kernel::level::Level;
-
         // App(App(Eq, Nat), App(Nat.add, Nat.zero))
         let eq = Expr::const_str("Eq");
         let nat = Expr::const_str("Nat");
@@ -1125,7 +1122,7 @@ mod tests {
         let goal = Expr::const_str("Nat.add");
         let results = search_for_kernel_goal(&mut lib, &goal, &[], &PremiseConfig::default());
 
-        let overlap_candidates: Vec<&PremiseCandidate> = results
+        let _overlap_candidates: Vec<&PremiseCandidate> = results
             .iter()
             .filter(|c| c.match_reason == MatchReason::SymbolOverlap)
             .collect();
@@ -1334,7 +1331,7 @@ mod tests {
         // Build a goal: Pi(Bool, Bool) — should match bool_id, NOT nat_id
         let bool_e = Expr::const_str("Bool");
         let bool_e2 = Expr::const_str("Bool");
-        let goal = Expr::pi(clean_kernel::expr::BinderInfo::Default, bool_e, bool_e2);
+        let _goal = Expr::pi(clean_kernel::expr::BinderInfo::Default, bool_e, bool_e2);
 
         let config = PremiseConfig {
             type_weight: 1.0,

@@ -1,0 +1,35 @@
+{
+  "conclusion": {
+    "coefficients": {
+      "x0": "12916801/16777216",
+      "x1": "-14352835/536870912"
+    },
+    "constant": "-12916801/8388608",
+    "kind": "ge",
+    "type": "linear_constraint"
+  },
+  "multipliers": [
+    "12916801/16777216",
+    "14352835/536870912"
+  ],
+  "premises": [
+    {
+      "coefficients": {
+        "x0": "1"
+      },
+      "constant": "-2",
+      "kind": "ge",
+      "type": "linear_constraint"
+    },
+    {
+      "coefficients": {
+        "x1": "1"
+      },
+      "constant": "0",
+      "kind": "le",
+      "type": "linear_constraint"
+    }
+  ],
+  "type": "entailment_certificate",
+  "version": "1.0"
+}

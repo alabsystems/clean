@@ -615,7 +615,8 @@ impl<'a> ElabCtx<'a> {
             };
 
             // Set expected type for elaboration to enable bidirectional checking
-            let arg_expr = self.elaborate_with_expected_type(&arg.expr, expected_arg_ty.clone())?;
+            let arg_expr =
+                self.elaborate_arg_with_expected_type(&arg.expr, expected_arg_ty.clone())?;
 
             if let Some(exp_ty) = expected_arg_ty.as_ref() {
                 self.enforce_expr_type(&arg_expr, exp_ty)?;
@@ -1401,7 +1402,7 @@ impl<'a> ElabCtx<'a> {
         let mut cur = self.whnf(&self.metas.instantiate(func_ty));
         let mut walked_all = true;
         let mut domains: Vec<Expr> = Vec::new();
-        let mut arg_slot_metas: std::collections::HashSet<crate::unify::MetaId> =
+        let mut arg_slot_metas: std::collections::HashSet<MetaId> =
             std::collections::HashSet::new();
         for _ in 0..args.len() {
             let ExprKind::Pi(_, dom, body) = cur.kind() else {
@@ -1477,7 +1478,7 @@ impl<'a> ElabCtx<'a> {
     /// Collect the unsolved metavariables (as [`crate::unify::MetaId`]s) occurring
     /// anywhere in `e`. Used by [`Self::result_only_implicit_needs_expected`] to
     /// detect genuinely result-only implicits.
-    fn collect_metavars(e: &Expr, out: &mut std::collections::HashSet<crate::unify::MetaId>) {
+    fn collect_metavars(e: &Expr, out: &mut std::collections::HashSet<MetaId>) {
         match e.kind() {
             ExprKind::FVar(id) => {
                 if let Some(mid) = MetaState::from_fvar(*id) {
@@ -1509,11 +1510,7 @@ impl<'a> ElabCtx<'a> {
     /// first-order pattern constraints (`Or ?a ?b`), never higher-order
     /// (`@Eq ?β (?f a₁) (?f a₂)`) or forced (`@Eq ?α ?a ?a`) ones.
     fn result_metavars_first_order_linear(e: &Expr) -> bool {
-        fn walk(
-            e: &Expr,
-            seen: &mut std::collections::HashSet<crate::unify::MetaId>,
-            bad: &mut bool,
-        ) {
+        fn walk(e: &Expr, seen: &mut std::collections::HashSet<MetaId>, bad: &mut bool) {
             if *bad {
                 return;
             }
@@ -1767,7 +1764,7 @@ impl<'a> ElabCtx<'a> {
             let arg_expr = if is_major {
                 major_expr.clone()
             } else {
-                self.elaborate_with_expected_type(&arg.expr, Some(dom.clone()))?
+                self.elaborate_arg_with_expected_type(&arg.expr, Some(dom.clone()))?
             };
             self.enforce_expr_type(&arg_expr, &dom)?;
             let arg_expr = self.metas.instantiate(&arg_expr);
@@ -2349,7 +2346,7 @@ impl<'a> ElabCtx<'a> {
                     // speculative scope so a failed attempt leaves no assignments.
                     self.metas.push_scope();
                     let fits = self
-                        .elaborate_with_expected_type(&arg.expr, Some(dom_inst.clone()))
+                        .elaborate_arg_with_expected_type(&arg.expr, Some(dom_inst.clone()))
                         .map(|e| {
                             self.infer_type(&e)
                                 .map(|t| {
@@ -2401,8 +2398,10 @@ impl<'a> ElabCtx<'a> {
                     };
                     let arg_expr = match getelem_hole_goal {
                         Some(goal) => self.discharge_getelem_valid_hole(&goal),
-                        None => self
-                            .elaborate_with_expected_type(&arg.expr, Some(expected_arg_ty.clone())),
+                        None => self.elaborate_arg_with_expected_type(
+                            &arg.expr,
+                            Some(expected_arg_ty.clone()),
+                        ),
                     };
                     let arg_expr = match arg_expr {
                         Ok(e) => e,
@@ -2429,10 +2428,7 @@ impl<'a> ElabCtx<'a> {
                     // literal that can pin a shared carrier metavar to `Nat` and
                     // later need Int re-coercion.
                     if Self::is_nat_literal(&arg_expr)
-                        || matches!(
-                            &arg.expr,
-                            SurfaceExpr::Lit(_, clean_parser::SurfaceLit::Nat(_))
-                        )
+                        || matches!(&arg.expr, SurfaceExpr::Lit(_, SurfaceLit::Nat(_)))
                     {
                         nat_literal_indices.push(idx);
                     }

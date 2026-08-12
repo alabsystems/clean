@@ -196,45 +196,48 @@ impl Parser {
                 .collect());
         }
 
-        // Bounded binder: (x ∈ S), (x > 0), (x ≥ 0), (x < n), (x ≤ n)
-        // Consume the guard and return x as an untyped binder
+        // Bounded binder: (x ∈ S), (x > 0), (x ≥ 0), (x < n), (x ≤ n), and the
+        // other relational forms `try_bounded_guard` recognises. Lean desugars
+        // `∀ (x ∈ S), p` to `∀ x, x ∈ S → p` (and `∃ (x ∈ S), p` to
+        // `∃ x, x ∈ S ∧ p`), so the guard must be PRESERVED, not discarded.
+        // We build the desugared guard proposition here and stash it in
+        // `pending_binder_guards`; the enclosing quantifier drains it via
+        // `quant_binders` and wraps the body. (Previously the guard tokens were
+        // skipped and thrown away, silently dropping the hypothesis and turning
+        // `∀ (x ∈ S), p` into the strictly stronger `∀ x, p`.)
         if names.len() == 1
             && matches!(
                 self.current_kind(),
-                TokenKind::Elem | TokenKind::Gt | TokenKind::Ge | TokenKind::Lt | TokenKind::Le
+                TokenKind::Elem
+                    | TokenKind::NotElem
+                    | TokenKind::Gt
+                    | TokenKind::Ge
+                    | TokenKind::Lt
+                    | TokenKind::Le
+                    | TokenKind::Eq
+                    | TokenKind::Ne
+                    | TokenKind::Subset
+                    | TokenKind::ProperSubset
             )
         {
-            self.advance(); // consume the operator
-                            // Parse and discard the guard expression until RParen
-            let mut depth = 0u32;
-            while !matches!(self.current_kind(), TokenKind::Eof) {
-                match self.current_kind() {
-                    TokenKind::RParen if depth == 0 => break,
-                    TokenKind::RParen => {
-                        depth -= 1;
-                        self.advance();
-                    }
-                    TokenKind::LParen => {
-                        depth += 1;
-                        self.advance();
-                    }
-                    _ => {
-                        self.advance();
-                    }
-                }
-            }
-            self.expect(&TokenKind::RParen)?;
             let (s, name) = names
                 .into_iter()
                 .next()
                 .expect("invariant: names.len() == 1 checked above");
-            return Ok(vec![SurfaceBinder {
+            let binder = SurfaceBinder {
                 span: s,
                 name,
                 ty: None,
                 default: None,
                 info: SurfaceBinderInfo::Explicit,
-            }]);
+            };
+            // `try_bounded_guard` consumes the operator, parses the right
+            // operand, and returns the desugared guard referencing `binder`.
+            if let Some(guard) = self.try_bounded_guard(&binder)? {
+                self.pending_binder_guards.push(guard);
+            }
+            self.expect(&TokenKind::RParen)?;
+            return Ok(vec![binder]);
         }
 
         // Type annotation is optional: `(x)` is valid
@@ -666,14 +669,20 @@ impl Parser {
             TokenKind::Ident(name) => {
                 let name = name.clone();
                 self.advance();
-                // Could be "max" or "imax" special forms
+                // Could be "max" or "imax" special forms. Arguments parse as
+                // ATOMS (Lean's level grammar): `max u v + 1` is
+                // `(max u v) + 1` — the `+ 1` binds to the WHOLE max via the
+                // level_expr caller — not `max u (v + 1)` (which is a
+                // different, generally-unequal level; the greedy parse made
+                // `PUnit.{max u v + 1}` silently ill-leveled). An offset
+                // argument still spells with parens: `max (u + 1) v`.
                 if name == "max" {
-                    let l1 = self.level_expr()?;
-                    let l2 = self.level_expr()?;
+                    let l1 = self.level_atom()?;
+                    let l2 = self.level_atom()?;
                     Ok(LevelExpr::Max(Box::new(l1), Box::new(l2)))
                 } else if name == "imax" {
-                    let l1 = self.level_expr()?;
-                    let l2 = self.level_expr()?;
+                    let l1 = self.level_atom()?;
+                    let l2 = self.level_atom()?;
                     Ok(LevelExpr::IMax(Box::new(l1), Box::new(l2)))
                 } else {
                     Ok(LevelExpr::Param(name))

@@ -4,11 +4,13 @@
 
 //! HOL family importers: HOL Light, HOL4 (via OpenTheory), Isabelle.
 
+#[cfg(test)]
 pub(crate) mod cross_system;
 pub mod embedding;
 pub mod error;
 pub mod hol4;
 pub mod hol_light;
+#[cfg(test)]
 pub(crate) mod hol_shard;
 pub mod isabelle;
 pub mod isabelle_bridge;

@@ -23,10 +23,6 @@ pub(crate) enum DeclKind {
 }
 
 impl DeclKind {
-    fn has_value(self) -> bool {
-        !matches!(self, Self::Theorem | Self::Rule)
-    }
-
     /// Map ACL2 surface-syntax kind to the shard-level [`ShardDeclKind`].
     /// Theorem/Rule → Theorem; Definition/Macro → Definition;
     /// Constant/Stobj → Axiom (opaque values with no kernel-checkable body).

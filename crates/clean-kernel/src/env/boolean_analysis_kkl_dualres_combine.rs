@@ -123,6 +123,7 @@ impl CombineConsts {
         self.o.rat_le(a, b)
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn eq(&self, a: Expr, b: Expr) -> Expr {
         self.o.rat_eq(a, b)
     }

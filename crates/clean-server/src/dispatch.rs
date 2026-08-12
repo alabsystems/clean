@@ -27,6 +27,10 @@ use crate::handlers::{
 };
 use crate::progress::ProgressSender;
 use crate::rpc::{RequestId, Response, RpcError};
+use crate::rpc_goals::{
+    handle_get_interactive_diagnostics, handle_get_interactive_goals, handle_get_plain_goal,
+    GetInteractiveDiagnosticsParams, PlainGoalParams,
+};
 use serde_json::Map;
 
 /// Dispatch a JSON-RPC request to the appropriate handler.
@@ -292,6 +296,21 @@ pub(crate) async fn dispatch_request(
         },
         "composeProof" => match parse_params::<crate::handlers::ComposeProofParams>(params) {
             Ok(p) => handle_compose_proof(state, id, p).await,
+            Err(e) => Response::error(id, e),
+        },
+        // Lean 4 editor infoview compatibility endpoints (Part of #1245)
+        "Lean.Widget.getInteractiveDiagnostics" => {
+            match parse_params::<GetInteractiveDiagnosticsParams>(params) {
+                Ok(p) => handle_get_interactive_diagnostics(state, id, p).await,
+                Err(e) => Response::error(id, e),
+            }
+        }
+        "Lean.Widget.getInteractiveGoals" => match parse_params::<PlainGoalParams>(params) {
+            Ok(p) => handle_get_interactive_goals(state, id, p).await,
+            Err(e) => Response::error(id, e),
+        },
+        "getPlainGoal" => match parse_params::<PlainGoalParams>(params) {
+            Ok(p) => handle_get_plain_goal(state, id, p).await,
             Err(e) => Response::error(id, e),
         },
         // LLM Integration API - Full Proof Search (#3177)

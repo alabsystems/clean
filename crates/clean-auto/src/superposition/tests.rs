@@ -1050,13 +1050,24 @@ fn test_generate_clauses_processed_clone_scaling() {
             prover.push_processed(clause);
         }
 
-        // Measure the cost of cloning processed (the operation on line 1261)
-        let start = Instant::now();
-        for _ in 0..100 {
-            let cloned: Vec<Clause> = prover.processed.clone();
-            std::hint::black_box(&cloned);
-        }
-        let elapsed = start.elapsed().as_nanos();
+        // Warm the allocator before measuring. A cold first allocation can
+        // dominate the smallest input and invert the ratio even though the
+        // clone remains linear in the number of clauses.
+        std::hint::black_box(prover.processed.clone());
+
+        // Take the best of several samples so unrelated scheduler pauses only
+        // make a sample ineligible; they cannot manufacture a scaling failure.
+        let elapsed = (0..5)
+            .map(|_| {
+                let start = Instant::now();
+                for _ in 0..100 {
+                    let cloned: Vec<Clause> = prover.processed.clone();
+                    std::hint::black_box(&cloned);
+                }
+                start.elapsed().as_nanos()
+            })
+            .min()
+            .unwrap_or(0);
         clone_times.push(elapsed);
     }
 

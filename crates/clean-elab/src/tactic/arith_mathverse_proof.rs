@@ -196,10 +196,10 @@ pub(crate) fn build_mathverse_proof(
             // fvar to thread, so prove the goal directly first. The synthesized
             // term is still re-checked by the caller's `state.close_goal`.
             if certificate.uses_goal_negation {
-                let direct_hyps: Vec<(clean_kernel::Expr, clean_kernel::Expr)> = goal
+                let direct_hyps: Vec<(Expr, Expr)> = goal
                     .local_ctx
                     .iter()
-                    .map(|d| (clean_kernel::Expr::fvar(d.fvar), d.ty.clone()))
+                    .map(|d| (Expr::fvar(d.fvar), d.ty.clone()))
                     .collect();
                 if let Some(direct) =
                     super::arith_linarith_nat_direct::try_prove_nat_inequality_direct_with_hyps(

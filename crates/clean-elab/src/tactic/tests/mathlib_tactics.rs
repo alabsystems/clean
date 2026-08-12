@@ -36,16 +36,16 @@ fn test_simpa_no_goals() {
 fn test_simpa_with_hypothesis() {
     let env = setup_env();
     let target = Expr::const_(Name::from_string("A"), vec![]);
-    let mut state = ProofState::new(env, target);
-
-    // Add a hypothesis h : A
-    let goal = &mut state.goals[0];
-    goal.local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "h".to_string(),
-        ty: Expr::const_(Name::from_string("A"), vec![]),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target,
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "h".to_string(),
+            ty: Expr::const_(Name::from_string("A"), vec![]),
+            value: None,
+        }],
+    );
 
     // simpa should find the hypothesis
     simpa(&mut state).expect("simpa should close goal when matching hypothesis exists");
@@ -56,16 +56,16 @@ fn test_simpa_with_hypothesis() {
 fn test_simpa_only_empty() {
     let env = setup_env();
     let target = Expr::const_(Name::from_string("A"), vec![]);
-    let mut state = ProofState::new(env, target);
-
-    // Add h : A
-    let goal = &mut state.goals[0];
-    goal.local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "h".to_string(),
-        ty: Expr::const_(Name::from_string("A"), vec![]),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target,
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "h".to_string(),
+            ty: Expr::const_(Name::from_string("A"), vec![]),
+            value: None,
+        }],
+    );
 
     simpa_only(&mut state, vec![])
         .expect("simpa_only should fallback to assumption for exact hypothesis");

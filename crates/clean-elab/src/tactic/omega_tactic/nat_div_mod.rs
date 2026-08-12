@@ -208,7 +208,7 @@ fn find_pos_proof(state: &ProofState, goal: &Goal, k: &Expr) -> Option<Expr> {
         k.clone(),
     );
     goal.local_ctx.iter().find_map(|decl| {
-        match_lt_operands(&decl.ty)?;
+        let _ = match_lt_operands(&decl.ty)?;
         state
             .is_def_eq(goal, &decl.ty, &expected)
             .then(|| Expr::fvar(decl.fvar))

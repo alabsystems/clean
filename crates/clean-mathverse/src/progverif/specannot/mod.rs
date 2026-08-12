@@ -31,8 +31,10 @@ use clean_kernel::flat::{FlatExpr, FlatLevel};
 
 use crate::error::MathverseResult;
 use crate::shard::ShardWriter;
+#[cfg(test)]
+use crate::types::SourceSystem;
 use crate::types::{
-    AxiomProfile, ContentDomain, ImportConfidence, MathverseConstantHeader, SourceSystem, NO_VALUE,
+    AxiomProfile, ContentDomain, ImportConfidence, MathverseConstantHeader, NO_VALUE,
 };
 
 // ---------------------------------------------------------------------------

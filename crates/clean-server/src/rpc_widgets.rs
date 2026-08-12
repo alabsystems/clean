@@ -101,12 +101,14 @@ pub(crate) struct WidgetSourceStore {
 
 impl WidgetSourceStore {
     #[must_use]
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self {
             sources: HashMap::new(),
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn insert(&mut self, hash: String, source: String) {
         self.sources.insert(hash, source);
     }
@@ -117,11 +119,13 @@ impl WidgetSourceStore {
     }
 
     #[must_use]
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.sources.len()
     }
 
     #[must_use]
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.sources.is_empty()
     }
@@ -154,11 +158,13 @@ impl WidgetState {
     }
 
     /// Register a widget JavaScript/HTML source by its content hash.
+    #[cfg(test)]
     pub(crate) fn register_source(&mut self, hash: String, source: String) {
         self.sources.insert(hash, source);
     }
 
     /// Register (or replace) goal-state widget metadata for a document URI.
+    #[cfg(test)]
     pub(crate) fn register_document_widgets(&mut self, uri: String, metadata: serde_json::Value) {
         self.metadata.insert(uri, metadata);
     }

@@ -235,6 +235,7 @@ impl HolderConsts {
     }
     /// `@Eq.refl Rat x : x = x`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_refl(&self, x: Expr) -> Expr {
         Expr::apps(self.order.eq_refl.clone(), [self.rat(), x])
     }

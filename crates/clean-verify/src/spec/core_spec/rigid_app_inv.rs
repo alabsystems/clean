@@ -77,12 +77,12 @@ impl Specification {
         };
 
         // refl
-        let mut arms = format!(
+        let mut arms = String::from(
             "(fun (e0 : KExpr) (f : KExpr) (a : KExpr) \
              (_hr : rigid_app_head (KExpr.app f a)) \
              (heq : Eq KExpr e0 (KExpr.app f a)) => \
              StuckAppRedWitness.mk env f a e0 f a heq \
-             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) "
+             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) ",
         );
 
         // beta: the head would be a lambda, and a rigid head is not.

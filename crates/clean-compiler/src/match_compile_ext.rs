@@ -22,6 +22,12 @@ use crate::match_compile::{DecisionTree, MatchArm, Pattern, Var};
 pub(crate) enum MatchCompileExtError {
     #[error("empty match matrix has no columns to analyze")]
     EmptyMatrix,
+    // Staged diagnostic for the column-selection API. Nothing can raise it
+    // yet: `pick_column_with_strategy` chooses the index itself, and the one
+    // API that takes a column (`score_column_with_strategy`) is infallible.
+    // Kept so the bounds contract stays expressible once a caller supplies a
+    // column — 2026-07-31.
+    #[allow(dead_code)]
     #[error("column index {col} out of bounds (max {max})")]
     ColumnOutOfBounds { col: usize, max: usize },
 }

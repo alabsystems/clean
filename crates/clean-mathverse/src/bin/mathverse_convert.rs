@@ -85,7 +85,7 @@ fn main() {
             let out = output_dir
                 .clone()
                 .unwrap_or_else(|| PathBuf::from("data/mathverse-shards"));
-            std::fs::create_dir_all(&out).ok();
+            fs::create_dir_all(&out).ok();
             convert_opentheory_dir(dir, &out);
         }
         "isabelle-binary" => {
@@ -93,7 +93,7 @@ fn main() {
             let out = output_dir
                 .clone()
                 .unwrap_or_else(|| PathBuf::from("data/mathverse-shards"));
-            std::fs::create_dir_all(&out).ok();
+            fs::create_dir_all(&out).ok();
             convert_isabelle_dir(dir, &out);
         }
         "isabelle-mathlib-bridge" => {
@@ -104,7 +104,7 @@ fn main() {
             let out = output_dir
                 .clone()
                 .unwrap_or_else(|| PathBuf::from("data/mathverse-shards"));
-            std::fs::create_dir_all(&out).ok();
+            fs::create_dir_all(&out).ok();
             bridge_isabelle_mathlib(isa_shard, mathlib_dir, &out);
         }
         "stats" => show_stats(require_arg("stats <data-dir>")),
@@ -362,7 +362,7 @@ fn write_metamath_json(
             // FINISH EVERYTHING: Write the .mathverse shard (#3522)
             let shard_path = output_path.with_extension("mathverse");
             println!("  Writing shard: {}", shard_path.display());
-            match std::fs::read_to_string(path)
+            match fs::read_to_string(path)
                 .map_err(|e| format!("read source: {e}"))
                 .and_then(|src| {
                     let db = clean_mathverse::metamath::parser::parse_mm(&src)
@@ -454,7 +454,7 @@ fn cmd_build(args: &[String], output_dir: Option<&Path>) {
             std::process::exit(1);
         }
     };
-    if let Err(e) = std::fs::create_dir_all(out.join("delta")) {
+    if let Err(e) = fs::create_dir_all(out.join("delta")) {
         eprintln!("build: cannot create {}: {e}", out.join("delta").display());
         std::process::exit(1);
     }
@@ -692,7 +692,7 @@ fn cmd_update(args: &[String], output_dir: Option<&Path>) {
     let report = source_refresh::check_staleness(&manifest);
     eprint!("{}", report.format_summary());
 
-    let _ = std::fs::create_dir_all(out.join("delta"));
+    let _ = fs::create_dir_all(out.join("delta"));
     let lock_path = out.join("mathverse.lock.json");
     let mut lock = Lockfile::load(&lock_path).unwrap_or_default();
 
@@ -1550,7 +1550,7 @@ fn bridge_isabelle_mathlib(isa_shard: &Path, mathlib_dir: Option<&Path>, out_dir
     );
 
     let out_path = out_dir.join("isabelle_mathlib_equivalences.json");
-    match std::fs::File::create(&out_path).map(std::io::BufWriter::new) {
+    match fs::File::create(&out_path).map(std::io::BufWriter::new) {
         Ok(mut w) => match write_report(&mut w, &report) {
             Ok(()) => println!("  Report written: {}", out_path.display()),
             Err(e) => eprintln!("  Could not write report: {e}"),

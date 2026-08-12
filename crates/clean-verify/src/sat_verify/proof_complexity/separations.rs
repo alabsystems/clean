@@ -507,7 +507,11 @@ pub fn simulate_resolution_in_cp(proof: &ResolutionProof) -> CuttingPlanesProof 
                 let idx = cp_proof.add_input(ineq);
                 res_to_cp.push(idx);
             }
-            ResolutionStep::Resolve { left, right, pivot } => {
+            ResolutionStep::Resolve {
+                left,
+                right,
+                pivot: _,
+            } => {
                 let left_cp = res_to_cp[*left];
                 let right_cp = res_to_cp[*right];
 

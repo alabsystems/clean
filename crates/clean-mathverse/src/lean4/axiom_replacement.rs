@@ -33,18 +33,18 @@ use super::mathlib_import::{
 
 /// A single axiom-to-theorem mapping entry.
 #[derive(Clone, Debug)]
-pub(crate) struct AxiomMapping {
+pub struct AxiomMapping {
     /// The gamma-crown axiom name (e.g., "nat_le_refl").
-    pub(crate) axiom_name: &'static str,
+    pub axiom_name: &'static str,
     /// Candidate Lean 4 theorem names to search for, in priority order.
-    pub(crate) lean_candidates: &'static [&'static str],
+    pub lean_candidates: &'static [&'static str],
 }
 
 /// The canonical mapping from gamma-crown axiom names to Lean 4 Init theorems.
 ///
 /// Each entry lists the gamma-crown axiom and the Lean 4 Init constant names
 /// that could replace it. The first candidate found with a proof term wins.
-pub(crate) fn gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
+pub fn gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
     vec![
         AxiomMapping {
             axiom_name: "mat_mul_assoc",
@@ -107,7 +107,7 @@ pub(crate) fn gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
 /// - **Topology/Lipschitz** (C003 lip_product, compose_chain)
 /// - **Order/lattice** (C007 merge_sound_helper, restrict_refines_helper)
 /// - **Distribution/probability** (C029 pac_certification_bound)
-pub(crate) fn mathlib_gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
+pub fn mathlib_gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
     vec![
         // --- Rat field properties (Category B: trivial consequences) ---
         AxiomMapping {
@@ -263,7 +263,7 @@ pub(crate) fn mathlib_gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
 /// Returns both the basic Init mappings and the extended Mathlib mappings
 /// in a single list. Use this for comprehensive axiom replacement when
 /// Mathlib `.olean` files are available.
-pub(crate) fn all_gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
+pub fn all_gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
     let mut mappings = gamma_crown_axiom_mappings();
     mappings.extend(mathlib_gamma_crown_axiom_mappings());
     mappings
@@ -276,23 +276,23 @@ pub(crate) fn all_gamma_crown_axiom_mappings() -> Vec<AxiomMapping> {
 /// A resolved axiom replacement: the gamma-crown axiom name mapped to a
 /// concrete Init theorem with its type and proof term.
 #[derive(Clone, Debug)]
-pub(crate) struct ResolvedReplacement {
+pub struct ResolvedReplacement {
     /// Gamma-crown axiom name.
-    pub(crate) axiom_name: String,
+    pub axiom_name: String,
     /// Lean 4 theorem name that provides the replacement.
-    pub(crate) lean_name: String,
+    pub lean_name: String,
     /// Type expression from the Init theorem.
-    pub(crate) type_: Expr,
+    pub type_: Expr,
     /// Proof term from the Init theorem (Some if theorem, None if axiom/opaque).
-    pub(crate) proof: Option<Expr>,
+    pub proof: Option<Expr>,
     /// Universe level parameters.
-    pub(crate) level_params: Vec<Name>,
+    pub level_params: Vec<Name>,
 }
 
 impl ResolvedReplacement {
     /// Whether this replacement has a real proof term (not just an axiom).
     #[must_use]
-    pub(crate) fn has_proof(&self) -> bool {
+    pub fn has_proof(&self) -> bool {
         self.proof.is_some()
     }
 }
@@ -307,7 +307,7 @@ impl ResolvedReplacement {
 /// against the loaded environment. Provides lookup by axiom name and
 /// replacement statistics.
 #[derive(Clone, Debug)]
-pub(crate) struct AxiomReplacementTable {
+pub struct AxiomReplacementTable {
     /// Resolved replacements keyed by gamma-crown axiom name.
     replacements: HashMap<String, ResolvedReplacement>,
     /// Axiom names that had no matching Init theorem.
@@ -318,28 +318,28 @@ pub(crate) struct AxiomReplacementTable {
 
 /// Statistics from building an axiom replacement table.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct ReplacementStats {
+pub struct ReplacementStats {
     /// Total gamma-crown axioms in the mapping table.
-    pub(crate) total_axioms: usize,
+    pub total_axioms: usize,
     /// Axioms resolved to Init theorems with proof terms.
-    pub(crate) replaced_with_proof: usize,
+    pub replaced_with_proof: usize,
     /// Axioms resolved to Init constants without proof terms (still axioms).
-    pub(crate) resolved_no_proof: usize,
+    pub resolved_no_proof: usize,
     /// Axioms with no matching Init constant.
-    pub(crate) unresolved: usize,
+    pub unresolved: usize,
 }
 
 impl AxiomReplacementTable {
     /// Build a replacement table by loading Lean 4 Init and resolving mappings.
     ///
     /// Returns `None` if the Lean 4 toolchain is not available.
-    pub(crate) fn from_init() -> Option<Self> {
+    pub fn from_init() -> Option<Self> {
         let lib_path = find_lean_lib_path()?;
         Self::from_init_path(&lib_path)
     }
 
     /// Build a replacement table from a specific Lean 4 lib path.
-    pub(crate) fn from_init_path(lean_lib_path: &std::path::Path) -> Option<Self> {
+    pub fn from_init_path(lean_lib_path: &std::path::Path) -> Option<Self> {
         let mut env = Environment::default();
         let result = load_init_modules(&mut env, lean_lib_path);
 
@@ -354,7 +354,7 @@ impl AxiomReplacementTable {
     ///
     /// Uses only the base Init axiom mappings. For environments that also
     /// contain Mathlib constants, use [`from_environment_extended`] instead.
-    pub(crate) fn from_environment(env: &Environment) -> Self {
+    pub fn from_environment(env: &Environment) -> Self {
         Self::resolve_mappings(env, &gamma_crown_axiom_mappings())
     }
 
@@ -364,7 +364,7 @@ impl AxiomReplacementTable {
     /// The environment must have been loaded with the relevant Mathlib modules
     /// (e.g., `Mathlib.Data.Rat.Basic`, `Mathlib.Data.Matrix.Basic`, etc.)
     /// for the Mathlib-specific mappings to resolve.
-    pub(crate) fn from_environment_extended(env: &Environment) -> Self {
+    pub fn from_environment_extended(env: &Environment) -> Self {
         Self::resolve_mappings(env, &all_gamma_crown_axiom_mappings())
     }
 
@@ -376,7 +376,7 @@ impl AxiomReplacementTable {
     ///
     /// This resolves both Init and Mathlib axiom mappings, providing the
     /// most comprehensive replacement table available.
-    pub(crate) fn from_mathlib() -> Option<Self> {
+    pub fn from_mathlib() -> Option<Self> {
         let lib_path = find_lean_lib_path()?;
         let mathlib_search_paths = find_mathlib_search_paths();
 
@@ -435,13 +435,13 @@ impl AxiomReplacementTable {
 
     /// Look up a replacement by gamma-crown axiom name.
     #[must_use]
-    pub(crate) fn get(&self, axiom_name: &str) -> Option<&ResolvedReplacement> {
+    pub fn get(&self, axiom_name: &str) -> Option<&ResolvedReplacement> {
         self.replacements.get(axiom_name)
     }
 
     /// Compute replacement statistics.
     #[must_use]
-    pub(crate) fn stats(&self) -> ReplacementStats {
+    pub fn stats(&self) -> ReplacementStats {
         let replaced_with_proof = self.replacements.values().filter(|r| r.has_proof()).count();
         let resolved_no_proof = self.replacements.len() - replaced_with_proof;
 
@@ -454,25 +454,25 @@ impl AxiomReplacementTable {
     }
 
     /// Iterator over all resolved replacements.
-    pub(crate) fn resolved(&self) -> impl Iterator<Item = &ResolvedReplacement> {
+    pub fn resolved(&self) -> impl Iterator<Item = &ResolvedReplacement> {
         self.replacements.values()
     }
 
     /// List of axiom names that could not be resolved.
     #[must_use]
-    pub(crate) fn unresolved_axioms(&self) -> &[String] {
+    pub fn unresolved_axioms(&self) -> &[String] {
         &self.unresolved
     }
 
     /// Total number of axioms in the mapping table.
     #[must_use]
-    pub(crate) fn total_axioms(&self) -> usize {
+    pub fn total_axioms(&self) -> usize {
         self.total_axioms
     }
 
     /// Number of successfully resolved replacements (with or without proof).
     #[must_use]
-    pub(crate) fn num_resolved(&self) -> usize {
+    pub fn num_resolved(&self) -> usize {
         self.replacements.len()
     }
 }
@@ -483,21 +483,21 @@ impl AxiomReplacementTable {
 
 /// Result of applying axiom replacements to an environment.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct PatchResult {
+pub struct PatchResult {
     /// Axioms successfully replaced with theorems (had proof terms).
-    pub(crate) theorems_added: Vec<String>,
+    pub theorems_added: Vec<String>,
     /// Axioms matched but Init constant had no proof term.
-    pub(crate) no_proof_available: Vec<String>,
+    pub no_proof_available: Vec<String>,
     /// Axioms not found in the replacement table.
-    pub(crate) not_in_table: Vec<String>,
+    pub not_in_table: Vec<String>,
     /// Errors encountered during add_decl (name, error message).
-    pub(crate) errors: Vec<(String, String)>,
+    pub errors: Vec<(String, String)>,
 }
 
 impl PatchResult {
     /// Number of axioms successfully replaced with proven theorems.
     #[must_use]
-    pub(crate) fn num_replaced(&self) -> usize {
+    pub fn num_replaced(&self) -> usize {
         self.theorems_added.len()
     }
 }
@@ -515,7 +515,7 @@ impl PatchResult {
 /// The target environment should NOT already contain declarations with the
 /// axiom names. If a name already exists, `add_decl` will return a
 /// duplicate-name error, which is recorded in `PatchResult::errors`.
-pub(crate) fn apply_replacements(
+pub fn apply_replacements(
     env: &mut Environment,
     table: &AxiomReplacementTable,
     axiom_names: &[&str],
@@ -561,7 +561,7 @@ pub(crate) fn apply_replacements(
 /// 1. Loads Init modules into a fresh environment.
 /// 2. Builds the replacement table.
 /// 3. Returns both the loaded environment and the table for further use.
-pub(crate) fn load_init_with_replacements() -> Option<(Environment, AxiomReplacementTable)> {
+pub fn load_init_with_replacements() -> Option<(Environment, AxiomReplacementTable)> {
     let lib_path = find_lean_lib_path()?;
     let mut env = Environment::default();
     let result = load_init_modules(&mut env, &lib_path);
@@ -581,7 +581,7 @@ pub(crate) fn load_init_with_replacements() -> Option<(Environment, AxiomReplace
 ///
 /// If Mathlib `.olean` files are not available, falls back to Init-only
 /// replacements (same as [`load_init_with_replacements`]).
-pub(crate) fn load_mathlib_with_replacements() -> Option<(Environment, AxiomReplacementTable)> {
+pub fn load_mathlib_with_replacements() -> Option<(Environment, AxiomReplacementTable)> {
     let lib_path = find_lean_lib_path()?;
     let mathlib_search_paths = find_mathlib_search_paths();
 
@@ -622,7 +622,7 @@ pub(crate) fn load_mathlib_with_replacements() -> Option<(Environment, AxiomRepl
 /// - `Mathlib.Analysis.SpecificLimits.Basic` — Real analysis (C028)
 /// - `Mathlib.MeasureTheory.Measure.MeasureSpace` — Probability (C029)
 /// - `Mathlib.Order.Basic` — Order properties (C007)
-pub(crate) fn gamma_crown_mathlib_modules() -> Vec<String> {
+pub fn gamma_crown_mathlib_modules() -> Vec<String> {
     vec![
         "Mathlib.Data.Rat.Basic".to_string(),
         "Mathlib.Data.Rat.Order".to_string(),

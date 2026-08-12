@@ -63,6 +63,8 @@ struct InvConsts {
     fin_sum: Expr,
     fin_sum_diag_collapse: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     rat_mmmc: Expr,
     rat_mul_comm: Expr,
     rat_mul_zero: Expr,
@@ -193,6 +195,7 @@ impl InvConsts {
         )
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn mmmc(&self, a: Expr, bb: Expr, cc: Expr, d: Expr) -> Expr {
         Expr::apps(self.rat_mmmc.clone(), [a, bb, cc, d])
     }

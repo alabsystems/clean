@@ -211,7 +211,7 @@ fn test_reduce_cache_cleared_on_transparency_change() {
     );
 
     // Change transparency — should clear cache
-    tc.set_transparency(crate::env::TransparencyMode::All);
+    tc.set_transparency(TransparencyMode::All);
     assert_eq!(
         tc.whnf_cache_entries(),
         0,
@@ -229,15 +229,15 @@ fn test_reduce_cache_skips_already_whnf() {
     let env = Environment::new();
     let tc = TypeChecker::new(&env);
 
-    let sort = Expr::sort(crate::level::Level::zero());
+    let sort = Expr::sort(Level::zero());
     let pi = Expr::pi(
         BinderInfo::Default,
-        Expr::sort(crate::level::Level::zero()),
-        Expr::sort(crate::level::Level::zero()),
+        Expr::sort(Level::zero()),
+        Expr::sort(Level::zero()),
     );
     let lam = Expr::lam(
         BinderInfo::Default,
-        Expr::sort(crate::level::Level::zero()),
+        Expr::sort(Level::zero()),
         Expr::bvar(0),
     );
     let lit = Expr::nat_lit(42);

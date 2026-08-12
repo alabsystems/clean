@@ -204,7 +204,7 @@ fn test_linarith_transitivity() {
     use clean_kernel::level::Level;
     use clean_kernel::FVarId;
 
-    let mut env = clean_kernel::Environment::new();
+    let mut env = Environment::new();
     env.init_nat().expect("init_nat");
     env.init_eq().expect("init_eq");
     env.init_le().expect("init_le");
@@ -294,7 +294,7 @@ fn test_linarith_transitivity_missing_hypothesis_fails() {
     use clean_kernel::level::Level;
     use clean_kernel::FVarId;
 
-    let mut env = clean_kernel::Environment::new();
+    let mut env = Environment::new();
     env.init_nat().expect("init_nat");
     env.init_eq().expect("init_eq");
     env.init_le().expect("init_le");

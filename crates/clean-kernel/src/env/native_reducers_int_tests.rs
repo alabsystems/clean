@@ -204,7 +204,7 @@ fn test_mk_int_roundtrip_extremes() {
 }
 
 /// Extract the non-negative `BigNat` magnitude of an `Int.ofNat <lit>` result.
-fn int_ofnat_mag(e: &Expr) -> Option<crate::expr::BigNat> {
+fn int_ofnat_mag(e: &Expr) -> Option<BigNat> {
     if let ExprKind::App(f, arg) = e.kind() {
         if let (ExprKind::Const(name, lv), ExprKind::Lit(Literal::Nat(n))) = (f.kind(), arg.kind())
         {

@@ -31,12 +31,14 @@ use std::collections::HashSet;
 pub(super) fn assignment_scope_violation(
     proof: &Expr,
     allowed: &HashSet<FVarId>,
+    explicitly_bound: &[(FVarId, u64)],
     metas: &MetaState,
     binder_base: u64,
     limit: u64,
 ) -> Option<String> {
     struct ScopeFinder<'a> {
         allowed: &'a HashSet<FVarId>,
+        explicitly_bound: &'a [(FVarId, u64)],
         metas: &'a MetaState,
         binder_base: u64,
         limit: u64,
@@ -54,7 +56,12 @@ pub(super) fn assignment_scope_violation(
         }
 
         fn permitted(&self, id: FVarId) -> bool {
-            self.allowed.contains(&id) || self.structurally_bound(id)
+            self.allowed.contains(&id)
+                || self.structurally_bound(id)
+                || self
+                    .explicitly_bound
+                    .iter()
+                    .any(|(bound, min_depth)| *bound == id && self.depth >= *min_depth)
         }
     }
 
@@ -105,6 +112,7 @@ pub(super) fn assignment_scope_violation(
 
     let mut finder = ScopeFinder {
         allowed,
+        explicitly_bound,
         metas,
         binder_base,
         limit,

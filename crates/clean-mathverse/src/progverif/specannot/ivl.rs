@@ -397,7 +397,7 @@ mod tests {
     fn test_boogie_extraction() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("example.bpl");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 type Ref;
@@ -461,7 +461,7 @@ procedure Increment(x: int) returns (y: int)
     fn test_viper_extraction() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("example.vpr");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 domain Pair[A, B] {
@@ -512,7 +512,7 @@ function abs(x: Int): Int
     fn test_verifast_extraction() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("example.c");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 //@ predicate counter(struct counter *c, int v);

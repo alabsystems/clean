@@ -1417,10 +1417,10 @@ mod tests {
         //     inv : Prop        -- invariant carried as a VALUE (any Prop fits)
         // This is exactly the pre-faithful-`Fin` `Fin.mk _ _ True` junk shape.
         let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
-        let type_ = Expr::from_kind(crate::expr::ExprKind::Sort(crate::level::Level::succ(
+        let type_ = Expr::from_kind(ExprKind::Sort(crate::level::Level::succ(
             crate::level::Level::zero(),
         )));
-        let prop = Expr::from_kind(crate::expr::ExprKind::Sort(crate::level::Level::zero()));
+        let prop = Expr::from_kind(ExprKind::Sort(crate::level::Level::zero()));
         let junk_const = Expr::const_(Name::from_string("JunkBox"), vec![]);
         let junk_mk_type = {
             let mut b = EnvDeclBuilder::new();

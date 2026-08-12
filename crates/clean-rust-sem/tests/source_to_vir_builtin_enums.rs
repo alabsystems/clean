@@ -7,11 +7,6 @@
 use clean_rust_sem::vir::{AggregateKind, Term};
 use clean_rust_sem::{Body, LoweredProgram, Rvalue, SourceProgram, Stmt};
 
-fn lowered_program(source: &str) -> LoweredProgram {
-    let program = SourceProgram::parse(source).expect("source should parse");
-    program.lower_to_vir().expect("source should lower to VIR")
-}
-
 /// Lower a snippet, panicking with the test name on failure. Wave 108
 /// closed the `?` operator gap for both `Result` and `Option`; the
 /// previous TRACE+return wrapper has been hard-asserted.

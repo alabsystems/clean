@@ -89,7 +89,7 @@ impl BridgeManifest {
     /// Load a manifest from a JSON file. Returns `None` on any read/parse error
     /// (the bridge simply stays inert — an unreadable manifest never blocks or
     /// mis-verifies a line).
-    fn load(path: &std::path::Path) -> Option<Self> {
+    fn load(path: &Path) -> Option<Self> {
         let bytes = std::fs::read(path).ok()?;
         serde_json::from_slice(&bytes).ok()
     }
@@ -131,7 +131,7 @@ fn bridge_manifest() -> Option<&'static BridgeManifest> {
     BRIDGE_MANIFEST
         .get_or_init(|| {
             let path = std::env::var_os("ISA_BRIDGE_DISCHARGE")?;
-            BridgeManifest::load(std::path::Path::new(&path))
+            BridgeManifest::load(Path::new(&path))
         })
         .as_ref()
 }
@@ -1213,7 +1213,7 @@ fn try_ledger_tier2(
             .axiom_deps(&name)
             .map(|d| {
                 d.iter()
-                    .map(std::string::ToString::to_string)
+                    .map(ToString::to_string)
                     .filter(|s| s.starts_with(LEDGER_AXIOM_PREFIX))
                     .collect()
             })
@@ -1961,7 +1961,7 @@ mod bridge_discharge_tests {
     /// Write a one-constant KV `.mathverse` shard `<name>.mathverse` into `dir` —
     /// the exact bytes the Mathlib import lane (`clean mathverse stamp-verified`)
     /// emits for one KernelVerified constant, values included.
-    fn write_kv_witness_shard(dir: &std::path::Path, name: &str, type_: &Expr, value: &Expr) {
+    fn write_kv_witness_shard(dir: &Path, name: &str, type_: &Expr, value: &Expr) {
         let mut w = ShardWriter::new();
         let name_idx = w.add_string(name);
         let type_idx = lower_kernel_expr(type_, &mut w);
@@ -2088,7 +2088,7 @@ mod bridge_discharge_tests {
         // (5) Shard round-trips as KernelBridged with a stored proof value.
         let mut buf = Vec::new();
         writer.write(&mut buf).expect("shard write");
-        let reader = crate::shard::ShardReader::from_bytes(&buf).expect("shard read");
+        let reader = ShardReader::from_bytes(&buf).expect("shard read");
         let (_, hdr) = reader
             .lookup_name("HOL.excluded_middle")
             .expect("bridged name present");

@@ -177,7 +177,7 @@ fn a_input_interpolant(
 fn resolve_interpolant(
     dag: &ResolutionDag,
     left: usize,
-    right: usize,
+    _right: usize,
     pivot: &Literal,
     i_left: PropFormula,
     i_right: PropFormula,

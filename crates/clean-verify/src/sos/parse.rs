@@ -7,7 +7,11 @@
 //! Parses the structured text format into [`SageSosCertificate`], reusing
 //! [`Polynomial`] and [`Monomial`] from `smt_verify::nra`.
 
-use std::collections::BTreeMap;
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
 
 use num_rational::Rational64;
 

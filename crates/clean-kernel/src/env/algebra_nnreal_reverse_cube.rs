@@ -64,6 +64,7 @@ use crate::name::Name;
 
 /// Pre-resolved handles + smart-constructors for the de-cube keystone.
 /// Self-contained (mirrors `SqConsts` one degree up).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct CubeReflConsts {
     nat: Expr,
     rat: Expr,
@@ -242,6 +243,7 @@ impl CubeReflConsts {
     }
     /// `Rat.cube_lt_cube_of_lt_of_nonneg a b (0≤b)(b<a) : b³ < a³`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn cube_lt_cube(&self, a: Expr, b: Expr, hb: Expr, hlt: Expr) -> Expr {
         Expr::apps(self.rat_cube_lt_cube.clone(), [a, b, hb, hlt])
     }

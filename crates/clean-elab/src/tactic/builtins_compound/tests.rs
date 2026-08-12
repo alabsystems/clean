@@ -97,7 +97,13 @@ fn test_compound_first_retries_recoverable_error() {
 fn test_compound_first_stops_on_fatal_error() {
     let mut eval = StubEval {
         calls: 0,
-        results: VecDeque::from([Err(TacticError::TypeCheckFailed("fatal".into())), Ok(())]),
+        results: VecDeque::from([
+            Err(TacticError::ParseFailed {
+                tactic: "first branch".into(),
+                detail: "fatal".into(),
+            }),
+            Ok(()),
+        ]),
         metas: MetaState::new(),
     };
     let mut state = test_state();
@@ -106,7 +112,7 @@ fn test_compound_first_stops_on_fatal_error() {
     let result = (handler.handler)(&mut eval, &mut state, &first_tactic_surface());
 
     assert!(
-        matches!(result, Err(TacticError::TypeCheckFailed(ref msg)) if msg == "fatal"),
+        matches!(result, Err(TacticError::ParseFailed { ref detail, .. }) if detail == "fatal"),
         "fatal branch failures should stop first immediately, got {result:?}"
     );
     assert_eq!(

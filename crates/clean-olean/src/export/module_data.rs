@@ -226,19 +226,20 @@ impl OleanExporter {
         // 2. Inductive types
         for ind in env.inductives() {
             all_names.push(ind.name.clone());
-            const_ptrs.push(self.write_inductive_info(ind)?);
+            const_ptrs.push(self.write_inductive_info_with_unsafe(ind, env.is_unsafe(&ind.name))?);
         }
 
         // 3. Constructors
         for ctor in env.constructors() {
             all_names.push(ctor.name.clone());
-            const_ptrs.push(self.write_constructor_info(ctor)?);
+            const_ptrs
+                .push(self.write_constructor_info_with_unsafe(ctor, env.is_unsafe(&ctor.name))?);
         }
 
         // 4. Recursors
         for rec in env.recursors() {
             all_names.push(rec.name.clone());
-            const_ptrs.push(self.write_recursor_info(rec)?);
+            const_ptrs.push(self.write_recursor_info_with_unsafe(rec, env.is_unsafe(&rec.name))?);
         }
 
         // 5. Quotients

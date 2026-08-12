@@ -76,29 +76,6 @@ pub(crate) fn pointfree_const_def_name(name: &str) -> Option<&'static str> {
     }
 }
 
-/// How many leading object-`Type` binders the def-const takes (`Let`/`NO_MATCH`
-/// are binary in their type parameters; the rest are unary). Used by
-/// [`Ctx::embed_const_term`] to saturate the def-const with the use-site's solved
-/// object types before applying its value arguments.
-pub(crate) fn pointfree_const_type_arity(name: &str) -> Option<usize> {
-    match name {
-        "HOL.Uniq" | "HOL.Ex1" | "HOL.induct_forall" | "HOL.induct_equal" | "ATP.fAll"
-        | "ATP.fEx" | "ATP.fequal" | "ATP.fComp" | "ATP.fChoice" => Some(1),
-        "HOL.Let" | "HOL.NO_MATCH" => Some(2),
-        // Monomorphic (`bool`/`prop` only) — no leading `Type` binders.
-        "HOL.induct_conj"
-        | "HOL.ASSUMPTION"
-        | "Code_Generator.holds"
-        | "ATP.fFalse"
-        | "ATP.fTrue"
-        | "ATP.fNot"
-        | "ATP.fconj"
-        | "ATP.fdisj"
-        | "ATP.fimplies" => Some(0),
-        _ => None,
-    }
-}
-
 /// `@Eq α a b` at the object level.
 fn eq_obj(alpha: Expr, a: Expr, b: Expr) -> Expr {
     Expr::apps(

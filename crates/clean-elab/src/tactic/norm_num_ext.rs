@@ -23,7 +23,10 @@ use super::equality::match_equality;
 use super::nat_expr_eval::eval_nat_expr;
 use super::norm_num::{eval_int_expr, try_eval_comparison};
 use super::proof_term::{reduce_eq, rfl};
-use super::smt::decide;
+// Kernel-evaluating `decide` ladder, not the bare SMT bridge — see the note in
+// `norm_num.rs`. No recursion: `eval_decide` calls the two
+// `try_close_*_ground_comparison` helpers below, never `eval_norm_num_ext*`.
+use super::decide::eval_decide as decide;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -71,11 +74,17 @@ std::thread_local! {
 }
 
 /// Register a custom norm_num extension for the current thread.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn register_norm_num_extension(ext: NormNumExtension) {
     CUSTOM_EXTENSIONS.with(|exts| exts.borrow_mut().push(ext));
 }
 
 /// Clear all registered extensions (useful in tests).
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn clear_norm_num_extensions() {
     CUSTOM_EXTENSIONS.with(|exts| exts.borrow_mut().clear());
 }

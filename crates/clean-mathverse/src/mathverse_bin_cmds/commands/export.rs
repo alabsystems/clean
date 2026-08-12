@@ -224,11 +224,13 @@ fn cmd_export_all(args: &[String]) {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) struct NativeExportArgs {
     pub(crate) output_dir: PathBuf,
     pub(crate) domain: Option<String>,
 }
 
+#[cfg(test)]
 impl NativeExportArgs {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
         let mut output_dir: Option<PathBuf> = None;
@@ -256,11 +258,13 @@ impl NativeExportArgs {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) struct ArxivExportArgs {
     pub(crate) paper_id: Option<String>,
     pub(crate) output_dir: PathBuf,
 }
 
+#[cfg(test)]
 impl ArxivExportArgs {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
         let mut paper_id: Option<String> = None;

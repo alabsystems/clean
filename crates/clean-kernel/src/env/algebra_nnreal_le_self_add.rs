@@ -80,6 +80,8 @@ pub(crate) struct LeSelfAddConsts {
     rat_lt_of_le_of_lt: Expr,
     // Logic / Eq.{1}.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     exists_c: Expr,
     exists_intro: Expr,
     eq_symm: Expr,
@@ -182,6 +184,7 @@ impl LeSelfAddConsts {
     }
     /// `∃ N, pred_n a b eps N : Prop`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn exists_pred(&self, parent: &EnvDeclBuilder, a: &Expr, b: &Expr, eps: &Expr) -> Expr {
         Expr::apps(
             self.exists_c.clone(),

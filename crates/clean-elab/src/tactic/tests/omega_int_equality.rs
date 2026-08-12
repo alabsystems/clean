@@ -121,7 +121,7 @@ fn state_with(goal_target: Expr, ctx: Vec<LocalDecl>) -> ProofState {
 fn assert_omega_proves(mut state: ProofState, label: &str) {
     reset_all_counters();
     let axiom_before = axiom_snapshot();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_ok(),
         "omega should prove `{label}`, got: {result:?}"
@@ -149,7 +149,7 @@ fn assert_omega_proves(mut state: ProofState, label: &str) {
 
 fn assert_omega_rejects(mut state: ProofState, label: &str) {
     reset_all_counters();
-    let result = crate::tactic::omega_tactic::omega(&mut state);
+    let result = omega(&mut state);
     assert!(
         result.is_err() && !state.is_complete(),
         "omega must REJECT `{label}`, but it closed: {result:?}"

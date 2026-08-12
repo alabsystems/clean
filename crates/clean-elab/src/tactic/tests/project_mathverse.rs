@@ -274,10 +274,10 @@ fn test_cert_mathverse_with_side_conditions_reports_missing_nat_sub_support() {
     let report = cert_mathverse_with_config(&mut state, &config)
         .expect("cert_mathverse should report side-condition blockers structurally");
 
-    assert!(matches!(
-        report.mathverse_result,
-        ProjectMathverseOutcome::NoProgress
-    ));
+    assert!(
+        matches!(report.mathverse_result, ProjectMathverseOutcome::NoProgress),
+        "unexpected report: {report:#?}"
+    );
     assert!(
         report
             .blockers

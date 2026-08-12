@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Extended derive handlers with advanced strategies, validation, and custom registration.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#![cfg_attr(not(test), allow(dead_code))]
 use crate::derive::{DeriveError, DeriveHandler};
 use crate::derive_ext_handlers2::{
     project_struct_field, resolve_field_instance, single_ctor_struct, CtorInfo2, DerivedDecl2,
@@ -305,8 +308,8 @@ fn has_direct_self_field(type_name: &Name, ctor: &CtorInfo2) -> bool {
 }
 fn head_const_name(expr: &Expr) -> Option<&Name> {
     match expr.kind() {
-        clean_kernel::ExprKind::Const(name, _) => Some(name),
-        clean_kernel::ExprKind::App(fun, _) => head_const_name(fun),
+        ExprKind::Const(name, _) => Some(name),
+        ExprKind::App(fun, _) => head_const_name(fun),
         _ => None,
     }
 }
@@ -385,7 +388,7 @@ fn fintype_nullary_enum_value(tn: &Name, ctors: &[CtorInfo2]) -> Option<Expr> {
     );
     let finset_cons = Expr::const_(Name::from_string("Finset.cons"), vec![lvl0.clone()]);
     let finset_mem = Expr::const_(Name::from_string("Finset.Mem"), vec![lvl0.clone()]);
-    let mem_empty = Expr::const_(Name::from_string("Finset.mem_empty"), vec![lvl0.clone()]);
+    let _mem_empty = Expr::const_(Name::from_string("Finset.mem_empty"), vec![lvl0.clone()]);
     let mem_self = Expr::const_(
         Name::from_string("Finset.mem_cons_self"),
         vec![lvl0.clone()],
@@ -515,8 +518,8 @@ fn fintype_nullary_enum_value(tn: &Name, ctors: &[CtorInfo2]) -> Option<Expr> {
     // `finsets[k]` = the Finset of constructors `c_k … c_{n-1}`.
     let n = ctors.len();
     let mut finsets: Vec<Expr> = vec![finset_empty.clone(); n + 1];
-    let mut hproofs: Vec<Expr> = Vec::with_capacity(n); // hproofs[i] used to cons cᵢ onto finsets[i+1]
-                                                        // placeholder fill; we build from the back.
+    let _hproofs: Vec<Expr> = Vec::with_capacity(n); // hproofs[i] used to cons cᵢ onto finsets[i+1]
+                                                     // placeholder fill; we build from the back.
     finsets[n] = finset_empty.clone();
     // Build h proofs and finsets going from i = n-1 down to 0.
     let mut h_by_index: Vec<Option<Expr>> = vec![None; n];

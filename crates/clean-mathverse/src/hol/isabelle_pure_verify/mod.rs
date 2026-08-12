@@ -27,6 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::isabelle_pure_translate::{Closure, TranslateError};
 use crate::shard::ShardWriter;
+#[cfg(test)]
 use crate::types::ImportConfidence;
 
 mod batch;

@@ -2124,7 +2124,7 @@ fn test_get_inlay_hints_carry_resolvable_data_payload() {
     let data = hints[0]
         .data
         .as_ref()
-        .and_then(super::navigation::InlayHintData::from_value)
+        .and_then(navigation::InlayHintData::from_value)
         .expect("hint should carry a resolvable data payload");
     assert_eq!(data.uri, uri.to_string());
     assert_eq!(data.name, "inferred");
@@ -2211,7 +2211,7 @@ fn test_resolve_inlay_hint_unknown_document_is_passthrough() {
 
     // A well-formed data payload that points at a document the server has
     // never seen (e.g. it was closed between the hint and resolve requests).
-    let data = super::navigation::InlayHintData {
+    let data = navigation::InlayHintData {
         uri: "file:///never-opened.lean".to_string(),
         name: "ghost".to_string(),
     };
@@ -2316,7 +2316,7 @@ fn test_completion_items_carry_resolvable_data_payload() {
     let data = item
         .data
         .as_ref()
-        .and_then(super::navigation::CompletionItemData::from_value)
+        .and_then(navigation::CompletionItemData::from_value)
         .expect("definition completion should carry a resolvable data payload");
     assert_eq!(data.uri, uri.to_string());
     assert_eq!(data.name, "completion_payload");
@@ -2349,7 +2349,7 @@ fn test_resolve_completion_item_enriches_detail_and_documentation() {
     let item = CompletionItem {
         label: "resolved".to_string(),
         kind: Some(CompletionItemKind::FUNCTION),
-        data: super::navigation::CompletionItemData {
+        data: navigation::CompletionItemData {
             uri: uri.to_string(),
             name: "resolved".to_string(),
         }
@@ -2412,7 +2412,7 @@ fn test_resolve_completion_item_unknown_document_is_passthrough() {
     let item = CompletionItem {
         label: "ghost".to_string(),
         kind: Some(CompletionItemKind::FUNCTION),
-        data: super::navigation::CompletionItemData {
+        data: navigation::CompletionItemData {
             uri: "file:///never-opened.lean".to_string(),
             name: "ghost".to_string(),
         }
@@ -4210,7 +4210,7 @@ fn test_format_hole_goal_with_and_without_local_context() {
         expected_type: "Nat".to_string(),
         local_bindings: vec![],
     };
-    assert_eq!(super::format_hole_goal(&bare), "Nat");
+    assert_eq!(format_hole_goal(&bare), "Nat");
 
     // With bindings: Lean infoview-style block with the turnstile.
     let with_ctx = HoleContext {
@@ -4223,7 +4223,7 @@ fn test_format_hole_goal_with_and_without_local_context() {
         ],
     };
     assert_eq!(
-        super::format_hole_goal(&with_ctx),
+        format_hole_goal(&with_ctx),
         "n : Nat\nh : P\n⊢ Q",
         "the local context must precede the turnstile, one hypothesis per line"
     );
@@ -4833,7 +4833,7 @@ async fn test_linked_editing_range_returns_all_in_document_occurrences() {
     let backend = service.inner();
     let uri = Url::parse("file:///linked.lean").unwrap();
     let text = "def foo := 1\n#check foo\n#check foo".to_string();
-    let mut doc = Document::new(uri.clone(), 1, text.clone(), "lean".to_string());
+    let doc = Document::new(uri.clone(), 1, text.clone(), "lean".to_string());
     let first_use_off = text
         .find("#check foo")
         .map(|p| p + "#check ".len())
@@ -5867,8 +5867,7 @@ fn test_document_link_carries_resolvable_data_payload() {
         .data
         .as_ref()
         .expect("link should carry a resolve payload");
-    let data =
-        super::links::DocumentLinkData::from_value(value).expect("payload should round-trip");
+    let data = links::DocumentLinkData::from_value(value).expect("payload should round-trip");
     assert_eq!(data.module, "Foo.Bar");
 }
 
@@ -6046,7 +6045,7 @@ fn test_code_lens_one_lens_per_named_declaration() {
     let payloads: Vec<(String, String)> = lenses
         .iter()
         .filter_map(|lens| {
-            let data = super::links::CodeLensData::from_value(lens.data.as_ref()?)?;
+            let data = links::CodeLensData::from_value(lens.data.as_ref()?)?;
             Some((data.kind, data.name))
         })
         .collect();
@@ -6151,7 +6150,7 @@ fn test_resolve_code_lens_enriches_title_with_elaborated_type() {
     });
     backend.documents.insert(uri.clone(), doc);
 
-    let data = super::links::CodeLensData {
+    let data = links::CodeLensData {
         uri: uri.to_string(),
         name: "foo".to_string(),
         kind: "def".to_string(),
@@ -6213,7 +6212,7 @@ fn test_resolve_code_lens_unelaborated_document_falls_back_to_kind_name() {
     // (e.g. closed between codeLens and resolve). With no elaborated type
     // available the title falls back to kind + name rather than fabricating
     // a type the document does not have.
-    let data = super::links::CodeLensData {
+    let data = links::CodeLensData {
         uri: "file:///never-opened.lean".to_string(),
         name: "ghost".to_string(),
         kind: "theorem".to_string(),

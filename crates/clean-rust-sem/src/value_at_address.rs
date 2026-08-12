@@ -196,7 +196,7 @@ pub enum StuckReason {
     /// An `Alloc` targeted an already-bound place (bridge collision).
     #[error("place is already bound to an allocation")]
     PlaceAlreadyBound,
-    /// A later-added memory error variant with no specific mapping yet.
+    /// A conservative rejection produced by an adapter without a more specific reason.
     #[error("unclassified memory rejection")]
     UnclassifiedRejection,
 }
@@ -221,9 +221,6 @@ impl From<MemoryError> for StuckReason {
             MemoryError::TaintedRead(id) => Self::TaintedRead(id),
             MemoryError::PointerOverflow => Self::PointerOverflow,
             MemoryError::AllocationFailed { size, align } => Self::AllocationFailed { size, align },
-            // `MemoryError` is `#[non_exhaustive]`; a future variant maps here
-            // rather than fail-open.
-            _ => Self::UnclassifiedRejection,
         }
     }
 }

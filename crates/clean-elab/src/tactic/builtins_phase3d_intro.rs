@@ -107,7 +107,13 @@ fn compound_induction() -> CompoundTacticEntry {
             // reverted names are re-introduced per case after induction.
             let reverted = revert_generalizing(ps, generalizing)?;
 
-            super::induction_using(ps, &hyp_name, rec_override.as_ref())?;
+            // `with`-block alternative names, in source order. Only the custom
+            // (non-recursor) eliminator path reads them: Clean's kernel `Pi`
+            // carries no binder name, so an `@[elab_as_elim]` eliminator's
+            // alternative tags are taken positionally from here. See
+            // `tactic::induction_elim`.
+            let alt_names: Vec<String> = alts.iter().map(|a| a.name.clone()).collect();
+            super::induction_using_alts(ps, &hyp_name, rec_override.as_ref(), &alt_names)?;
 
             // The generalized variables are re-introduced per branch (inside
             // `eval_induction_alts`, after that branch's `next_fvar` reset) so

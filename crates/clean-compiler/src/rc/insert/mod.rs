@@ -34,7 +34,7 @@
 //!
 //! Part of #963 - Compiler IR infrastructure.
 
-use crate::lcnf::{Alt, Arg, Cases, Code, Decl, DeclValue, FunDecl};
+use crate::lcnf::{Alt, Arg, Cases, Code, Decl, DeclValue, FunDecl, LetValue};
 use crate::rc::borrow::{BorrowMap, Ownership};
 use crate::rc::FVarIdAllocator;
 use clean_kernel::{Expr, ExprKind, FVarId, Name};
@@ -59,9 +59,10 @@ static SCALAR_TYPES: LazyLock<HashSet<Name>> = LazyLock::new(|| {
 mod helpers;
 use helpers::{process_let_value, wrap_dec, wrap_inc};
 
-// Re-exports for test access via `use super::*;`
+// Re-exports for test access via `use super::*;` (`LetValue` is already a
+// plain import above, so tests pick it up through the same glob).
 #[cfg(test)]
-pub(crate) use crate::lcnf::{LetDecl, LetValue};
+pub(crate) use crate::lcnf::LetDecl;
 
 /// Check if a type expression is a scalar type that never needs RC.
 ///
@@ -276,7 +277,7 @@ fn insert_rc_in_code(code: &Code, live: &mut LiveVars, ctx: &mut RCContext<'_>) 
             ctx.register_type(decl.fvar_id, &decl.ty);
             // Register BEFORE the backward walk into the body, so uses of
             // the binding (processed first) already see it as erased.
-            if matches!(decl.value, crate::lcnf::LetValue::Erased) {
+            if matches!(decl.value, LetValue::Erased) {
                 ctx.erased_locals.insert(decl.fvar_id);
             }
             let new_body = insert_rc_in_code(body, live, ctx);

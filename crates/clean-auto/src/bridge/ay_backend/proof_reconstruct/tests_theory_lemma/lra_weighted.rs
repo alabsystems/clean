@@ -8,7 +8,6 @@ use super::super::expr_builders_arith::CmpOp;
 use super::super::theory_lemma_lra::ActiveBound;
 use super::super::theory_lemma_lra_chain::BoundInfo;
 use super::super::theory_lemma_lra_weighted::build_weighted_additive_false;
-use super::support::boundary::assert_lra_trust_boundary;
 use super::support::semantic::{mk_raw_le, register_int_const};
 use super::{
     attempt_reconstruction, Expr, FarkasAnnotation, Name, Proof, TermStore, VariableMapping,

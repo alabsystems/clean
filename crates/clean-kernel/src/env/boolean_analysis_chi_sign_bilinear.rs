@@ -41,6 +41,7 @@ use crate::name::Name;
 
 /// Consts for the sign-side combine + induction (decode/restrict/testBit + the
 /// sign-side peel / pair-sum leaves).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct SignBiConsts {
     nat: Expr,
     rat: Expr,

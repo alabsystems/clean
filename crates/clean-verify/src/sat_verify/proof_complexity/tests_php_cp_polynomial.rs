@@ -19,8 +19,7 @@
 //!
 //! Part of #3164.
 
-use super::cutting_planes::CpInequality;
-use super::encodings::{encode_php, encode_php_cp, php_num_clauses};
+use super::encodings::{encode_php, encode_php_cp};
 use super::separations::{
     php_cp_size_upper_bound, php_resolution_size_lower_bound, php_separation_witness,
     ProofSizeBound,

@@ -31,7 +31,6 @@ use clean_elab::{
     elaborate_decl_and_register, preprocess_decl_with_context, ElabResult, FileContext,
 };
 use clean_kernel::env::Environment;
-use clean_kernel::Name;
 use clean_parser::parse_file;
 
 /// Polymorphic single-field wrapper: the by-block's element type is a bare

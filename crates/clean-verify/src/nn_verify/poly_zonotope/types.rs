@@ -35,6 +35,12 @@
 //! - Ladner et al., "Automatic Abstraction for Polynomial Zonotopes" (2023)
 //! - Althoff, "Reachability Analysis of Nonlinear Systems" (2013)
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use crate::nn_verify::zonotope::ZonotopeError;
 
 /// Error type for polynomial zonotope operations.
@@ -355,7 +361,7 @@ impl PolyZonotope {
             });
         }
 
-        let d = self.dim();
+        let _d = self.dim();
 
         let center: Vec<f64> = self
             .center
@@ -657,6 +663,7 @@ impl PolyZonotope {
     /// Compute the maximum absolute value of all generators in a given
     /// dimension, used for tightness analysis.
     #[must_use]
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     pub(crate) fn generator_norm(&self, dim: usize) -> f64 {
         let linear_sum: f64 = self.linear_gens.iter().map(|g| g[dim].abs()).sum();
         let quad_sum: f64 = self.quad_gens.iter().map(|q| q[dim].abs()).sum();

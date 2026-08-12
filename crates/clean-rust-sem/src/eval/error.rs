@@ -24,9 +24,6 @@ pub enum EvalError {
     #[error("field `{field}` not found on {struct_name}")]
     FieldNotFound { struct_name: String, field: String },
 
-    #[error("method `{method}` not found on {type_name}")]
-    MethodNotFound { type_name: String, method: String },
-
     #[error("unsupported operation `{op}`: {context}")]
     UnsupportedOperation { op: String, context: String },
 
@@ -122,18 +119,9 @@ mod tests {
             actual: "i32".to_string(),
             context: "if condition".to_string(),
         };
-        let method_error = EvalError::MethodNotFound {
-            type_name: "Vec<i32>".to_string(),
-            method: "push_front".to_string(),
-        };
-
         assert_eq!(
             type_error.to_string(),
             "type error in if condition: expected bool, got i32"
-        );
-        assert_eq!(
-            method_error.to_string(),
-            "method `push_front` not found on Vec<i32>"
         );
     }
 

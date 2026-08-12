@@ -51,6 +51,7 @@ use crate::name::Name;
 
 /// Shared constants for proof-guided NAS formalization.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct ProofGuidedNasConsts {
     pub(super) nat: Expr,
     pub(super) rat: Expr,
@@ -173,6 +174,7 @@ impl ProofGuidedNasConsts {
 
     /// Build `LT.lt @Nat instLTNat lhs rhs`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn nat_lt(&self, lhs: Expr, rhs: Expr) -> Expr {
         Expr::app(
             Expr::app(

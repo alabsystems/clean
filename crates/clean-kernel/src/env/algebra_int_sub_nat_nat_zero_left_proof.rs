@@ -63,6 +63,8 @@ struct IntSubNatNatZeroLeftConsts {
     nat_type: Expr,
     nat_zero: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_succ: Expr,
     nat_rec: Expr,
     int_of_nat: Expr,
@@ -108,6 +110,7 @@ impl IntSubNatNatZeroLeftConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn succ(&self, n: Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), n)
     }

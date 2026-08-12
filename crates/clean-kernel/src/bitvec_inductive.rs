@@ -189,6 +189,7 @@ fn eq_trans_list(a: Expr, b: Expr, c: Expr, h1: Expr, h2: Expr) -> Expr {
 }
 /// `@Eq.symm.{1} (List Bool) a b h`.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn eq_symm_list(a: Expr, b: Expr, h: Expr) -> Expr {
     Expr::apps(
         Expr::const_(

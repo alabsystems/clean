@@ -145,6 +145,105 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
     })
 }
 
+/// Read a ground Nat **numeral** out of `expr`, including the
+/// `@OfNat.ofNat α n inst` form the elaborator actually builds for a source
+/// numeral.
+///
+/// This is the single shared numeral reader for the tactic layer. Three private
+/// copies used to exist — `finite_cases::extract_nat_literal`,
+/// `interval_cases::expr_to_int` and `ring_literals::nat_const_value` — and all
+/// three recognized only `Nat.zero`, a `Nat.succ` chain and a raw `Lit(Nat)`, so
+/// every *source* numeral fell through: `fin_cases` reported "not a recognized
+/// finite type" on `Fin 3`, `interval_cases` reported "no bounds found" on
+/// `2 ≤ n ≤ 3`, and `ring` turned each numeral into an opaque
+/// `RingExpr::Unknown` atom so `0 + x = x` and `1 * x = x` could not fold. The
+/// `Nat.succ`-spelled variants of the same goals passed, which is what isolated
+/// the reader as the cause (RC-H / brick T2).
+///
+/// Unlike [`eval_nat_expr`] this does **not** evaluate arithmetic — it reads
+/// numerals only, preserving each caller's previous "a literal or nothing"
+/// contract.
+///
+/// # Recognized forms
+///
+/// - `Lit(Nat n)`
+/// - `Nat.zero`, `Nat.one`, and a constant whose *name* is a decimal numeral
+///   (a legacy spelling the `fin_cases` / `interval_cases` readers accepted)
+/// - `Nat.succ e` — one greater than `e`, recursively
+/// - `@OfNat.ofNat α n inst` — the value is the `n` index. Reading the index
+///   rather than the instance is what `OfNat`'s own contract guarantees, and it
+///   is why this works uniformly for `instOfNatNat n`, for the
+///   `Zero.toOfNat0` / `One.toOfNat1` bridges the elaborator picks under real
+///   imports, and for Mathlib's `instOfNat`.
+/// - `Proj("OfNat", 0, inst)` — the δβ-reduced spelling of the above
+///   (`OfNat.ofNat`'s value is `fun {α n} [inst] => inst.1`,
+///   `clean-kernel/src/env/algebra_basic_ofnat.rs:153`), recovered from the
+///   three instance heads whose field-0 value is fixed by definition.
+/// - `MData _ e` — an annotation wrapper, transparent.
+///
+/// # Contract
+///
+/// REQUIRES: `expr` is a well-formed expression.
+/// ENSURES: Returns `Some(n)` only when `expr` denotes the numeral `n`, and
+/// `None` for anything symbolic.
+/// ENSURES: Every consumer is completeness-only — `fin_cases`/`interval_cases`
+/// case splits and `ring` normal forms are turned into proof terms that
+/// `close_goal` re-checks in the kernel, so a misread numeral can only lose a
+/// proof, never manufacture one.
+/// ENSURES: Recursion terminates via the `stack_safe` guard.
+pub(crate) fn read_nat_numeral(expr: &Expr) -> Option<u64> {
+    stack_safe(|| match expr.kind() {
+        ExprKind::Lit(clean_kernel::expr::Literal::Nat(n)) => n.to_u64(),
+
+        ExprKind::Const(name, _) => {
+            let name_str = name.to_string();
+            match name_str.as_str() {
+                "Nat.zero" => Some(0),
+                "Nat.one" => Some(1),
+                // Legacy spelling: a constant literally named "0", "1", …
+                other => other.parse().ok(),
+            }
+        }
+
+        ExprKind::MData(_, inner) => read_nat_numeral(inner),
+
+        ExprKind::App(_, _) => {
+            let ExprKind::Const(op_name, _) = expr.get_app_fn().kind() else {
+                return None;
+            };
+            let args = expr.get_app_args();
+            match op_name.to_string().as_str() {
+                "Nat.succ" => read_nat_numeral(args.last()?)?.checked_add(1),
+                // `@OfNat.ofNat α n inst`: the numeral is the second argument.
+                "OfNat.ofNat" if args.len() >= 2 => read_nat_numeral(args[1]),
+                _ => None,
+            }
+        }
+
+        // `inst.1` for an `OfNat α n` instance. Only the instance heads whose
+        // field 0 is fixed by their own definition are read here; anything else
+        // would need the instance's *type* to recover `n`, which is not
+        // available without a typing context.
+        ExprKind::Proj(struct_name, 0, inst) if struct_name.to_string() == "OfNat" => {
+            let ExprKind::Const(inst_name, _) = inst.get_app_fn().kind() else {
+                return None;
+            };
+            let inst_args = inst.get_app_args();
+            match inst_name.to_string().as_str() {
+                // `instOfNatNat n : OfNat Nat n` is `⟨n⟩`.
+                "instOfNatNat" => read_nat_numeral(inst_args.first()?),
+                // `Zero.toOfNat0 : [Zero α] → OfNat α 0` is `⟨Zero.zero⟩`.
+                "Zero.toOfNat0" => Some(0),
+                // `One.toOfNat1 : [One α] → OfNat α 1` is `⟨One.one⟩`.
+                "One.toOfNat1" => Some(1),
+                _ => None,
+            }
+        }
+
+        _ => None,
+    })
+}
+
 /// Euclidean GCD on `u64`, matching Lean 4's `Nat.gcd` and the kernel's native
 /// `reduce_nat` reducer (`nat_gcd` in `tc/reduction/nat.rs`).
 ///

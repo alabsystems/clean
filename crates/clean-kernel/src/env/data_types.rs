@@ -35,8 +35,13 @@ impl Environment {
         let u = Name::from_string("u");
         let sort_u = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(u.clone()))));
 
-        // Option : Sort u → Sort u (Type u)
-        let option_type = Expr::pi(BinderInfo::Implicit, sort_u.clone(), sort_u.clone());
+        // Option : Sort u → Sort u — the type former's parameter is EXPLICIT
+        // (Lean parity: `Option : Type u → Type u`; the doc comment above
+        // always said `(α : Sort u)`). It was Implicit, which made a BARE
+        // `Option` in functor position auto-insert a hole (`Option ?m`) and
+        // shape-bail against `Type → Type` — the U2 battery P18 wall.
+        // Constructor params stay implicit (correct: `@some : {α} → α → …`).
+        let option_type = Expr::pi(BinderInfo::Default, sort_u.clone(), sort_u.clone());
 
         let option_const = Expr::const_(Name::from_string("Option"), vec![Level::param(u.clone())]);
 

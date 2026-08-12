@@ -38,7 +38,7 @@ use clean_ck0::{
     add_inductive, Budget, Constructor as CkCtor, Env as CkEnv, InductiveDecl as CkIndDecl,
     MinimalEnv, Name as CkName, RawExpr, Term, Transparency,
 };
-use clean_kernel::{Declaration, Environment, Expr, ExprKind, Level as KLevel, Name as KName};
+use clean_kernel::{Environment, Expr, ExprKind, Level as KLevel, Name as KName};
 
 // ===========================================================================
 // The untrusted translator: clean-kernel Expr/Level/Name -> ck0 RawExpr/...

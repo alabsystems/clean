@@ -36,11 +36,7 @@ pub(in crate::infer) fn wrap_alias_surface_body(
 ) -> SurfaceExpr {
     SurfaceExpr::Let(
         clean_parser::Span::dummy(),
-        SurfaceBinder::new(
-            alias_name.to_string(),
-            None,
-            clean_parser::SurfaceBinderInfo::Explicit,
-        ),
+        SurfaceBinder::new(alias_name.to_string(), None, SurfaceBinderInfo::Explicit),
         Box::new(alias_value),
         Box::new(body.clone()),
     )
@@ -54,11 +50,7 @@ pub(in crate::infer) fn prepend_do_alias_binding(
     let mut rewritten = Vec::with_capacity(body.len() + 1);
     rewritten.push(DoElem::Let(
         clean_parser::Span::dummy(),
-        SurfaceBinder::new(
-            alias_name.to_string(),
-            None,
-            clean_parser::SurfaceBinderInfo::Explicit,
-        ),
+        SurfaceBinder::new(alias_name.to_string(), None, SurfaceBinderInfo::Explicit),
         Box::new(alias_value),
     ));
     rewritten.extend(body.iter().cloned());

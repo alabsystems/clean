@@ -76,6 +76,7 @@ struct OffDiagConsts {
     eq_ndrec_fin: Expr,
     // proof glue.
     eq1: Expr,
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_refl1: Expr,
     eq_trans1: Expr,
     congr_arg: Expr,
@@ -208,6 +209,7 @@ impl OffDiagConsts {
         Expr::apps(self.eq1.clone(), [self.rat.clone(), l, r])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn refl_rat(&self, x: Expr) -> Expr {
         Expr::apps(self.eq_refl1.clone(), [self.rat.clone(), x])
     }

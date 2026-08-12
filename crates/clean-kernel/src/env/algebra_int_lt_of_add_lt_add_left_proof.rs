@@ -56,6 +56,8 @@ use crate::name::Name;
 struct IntLtOfAddLtAddLeftConsts {
     int_type: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     int_le: Expr,
     int_lt: Expr,
     int_add: Expr,

@@ -278,6 +278,21 @@ pub struct CompressionStats {
     pub ratio: f64,
 }
 
+impl std::fmt::Display for CompressionStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CompressionStats {{ exprs: {}, levels: {}, certs: {}, {} -> {} bytes ({:.1}x) }}",
+            self.unique_exprs,
+            self.unique_levels,
+            self.unique_certs,
+            self.original_bytes,
+            self.compressed_bytes,
+            self.ratio
+        )
+    }
+}
+
 #[cfg(test)]
 mod schema_tests {
     use super::*;
@@ -319,20 +334,5 @@ mod schema_tests {
         let bytes = bincode::serde::encode_to_vec(&current, bincode::config::standard()).unwrap();
         let decoded: CompressedCert = decode_certificate_bincode_limited(&bytes).unwrap();
         assert_eq!(decoded, current);
-    }
-}
-
-impl std::fmt::Display for CompressionStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "CompressionStats {{ exprs: {}, levels: {}, certs: {}, {} -> {} bytes ({:.1}x) }}",
-            self.unique_exprs,
-            self.unique_levels,
-            self.unique_certs,
-            self.original_bytes,
-            self.compressed_bytes,
-            self.ratio
-        )
     }
 }

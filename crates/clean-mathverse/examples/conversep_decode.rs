@@ -68,7 +68,7 @@ fn main() {
             // Emit the VERBATIM trimmed corpus line to `<dir>/s<serial>.jsonl`
             // (exact-corpus fixture extraction).
             let trimmed = line.trim_end_matches(['\n', '\r']);
-            let path = std::path::Path::new(&dir).join(format!("s{s}.jsonl"));
+            let path = Path::new(&dir).join(format!("s{s}.jsonl"));
             std::fs::write(&path, format!("{trimmed}\n")).expect("write raw fixture");
             eprintln!("RAW s{s} -> {} ({} bytes)", path.display(), trimmed.len());
             continue;

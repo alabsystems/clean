@@ -19,6 +19,7 @@ fn is_bool_false(e: &Expr) -> bool {
         if levels.is_empty() && *name == Name::from_string("Bool.false"))
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn is_dec_is_true(e: &Expr) -> bool {
     // Peel *all* application layers: a sound `isTrue`/`isFalse` is fully applied
     // (`@Decidable.isFalse prop proof`), so a single-layer peel would miss it.
@@ -26,6 +27,7 @@ fn is_dec_is_true(e: &Expr) -> bool {
         ExprKind::Const(name, _) if *name == Name::from_string("Decidable.isTrue"))
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn is_dec_is_false(e: &Expr) -> bool {
     matches!(e.get_app_fn().kind(),
         ExprKind::Const(name, _) if *name == Name::from_string("Decidable.isFalse"))

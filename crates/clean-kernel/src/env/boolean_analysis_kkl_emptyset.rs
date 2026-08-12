@@ -33,6 +33,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Shared atoms for the empty-set isolation bridge.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct EmptyConsts {
     nat: Expr,
     rat: Expr,
@@ -79,6 +80,7 @@ struct EmptyConsts {
     congr_c: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl EmptyConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

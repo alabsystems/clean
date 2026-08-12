@@ -10,10 +10,8 @@
 //!
 //! Part of #3192.
 
-use crate::candidate::{CandidateId, CandidateTheorem, ParamValue, ParamVec};
 use crate::error::DiscoveryError;
 use crate::family::TheoremFamily;
-use clean_kernel::{BinderInfo, Expr, Level};
 use serde::{Deserialize, Serialize};
 
 /// Activation function type for a neuron.
@@ -243,13 +241,6 @@ pub(crate) fn random_sampling(
     finalize_result(best, best_width, default_width, iterations, checker)
 }
 
-pub(crate) fn compute_bound_width(params: &[RelaxationParam]) -> f64 {
-    params
-        .iter()
-        .map(|param| contribution(param.alpha, fallback_activation(param.layer_index)))
-        .sum()
-}
-
 pub(crate) fn default_params(space: &RelaxationSpace) -> Vec<RelaxationParam> {
     space
         .params
@@ -259,58 +250,6 @@ pub(crate) fn default_params(space: &RelaxationSpace) -> Vec<RelaxationParam> {
             ..*param
         })
         .collect()
-}
-
-pub(crate) fn generate_relaxation_candidates(
-    space: &RelaxationSpace,
-    config: &RelaxationConfig,
-) -> Vec<CandidateTheorem> {
-    if validate_relaxation_inputs(space, config).is_err() {
-        return Vec::new();
-    }
-    let mut candidates = Vec::with_capacity((config.grid_resolution + 1) as usize);
-    for step in 0..=config.grid_resolution {
-        let alpha = f64::from(step) / f64::from(config.grid_resolution);
-        let mut params = default_params(space);
-        for param in &mut params {
-            param.alpha = alpha;
-        }
-        candidates.push(CandidateTheorem {
-            id: CandidateId(u64::from(step)),
-            family: TheoremFamily::DomainTightness,
-            params: encode_params(&params, step),
-            statement: build_relaxation_statement(&params),
-            proof: build_relaxation_proof(&params),
-        });
-    }
-    candidates
-}
-
-pub(crate) fn build_relaxation_statement(params: &[RelaxationParam]) -> Expr {
-    let nat = Expr::const_str("Nat");
-    let le_le = Expr::const_str_levels("LE.le", vec![Level::zero()]);
-    let inst_le_nat = Expr::const_str("instLENat");
-    let nat_add = Expr::const_str("Nat.add");
-    let width = Expr::nat_lit((compute_bound_width(params) * 1_000_000.0).round() as u64);
-    let rhs = Expr::apps(nat_add, [Expr::bvar(0), width.clone()]);
-    let le_expr = Expr::apps(le_le, [nat.clone(), inst_le_nat, width, rhs]);
-    Expr::pi(BinderInfo::Default, nat, le_expr)
-}
-
-/// Build a proof term for a relaxation candidate, if one genuinely exists.
-///
-/// # Honesty
-///
-/// The relaxation statement is `forall (n : Nat), LE.le width (Nat.add n width)`
-/// where `width` is a literal. The previous implementation returned a bare
-/// `Nat.le_add_left` reference as the "proof", but that reference does NOT have
-/// the statement as its type (`Nat.le_add_left : forall n k, k <= n + k` is a
-/// two-binder family; a real proof would be `fun n => Nat.le_add_left n width`),
-/// and `Nat.le_add_left` is not even registered in the discovery environment.
-/// We have no genuine proof term to construct here, so we return `None`: the
-/// candidate is honestly Unverified rather than "verified" by a mismatched axiom.
-pub(crate) fn build_relaxation_proof(_params: &[RelaxationParam]) -> Option<Expr> {
-    None
 }
 
 fn validate_relaxation_inputs(
@@ -361,33 +300,6 @@ fn contribution(alpha: f64, activation: ActivationType) -> f64 {
         ActivationType::ReLU => alpha * (1.0 - alpha),
         ActivationType::Sigmoid => alpha * 0.25,
         ActivationType::Tanh => alpha * (1.0 - alpha * alpha),
-    }
-}
-
-fn fallback_activation(layer_index: usize) -> ActivationType {
-    match layer_index % 3 {
-        0 => ActivationType::ReLU,
-        1 => ActivationType::Sigmoid,
-        _ => ActivationType::Tanh,
-    }
-}
-
-fn encode_params(params: &[RelaxationParam], alpha_step: u32) -> ParamVec {
-    let mut encoded = Vec::with_capacity(params.len() * 4);
-    for param in params {
-        encoded.push(ParamValue::Nat(param.layer_index as u64));
-        encoded.push(ParamValue::Nat(param.neuron_index as u64));
-        encoded.push(ParamValue::Nat(u64::from(alpha_step)));
-        encoded.push(ParamValue::Choice(bound_choice_index(param.bound_choice)));
-    }
-    ParamVec(encoded)
-}
-
-fn bound_choice_index(choice: BoundChoice) -> usize {
-    match choice {
-        BoundChoice::LowerTangent => 0,
-        BoundChoice::UpperTangent => 1,
-        BoundChoice::Adaptive => 2,
     }
 }
 
@@ -463,8 +375,9 @@ fn test_defaults_and_default_params() {
     assert!(params.iter().all(|param| (param.alpha - 0.5).abs() < 1e-12));
     assert_eq!(params[1].neuron_index, 3);
     let widths = [param(0, 0, 0.25, BoundChoice::Adaptive), param(1, 0, 0.5, BoundChoice::Adaptive), param(2, 0, 0.5, BoundChoice::Adaptive)];
+    let width_space = space(widths.to_vec(), vec![ActivationType::ReLU, ActivationType::Sigmoid, ActivationType::Tanh]);
     let expected = 0.25 * 0.75 + 0.5 * 0.25 + 0.5 * (1.0 - 0.25);
-    assert!((compute_bound_width(&widths) - expected).abs() < 1e-12);
+    assert!((compute_bound_width_for_space(&width_space, &widths) - expected).abs() < 1e-12);
 }
 
 #[test]
@@ -491,13 +404,4 @@ fn test_search_strategies() {
     assert!(rs.soundness_verified);
 }
 
-#[test]
-fn test_candidates_and_statement() {
-    let candidates = generate_relaxation_candidates(&sample_space(), &RelaxationConfig { grid_resolution: 4, ..RelaxationConfig::default() });
-    assert_eq!(candidates.len(), 5);
-    // No genuine proof exists for relaxation statements, so each candidate is
-    // honestly emitted WITHOUT a proof term (proof: None).
-    assert!(candidates.iter().all(|candidate| candidate.proof.is_none() && candidate.family == TheoremFamily::DomainTightness));
-    assert!(build_relaxation_statement(&default_params(&sample_space())).is_pi());
-}
 }

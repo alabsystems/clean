@@ -39,7 +39,9 @@ fn match_named_comparison(
 /// REQUIRES: `lhs` and `rhs` inhabit `ty` for equality/order relations, or are
 /// propositions for `Iff`.
 /// ENSURES: Returns the kernel-level relation expression for `rel`.
-#[cfg_attr(not(test), allow(dead_code))]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn make_rel_expr(
     rel: CalcRel,
     ty: &Expr,
@@ -126,6 +128,83 @@ pub(crate) fn match_goal_rel(expr: &Expr) -> Option<(CalcRel, Expr, Expr, Expr, 
     }
 
     None
+}
+
+/// Decompose `e` into `(rel, lhs, rhs)` exactly the way Lean's
+/// `Lean.Elab.Term.getCalcRelation?` does — strip the last two arguments of the
+/// application, whatever the head is.
+///
+/// Lean's `calc` is relation-AGNOSTIC: a step's type only has to be an
+/// application carrying at least two arguments, and its last two arguments are
+/// the endpoints (`Lean/Elab/Calc.lean`, "it assumes the last two arguments are
+/// explicit"). [`match_goal_rel`] above recognizes only the seven relations
+/// Clean ships dedicated transitivity lemmas for; using it as the *gate* on a
+/// calc step rejects every other relation (`List.Sublist`, `List.Perm`,
+/// `Dvd.dvd`, a user's own inductive relation, …) before any transitivity
+/// machinery is reached. This function is that gate's Lean-faithful
+/// replacement.
+///
+/// It only DECOMPOSES — it asserts nothing about `rel` being a genuine
+/// relation. Every proof term built from the result is still checked by
+/// `infer_type` here and re-checked by the kernel via `add_decl` /
+/// `close_goal`, so admitting a non-relation head can only produce a loud
+/// failure downstream, never an over-accept.
+///
+/// REQUIRES: none.
+/// ENSURES: Returns `Some((rel, lhs, rhs))` iff `e` is an application of at
+/// least two arguments, where `rel` is `e` with its last two arguments removed.
+#[must_use]
+pub(crate) fn get_calc_relation(e: &Expr) -> Option<(Expr, Expr, Expr)> {
+    let ExprKind::App(fn_and_lhs, rhs) = e.kind() else {
+        return None;
+    };
+    let ExprKind::App(rel, lhs) = fn_and_lhs.kind() else {
+        return None;
+    };
+    Some((
+        rel.as_ref().clone(),
+        lhs.as_ref().clone(),
+        rhs.as_ref().clone(),
+    ))
+}
+
+/// Endpoint decomposition for one calc step.
+///
+/// Tries the dedicated seven-relation matcher first, so the existing
+/// per-relation lemma routing and its endpoint conventions are bit-for-bit
+/// unchanged for `Eq`/`Ne`/`LE.le`/`LT.lt`/`GE.ge`/`GT.gt`/`Iff`, then falls
+/// back to Lean's generic last-two-arguments rule for everything else.
+///
+/// REQUIRES: none.
+/// ENSURES: Returns `Some((lhs, rhs))` whenever [`match_goal_rel`] or
+/// [`get_calc_relation`] decomposes `e`; the two agree on the endpoints for
+/// every relation the former recognizes.
+#[must_use]
+pub(crate) fn calc_endpoints(e: &Expr) -> Option<(Expr, Expr)> {
+    if let Some((_, _, lhs, rhs, _)) = match_goal_rel(e) {
+        return Some((lhs, rhs));
+    }
+    let (_, lhs, rhs) = get_calc_relation(e)?;
+    Some((lhs, rhs))
+}
+
+/// The head constant of a calc step's relation, if it has one.
+///
+/// For `@List.Sublist α l₁ l₂` this is `List.Sublist`; for a bare user relation
+/// `MyR a b` it is `MyR`. Used to find the relation's own transitivity lemma
+/// (`<R>.trans`) — which is exactly the term Lean's own `Trans` instances are
+/// built from (`instance : Trans (@Sublist α) Sublist Sublist := ⟨Sublist.trans⟩`).
+///
+/// REQUIRES: none.
+/// ENSURES: Returns `Some(name)` iff `e` decomposes via [`get_calc_relation`]
+/// and the resulting relation's head is a constant.
+#[must_use]
+pub(crate) fn calc_relation_head(e: &Expr) -> Option<Name> {
+    let (rel, _, _) = get_calc_relation(e)?;
+    match rel.get_app_fn().kind() {
+        ExprKind::Const(name, _) => Some(name.clone()),
+        _ => None,
+    }
 }
 
 /// Match `@Ne.{u} α a b` expressions.

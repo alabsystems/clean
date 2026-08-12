@@ -358,7 +358,7 @@ fn test_init_int_hdiv_inst() {
     let info = env.get_const(&Name::from_string("Int.div")).unwrap();
     assert_eq!(
         info.kind,
-        crate::env::ConstantKind::Opaque,
+        ConstantKind::Opaque,
         "Int.div must be Opaque, got {:?}",
         info.kind
     );
@@ -376,7 +376,7 @@ fn test_init_int_hmod_inst() {
     let info = env.get_const(&Name::from_string("Int.mod")).unwrap();
     assert_eq!(
         info.kind,
-        crate::env::ConstantKind::Opaque,
+        ConstantKind::Opaque,
         "Int.mod must be Opaque, got {:?}",
         info.kind
     );
@@ -406,7 +406,7 @@ fn test_init_int_hpow_inst() {
     let info = env.get_const(&Name::from_string("Int.pow")).unwrap();
     assert_eq!(
         info.kind,
-        crate::env::ConstantKind::Definition,
+        ConstantKind::Definition,
         "Int.pow must be a Definition, got {:?}",
         info.kind
     );
@@ -5443,11 +5443,11 @@ fn test_inst_preorder_rat_as_definition_registration() {
     // First add the ordering axioms that instPreorderRat needs
     // (these are all Axioms, which is fine — they are mathematical axioms)
     let le_const = Expr::const_(Name::from_string("Rat.le"), vec![]);
-    let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
+    let _eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
 
     // Rat.le_refl : ∀ a : Rat, Rat.le a a
     {
-        let mut bd = super::decl_builder::EnvDeclBuilder::new();
+        let mut bd = decl_builder::EnvDeclBuilder::new();
         let (a_id, a) = bd.fresh_local(rat_const.clone());
         let body = Expr::app(Expr::app(le_const.clone(), a.clone()), a);
         let e = bd.mk_pi(a_id, BinderInfo::Default, rat_const.clone(), body);
@@ -5462,7 +5462,7 @@ fn test_inst_preorder_rat_as_definition_registration() {
 
     // Rat.le_trans : ∀ a b c : Rat, Rat.le a b → Rat.le b c → Rat.le a c
     {
-        let mut bd = super::decl_builder::EnvDeclBuilder::new();
+        let mut bd = decl_builder::EnvDeclBuilder::new();
         let (a_id, a) = bd.fresh_local(rat_const.clone());
         let (b_id, bv) = bd.fresh_local(rat_const.clone());
         let (c_id, c) = bd.fresh_local(rat_const.clone());

@@ -8,7 +8,7 @@
 //! This is the core deduction engine: when a clause has all but one literal
 //! falsified, the remaining literal must be true.
 
-use super::{var_of, CdclError, CdclState};
+use super::{CdclError, CdclState};
 
 /// Result of a single BCP step.
 #[derive(Debug, Clone, PartialEq, Eq)]

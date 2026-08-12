@@ -185,7 +185,7 @@ fn test_conv_congr_two_args_kernel_checked_no_new_axioms() {
         .expect("multi-focus conv-congr proof must be a closed term");
 
     // (2) Kernel-type-check against the ORIGINAL goal type.
-    let tc = clean_kernel::TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc
         .infer_type(&proof)
         .expect("multi-focus conv-congr proof must kernel-type-check");
@@ -288,7 +288,7 @@ fn test_conv_congr_one_arg_other_refl_kernel_checked() {
     rfl(&mut state).expect("closes by rfl");
 
     let proof = state.closed_proof().expect("closed proof");
-    let tc = clean_kernel::TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc.infer_type(&proof).expect("kernel-type-check");
     assert!(
         tc.is_def_eq(&inferred, &goal_ty),
@@ -462,7 +462,7 @@ fn adversarial_ternary_middle_arg_only_kernel_checked() {
     rfl(&mut state).expect("closes by rfl");
 
     let proof = state.closed_proof().expect("closed proof");
-    let tc = clean_kernel::TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc.infer_type(&proof).expect("kernel-type-check");
     assert!(
         tc.is_def_eq(&inferred, &goal_ty),
@@ -600,7 +600,7 @@ fn adversarial_duplicate_arg_focus_isolation() {
     );
     rfl(&mut state).expect("closes by rfl");
     let proof = state.closed_proof().expect("closed proof");
-    let tc = clean_kernel::TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc.infer_type(&proof).expect("kernel-type-check");
     assert!(
         tc.is_def_eq(&inferred, &goal_ty),
@@ -691,7 +691,7 @@ fn adversarial_dependent_head_fails_closed() {
         let _ = rfl(&mut state);
     }
     if let Some(proof) = state.closed_proof() {
-        let tc = clean_kernel::TypeChecker::new(&env);
+        let tc = TypeChecker::new(&env);
         let inferred = tc
             .infer_type(&proof)
             .expect("any closed proof MUST kernel-type-check");
@@ -785,7 +785,7 @@ fn adversarial_head_and_arg_rewrite_kernel_checked() {
             );
             rfl(&mut state).expect("closes by rfl");
             let proof = state.closed_proof().expect("closed proof");
-            let tc = clean_kernel::TypeChecker::new(&env);
+            let tc = TypeChecker::new(&env);
             let inferred = tc.infer_type(&proof).expect("kernel-type-check");
             assert!(
                 tc.is_def_eq(&inferred, &goal_ty),

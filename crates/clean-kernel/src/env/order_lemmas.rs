@@ -14,21 +14,21 @@
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::order::{nat_le_relation, nat_le_tc, nat_lt_relation, nat_lt_tc};
+use crate::env::order_structures::prop_rel_trans_levels;
 #[cfg(test)]
 use crate::env::{Constructor, InductiveDecl, InductiveType};
 use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
+// `Level` is now only spelled by the `#[cfg(test)]` / `math-overlays` scaffolding
+// in this module: the `Trans` universe list moved to `prop_rel_trans_levels`.
+#[cfg(any(test, feature = "math-overlays"))]
 use crate::level::Level;
 use crate::name::Name;
 
-/// Build `@Trans.{1,1,1} Nat Nat Nat r s t` — the `Trans` instance *type* for
-/// three Nat-valued binary relations `r`, `s`, `t`.
+/// Build `@Trans.{0,0,0,1,1,1} Nat Nat Nat r s t` — the `Trans` instance *type*
+/// for three Nat-valued binary relations `r`, `s`, `t`.
 fn nat_trans_app(nat: &Expr, r: &Expr, s: &Expr, t: &Expr) -> Expr {
-    let one = Level::succ(Level::zero());
-    let head = Expr::const_(
-        Name::from_string("Trans"),
-        vec![one.clone(), one.clone(), one],
-    );
+    let head = Expr::const_(Name::from_string("Trans"), prop_rel_trans_levels());
     Expr::apps(
         head,
         [
@@ -81,14 +81,10 @@ fn nat_trans_proof_field(
     b.finish(e)
 }
 
-/// Build `@Trans.mk.{1,1,1} Nat Nat Nat r s t proof` — the constructive `Trans`
-/// instance *value*.
+/// Build `@Trans.mk.{0,0,0,1,1,1} Nat Nat Nat r s t proof` — the constructive
+/// `Trans` instance *value*.
 fn nat_trans_mk_app(nat: &Expr, r: &Expr, s: &Expr, t: &Expr, proof: Expr) -> Expr {
-    let one = Level::succ(Level::zero());
-    let head = Expr::const_(
-        Name::from_string("Trans.mk"),
-        vec![one.clone(), one.clone(), one],
-    );
+    let head = Expr::const_(Name::from_string("Trans.mk"), prop_rel_trans_levels());
     Expr::apps(
         head,
         [
@@ -181,7 +177,9 @@ impl Environment {
             );
             let (irrefl_id, _irrefl_inst) = b.fresh_local(irrefl_r.clone());
 
-            // Trans.{u,u,u} α α α r r r — homogeneous Trans for StrictOrder
+            // Trans.{0,0,0,u,u,u} α α α r r r — homogeneous Trans for
+            // StrictOrder. `r : α → α → Prop`, so the three RELATION sorts are
+            // `Sort 0` and the three CARRIER sorts are `u`.
             let trans_r = Expr::app(
                 Expr::app(
                     Expr::app(
@@ -190,7 +188,14 @@ impl Environment {
                                 Expr::app(
                                     Expr::const_(
                                         Name::from_string("Trans"),
-                                        vec![u_level.clone(), u_level.clone(), u_level.clone()],
+                                        vec![
+                                            Level::zero(),
+                                            Level::zero(),
+                                            Level::zero(),
+                                            u_level.clone(),
+                                            u_level.clone(),
+                                            u_level.clone(),
+                                        ],
                                     ),
                                     alpha.clone(), // α
                                 ),
@@ -583,7 +588,6 @@ impl Environment {
             let nat_le_relation = nat_le_relation();
 
             // instTransNatLtLtLe : Trans Nat.lt Nat.lt Nat.le
-            let level_one = Level::succ(Level::zero());
             let inst_type = Expr::app(
                 Expr::app(
                     Expr::app(
@@ -592,11 +596,7 @@ impl Environment {
                                 Expr::app(
                                     Expr::const_(
                                         Name::from_string("Trans"),
-                                        vec![
-                                            level_one.clone(),
-                                            level_one.clone(),
-                                            level_one.clone(),
-                                        ],
+                                        prop_rel_trans_levels(),
                                     ),
                                     nat_const.clone(), // α = Nat
                                 ),
@@ -610,7 +610,6 @@ impl Environment {
                 ),
                 nat_le_relation.clone(), // t = Nat.le
             );
-            let one = Level::succ(Level::zero());
             let proof = {
                 let mut b = EnvDeclBuilder::new();
                 let (a_id, a) = b.fresh_local(nat_const.clone());
@@ -638,10 +637,7 @@ impl Environment {
                 b.finish(e)
             };
             let value = Expr::apps(
-                Expr::const_(
-                    Name::from_string("Trans.mk"),
-                    vec![one.clone(), one.clone(), one],
-                ),
+                Expr::const_(Name::from_string("Trans.mk"), prop_rel_trans_levels()),
                 [
                     nat_const.clone(),
                     nat_const.clone(),

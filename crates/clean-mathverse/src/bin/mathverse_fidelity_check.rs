@@ -178,10 +178,10 @@ fn main() -> ExitCode {
     }
 
     println!(
-        "{:<55} {:>8} {:>10} {:>10} {:>10}  fidelity",
-        "shard", "size_MB", "consts", "exprs", "expr/c"
+        "{:<55} {:>4} {:>8} {:>10} {:>10} {:>10} {:>10}  fidelity",
+        "shard", "ver", "size_MB", "strings", "consts", "exprs", "expr/c"
     );
-    println!("{}", "-".repeat(115));
+    println!("{}", "-".repeat(132));
 
     let mut tier_counts = std::collections::BTreeMap::<&str, u32>::new();
     let mut stub_with_volume: Vec<&ShardSummary> = Vec::new();
@@ -191,7 +191,7 @@ fn main() -> ExitCode {
         } else {
             0.0
         };
-        let basename = std::path::Path::new(&s.path)
+        let basename = Path::new(&s.path)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| s.path.clone());
@@ -201,9 +201,11 @@ fn main() -> ExitCode {
             format!("…{}", &s.path[s.path.len() - 53..])
         };
         println!(
-            "{:<55} {:>8.1} {:>10} {:>10} {:>10.2}  {}",
+            "{:<55} {:>4} {:>8.1} {:>10} {:>10} {:>10} {:>10.2}  {}",
             path_short,
+            s.version,
             s.size_bytes as f64 / 1_048_576.0,
+            s.string_count,
             s.constant_count,
             s.expr_count,
             ratio,
@@ -245,7 +247,7 @@ fn main() -> ExitCode {
         for s in &stub_with_volume {
             println!(
                 "  ! {}: {} constants but only {} FlatExpr → name-only",
-                std::path::Path::new(&s.path)
+                Path::new(&s.path)
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default(),

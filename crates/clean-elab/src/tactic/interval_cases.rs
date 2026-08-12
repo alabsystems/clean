@@ -7,12 +7,12 @@
 //! Extracted from `finite_cases.rs` for file-size compliance.
 
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprKind, FVarId, Level};
+use clean_kernel::{Expr, ExprKind, Level};
 
 use super::finite_cases::{make_nat_literal, substitute_fvar};
 use super::finite_cases_proof::build_or_elim_chain;
+use super::nat_expr_eval::read_nat_numeral;
 use super::{match_le, match_lt, Goal, LocalDecl, ProofState, TacticError, TacticResult};
-use crate::stack_safe;
 
 /// Case split on an integer hypothesis within an interval.
 ///
@@ -105,24 +105,33 @@ fn build_interval_goals(
     let mut value_exprs = Vec::new();
     let target_depends_on_hyp = goal.target.abstract_fvar(hyp.fvar) != goal.target;
 
-    for value in lower..=upper {
+    let value_count =
+        usize::try_from(upper - lower + 1).map_err(|_| TacticError::InvalidTarget {
+            tactic: "interval_cases".into(),
+            detail: "interval size does not fit in memory".into(),
+        })?;
+    for (case_idx, value) in (lower..=upper).enumerate() {
         let value_expr = make_int_literal(value);
-        let eq_hyp_name = format!("{hyp_name}_eq");
-        let eq_type = make_equality_type(
-            &Expr::const_(Name::from_string("Nat"), vec![]),
-            &Expr::fvar(hyp.fvar),
-            &value_expr,
-            Level::succ(Level::zero()), // Nat : Type 0 = Sort 1
-        );
-
         let mut new_ctx = goal.local_ctx.clone();
-        let eq_fvar = FVarId::new(new_ctx.len() as u64 + 1000);
-        new_ctx.push(LocalDecl {
-            fvar: eq_fvar,
-            name: eq_hyp_name,
-            ty: eq_type,
-            value: None,
-        });
+        // Each non-final branch is introduced by the corresponding true-side
+        // lambda in `build_or_elim_chain`. Allocate its equality FVar in binder
+        // order so final proof closing maps it to that lambda's BVar. The final
+        // branch is reached only through negations of all prior equalities; the
+        // current fallback has no constructive proof of `h = final_value`, so
+        // granting that equality would fabricate local authority.
+        if case_idx + 1 < value_count {
+            new_ctx.push(LocalDecl {
+                fvar: state.fresh_fvar(),
+                name: format!("{hyp_name}_eq"),
+                ty: make_equality_type(
+                    &Expr::const_(Name::from_string("Nat"), vec![]),
+                    &Expr::fvar(hyp.fvar),
+                    &value_expr,
+                    Level::succ(Level::zero()), // Nat : Type 0 = Sort 1
+                ),
+                value: None,
+            });
+        }
 
         // The Or.rec fallback only carries the branch-local equality proof for
         // the active branch. If we eagerly substitute a dependent target, the
@@ -226,35 +235,21 @@ fn find_integer_bounds(goal: &Goal, hyp: &LocalDecl) -> Result<(i64, i64), Tacti
 
 /// Convert expression to integer if possible
 ///
+/// Delegates to the shared `nat_expr_eval::read_nat_numeral` reader so the
+/// `@OfNat.ofNat Nat k inst` form the elaborator builds for a source numeral is
+/// recognized. Before that (RC-H), this handled only `Nat.zero` / a `Nat.succ`
+/// chain / a raw `Lit(Nat)`, so `interval_cases n` under `h1 : 2 ≤ n` and
+/// `h2 : n ≤ 3` reported "no bounds found in context" while the
+/// `Nat.succ`-spelled bounds were read.
+///
 /// REQUIRES: `expr` is a well-formed Lean expression
 ///
-/// ENSURES: returns `Some(n)` for Nat literals, `Nat.zero`, numeric constant
-/// names, and `Nat.succ` chains
-/// ENSURES: returns `None` for non-numeric expressions
+/// ENSURES: returns `Some(n)` when `expr` denotes the Nat numeral `n` and `n`
+/// fits in an `i64`
+/// ENSURES: returns `None` for non-numeral expressions
 /// ENSURES: recursive descent runs under `stack_safe`
 pub(crate) fn expr_to_int(expr: &Expr) -> Option<i64> {
-    stack_safe(|| match expr.kind() {
-        ExprKind::Const(name, _) => {
-            let name_str = name.to_string();
-            if name_str == "Nat.zero" {
-                return Some(0);
-            }
-            name_str.parse().ok()
-        }
-        ExprKind::Lit(clean_kernel::expr::Literal::Nat(n)) => {
-            n.to_u64().and_then(|v| i64::try_from(v).ok())
-        }
-        ExprKind::App(f, arg) => {
-            if let ExprKind::Const(name, _) = f.kind() {
-                if name.to_string() == "Nat.succ" {
-                    return expr_to_int(arg).map(|n| n + 1);
-                }
-            }
-            None
-        }
-        // Non-Nat literals and other expressions don't convert to integers
-        _ => None,
-    })
+    read_nat_numeral(expr).and_then(|v| i64::try_from(v).ok())
 }
 
 /// Make an integer literal expression

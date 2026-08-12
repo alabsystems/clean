@@ -38,6 +38,8 @@ mod tests_external_packages;
 #[cfg(test)]
 mod tests_instance_ext_import;
 #[cfg(test)]
+mod tests_instance_priority_adopt;
+#[cfg(test)]
 mod tests_membership_carrier_import;
 
 use crate::module::ParsedModule;

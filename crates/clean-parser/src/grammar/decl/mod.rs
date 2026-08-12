@@ -103,6 +103,14 @@ impl Parser {
                 self.advance();
                 self.coinductive_decl_with_mods(span, modifiers)
             }
+            TokenKind::Codata => {
+                self.advance();
+                self.codata_decl_with_mods(span, modifiers)
+            }
+            TokenKind::Codef => {
+                self.advance();
+                self.codef_decl_with_mods(span, modifiers)
+            }
             TokenKind::Structure => {
                 self.advance();
                 self.structure_decl_with_mods(span, modifiers)

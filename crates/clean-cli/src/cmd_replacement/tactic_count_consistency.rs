@@ -6,6 +6,7 @@
 
 use super::*;
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn validate_tactic_count_artifact_consistency(
     artifact: &TacticParityCountArtifact,
 ) -> Result<(), Vec<String>> {
@@ -263,6 +264,7 @@ pub(crate) fn validate_tactic_count_artifact_consistency(
     }
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn validate_tactic_parity_report_linkage(
     report: &TacticParityReport,
 ) -> Result<(), Vec<String>> {

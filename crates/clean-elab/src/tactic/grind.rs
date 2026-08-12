@@ -560,6 +560,9 @@ fn close_all_goals_recursive(
 ///
 /// Returns pairs `(lhs, rhs)` from hypotheses of the form `lhs = rhs`.
 /// Used by CC and the automation engine E-matching passes.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn collect_eq_hypotheses(goal: &Goal, metas: &MetaState) -> Vec<(Expr, Expr)> {
     goal.local_ctx
         .iter()

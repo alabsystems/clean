@@ -453,6 +453,9 @@ pub(super) fn fourier_motzkin_check_certified_wide(
 mod tests {
     use super::*;
 
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     fn expr_with_coeffs(constant: i64, coeffs: &[(usize, i64)]) -> LinearExpr {
         LinearExpr::from_coeffs(constant, coeffs.iter().copied())
     }

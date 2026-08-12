@@ -67,6 +67,7 @@ fn arrow(a: Expr, b: Expr) -> Expr {
 // ── embedded-connective constructors ───────────────────────────────────────
 
 /// The embedded `HOL.True` (`isabelle.def.HOL.True`, δ→ `(λx.x)=(λx.x)`).
+#[cfg(test)]
 fn c_true() -> Expr {
     Expr::const_str("isabelle.def.HOL.True")
 }
@@ -160,7 +161,7 @@ fn false_elim_at(goal: &Expr, hfalse: Expr) -> Expr {
 /// `@Eq.mp.{0} a b heq h : b` (transport `h:a` along `heq:a=b`).
 fn eq_mp(a: &Expr, b: &Expr, heq: Expr, h: Expr) -> Expr {
     Expr::apps(
-        Expr::const_str_levels("Eq.mp", vec![clean_kernel::level::Level::zero()]),
+        Expr::const_str_levels("Eq.mp", vec![Level::zero()]),
         [a.clone(), b.clone(), heq, h],
     )
 }
@@ -168,7 +169,7 @@ fn eq_mp(a: &Expr, b: &Expr, heq: Expr, h: Expr) -> Expr {
 /// `@Eq.mpr.{0} a b heq h : a` (transport `h:b` back along `heq:a=b`).
 fn eq_mpr(a: &Expr, b: &Expr, heq: Expr, h: Expr) -> Expr {
     Expr::apps(
-        Expr::const_str_levels("Eq.mpr", vec![clean_kernel::level::Level::zero()]),
+        Expr::const_str_levels("Eq.mpr", vec![Level::zero()]),
         [a.clone(), b.clone(), heq, h],
     )
 }
@@ -216,10 +217,7 @@ fn eq_subst_obj(alpha: &Expr, motive: &Expr, a: &Expr, b: &Expr, h: Expr, m: Exp
 /// (as produced by [`em_case_split`]'s negative arm `hnp : p → False`) into any goal.
 fn false_elim_kernel(goal: &Expr, absurd: Expr) -> Expr {
     Expr::apps(
-        Expr::const_(
-            Name::from_string("False.elim"),
-            vec![clean_kernel::level::Level::zero()],
-        ),
+        Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]),
         [goal.clone(), absurd],
     )
 }
@@ -280,7 +278,7 @@ fn as_arrow(ty: &Expr) -> Option<(Expr, Expr)> {
 /// Decode `@Eq.{u} α a b`, returning `(u, α, a, b)` (the sort level kept, unlike
 /// [`eq_three_parts`] which drops it). Used by the eq-commute leaf so `Eq.symm` is
 /// instantiated at the *actual* object/Prop level of the equated sort.
-fn as_eq_leveled(e: &Expr) -> Option<(clean_kernel::level::Level, Expr, Expr, Expr)> {
+fn as_eq_leveled(e: &Expr) -> Option<(Level, Expr, Expr, Expr)> {
     let ExprKind::App(eq_a, b) = e.kind() else {
         return None;
     };
@@ -302,7 +300,7 @@ fn as_eq_leveled(e: &Expr) -> Option<(clean_kernel::level::Level, Expr, Expr, Ex
 
 /// `@Eq.symm.{u} α a b h : Eq α b a` (from `h : Eq α a b`), at an arbitrary sort
 /// level `u` read from the leaf (the level-general sibling of [`eq_symm_obj`]).
-fn eq_symm_lvl(u: &clean_kernel::level::Level, alpha: &Expr, a: &Expr, b: &Expr, h: Expr) -> Expr {
+fn eq_symm_lvl(u: &Level, alpha: &Expr, a: &Expr, b: &Expr, h: Expr) -> Expr {
     Expr::apps(
         Expr::const_str_levels("Eq.symm", vec![u.clone()]),
         [alpha.clone(), a.clone(), b.clone(), h],
@@ -571,6 +569,7 @@ fn and_chain(leaves: &[Expr], proofs: &[Expr]) -> Expr {
 /// if the leaf is not one of the recognized laws. Every returned term is a
 /// `propext`/`Classical.em`/`Eq.{mp,mpr}` derivation with foundational closure; the
 /// kernel re-checks it against `leaf`, so a mis-match rejects (never miscounts).
+#[cfg(any(test, doc))]
 pub(crate) fn prove_simp_leaf(leaf: &Expr) -> Option<Expr> {
     prove_simp_leaf_wit(leaf, &[])
 }
@@ -1621,7 +1620,7 @@ fn prove_classical_prop_leaf(l: &Expr, r: &Expr) -> Option<Expr> {
                     })
                 };
                 let mpr = {
-                    let (a, b, na, nb) = (a.clone(), b.clone(), na.clone(), nb.clone());
+                    let (a, b, _na, _nb) = (a.clone(), b.clone(), na.clone(), nb.clone());
                     lam_fv(0x9506, r.clone(), move |h| {
                         let (a2, b2) = (a.clone(), b.clone());
                         lam_fv(0x9507, mk_conj(&a2, &b2), move |hpq| {
@@ -1674,14 +1673,15 @@ fn prove_classical_prop_leaf(l: &Expr, r: &Expr) -> Option<Expr> {
                         let (a2, b2) = (a.clone(), b.clone());
                         lam_fv(0x9605, mk_disj(&a2, &b2), move |hpq| {
                             let fa = {
-                                let (a, b, na, nb, h) =
+                                let (a, _b, na, nb, h) =
                                     (a.clone(), b.clone(), na.clone(), nb.clone(), h.clone());
                                 lam_fv(0x9606, a.clone(), move |ha| {
                                     Expr::app(conj_left(&na, &nb, h), ha)
                                 })
                             };
                             let fb = {
-                                let (a, b, na, nb) = (a.clone(), b.clone(), na.clone(), nb.clone());
+                                let (_a, b, na, nb) =
+                                    (a.clone(), b.clone(), na.clone(), nb.clone());
                                 lam_fv(0x9607, b.clone(), move |hb| {
                                     Expr::app(conj_right(&na, &nb, h), hb)
                                 })
@@ -1760,7 +1760,7 @@ fn prove_classical_prop_leaf(l: &Expr, r: &Expr) -> Option<Expr> {
                                 let hna = kernel_not_to_hol_not(&a, hna_k);
                                 // Need `b` to build (¬P ∧ Q); split on b.
                                 let pos_b = {
-                                    let (a, b, na, c1, c2, hna) = (
+                                    let (_a, b, na, c1, c2, hna) = (
                                         a.clone(),
                                         b.clone(),
                                         na.clone(),
@@ -1773,7 +1773,7 @@ fn prove_classical_prop_leaf(l: &Expr, r: &Expr) -> Option<Expr> {
                                     })
                                 };
                                 let neg_b = {
-                                    let (a, b, na, r4, h, hna) = (
+                                    let (a, b, _na, r4, h, hna) = (
                                         a.clone(),
                                         b.clone(),
                                         na.clone(),
@@ -1812,7 +1812,7 @@ fn prove_classical_prop_leaf(l: &Expr, r: &Expr) -> Option<Expr> {
                     })
                 };
                 let mpr = {
-                    let (a, b, na, nb, c1, c2) = (
+                    let (a, b, na, nb, _c1, _c2) = (
                         a.clone(),
                         b.clone(),
                         na.clone(),
@@ -2694,7 +2694,7 @@ fn ex_miniscope_leaf(l: &Expr, r: &Expr, witnesses: &[(Expr, Expr)]) -> Option<E
                         lam_fv(0x7594, k_ty, move |k| {
                             // pos : all_px → C   =  λhall. k w (λ_:Pw. himp2 hall)
                             let pos = {
-                                let (aa, q, w, himp2, k) =
+                                let (aa, _q, w, himp2, k) =
                                     (aa.clone(), q.clone(), w.clone(), himp2.clone(), k.clone());
                                 lam_fv(0x7596, all_px.clone(), move |hall| {
                                     let pw = px_at(&w, &aa);
@@ -2722,7 +2722,7 @@ fn ex_miniscope_leaf(l: &Expr, r: &Expr, witnesses: &[(Expr, Expr)]) -> Option<E
                                     move |hn_all| {
                                         // inner em on C:  λnc. False.elim C (hn_all all_px_proof)
                                         let neg_c = {
-                                            let (alpha, aa, q, pred_l, all_px, k, c, hn_all) = (
+                                            let (alpha, aa, q, pred_l, _all_px, k, c, hn_all) = (
                                                 alpha.clone(),
                                                 aa.clone(),
                                                 q.clone(),
@@ -2748,7 +2748,7 @@ fn ex_miniscope_leaf(l: &Expr, r: &Expr, witnesses: &[(Expr, Expr)]) -> Option<E
                                                         lam_fv(0x759C, alpha.clone(), move |x| {
                                                             let pxx = px_at(&x, &aa);
                                                             let neg_px = {
-                                                                let (q, pxx, pred_l, k, nc, x) = (
+                                                                let (q, pxx, _pred_l, k, nc, x) = (
                                                                     q.clone(),
                                                                     pxx.clone(),
                                                                     pred_l.clone(),
@@ -2853,7 +2853,7 @@ fn ex_miniscope_leaf(l: &Expr, r: &Expr, witnesses: &[(Expr, Expr)]) -> Option<E
             };
             // mpr : (P → ExQx) → l   (needs witness w in the ¬P branch)
             let mpr = {
-                let (alpha, bb, p, pred_l, pred_q, ex_qx, w) = (
+                let (alpha, bb, p, pred_l, pred_q, _ex_qx, w) = (
                     alpha.clone(),
                     bb.clone(),
                     p.clone(),
@@ -3322,7 +3322,7 @@ fn disj_miniscope_proof(
                                 let (da, db) = ops_at(&depx, right_const);
                                 let hx = Expr::app(h.clone(), x.clone()); // disj(da, db)
                                 let fa = {
-                                    let (depx, const_op, hnc) =
+                                    let (depx, _const_op, hnc) =
                                         (depx.clone(), const_op.clone(), hnc.clone());
                                     lam_fv(0x8305, da.clone(), move |hl| {
                                         if right_const {
@@ -3334,7 +3334,7 @@ fn disj_miniscope_proof(
                                     })
                                 };
                                 let fb = {
-                                    let (depx, const_op, hnc) =
+                                    let (depx, _const_op, hnc) =
                                         (depx.clone(), const_op.clone(), hnc.clone());
                                     lam_fv(0x8306, db.clone(), move |hr| {
                                         if right_const {
@@ -3526,7 +3526,7 @@ fn neg_cong_leaf(l: &Expr, r: &Expr, p: &Expr, q: &Expr, ex: &Expr, ey: &Expr) -
                 lam_fv(0x6002, p.clone(), move |hp| {
                     let pos = lam_fv(0x6003, q.clone(), |hq| hq);
                     let neg = {
-                        let (p, q, ex, ey, h, hp) = (
+                        let (_p, q, ex, ey, h, hp) = (
                             p.clone(),
                             q.clone(),
                             ex.clone(),
@@ -3556,7 +3556,7 @@ fn neg_cong_leaf(l: &Expr, r: &Expr, p: &Expr, q: &Expr, ex: &Expr, ey: &Expr) -
                 lam_fv(0x6005, q.clone(), move |hq| {
                     let pos = lam_fv(0x6006, p.clone(), |hp| hp);
                     let neg = {
-                        let (p, q, ex, ey, h, hq) = (
+                        let (p, _q, ex, ey, h, hq) = (
                             p.clone(),
                             q.clone(),
                             ex.clone(),

@@ -223,7 +223,7 @@ impl<'a> ElabCtx<'a> {
         // binder — registering a declaration whose signature differs from the
         // one written. Both detectors must clear the value before it is
         // treated as non-recursive.
-        let mentions_self = super::structural::detect_recursion_with_params(&binder.name, val, &[])
+        let mentions_self = structural::detect_recursion_with_params(&binder.name, val, &[])
             .is_recursive
             || crate::where_desugar_ext::collect_free_idents(val).contains(&binder.name);
         if !mentions_self {
@@ -244,14 +244,14 @@ impl<'a> ElabCtx<'a> {
     /// through unchanged — i.e. the "decreasing" argument never actually
     /// decreases. Shared by the lift gate and the loud-error description.
     fn all_calls_pass_param_unchanged(
-        calls: &[super::structural::RecursiveCall],
+        calls: &[structural::RecursiveCall],
         param_names: &[String],
         pos: usize,
     ) -> bool {
         param_names.get(pos).is_some_and(|param| {
             calls.iter().all(|call| {
                 matches!(call.args.get(pos),
-                         Some(super::structural::RecursiveArg::Var(name)) if name == param)
+                         Some(structural::RecursiveArg::Var(name)) if name == param)
             })
         })
     }
@@ -271,7 +271,7 @@ impl<'a> ElabCtx<'a> {
                     terminating interpretation)"
                 .to_string();
         }
-        let info = super::structural::detect_recursion_with_params(&binder.name, inner, &params);
+        let info = structural::detect_recursion_with_params(&binder.name, inner, &params);
         // Mirrors the lift gate below (B97): a name-equality "unchanged"
         // verdict is discounted when a whole-body-match arm rebinds the
         // parameter, so shapes that ATTEMPTED the lift and failed for another
@@ -279,7 +279,7 @@ impl<'a> ElabCtx<'a> {
         let no_descent = info.decreasing_arg.is_none()
             || info.decreasing_arg.is_some_and(|pos| {
                 Self::all_calls_pass_param_unchanged(&info.calls, &params, pos)
-                    && !super::structural::whole_body_match_rebinds_param(inner, &params, pos)
+                    && !structural::whole_body_match_rebinds_param(inner, &params, pos)
             });
         if info.is_recursive && no_descent {
             return "recursive, but no structurally decreasing parameter was found \
@@ -330,7 +330,7 @@ impl<'a> ElabCtx<'a> {
             Vec<SurfaceBinder>,
             Option<SurfaceExpr>,
             SurfaceExpr,
-        ) = if let Some((lifted, ret, body)) = super::elab_decl_value::normalize_equation_def(
+        ) = if let Some((lifted, ret, body)) = elab_decl_value::normalize_equation_def(
             self.env,
             &binder.name,
             &[],
@@ -362,7 +362,7 @@ impl<'a> ElabCtx<'a> {
         //    conservative fallback so we never fabricate an ill-formed term.
         let param_names: Vec<String> = helper_binders.iter().map(|b| b.name.clone()).collect();
         let recursion_info =
-            super::structural::detect_recursion_with_params(&func_name, helper_body, &param_names);
+            structural::detect_recursion_with_params(&func_name, helper_body, &param_names);
         let Some(dec_pos) = recursion_info.decreasing_arg else {
             return Ok(None);
         };
@@ -388,11 +388,7 @@ impl<'a> ElabCtx<'a> {
         // passes the OUTER parameter unchanged still fails loud downstream
         // (and the kernel re-checks the lowered value regardless).
         if Self::all_calls_pass_param_unchanged(&recursion_info.calls, &param_names, dec_pos)
-            && !super::structural::whole_body_match_rebinds_param(
-                helper_body,
-                &param_names,
-                dec_pos,
-            )
+            && !structural::whole_body_match_rebinds_param(helper_body, &param_names, dec_pos)
         {
             return Ok(None);
         }

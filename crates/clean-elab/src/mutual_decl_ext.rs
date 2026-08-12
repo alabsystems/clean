@@ -306,6 +306,9 @@ pub(crate) fn encode_wf_mutual(
 
 /// Result of well-founded encoding for a single declaration.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct WfEncodedDef {
     pub(crate) name: String,
     pub(crate) original_index: usize,
@@ -322,6 +325,9 @@ pub(crate) struct ForwardRefContext {
 
 /// A forward reference to a sibling declaration.
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct ForwardRef {
     pub(crate) ty: Expr,
     pub(crate) index: usize,

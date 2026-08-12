@@ -89,6 +89,7 @@ mod tests {
     }
 
     /// Generate a known-UNSAT formula: x AND NOT x (for each variable pair).
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     fn unsat_formula(num_vars: usize) -> Vec<Vec<i32>> {
         let mut clauses = Vec::new();
         for v in 1..=num_vars as i32 {
@@ -398,7 +399,7 @@ mod tests {
         let mut rng = Rng::new(1234);
         for _ in 0..10 {
             let mut proof = CuttingPlanesProof::new();
-            let n = 3;
+            let _n = 3;
             let idx = proof.add_input(CpInequality::new(vec![1, 2, -1], 2));
 
             // Apply random operations.

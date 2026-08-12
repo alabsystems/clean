@@ -285,7 +285,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         ind_name: &Name,
         ind_type: &Expr,
-        fc_a: &FieldedCtor,
+        _fc_a: &FieldedCtor,
         fc_b: &FieldedCtor,
         a_applied: &Expr,
     ) -> Expr {

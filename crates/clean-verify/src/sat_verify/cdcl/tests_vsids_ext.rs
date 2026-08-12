@@ -207,15 +207,15 @@ mod tests {
     #[test]
     fn test_phase_saving_consistent() {
         // Var 0 last assigned positive, var 1 last assigned negative.
-        let saved = [Some(true), Some(false)];
-        let trail = [(1, true), (-2, false)]; // var 1 = true (lit 1), var 2 = false (lit -2)
-                                              // saved_phases[0] = Some(true) matches var 0 — but var 0 not on trail? Actually
-                                              // lit=1 means var=1, and saved_phases is 0-indexed...
-                                              // Let me be precise: saved_phases[0] for var 0, saved_phases[1] for var 1.
-                                              // trail: (1, true) means lit=1, var=1, pol=positive(true).
-                                              //        (-2, false) means lit=-2, var=2, pol=negative(false).
-                                              // So var 0 has no trail entry, but saved_phases[0] = Some(true) => inconsistent.
-                                              // Let me fix the test to be correct.
+        let _saved = [Some(true), Some(false)];
+        let _trail = [(1, true), (-2, false)]; // var 1 = true (lit 1), var 2 = false (lit -2)
+                                               // saved_phases[0] = Some(true) matches var 0 — but var 0 not on trail? Actually
+                                               // lit=1 means var=1, and saved_phases is 0-indexed...
+                                               // Let me be precise: saved_phases[0] for var 0, saved_phases[1] for var 1.
+                                               // trail: (1, true) means lit=1, var=1, pol=positive(true).
+                                               //        (-2, false) means lit=-2, var=2, pol=negative(false).
+                                               // So var 0 has no trail entry, but saved_phases[0] = Some(true) => inconsistent.
+                                               // Let me fix the test to be correct.
         let saved_correct = vec![None, Some(true), Some(false)];
         let trail_correct = vec![(1, true), (-2, false)];
         assert!(phase_saving_consistency(&saved_correct, &trail_correct));

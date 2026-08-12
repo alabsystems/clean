@@ -68,6 +68,8 @@ struct LevelLowerConsts {
     subset_sum: Expr,
     nat_ble: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_pow: Expr,
     nat_succ: Expr,
     nat_zero: Expr,
@@ -141,6 +143,7 @@ impl LevelLowerConsts {
     }
     /// `Nat.pow 2 n`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn pow2(&self, n: &Expr) -> Expr {
         let one = Expr::app(self.nat_succ.clone(), self.nat_zero.clone());
         let two = Expr::app(self.nat_succ.clone(), one);

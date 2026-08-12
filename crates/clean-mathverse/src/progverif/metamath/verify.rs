@@ -148,7 +148,7 @@ pub(crate) fn build_label_table(
 ) -> Result<HashMap<String, LabelInfo>, MetamathError> {
     let mut labels: HashMap<String, LabelInfo> = HashMap::new();
     let mut scope_stack: Vec<ScopeFrame> = vec![ScopeFrame::default()];
-    let mut constants: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut constants: HashSet<String> = HashSet::new();
 
     let mut i = 0;
     while i < tokens.len() {
@@ -327,7 +327,7 @@ pub(crate) fn build_label_table(
 fn collect_mandatory_frame(
     scope_stack: &[ScopeFrame],
     expr: &[String],
-    constants: &std::collections::HashSet<String>,
+    constants: &HashSet<String>,
 ) -> (
     Vec<(String, String, String)>,
     Vec<(String, Vec<String>)>,
@@ -346,7 +346,7 @@ fn collect_mandatory_frame(
     }
 
     // Find all variables used in the expression and essential hypotheses.
-    let mut used_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut used_vars: HashSet<String> = HashSet::new();
     for token in expr {
         if !constants.contains(token) {
             used_vars.insert(token.clone());

@@ -9,14 +9,10 @@
 //! `embed_case_option`, `embed_map_fun`. Moved verbatim from the original
 //! single-file `datatypes` module; behaviour is byte-identical.
 
-use std::collections::BTreeMap;
-
-use clean_kernel::expr::FVarId;
 use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::{BinderInfo, Expr};
 
-use super::super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
+use super::super::super::isabelle_pure::IsaType;
 use super::super::*;
 
 impl Ctx {
@@ -391,7 +387,7 @@ impl Ctx {
         let Some((c_ty, d_ty)) = fun_split(hty) else {
             return Ok(None);
         };
-        let Some((fty, _r3)) = fun_split(r2) else {
+        let Some((_fty, _r3)) = fun_split(r2) else {
             return Ok(None);
         };
         let (a, b) = (self.embed_type(a_ty)?, self.embed_type(b_ty)?);

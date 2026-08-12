@@ -7,6 +7,8 @@
 //! Contains `rewrite`, `rewrite_ltr`, `rewrite_rtl`, and `rewrite_at` —
 //! tactics that replace subexpressions using equality proofs via `Eq.subst`.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level, LocalContext, Name};
 
 use super::super::op_projection::{is_hetero_op_projection, reduce_op_projection_head};
@@ -23,6 +25,7 @@ use crate::unify::{MetaState, Unifier, UnifyResult};
 /// `Backward` rewrites right-to-left (replacing RHS with LHS), corresponding
 /// to Lean 4's `rw [<-h]` syntax.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) enum RewriteDirection {
     /// Rewrite left-to-right: replace occurrences of LHS with RHS.
     Forward,
@@ -32,6 +35,7 @@ pub(crate) enum RewriteDirection {
 
 impl RewriteDirection {
     /// Returns `true` for backward (right-to-left) rewrites.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn is_reverse(self) -> bool {
         matches!(self, RewriteDirection::Backward)
     }
@@ -43,10 +47,13 @@ impl RewriteDirection {
 /// Constructed from a hypothesis name in the local context via
 /// [`RewriteRule::from_hypothesis`].
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct RewriteRule {
     /// Direction of the rewrite.
     pub(crate) direction: RewriteDirection,
     /// The equality proof expression (typically an FVar reference).
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) proof: Expr,
     /// The type of the equality (the `alpha` in `@Eq alpha a b`).
     pub(crate) eq_type: Expr,
@@ -64,6 +71,7 @@ impl RewriteRule {
     /// # Errors
     /// - `HypothesisNotFound` if `hyp_name` is not in the local context.
     /// - `GoalMismatch` if the hypothesis type is not an equality.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn from_hypothesis(
         state: &ProofState,
         goal: &Goal,
@@ -94,6 +102,7 @@ impl RewriteRule {
     /// `from_*` here names the LHS/RHS direction of the rewrite, not a
     /// type conversion — `&self` is correct.
     #[allow(clippy::wrong_self_convention)]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn from_expr(&self) -> &Expr {
         match self.direction {
             RewriteDirection::Forward => &self.lhs,
@@ -102,6 +111,7 @@ impl RewriteRule {
     }
 
     /// The expression to replace with (the "to" side).
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn to_expr(&self) -> &Expr {
         match self.direction {
             RewriteDirection::Forward => &self.rhs,
@@ -1250,6 +1260,7 @@ pub fn rewrite_at_with_proof(
 /// REQUIRES: Each `(hyp_name, direction)` refers to an equality hypothesis
 /// ENSURES: On Ok, all rewrites applied sequentially
 /// ENSURES: On Err, state reflects all rewrites completed before the failure
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn rewrite_chain(
     state: &mut ProofState,
     steps: &[(&str, RewriteDirection)],

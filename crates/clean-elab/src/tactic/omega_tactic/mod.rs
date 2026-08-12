@@ -31,7 +31,10 @@ use super::arith_mathverse_proof::{
     build_mathverse_proof, build_modular_mathverse_proof, MathverseProofOutcome,
 };
 use super::arithmetic::{LinearConstraint, LinearExpr};
-use super::{decide, Goal, ProofState, TacticError, TacticResult};
+// Kernel-evaluating `decide` ladder, not the `smt::decide` re-exported from
+// `super` — see the note in `norm_num.rs`.
+use super::decide::eval_decide as decide;
+use super::{Goal, ProofState, TacticError, TacticResult};
 use fail_closed::certified_arithmetic_contradiction_without_kernel_proof;
 
 // Re-export parsing functions for tests and other modules

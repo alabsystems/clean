@@ -365,14 +365,14 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string(&inst_le_name),
             class_name: Name::from_string("LE"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: Some(inst_le_type),
             value: Some(Expr::const_(Name::from_string(&inst_le_name), vec![])),
         });
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string(&inst_lt_name),
             class_name: Name::from_string("LT"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: Some(inst_lt_type),
             value: Some(Expr::const_(Name::from_string(&inst_lt_name), vec![])),
         });
@@ -707,14 +707,14 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string(&inst_le_name),
             class_name: Name::from_string("LE"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: Some(inst_le_type),
             value: Some(Expr::const_(Name::from_string(&inst_le_name), vec![])),
         });
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string(&inst_lt_name),
             class_name: Name::from_string("LT"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: Some(inst_lt_type),
             value: Some(Expr::const_(Name::from_string(&inst_lt_name), vec![])),
         });

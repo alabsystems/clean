@@ -95,6 +95,8 @@ struct NatBridgeConsts {
     rat_mk: Expr,
     rat_add: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     rat_one: Expr,
     fin_sum: Expr,
     fin_sum_nat: Expr,
@@ -138,6 +140,7 @@ struct NatBridgeConsts {
     hcpoint: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl NatBridgeConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());
@@ -1335,6 +1338,8 @@ struct ThresholdNatAtoms {
     eq_subst: Expr,
     eq_bool: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     u1: Level,
 }
 

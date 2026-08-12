@@ -102,6 +102,9 @@ pub(crate) fn specialize_multi(
 ///
 /// h : forall (n : Nat), n + 0 = n
 /// ```
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn generalize_at(
     state: &mut ProofState,
     term: Expr,
@@ -176,6 +179,9 @@ pub(crate) fn generalize_at(
 ///
 /// |- forall (x : Nat) (y : Nat), x + y = y + x
 /// ```
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn revert_many(state: &mut ProofState, hyp_names: &[&str]) -> TacticResult {
     for name in hyp_names {
         super::congr_obtain::revert(state, name)?;
@@ -296,6 +302,9 @@ pub(crate) fn revert_with_deps(
 /// REQUIRES: `term` appears in the current goal target
 /// ENSURES: On Ok, the goal is abstracted over `term` with a fresh
 ///   variable named `var_name`
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn generalize_in_goal(
     state: &mut ProofState,
     term: Expr,
@@ -312,6 +321,9 @@ pub(crate) fn generalize_in_goal(
 ///
 /// This is a convenience re-export of [`super::hypothesis::specialize`]
 /// for API consistency within this module.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn specialize_single(state: &mut ProofState, hyp_name: &str, arg: Expr) -> TacticResult {
     super::hypothesis::specialize(state, hyp_name, arg)
 }
@@ -324,6 +336,9 @@ pub(crate) fn specialize_single(state: &mut ProofState, hyp_name: &str, arg: Exp
 ///
 /// This is a convenience re-export of [`super::congr_obtain::revert`]
 /// for API consistency within this module.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn revert_single(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     super::congr_obtain::revert(state, hyp_name)
 }

@@ -186,41 +186,44 @@ pub(crate) fn verify_closed_proof_with_trust_summary(
     (verified, trust_summary)
 }
 
-pub(crate) async fn initialize_verify_file_env(state: &ServerState) {
+pub(crate) async fn initialize_verify_file_env(
+    state: &ServerState,
+) -> Result<(), clean_kernel::EnvError> {
     let mut env = state.env.write().await;
     // File-level verification and sorry-filling replay Lean sketches directly,
     // so the logical prelude must exist even when no imported module has
     // forced these declarations in transitively yet.
-    let _ = env.init_true_false();
-    let _ = env.init_and();
+    env.init_true_false()?;
+    env.init_and()?;
     if !env.has_ring() {
-        let _ = env.init_ring();
+        env.init_ring()?;
     }
     if !env.has_comm_ring() {
-        let _ = env.init_comm_ring();
+        env.init_comm_ring()?;
     }
     if !env.has_field() {
-        let _ = env.init_field();
+        env.init_field()?;
     }
     if !env.has_integral_domain() {
-        let _ = env.init_integral_domain();
+        env.init_integral_domain()?;
     }
     if !env.has_module() || !env.has_algebra() || !env.has_domain_types() {
-        let _ = env.init_module_algebra_all();
+        env.init_module_algebra_all()?;
     }
     if !env.has_prime() {
-        let _ = env.init_prime();
+        env.init_prime()?;
     }
     if !env.has_is_principal_ideal_ring() {
-        let _ = env.init_is_principal_ideal_ring();
+        env.init_is_principal_ideal_ring()?;
     }
     if !env.has_polynomial() {
-        let _ = env.init_polynomial();
+        env.init_polynomial()?;
     }
     if !env.has_ufm() {
-        let _ = env.init_ufm();
+        env.init_ufm()?;
     }
     if !env.has_associated() {
-        let _ = env.init_associated();
+        env.init_associated()?;
     }
+    Ok(())
 }

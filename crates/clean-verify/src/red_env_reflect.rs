@@ -169,14 +169,14 @@ pub fn parse_interning_tsv(tsv: &str) -> Result<BTreeMap<String, u64>, Interning
     if by_name.is_empty() {
         return Err(InterningTableError::Invalid("table is empty".to_string()));
     }
-    let mut expected = 0_u64;
-    for tag in tags {
+    for (index, tag) in tags.into_iter().enumerate() {
+        // `tags` is a `BTreeSet<u64>`, so the ascending index IS the expected tag.
+        let expected = index as u64;
         if tag != expected {
             return Err(InterningTableError::Invalid(format!(
                 "tags are not contiguous from zero: expected {expected}, found {tag}"
             )));
         }
-        expected += 1;
     }
     Ok(by_name)
 }
@@ -1408,7 +1408,19 @@ mod tests {
         assert_eq!(erase_level_to_nat(&p), 0, "param erases to 0");
         let s = Level::succ(Level::Zero);
         assert_eq!(erase_level_to_nat(&s), 1, "succ adds 1");
-        let m = Level::imax(s.clone(), Level::Zero);
+        // `Level::imax` is a SMART constructor with Lean 4 parity, not a raw
+        // variant: `imax(_, 0)` normalises to `Zero` before `erase_level_to_nat`
+        // ever sees it (level/mod.rs:482-485). So this pair is not a test of the
+        // IMax arm at all — it is a test that the normalisation happened.
+        let collapsed = Level::imax(s.clone(), Level::Zero);
+        assert_eq!(collapsed, Level::Zero, "imax(_, 0) normalises to zero");
+        assert_eq!(erase_level_to_nat(&collapsed), 0, "and so erases to 0");
+
+        // To reach the IMax arm the right operand must be neither definitely
+        // zero nor definitely nonzero — i.e. a bare param. Then the erasure is
+        // the max of the erased sides: succ(u) -> 1, v -> 0.
+        let m = Level::imax(Level::succ(p.clone()), Level::Param(Name::from_string("v")));
+        assert!(matches!(m, Level::IMax(_, _)), "this imax must survive");
         assert_eq!(erase_level_to_nat(&m), 1, "imax erases to max");
     }
 

@@ -44,7 +44,7 @@ impl Default for HolLightImporter {
 impl HolLightImporter {
     /// Create a new HOL Light importer with a custom namespace.
     #[must_use]
-    pub(crate) fn with_namespace(namespace: &str) -> Self {
+    pub fn with_namespace(namespace: &str) -> Self {
         Self {
             namespace: LeanName::from_string(namespace),
         }
@@ -60,7 +60,7 @@ impl HolLightImporter {
     }
 
     /// Import an OpenTheory article from raw text.
-    pub(crate) fn import_text(
+    pub fn import_text(
         &self,
         input: &str,
     ) -> HolResult<(Vec<MathverseImportedConstant>, ImportStatistics)> {
@@ -114,11 +114,7 @@ impl HolLightImporter {
     /// Processes each article through the OpenTheory bridge and collects
     /// all results into a `HolLightTheory`. Articles that fail to parse
     /// are counted as failures in the statistics but do not abort the import.
-    pub(crate) fn import_theory(
-        &self,
-        theory_name: &str,
-        articles: &[&str],
-    ) -> HolResult<HolLightTheory> {
+    pub fn import_theory(&self, theory_name: &str, articles: &[&str]) -> HolResult<HolLightTheory> {
         let bridge = self.make_bridge(None);
 
         let mut axioms = Vec::new();
@@ -184,23 +180,23 @@ impl HolLightImporter {
 /// Groups imported constants into axioms (assumptions), definitions (support
 /// declarations), and proved theorems for structured access.
 #[derive(Clone, Debug)]
-pub(crate) struct HolLightTheory {
+pub struct HolLightTheory {
     /// Name of this theory (e.g., `"bool"`, `"arith"`, `"topology"`).
-    pub(crate) theory_name: String,
+    pub theory_name: String,
     /// Assumptions (unproved axioms) imported from the articles.
-    pub(crate) axioms: Vec<MathverseImportedConstant>,
+    pub axioms: Vec<MathverseImportedConstant>,
     /// Support declarations (type operators, constants) from the articles.
-    pub(crate) definitions: Vec<MathverseImportedConstant>,
+    pub definitions: Vec<MathverseImportedConstant>,
     /// Proved theorems exported via `thm` in the articles.
-    pub(crate) theorems: Vec<MathverseImportedConstant>,
+    pub theorems: Vec<MathverseImportedConstant>,
     /// Aggregate statistics for this theory import.
-    pub(crate) statistics: HolLightStatistics,
+    pub statistics: HolLightStatistics,
 }
 
 impl HolLightTheory {
     /// Total number of constants across all categories.
     #[must_use]
-    pub(crate) fn total_constants(&self) -> usize {
+    pub fn total_constants(&self) -> usize {
         self.axioms.len() + self.definitions.len() + self.theorems.len()
     }
 
@@ -208,7 +204,7 @@ impl HolLightTheory {
     ///
     /// Returns the union of all individual axiom profiles.
     #[must_use]
-    pub(crate) fn combined_axiom_profile(&self) -> AxiomProfile {
+    pub fn combined_axiom_profile(&self) -> AxiomProfile {
         let all_constants = self
             .axioms
             .iter()
@@ -226,7 +222,7 @@ impl HolLightTheory {
     ///
     /// Returns `None` if the theory has no constants.
     #[must_use]
-    pub(crate) fn min_trust_level(&self) -> Option<TrustLevel> {
+    pub fn min_trust_level(&self) -> Option<TrustLevel> {
         let all_constants = self
             .axioms
             .iter()
@@ -238,32 +234,32 @@ impl HolLightTheory {
 
     /// Names of all theorems in the theory.
     #[must_use]
-    pub(crate) fn theorem_names(&self) -> Vec<String> {
+    pub fn theorem_names(&self) -> Vec<String> {
         self.theorems.iter().map(|t| t.name.to_string()).collect()
     }
 
     /// Names of all axioms in the theory.
     #[must_use]
-    pub(crate) fn axiom_names(&self) -> Vec<String> {
+    pub fn axiom_names(&self) -> Vec<String> {
         self.axioms.iter().map(|a| a.name.to_string()).collect()
     }
 }
 
 /// Statistics for a HOL Light theory import.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct HolLightStatistics {
+pub struct HolLightStatistics {
     /// Total number of article texts provided for import.
-    pub(crate) total_articles: usize,
+    pub total_articles: usize,
     /// Total number of constants successfully imported.
-    pub(crate) imported_constants: usize,
+    pub imported_constants: usize,
     /// Number of articles that failed to parse or import.
-    pub(crate) failed_articles: usize,
+    pub failed_articles: usize,
     /// Number of proved theorems imported.
-    pub(crate) theorem_count: usize,
+    pub theorem_count: usize,
     /// Number of assumptions (axioms) imported.
-    pub(crate) axiom_count: usize,
+    pub axiom_count: usize,
     /// Number of support declarations (definitions) imported.
-    pub(crate) definition_count: usize,
+    pub definition_count: usize,
 }
 
 impl HolLightStatistics {
@@ -271,7 +267,7 @@ impl HolLightStatistics {
     ///
     /// Returns 1.0 if no articles were provided.
     #[must_use]
-    pub(crate) fn success_rate(&self) -> f64 {
+    pub fn success_rate(&self) -> f64 {
         if self.total_articles == 0 {
             return 1.0;
         }
@@ -287,7 +283,7 @@ impl HolLightStatistics {
 /// See: Harrison, "HOL Light: An Overview", TPHOLs 2009.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub(crate) enum HolLightProofStep {
+pub enum HolLightProofStep {
     /// `REFL t`: Produces `|- t = t`.
     Refl {
         /// String representation of the term.
@@ -357,7 +353,7 @@ pub(crate) enum HolLightProofStep {
 impl HolLightProofStep {
     /// Human-readable name of this proof rule.
     #[must_use]
-    pub(crate) fn rule_name(&self) -> &'static str {
+    pub fn rule_name(&self) -> &'static str {
         match self {
             Self::Refl { .. } => "REFL",
             Self::Trans { .. } => "TRANS",
@@ -374,7 +370,7 @@ impl HolLightProofStep {
 
     /// Whether this step is a leaf (has no premise references).
     #[must_use]
-    pub(crate) fn is_leaf(&self) -> bool {
+    pub fn is_leaf(&self) -> bool {
         matches!(
             self,
             Self::Refl { .. } | Self::Beta { .. } | Self::Assume { .. }
@@ -383,7 +379,7 @@ impl HolLightProofStep {
 
     /// Collect the indices of all premises referenced by this step.
     #[must_use]
-    pub(crate) fn premise_indices(&self) -> Vec<usize> {
+    pub fn premise_indices(&self) -> Vec<usize> {
         match self {
             Self::Refl { .. } | Self::Beta { .. } | Self::Assume { .. } => Vec::new(),
             Self::Trans { left, right }
@@ -408,20 +404,20 @@ impl HolLightProofStep {
 /// Steps reference earlier steps by index (DAG structure, since
 /// intermediate results may be shared).
 #[derive(Clone, Debug)]
-pub(crate) struct HolLightProofTree {
+pub struct HolLightProofTree {
     /// The sequence of proof steps, in order of construction.
     /// Later steps may reference earlier ones by index.
-    pub(crate) steps: Vec<HolLightProofStep>,
+    pub steps: Vec<HolLightProofStep>,
     /// The conclusion of the proof (index of the final step).
-    pub(crate) conclusion: Option<usize>,
+    pub conclusion: Option<usize>,
     /// Name of the theorem being proved, if known.
-    pub(crate) theorem_name: Option<String>,
+    pub theorem_name: Option<String>,
 }
 
 impl HolLightProofTree {
     /// Create an empty proof tree.
     #[must_use]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             steps: Vec::new(),
             conclusion: None,
@@ -431,7 +427,7 @@ impl HolLightProofTree {
 
     /// Create a proof tree with a given theorem name.
     #[must_use]
-    pub(crate) fn with_name(name: &str) -> Self {
+    pub fn with_name(name: &str) -> Self {
         Self {
             steps: Vec::new(),
             conclusion: None,
@@ -440,38 +436,38 @@ impl HolLightProofTree {
     }
 
     /// Add a proof step and return its index.
-    pub(crate) fn add_step(&mut self, step: HolLightProofStep) -> usize {
+    pub fn add_step(&mut self, step: HolLightProofStep) -> usize {
         let idx = self.steps.len();
         self.steps.push(step);
         idx
     }
 
     /// Set the conclusion index.
-    pub(crate) fn set_conclusion(&mut self, idx: usize) {
+    pub fn set_conclusion(&mut self, idx: usize) {
         self.conclusion = Some(idx);
     }
 
     /// Number of steps in the proof tree.
     #[must_use]
-    pub(crate) fn step_count(&self) -> usize {
+    pub fn step_count(&self) -> usize {
         self.steps.len()
     }
 
     /// Whether the proof tree is empty.
     #[must_use]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.steps.is_empty()
     }
 
     /// Count the number of leaf steps (steps with no premises).
     #[must_use]
-    pub(crate) fn leaf_count(&self) -> usize {
+    pub fn leaf_count(&self) -> usize {
         self.steps.iter().filter(|s| s.is_leaf()).count()
     }
 
     /// Count occurrences of each proof rule in the tree.
     #[must_use]
-    pub(crate) fn rule_histogram(&self) -> std::collections::HashMap<&'static str, usize> {
+    pub fn rule_histogram(&self) -> std::collections::HashMap<&'static str, usize> {
         let mut counts = std::collections::HashMap::new();
         for step in &self.steps {
             *counts.entry(step.rule_name()).or_insert(0) += 1;
@@ -481,13 +477,13 @@ impl HolLightProofTree {
 
     /// Get the step at a given index.
     #[must_use]
-    pub(crate) fn get_step(&self, idx: usize) -> Option<&HolLightProofStep> {
+    pub fn get_step(&self, idx: usize) -> Option<&HolLightProofStep> {
         self.steps.get(idx)
     }
 
     /// Validate that all premise references point to valid earlier steps.
     #[must_use]
-    pub(crate) fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         for (idx, step) in self.steps.iter().enumerate() {
             for premise in step.premise_indices() {
                 if premise >= idx {
@@ -505,7 +501,7 @@ impl HolLightProofTree {
 
     /// Compute the depth of the proof tree (longest path from a leaf to conclusion).
     #[must_use]
-    pub(crate) fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         if self.steps.is_empty() {
             return 0;
         }
@@ -524,6 +520,12 @@ impl HolLightProofTree {
     }
 }
 
+impl Default for HolLightProofTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Tracks which axioms each theorem depends on in a HOL Light proof.
 ///
 /// Axiom tracking is essential for determining the trust level of
@@ -531,7 +533,7 @@ impl HolLightProofTree {
 /// HOL Light axioms (infinity, eta, choice) gets a higher trust
 /// level than one depending on user-defined axioms.
 #[derive(Clone, Debug)]
-pub(crate) struct HolLightAxiomTracker {
+pub struct HolLightAxiomTracker {
     /// Map from theorem name to the set of axiom names it depends on.
     dependencies: std::collections::HashMap<String, Vec<String>>,
 }
@@ -539,14 +541,14 @@ pub(crate) struct HolLightAxiomTracker {
 impl HolLightAxiomTracker {
     /// Create an empty tracker.
     #[must_use]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             dependencies: std::collections::HashMap::new(),
         }
     }
 
     /// Record that `theorem_name` depends on `axiom_name`.
-    pub(crate) fn add_dependency(&mut self, theorem_name: &str, axiom_name: &str) {
+    pub fn add_dependency(&mut self, theorem_name: &str, axiom_name: &str) {
         self.dependencies
             .entry(theorem_name.to_owned())
             .or_default()
@@ -554,7 +556,7 @@ impl HolLightAxiomTracker {
     }
 
     /// Record that `theorem_name` depends on all axioms listed.
-    pub(crate) fn add_dependencies(&mut self, theorem_name: &str, axiom_names: &[&str]) {
+    pub fn add_dependencies(&mut self, theorem_name: &str, axiom_names: &[&str]) {
         let entry = self
             .dependencies
             .entry(theorem_name.to_owned())
@@ -566,7 +568,7 @@ impl HolLightAxiomTracker {
 
     /// Get the axiom dependencies for a given theorem.
     #[must_use]
-    pub(crate) fn get_dependencies(&self, theorem_name: &str) -> Vec<&str> {
+    pub fn get_dependencies(&self, theorem_name: &str) -> Vec<&str> {
         self.dependencies
             .get(theorem_name)
             .map(|deps| deps.iter().map(|s| s.as_str()).collect())
@@ -575,7 +577,7 @@ impl HolLightAxiomTracker {
 
     /// Whether a theorem has any recorded axiom dependencies.
     #[must_use]
-    pub(crate) fn has_dependencies(&self, theorem_name: &str) -> bool {
+    pub fn has_dependencies(&self, theorem_name: &str) -> bool {
         self.dependencies
             .get(theorem_name)
             .map(|deps| !deps.is_empty())
@@ -584,13 +586,13 @@ impl HolLightAxiomTracker {
 
     /// Number of tracked theorems.
     #[must_use]
-    pub(crate) fn theorem_count(&self) -> usize {
+    pub fn theorem_count(&self) -> usize {
         self.dependencies.len()
     }
 
     /// All tracked theorem names, sorted.
     #[must_use]
-    pub(crate) fn theorem_names(&self) -> Vec<&str> {
+    pub fn theorem_names(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self.dependencies.keys().map(|s| s.as_str()).collect();
         names.sort();
         names
@@ -599,7 +601,7 @@ impl HolLightAxiomTracker {
     /// Whether a theorem depends only on the three standard HOL Light axioms:
     /// `INFINITY_AX`, `ETA_AX`, `SELECT_AX` (axiom of choice).
     #[must_use]
-    pub(crate) fn uses_only_standard_axioms(&self, theorem_name: &str) -> bool {
+    pub fn uses_only_standard_axioms(&self, theorem_name: &str) -> bool {
         const STANDARD_AXIOMS: &[&str] = &["INFINITY_AX", "ETA_AX", "SELECT_AX"];
         let deps = self.get_dependencies(theorem_name);
         if deps.is_empty() {
@@ -610,7 +612,7 @@ impl HolLightAxiomTracker {
 
     /// Count theorems that use only standard axioms.
     #[must_use]
-    pub(crate) fn standard_axiom_count(&self) -> usize {
+    pub fn standard_axiom_count(&self) -> usize {
         self.dependencies
             .keys()
             .filter(|name| self.uses_only_standard_axioms(name))
@@ -619,8 +621,14 @@ impl HolLightAxiomTracker {
 
     /// Count theorems that use non-standard (user-defined) axioms.
     #[must_use]
-    pub(crate) fn nonstandard_axiom_count(&self) -> usize {
+    pub fn nonstandard_axiom_count(&self) -> usize {
         self.theorem_count() - self.standard_axiom_count()
+    }
+}
+
+impl Default for HolLightAxiomTracker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -641,7 +649,7 @@ impl HolLightAxiomTracker {
 ///
 /// Returns `None` if the line cannot be parsed.
 #[must_use]
-pub(crate) fn parse_proof_log_line(line: &str) -> Option<HolLightProofStep> {
+pub fn parse_proof_log_line(line: &str) -> Option<HolLightProofStep> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
         return None;
@@ -757,7 +765,7 @@ pub(crate) fn parse_proof_log_line(line: &str) -> Option<HolLightProofStep> {
 /// Empty lines and unparseable lines are skipped. The last successfully
 /// parsed step becomes the conclusion.
 #[must_use]
-pub(crate) fn parse_proof_log(text: &str) -> HolLightProofTree {
+pub fn parse_proof_log(text: &str) -> HolLightProofTree {
     let mut tree = HolLightProofTree::new();
 
     for line in text.lines() {
@@ -801,7 +809,6 @@ fn collect_art_files(dir: &Path) -> HolResult<Vec<std::path::PathBuf>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hol::opentheory_bridge::HOL_BASE_PROFILE;
 
     /// Minimal refl article (x = x) for testing.
     const TEST_REFL: &str = r#"

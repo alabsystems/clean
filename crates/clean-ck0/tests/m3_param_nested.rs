@@ -269,7 +269,7 @@ fn add_def_body() -> RawExpr {
 }
 
 fn tree_env_with_add() -> MinimalEnv {
-    let mut env = tree_env();
+    let env = tree_env();
     let add_ty = Term::validate_closed(
         &env,
         &r_pi(r_const("Nat"), r_pi(r_const("Nat"), r_const("Nat"))),

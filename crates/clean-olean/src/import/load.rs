@@ -181,6 +181,14 @@ pub fn load_module_with_deps_with_import_policy(
     // pass is idempotent (skips already-registered structures) and only appends
     // search metadata — never TCB (#olean-structure-field-names).
     super::load_register::register_structure_fields_from_projections(env);
+    // When the policy deferred the O(env) heuristic instance backfill (to avoid
+    // the O(modules × env) quadratic across a large closure), run it ONCE now that
+    // every module — and thus every real `@[instance]`/`@[class]` decoded per
+    // module — is present. The result is identical to the per-module schedule
+    // (additive + idempotent, real registrations already won first-writer).
+    if policy.defer_global_instance_backfill() {
+        super::load_register::finalize_global_instance_backfill(env);
+    }
     Ok(summaries)
 }
 

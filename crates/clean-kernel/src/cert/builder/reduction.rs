@@ -29,7 +29,10 @@ impl<'env> CertBuilder<'env> {
 
     pub(crate) fn def_eq(&self, a: &Expr, b: &Expr) -> bool {
         use super::super::expr_eq::CertExprEqContext;
-        CertExprEqContext::def_eq_impl(self, a, b)
+        // The builder keeps the trait's type-directed hook at its disabled
+        // default (fail-closed), so the equality binder context is never
+        // consulted — an empty seed is correct.
+        CertExprEqContext::def_eq_impl(self, &mut Vec::new(), a, b)
     }
 
     #[cfg(test)]

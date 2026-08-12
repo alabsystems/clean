@@ -43,6 +43,7 @@
 //!
 //! `DerivedProved`, empty axiom closures.
 
+use super::nf_head::HNF;
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
@@ -74,11 +75,6 @@ const BINDER_ROUNDS: [(&str, &str, &str, &str, &str, &str, &str, &str); 2] = [
 /// The recursion hypothesis, shared by every round.
 const RECUR: &str = "(recur : forall (c1 : KExpr) (c2 : KExpr), rbelow_plus c1 x -> \
      DefEq c1 c2 -> rbelow_plus_acc c2 -> DefEqFuelAccepts c1 c2) ";
-
-/// The hereditary normal-form-head hypothesis.
-const HNF: &str = "(hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
-     Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (OptionType.some KExpr r) -> \
-     nf_head r) ";
 
 impl Specification {
     /// Completeness rounds at the binder heads.

@@ -85,6 +85,8 @@ struct NatDiv2Consts {
     nat_add: Expr,
     nat_sub: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_rec: Expr,
     prod_type: Expr,
     prod_mk: Expr,

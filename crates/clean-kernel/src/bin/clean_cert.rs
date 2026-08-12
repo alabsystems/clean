@@ -169,6 +169,31 @@ fn load_bundle(path: &Path) -> CertBundle {
     }
 }
 
+/// Load a bundle for a *reporting* command.
+///
+/// The trust loader runs first and its verdict is never softened. When it
+/// refuses the file, fall back to the quarantined read so the user is told
+/// WHAT is not ready (e.g. "theorem X has no proof term") instead of only that
+/// something is. The quarantined read pins every recorded trust claim to
+/// `unverified`, and the returned rejection reason obliges the caller to still
+/// exit non-zero, so no gate is loosened by producing the report.
+fn load_bundle_for_report(path: &Path) -> (CertBundle, Option<String>) {
+    match CertBundle::load(path) {
+        Ok(bundle) => (bundle, None),
+        Err(strict_error) => match CertBundle::load_for_inspection(path) {
+            Ok(bundle) => (bundle, Some(strict_error.to_string())),
+            Err(diagnostic_error) => {
+                eprintln!(
+                    "Error loading bundle {}: {strict_error} \
+                     (quarantined read also failed: {diagnostic_error})",
+                    path.display()
+                );
+                process::exit(2);
+            }
+        },
+    }
+}
+
 /// Print a JSON value to stdout, exiting with the standard error code (2)
 /// if serialization fails instead of panicking.
 fn print_json(output: &serde_json::Value) {
@@ -187,30 +212,52 @@ fn print_json(output: &serde_json::Value) {
 
 fn cmd_verify(path: &Path, json_mode: bool) {
     let start = Instant::now();
-    let bundle = load_bundle(path);
+    let (bundle, rejection) = load_bundle_for_report(path);
     let inspect = bundle.inspect();
     let load_time = start.elapsed();
 
     let verify_start = Instant::now();
-    let result = match bundle.verify_all() {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Verification error: {e}");
-            process::exit(2);
+    let result = if rejection.is_some() {
+        // The trust loader already refused this file, so the only job left is
+        // to say what is not ready. The diagnostics replay pins its verdict to
+        // `unverified` and still counts an unproved theorem as failed, so this
+        // reports the deficiency without excusing it.
+        bundle.verify_all_for_inspection()
+    } else {
+        match bundle.verify_all() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Verification error: {e}");
+                process::exit(2);
+            }
         }
     };
     let verify_time = verify_start.elapsed();
 
     if json_mode {
-        let output = build_verify_json(path, &result, &inspect, load_time, verify_time);
+        let mut output = build_verify_json(path, &result, &inspect, load_time, verify_time);
+        if let Some(reason) = &rejection {
+            output["rejected"] = serde_json::Value::Bool(true);
+            output["rejection_reason"] = serde_json::Value::String(reason.clone());
+        }
         print_json(&output);
     } else {
+        if let Some(reason) = &rejection {
+            println!("REJECTED by the trust loader: {reason}");
+            println!(
+                "Quarantined readiness diagnostics follow; nothing in this bundle is verified."
+            );
+            println!();
+        }
         print!(
             "{}",
             render_verify_human(path, &bundle, &result, &inspect, load_time, verify_time)
         );
     }
 
+    if rejection.is_some() {
+        process::exit(2);
+    }
     if !result.all_passed() {
         process::exit(1);
     }
@@ -326,9 +373,19 @@ fn render_verify_human(
 // ────────────────────────────────────────────────────────────────────────────
 
 fn cmd_inspect(path: &Path, json_mode: bool) {
-    let bundle = load_bundle(path);
+    let (bundle, rejection) = load_bundle_for_report(path);
     let manifest = bundle.manifest();
     let report = bundle.inspect();
+
+    if !json_mode {
+        if let Some(reason) = &rejection {
+            println!("REJECTED by the trust loader: {reason}");
+            println!(
+                "Quarantined readiness diagnostics follow; nothing in this bundle is verified."
+            );
+            println!();
+        }
+    }
 
     if json_mode {
         let theorems: Vec<serde_json::Value> = report
@@ -369,7 +426,7 @@ fn cmd_inspect(path: &Path, json_mode: bool) {
             })
             .collect();
 
-        let output = serde_json::json!({
+        let mut output = serde_json::json!({
             "path": path.display().to_string(),
             "project": manifest.project,
             "clean_version": manifest.clean_version,
@@ -380,6 +437,10 @@ fn cmd_inspect(path: &Path, json_mode: bool) {
             "trust_level": trust_level_str(manifest.trust_level),
             "theorems": theorems,
         });
+        if let Some(reason) = &rejection {
+            output["rejected"] = serde_json::Value::Bool(true);
+            output["rejection_reason"] = serde_json::Value::String(reason.clone());
+        }
         print_json(&output);
     } else {
         println!("{} {}", bold("Bundle:"), path.display());
@@ -446,6 +507,11 @@ fn cmd_inspect(path: &Path, json_mode: bool) {
                 }
             );
         }
+    }
+
+    // The report describes the deficiency; it never excuses it.
+    if rejection.is_some() {
+        process::exit(2);
     }
 }
 
@@ -564,17 +630,23 @@ mod tests {
             },
         );
 
-        CertBundle::build("test-project", "0.1.0", env, certs, HashMap::new(), None)
-            .expect("build bundle")
+        // `CertBundle::build` deliberately refuses this fixture: a manifest
+        // entry is a claim of proof authority and `Test.assumed` has none.
+        // `for_inspection` is the quarantined view that lets the readiness
+        // renderers describe exactly that deficiency.
+        CertBundle::for_inspection("test-project", "0.1.0", env, certs, HashMap::new())
+            .expect("assemble diagnostics view")
     }
 
     #[test]
     fn verify_renderers_report_bundle_readiness_for_failures() {
         let bundle = axiom_bundle();
         let inspect = bundle.inspect();
-        let result = bundle
-            .verify_all()
-            .expect("verify_all should return a result");
+        // Not `verify_all`: that is the trust verb and it must keep rejecting
+        // this bundle outright (asserted below). The renderers under test
+        // consume the quarantined replay, which reports the same deficiency
+        // per theorem instead of collapsing it into one opaque error.
+        let result = bundle.verify_all_for_inspection();
         let json = build_verify_json(
             Path::new("fixture.cleancert"),
             &result,
@@ -612,5 +684,50 @@ mod tests {
         assert!(human.contains("declaration has no proof term"));
         assert!(human.contains("bundle state: missing-proof-term"));
         assert!(human.contains("Result: 0 passed, 1 failed (FAILURES DETECTED)"));
+    }
+
+    /// The verify renderers exist to say what is *not* ready; they must never
+    /// launder an assumed theorem into a verified one, and the trust verb must
+    /// keep refusing the bundle they describe.
+    #[test]
+    fn quarantined_verify_never_presents_an_assumed_theorem_as_verified() {
+        let bundle = axiom_bundle();
+
+        // The trust verb is unchanged: it still refuses this bundle outright.
+        assert!(
+            bundle.verify_all().is_err(),
+            "an assumed theorem must never reach a verification verdict"
+        );
+
+        let result = bundle.verify_all_for_inspection();
+        assert_eq!(result.passed, 0);
+        assert!(!result.all_passed());
+        assert_eq!(result.trust_level, TrustLevel::Unverified);
+
+        let inspect = bundle.inspect();
+        let json = build_verify_json(
+            Path::new("fixture.cleancert"),
+            &result,
+            &inspect,
+            std::time::Duration::ZERO,
+            std::time::Duration::ZERO,
+        );
+        assert_eq!(json["trust_level"], trust_level_str(TrustLevel::Unverified));
+
+        let human = render_verify_human(
+            Path::new("fixture.cleancert"),
+            &bundle,
+            &result,
+            &inspect,
+            std::time::Duration::ZERO,
+            std::time::Duration::ZERO,
+        );
+        assert!(human.contains("Trust level: unverified"));
+        for forbidden in ["kernel-verified", "smt-backed", "ALL PASSED", "[PASS]"] {
+            assert!(
+                !human.contains(forbidden),
+                "quarantined verify report leaked `{forbidden}`:\n{human}"
+            );
+        }
     }
 }

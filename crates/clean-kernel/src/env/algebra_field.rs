@@ -601,6 +601,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.rat_ordered_field_axioms_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
+    #[cfg(any(test, feature = "math-overlays", feature = "farkas-constructive"))]
     pub(crate) fn init_rat_ordered_field_axioms(&mut self) -> Result<(), EnvError> {
         if self.rat_ordered_field_axioms_init {
             return Ok(());

@@ -28,6 +28,29 @@ fn test_prove_trivial() {
 }
 
 #[test]
+fn test_reused_engine_isolates_obligation_bindings() {
+    use crate::encoding::TlaExpr;
+    use crate::obligation::TlaDeclare;
+
+    let mut engine = TlaTacticEngine::new();
+    let substituted = TlaObligation::new(TlaFormula::True).with_declare(TlaDeclare::Instance {
+        module: "Parameterized".to_string(),
+        substitutions: vec![("p".to_string(), TlaExpr::Var("replacement".to_string()))],
+    });
+    assert!(engine.prove(&substituted).proved);
+    assert!(
+        engine.ctx.vars.contains_key("p"),
+        "the first obligation should install its INSTANCE substitution"
+    );
+
+    assert!(engine.prove(&TlaObligation::new(TlaFormula::True)).proved);
+    assert!(
+        !engine.ctx.vars.contains_key("p"),
+        "a reused engine must clear substitutions from the previous obligation"
+    );
+}
+
+#[test]
 fn test_tactic_selection() {
     // Temporal obligation should use temporal tactic
     let temporal = TlaObligation::new(TlaFormula::Always(Box::new(TlaFormula::True)));
@@ -1396,63 +1419,11 @@ fn test_try_progress_measure_countdown_is_not_proved() {
 }
 
 #[test]
-fn test_try_lattice_decomposition_bounded_is_not_proved() {
-    // SOUNDNESS: finding a `<`-subterm anywhere in P is NOT a proof of
-    // `P ~> Q`. Nothing checks that the term is a well-founded variant, that it
-    // strictly decreases on the transition relation, or that Q is reached. This
-    // "bounded descent" accept certified false liveness like `(x<5) ~> FALSE`,
-    // so it is removed: the tactic must fail-closed (return None) for a bounded
-    // variant with no discharge.
-    use clean_kernel::expr::Expr;
-    use clean_kernel::name::Name;
-
-    let engine = TlaTacticEngine::new();
-
-    // P: n < k (bounded variant), Q: result
-    let n = Expr::const_(Name::from_string("n"), vec![]);
-    let k = Expr::const_(Name::from_string("k"), vec![]);
-    let p = Expr::app(
-        Expr::app(Expr::const_(Name::from_string("TLA.lt"), vec![]), n),
-        k,
-    );
-    let q = Expr::const_(Name::from_string("result"), vec![]);
-
-    let result = engine
-        .try_lattice_decomposition(&p, &q)
-        .expect("lattice_decomposition should not error");
-    assert!(
-        result.is_none(),
-        "SOUNDNESS: a bounded `<` variant alone must not prove liveness, got: {result:?}"
-    );
-}
-
-#[test]
-fn test_try_lattice_decomposition_ex_falso_still_proves() {
-    // The one sound accept in lattice decomposition: `FALSE ~> Q` holds ex
-    // falso for any Q, so this must still be discharged.
-    use clean_kernel::expr::Expr;
-    use clean_kernel::name::Name;
-
-    let engine = TlaTacticEngine::new();
-    let p = Expr::const_(Name::from_string("False"), vec![]);
-    let q = Expr::const_(Name::from_string("result"), vec![]);
-
-    let cert = engine
-        .try_lattice_decomposition(&p, &q)
-        .expect("lattice_decomposition should not error")
-        .expect("FALSE ~> Q must still be discharged ex falso");
-    assert!(
-        cert.contains("ex_falso"),
-        "ex-falso certificate expected, got: {cert}"
-    );
-}
-
-#[test]
 fn test_leads_to_false_p_proves_ex_falso_end_to_end() {
     // `False ~> Q` is genuinely true (ex falso) and must still be proved
-    // through the PUBLIC entry — but now via the sound leads-to trivialities
-    // (Rule 0b / lattice ex-falso), NOT the fail-closed progress-measure
-    // heuristic. This is the end-to-end guard for the trivial-P case.
+    // through the PUBLIC entry via the sound leads-to triviality (Rule 0b),
+    // not the fail-closed progress-measure heuristic. This is the end-to-end
+    // guard for the trivial-P case.
     let obligation = TlaObligation::new(TlaFormula::LeadsTo(
         Box::new(TlaFormula::False),
         Box::new(TlaFormula::Expr(crate::encoding::TlaExpr::Const(
@@ -1779,7 +1750,7 @@ fn test_polynomial_equality() {
 
 /// Walk an application spine and collect every constant name that appears in
 /// head position, so tests can assert structural features of a reduced form.
-fn collect_const_names(expr: &clean_kernel::expr::Expr, out: &mut Vec<String>) {
+fn collect_const_names(expr: &Expr, out: &mut Vec<String>) {
     match expr.kind() {
         ExprKind::Const(name, _) => out.push(name.to_string()),
         ExprKind::App(f, a) => {
@@ -1794,7 +1765,7 @@ fn collect_const_names(expr: &clean_kernel::expr::Expr, out: &mut Vec<String>) {
     }
 }
 
-fn build_weak_fairness(vars: clean_kernel::expr::Expr, action: clean_kernel::expr::Expr) -> Expr {
+fn build_weak_fairness(vars: Expr, action: Expr) -> Expr {
     use clean_kernel::expr::Expr;
     use clean_kernel::name::Name;
     Expr::app(
@@ -1806,7 +1777,7 @@ fn build_weak_fairness(vars: clean_kernel::expr::Expr, action: clean_kernel::exp
     )
 }
 
-fn build_strong_fairness(vars: clean_kernel::expr::Expr, action: clean_kernel::expr::Expr) -> Expr {
+fn build_strong_fairness(vars: Expr, action: Expr) -> Expr {
     use clean_kernel::expr::Expr;
     use clean_kernel::name::Name;
     Expr::app(
@@ -2133,14 +2104,14 @@ fn test_ring_for_associativity() {
 // ====================================================================
 
 /// Build a distinct atomic state predicate named `name`.
-fn lt_atom(name: &str) -> clean_kernel::expr::Expr {
+fn lt_atom(name: &str) -> Expr {
     use clean_kernel::expr::Expr;
     use clean_kernel::name::Name;
     Expr::const_(Name::from_string(name), vec![])
 }
 
 /// Build the leads-to hypothesis `FixedPoint.TLA_leads_to a b`.
-fn lt_edge(a: &clean_kernel::expr::Expr, b: &clean_kernel::expr::Expr) -> clean_kernel::expr::Expr {
+fn lt_edge(a: &Expr, b: &Expr) -> Expr {
     use clean_kernel::expr::Expr;
     use clean_kernel::name::Name;
     Expr::app(
@@ -2304,7 +2275,7 @@ fn test_leads_to_binary_transitivity_unaffected_by_chain_addition() {
 /// Translate a standalone obligation's goal/hypotheses into a clean goal Expr,
 /// exactly as the tactic engine sees it.
 fn exists_test_goal(obligation: &TlaObligation) -> Expr {
-    let mut ctx = crate::encoding::TlaContext::new();
+    let mut ctx = TlaContext::new();
     obligation
         .to_clean_goal(&mut ctx)
         .expect("test obligation should translate to a clean goal")

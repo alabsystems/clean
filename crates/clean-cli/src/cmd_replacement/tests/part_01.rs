@@ -5,7 +5,6 @@
 //! Tests (slice 1) for the `clean replacement` command group,
 //! split from the original single-file `cmd_replacement.rs` tests module.
 
-use super::support::*;
 use crate::cmd_replacement::*;
 
 #[test]
@@ -89,7 +88,7 @@ fn validate_report_accepts_current_replacement_reports() {
         // when the real reports haven't been generated on this
         // machine. Real CI machines carry the full artifacts.
         let resolved = repo_artifact_path(path);
-        if let Ok(text) = std::fs::read_to_string(&resolved) {
+        if let Ok(text) = fs::read_to_string(&resolved) {
             if text.contains("\"stub\": true") {
                 eprintln!("SKIP: {path} is a stub artifact");
                 continue;

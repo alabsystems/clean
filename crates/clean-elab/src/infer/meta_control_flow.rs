@@ -72,6 +72,9 @@ const BOOL_FALSE: &str = "Bool.false";
 /// computed control flow handles). A nullary `if` body has no other surface
 /// representation, so recognizing the variant is sufficient.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn is_meta_if_body(body: &SurfaceExpr) -> bool {
     matches!(body, SurfaceExpr::If(..))
 }

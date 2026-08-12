@@ -19,7 +19,7 @@
 //! - Jhala & McMillan (2006): "A practical and complete approach to predicate
 //!   refinement", TACAS 2006.
 
-use super::mcmillan::{extract_mcmillan_interpolant, Partition, ResolutionDag, ResolutionDagNode};
+use super::mcmillan::{extract_mcmillan_interpolant, Partition, ResolutionDag};
 use super::reverse::pudlak_interpolation;
 use super::PropFormula;
 use crate::sat_verify::cdcl::var_of;

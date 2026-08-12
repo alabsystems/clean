@@ -15,7 +15,7 @@ use clean_elab::{
 };
 use clean_kernel::sorry::{reset_sorry_counter, sorry_count};
 use clean_kernel::{Environment, TypeChecker};
-use clean_parser::{parse_expr, parse_file_with_tactics, Span, SurfaceBinder, SurfaceDecl};
+use clean_parser::{parse_expr, Span, SurfaceBinder, SurfaceDecl};
 use clean_server::handlers::validate_decl_read_only;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 
 const CHECK_REPORT_SCHEMA_VERSION: &str = "Clean-check-report-v1";
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn check_file(
     path: &Path,
     verbose: bool,
@@ -36,6 +37,7 @@ pub(crate) fn check_file(
     check_file_with_json(path, verbose, allow_sorry, prelude, false)
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn check_file_with_json(
     path: &Path,
     verbose: bool,
@@ -226,7 +228,40 @@ fn check_file_body(
 
     let parse_start = Instant::now();
     let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
-    let decls = parse_file_with_tactics(&content, &patterns)?;
+    // MEASUREMENT INTEGRITY (T0, `docs/plans/TACTICS_TO_100_2026-07-29.md`
+    // §RC-Q). `parse_file_with_tactics` DISCARDS the parser's recovery
+    // diagnostics. Every tactic whose argument grammar Clean does not support
+    // (`set x := e`, `conv_rhs => …`, `conv in p => …`, `module`, `simp [*]`,
+    // `simp (config := …)`, `cases … with | _ =>`, `rcases … with -`, a bare
+    // `rw`/`unfold`/`revert`, …) therefore recovered the whole `by` block to a
+    // SyntheticSorry and the user saw exactly one line — "declaration uses
+    // synthetic sorry" — with NOTHING naming the tactic that did nothing. That
+    // makes the gap unmeasurable: any coverage script keyed on
+    // `UnknownTactic`/`TacticFailed` under-reports it.
+    //
+    // Reading the report variant and surfacing each recovery as an error makes
+    // the class LOUD and countable. It cannot mask a real proof: a recovery
+    // event means the tactic block was replaced by a synthetic sorry (or the
+    // declaration by a `RawDecl`), so the declaration was already failing —
+    // this only attributes the failure.
+    let report = clean_parser::parse_file_with_tactics_diagnostics(&content, &patterns)?;
+    let decls = report.decls;
+    for diag in &report.diagnostics {
+        let named = match &diag.tactic {
+            Some(tac) => format!("tactic `{tac}`"),
+            None => format!("construct `{}`", diag.construct),
+        };
+        let diagnostic = format!(
+            "parser recovery [{}]: unsupported {named} at line {}, column {}: {}",
+            diag.code, diag.recovery_start.line, diag.recovery_start.column, diag.message
+        );
+        let diagnostic = if is_entry_file {
+            diagnostic
+        } else {
+            format!("[{}] {diagnostic}", module_name_for_path(path))
+        };
+        outcome.errors.push(diagnostic);
+    }
     let parse_time = parse_start.elapsed();
     if verbose {
         println!("Parsed {} declarations in {:?}", decls.len(), parse_time);
@@ -1156,6 +1191,8 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Opaque { span, .. }
         | SurfaceDecl::Inductive { span, .. }
         | SurfaceDecl::Coinductive { span, .. }
+        | SurfaceDecl::Codata { span, .. }
+        | SurfaceDecl::Codef { span, .. }
         | SurfaceDecl::Structure { span, .. }
         | SurfaceDecl::Class { span, .. }
         | SurfaceDecl::Instance { span, .. }

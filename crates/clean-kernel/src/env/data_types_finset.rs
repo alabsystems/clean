@@ -2754,7 +2754,7 @@ mod finset_tests {
         let not_c = Expr::const_(Name::from_string("Not"), vec![]);
         let no_conf = Expr::const_(Name::from_string("Bool.noConfusion"), vec![lvl0.clone()]);
 
-        let finset_const = Expr::const_(Name::from_string("Finset"), vec![lvl0.clone()]);
+        let _finset_const = Expr::const_(Name::from_string("Finset"), vec![lvl0.clone()]);
         let finset_empty = Expr::app(
             Expr::const_(Name::from_string("Finset.empty"), vec![lvl0.clone()]),
             bool_c.clone(),

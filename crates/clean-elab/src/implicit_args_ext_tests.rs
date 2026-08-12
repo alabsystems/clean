@@ -85,6 +85,9 @@ fn mk_mixed_type() -> Expr {
     )
 }
 
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn make_env_and_meta() -> (Environment, ()) {
     (Environment::new(), ())
 }

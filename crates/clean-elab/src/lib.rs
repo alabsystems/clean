@@ -29,112 +29,318 @@
 
 pub mod agent_diagnostics;
 pub mod attr_macro;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod attr_macro_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod attr_scoping;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod attr_scoping_integration;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod attribute_ext;
 pub(crate) mod attribute_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod attribute_handlers;
 pub mod attribute_registry;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod attribute_registry_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod auto_bound;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod auto_bound_ext;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod auto_param_ext;
 pub mod cert;
 pub mod check_cmd;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub(crate) mod coercion;
+pub(crate) mod decl_attributes;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod coercion_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod coercion_ext2;
 pub mod command_elab;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod command_elab_ext;
 pub mod command_elab_registry;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod command_elab_registry_ext;
 pub(crate) mod commands;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod commands_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod dep_graph;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod dep_graph_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod dep_graph_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod dep_graph_ext2_impact;
 pub mod derive;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod derive_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod derive_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod derive_ext_handlers;
 pub(crate) mod derive_ext_handlers2;
 pub mod derive_handlers;
 pub(crate) mod derive_handlers_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod deriving_handlers;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod diamond_resolution;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod diamond_resolution_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod do_notation;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod do_notation_desugar;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod do_notation_desugar_control;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod do_notation_desugar_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod do_notation_ext;
 pub mod elab_cmd;
 pub mod elab_hooks;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod elab_hooks_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod env_snapshot;
+// Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
+#[cfg(test)]
 pub(crate) mod env_snapshot_ext;
 pub(crate) mod error;
 pub mod eval_cmd;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod eval_cmd_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+// DELETION CANDIDATE (2026-07-30): the EvalCache/EvalHistory/ExprKey cluster has no
+// production caller anywhere in the crate; a future owner pass should decide keep-vs-delete.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod eval_cmd_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod ffi_extern;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+pub(crate) mod codata_cmd;
+pub mod codata_seed;
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod ffi_extern_ext;
 pub(crate) mod file_context;
+pub mod header;
 pub(crate) mod hetero_bridge_seed;
 pub(crate) mod imports;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod inductive_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod inductive_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod inductive_ext_elab;
 pub(crate) mod infer;
 pub(crate) mod instance_priority;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod instance_priority_ext;
+// Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
+#[cfg(test)]
 pub(crate) mod instance_priority_ext2;
 pub mod instance_resolution;
 pub mod instance_synthesis;
 pub(crate) mod instances;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod instances_ext;
 pub mod io_bridge;
 pub(crate) mod io_monad;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod io_monad_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod io_monad_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod let_rec;
 pub(crate) mod let_rec_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod let_rec_ext2;
 pub mod macro_cmd;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod macro_cmd_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod macro_hygiene;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod macro_hygiene_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod macro_hygiene_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod macro_hygiene_ext3;
 pub(crate) mod macro_integration;
 pub(crate) mod meta;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod meta_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod mutual_decl;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod mutual_decl_ext;
+// Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
+#[cfg(test)]
 pub(crate) mod mutual_decl_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod mutual_decl_ext3;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod mutual_inductive;
+// Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
+pub mod module_batch;
+#[cfg(test)]
 pub(crate) mod mutual_inductive_ext;
 pub(crate) mod mutual_recursion_desugar;
 pub(crate) mod name_resolution;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod name_resolution_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod name_resolution_ext2;
 pub mod namespace;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod namespace_ext;
 pub(crate) mod namespace_open;
 pub mod notation;
+// Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
+#[cfg(test)]
 pub(crate) mod notation_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod notation_priority;
 pub(crate) mod notation_priority_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod notation_scope;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod notation_scope_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod notation_scope_ext2;
 pub mod options_registry;
 pub(crate) mod options_registry_ext;
+#[cfg(test)]
 #[cfg(test)]
 mod test_env;
 // Unwired roadmap prototype. Keep its unit coverage available without making
@@ -147,35 +353,108 @@ pub(crate) mod preprocess_ext;
 pub(crate) mod print_cmd;
 pub(crate) mod proj_recursion;
 pub mod register;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod register_ext;
 pub(crate) mod registration_warning;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod section_scope;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod section_scope_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod section_variable_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod section_variable_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod structure_cmd;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod structure_cmd_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod structure_extend;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod structure_extend_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod structure_inherit;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod structure_inherit_ext;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod structure_inherit_ext2;
 pub mod syntax_cmd;
 pub mod tactic;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tc_outparam;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tc_outparam_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tc_synthesis_ext;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod tc_synthesis_ext2;
 pub mod term_elab_registry;
+pub(crate) mod u2_histogram;
 pub(crate) mod unify;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod unify_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod universe_constraint_ext;
 pub(crate) mod universe_poly;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod universe_poly_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod universe_poly_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod variable_cmd;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod variable_cmd_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod where_clause;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod where_clause_ext;
 pub(crate) mod where_desugar;
 pub(crate) mod where_desugar_ext;
@@ -188,16 +467,43 @@ pub(crate) mod error_recovery;
 pub(crate) mod error_recovery_ext;
 #[cfg(test)]
 pub(crate) mod error_recovery_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod implicit_args;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod implicit_args_ext;
 pub(crate) mod info_tree;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod info_tree_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod lean4_compat;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod lean4_compat_ext;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(test)]
 pub(crate) mod lean4_compat_ext2;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod string_interp_ext;
 pub(crate) mod string_interpolation;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tactic_interp_ext;
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod tactic_interp_profile;
 
 #[cfg(test)]
@@ -223,12 +529,13 @@ mod info_tree_tests;
 #[path = "info_tree_ext_tests.rs"]
 mod info_tree_ext_tests;
 
-use clean_kernel::{env::TrustedEnvExt, Name};
+use clean_kernel::Name;
 
 // Re-export extracted types at crate root for backwards compatibility
 use derive_handlers::register_user_derive_handler;
 pub use error::{ElabElabError, ElabError};
 pub use file_context::FileContext;
+pub use header::{elaborate_decl_headers_with_context, DeclHeader};
 pub use imports::{
     lake_import_search_paths_for_file, nearest_lake_root_for_file, olean_available_for_module,
     process_imports, resolve_intra_project_import,
@@ -541,7 +848,7 @@ fn failed_inner_leaf(
 ///
 /// `Multiple` results (namespace/section blocks) are walked recursively;
 /// every other result kind carries no instance scope.
-fn record_instance_scopes(fc: &mut FileContext, result: &ElabResult) {
+pub(crate) fn record_instance_scopes(fc: &mut FileContext, result: &ElabResult) {
     use clean_parser::DeclScope;
     match result {
         ElabResult::Instance {
@@ -579,7 +886,28 @@ fn elaborate_decl_and_register_inner_with_aux(
     // instances (kernel-checked; idempotent; skipped when the constants
     // already exist, e.g. via olean import) so user `Add`/`Mul`/`Sub`
     // instances are reachable through their operators.
-    hetero_bridge_seed::seed_hetero_bridges(env);
+    //
+    // NOT while elaborating an `import`. This call runs once per declaration,
+    // and an `import` IS a declaration handled further down this function — so
+    // seeding here pre-empted the very import that supplies Lean's genuine
+    // `instHAdd`/`instHSub`/`instHMul`. The seed registers them at
+    // `BRIDGE_INSTANCE_PRIORITY` (50, deliberately below the prelude's fused
+    // monomorphic instances), and both of the import's repair paths are
+    // first-writer-wins — the constant is skipped as a name collision and
+    // `register_real_instance_entries` skips any name already in the registry —
+    // so Lean's decoded priority 1000 was discarded and `a - b` elaborated
+    // through Clean's invented `instHSubNat` instead of Lean's
+    // `instHSub Nat instSubNat`. `HDiv`/`HMod`, which have no bridge here, kept
+    // Lean's stack and were the only Nat operators that matched their own
+    // imported lemmas.
+    //
+    // The seed stays self-healing: it is idempotent and runs again on the NEXT
+    // declaration, so a file whose imports do not supply the bridge constants
+    // still gets them before any term is elaborated. Files with no `import` are
+    // unaffected.
+    if !matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
+        hetero_bridge_seed::seed_hetero_bridges(env);
+    }
 
     // Handle declare_aesop_rule_sets directly (before creating immutable borrow)
     if let clean_parser::SurfaceDecl::DeclareAesopRuleSets { names, .. } = decl {
@@ -592,6 +920,18 @@ fn elaborate_decl_and_register_inner_with_aux(
             warning: None,
             hole_contexts: Vec::new(),
         });
+    }
+
+    // `codata` command: seeds the lazy Codata.* library on first use, then
+    // generates + kernel-checks the M-type encoding (type, accessors,
+    // corecursor, rfl laws). Transactional; loud v1 envelope.
+    if let clean_parser::SurfaceDecl::Codata { .. } = decl {
+        return codata_cmd::elab_codata_decl(env, decl);
+    }
+
+    // `codef` copattern definition: compiles to the codata's corecursor.
+    if let clean_parser::SurfaceDecl::Codef { .. } = decl {
+        return codata_cmd::elab_codef_decl(env, decl);
     }
 
     // Handle imports: initialize appropriate Mathlib stubs
@@ -726,9 +1066,7 @@ fn elaborate_decl_and_register_inner_with_aux(
             let processed = if matches!(inner, clean_parser::SurfaceDecl::Section { .. }) {
                 None
             } else {
-                Some(crate::preprocess::preprocess_decl_with_context(
-                    inner, fc_ref,
-                ))
+                Some(preprocess_decl_with_context(inner, fc_ref))
             };
             let to_elab = processed.as_ref().unwrap_or(inner);
             // COLLECT per-inner outcomes instead of `?`-aborting on the first
@@ -860,6 +1198,25 @@ fn elaborate_decl_and_register_inner_with_aux(
     // (deferring to the existing `elab_mutual` path) for anything outside the
     // conservative sound envelope.
     if let clean_parser::SurfaceDecl::Mutual { decls: members, .. } = decl {
+        // A mutual block of codata declarations is the tag-index codata
+        // surface (QPFTypes mutual answer) — handled by the codata command,
+        // BEFORE the recursion desugar (which would silently no-op on it).
+        if !members.is_empty()
+            && members
+                .iter()
+                .all(|m| matches!(m, clean_parser::SurfaceDecl::Codata { .. }))
+        {
+            return codata_cmd::elab_mutual_codata(env, members);
+        }
+        // A mutual block of codef declarations: joint copattern definitions
+        // into a mutual codata block.
+        if !members.is_empty()
+            && members
+                .iter()
+                .all(|m| matches!(m, clean_parser::SurfaceDecl::Codef { .. }))
+        {
+            return codata_cmd::elab_mutual_codef(env, members);
+        }
         if let Some(split) = mutual_recursion_desugar::desugar_mutual_structural(members) {
             let mut results = Vec::new();
             let mut hole_contexts = Vec::new();
@@ -984,33 +1341,10 @@ fn elaborate_decl_and_register_inner_with_aux(
     // types for IDE display and never affects what is registered in the kernel.
     let hole_contexts = ctx.collect_hole_contexts();
 
-    // Collect all attributes before dropping ctx (releases immutable borrow of env)
-    let aesop_attrs = ctx.take_aesop_attrs();
-    let simp_attrs = ctx.take_simp_attrs();
-    let reducibility_attrs = ctx.take_reducibility();
-    let extern_attrs = ctx.take_extern();
-    let export_attrs = ctx.take_export();
-    let deprecated_attrs = ctx.take_deprecated();
-    let inline_attrs = ctx.take_inline();
-    let noinline_attrs = ctx.take_noinline();
-    let always_inline_attrs = ctx.take_always_inline();
-    let specialize_attrs = ctx.take_specialize();
-    let csimp_attrs = ctx.take_csimp();
-    let congr_attrs = ctx.take_congr();
-    let ext_attrs = ctx.take_ext();
-    let refl_attrs = ctx.take_refl();
-    let symm_attrs = ctx.take_symm();
-    let macro_inline_attrs = ctx.take_macro_inline();
-    let inline_if_reduce_attrs = ctx.take_inline_if_reduce();
-    let nospecialize_attrs = ctx.take_nospecialize();
-    let implemented_by_attrs = ctx.take_implemented_by();
-    let coe_attrs = ctx.take_coe();
-    let match_pattern_attrs = ctx.take_match_pattern();
-    let init_attrs = ctx.take_init();
-    let default_instance_attrs = ctx.take_default_instance();
-    let instance_attrs = ctx.take_instance_attrs();
-    let derive_handler_attrs = ctx.take_derive_handler();
-    let attribute_removals = ctx.take_attribute_removals();
+    // Drain every collected attribute out of `ctx` BEFORE it is dropped: the
+    // registrations below need `&mut env`, and `ctx` holds an immutable borrow
+    // of it. See `decl_attributes::CtxAttributes`.
+    let collected_attributes = decl_attributes::CtxAttributes::collect(&mut ctx);
 
     // Extract namespace state back to FileContext before dropping ctx.
     let ns_state = ctx.take_namespace_state();
@@ -1041,207 +1375,8 @@ fn elaborate_decl_and_register_inner_with_aux(
     // Register parameter names for named argument support (#1230)
     register::register_param_names(env, decl);
 
-    // Now register attributes that reference the declaration
-
-    // Register aesop rules
-    for (name, attr) in aesop_attrs {
-        register_aesop_rule(env, name, &attr);
-    }
-
-    // Register simp lemmas
-    for (name, priority) in simp_attrs {
-        env.register_simp_lemma(name, priority);
-    }
-
-    // Apply reducibility attributes
-    // These override the default reducibility set at declaration time
-    for (name, reducibility) in reducibility_attrs {
-        env.set_reducibility(&name, reducibility);
-    }
-
-    // Register extern bindings
-    for (decl_name, extern_name) in extern_attrs {
-        env.register_extern(decl_name, extern_name);
-    }
-
-    // Register export bindings
-    for (decl_name, export_name) in export_attrs {
-        env.register_export(decl_name, export_name);
-    }
-
-    // Register deprecations
-    for (name, msg) in deprecated_attrs {
-        env.register_deprecated(name, msg);
-    }
-
-    // Register inline hints
-    for name in inline_attrs {
-        env.register_inline(name);
-    }
-
-    // Register noinline hints
-    for name in noinline_attrs {
-        env.register_noinline(name);
-    }
-
-    // Register always_inline hints
-    for name in always_inline_attrs {
-        env.register_always_inline(name);
-    }
-
-    // Register specialize hints
-    for name in specialize_attrs {
-        env.register_specialize(name);
-    }
-
-    // Register csimp lemmas
-    for name in csimp_attrs {
-        env.register_csimp(name);
-    }
-
-    // Register congr lemmas
-    for name in congr_attrs {
-        env.register_congr(name);
-    }
-
-    // Register ext lemmas
-    for name in ext_attrs {
-        env.register_ext(name);
-    }
-
-    // Register refl lemmas
-    for name in refl_attrs {
-        env.register_refl(name);
-    }
-
-    // Register symm lemmas
-    for name in symm_attrs {
-        env.register_symm(name);
-    }
-
-    // Register macro_inline hints
-    for name in macro_inline_attrs {
-        env.register_macro_inline(name);
-    }
-
-    // Register inline_if_reduce hints
-    for name in inline_if_reduce_attrs {
-        env.register_inline_if_reduce(name);
-    }
-
-    // Register nospecialize hints
-    for name in nospecialize_attrs {
-        env.register_nospecialize(name);
-    }
-
-    // Register @[implemented_by] bindings
-    for (decl_name, impl_name) in implemented_by_attrs {
-        let impl_n = Name::from_string(&impl_name);
-        env.register_implemented_by(decl_name, impl_n);
-    }
-
-    // Register @[coe] coercions
-    for name in coe_attrs {
-        env.register_coercion(name);
-    }
-
-    // Register @[match_pattern] declarations
-    for name in match_pattern_attrs {
-        env.register_match_pattern(name);
-    }
-
-    // Register @[init] functions
-    // Note: actual initialization execution requires IO runtime; we record the
-    // registration so downstream consumers can query and execute init functions.
-    for name in init_attrs {
-        env.register_init_fn(name);
-    }
-
-    // Register @[default_instance] declarations (B99): record membership in
-    // the kernel-side registry (pre-existing) AND the FileContext
-    // default-instance table (class → entries with priority, declaration
-    // order) that drives open-metavariable defaulting in instance
-    // resolution. The class is read off the declaration type's conclusion
-    // (like the `attribute [instance]` handler below); a conclusion without
-    // a constant head cannot participate in class-goal defaulting, so only
-    // the membership registry is updated for it (unchanged behavior).
-    for (name, priority) in default_instance_attrs {
-        if let Some(fc) = file_ctx.as_deref_mut() {
-            let conclusion_class = env.get_const(&name).and_then(|info| {
-                let mut conclusion = &info.type_;
-                while let clean_kernel::ExprKind::Pi(_, _, body) = conclusion.kind() {
-                    conclusion = body;
-                }
-                crate::instances::extract_class_app(conclusion).map(|(class_name, _)| class_name)
-            });
-            if let Some(class_name) = conclusion_class {
-                fc.record_default_instance(name.clone(), class_name, priority);
-            }
-        }
-        env.register_default_instance(name);
-    }
-
-    // Register `attribute [instance] foo` / `@[instance N] def foo` targets as
-    // type class instances (B06; sweep row classes_instances/p14). Lean ground
-    // truth: the `instance` attribute calls `addInstance`
-    // (lean4 `src/Lean/Meta/Instances.lean`) after validating that the
-    // declaration's type concludes in a class application. The class name is
-    // read off the target type's conclusion; a non-class conclusion is a LOUD
-    // error, exactly like Lean's "invalid 'instance' attribute". Duplicate
-    // registration (e.g. re-running the attribute command) is a no-op.
-    for (name, priority) in instance_attrs {
-        if env.is_instance(&name) {
-            continue;
-        }
-        let target_ty = env
-            .get_const(&name)
-            .map(|info| info.type_.clone())
-            .ok_or_else(|| {
-                ElabError::UnknownIdent(format!("attribute [instance] target {name}"))
-            })?;
-        let mut conclusion = &target_ty;
-        while let clean_kernel::ExprKind::Pi(_, _, body) = conclusion.kind() {
-            conclusion = body;
-        }
-        let class_name = crate::instances::extract_class_app(conclusion)
-            .map(|(class_name, _)| class_name)
-            .filter(|class_name| env.get_class_info(class_name).is_some())
-            .ok_or_else(|| ElabError::Unsupported {
-                feature: format!(
-                    "attribute [instance]: type of `{name}` does not conclude in a \
-                     registered class (got `{conclusion}`)"
-                ),
-            })?;
-        env.register_instance(clean_kernel::KernelInstanceInfo {
-            name,
-            class_name,
-            priority,
-            type_: None,
-            value: None,
-        });
-    }
-
-    // Register @[derive_handler] declarations.
-    for name in derive_handler_attrs {
-        register_user_derive_handler(env, &name)?;
-    }
-
-    for (name, attr_name) in attribute_removals {
-        match attr_name.as_str() {
-            "simp" => {
-                if !env.unregister_simp_lemma(&name) {
-                    return Err(ElabError::Unsupported {
-                        feature: format!("cannot remove @[{attr_name}]: not applied to '{}'", name),
-                    });
-                }
-            }
-            _ => {
-                return Err(ElabError::Unsupported {
-                    feature: format!("attribute removal for '[-{attr_name}]' is not supported"),
-                });
-            }
-        }
-    }
+    // Now register attributes that reference the declaration.
+    collected_attributes.apply(env, file_ctx)?;
 
     Ok(RegisteredElabResult {
         result,
@@ -1293,6 +1428,12 @@ mod mutual_recursion_desugar_tests;
 
 #[cfg(test)]
 mod mutual_inductive_elab_tests;
+
+#[cfg(test)]
+mod codata_cmd_tests;
+
+#[cfg(test)]
+mod nested_local_lift_tests;
 
 #[cfg(test)]
 mod proj_recursion_tests;
@@ -1360,6 +1501,9 @@ mod attr_scoping_tests;
 
 #[cfg(test)]
 mod attribute_wiring_tests;
+
+#[cfg(test)]
+mod calc_generic_relation_tests;
 
 #[cfg(test)]
 mod structure_cmd_tests;

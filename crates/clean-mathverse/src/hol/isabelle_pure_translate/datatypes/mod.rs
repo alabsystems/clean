@@ -12,13 +12,7 @@
 
 use std::collections::BTreeMap;
 
-use clean_kernel::expr::FVarId;
-use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
-
-use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
-use super::*;
+use super::super::isabelle_pure::{IsaTerm, IsaType};
 
 /// A registered **monomorphic instance operation** — the *ground-type* analogue
 /// of [`MethodDefInfo`]. The recursive arithmetic definitions on the concrete
@@ -355,5 +349,5 @@ mod registers2;
 mod registers3;
 
 pub use registers::*;
-pub use registers2::*;
+pub(crate) use registers2::*;
 pub use registers3::*;

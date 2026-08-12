@@ -37,7 +37,7 @@ fn mk_not(a: Expr) -> Expr {
 }
 
 fn mk_implies(a: Expr, b: Expr) -> Expr {
-    Expr::pi(clean_kernel::BinderInfo::Default, a, b)
+    Expr::pi(BinderInfo::Default, a, b)
 }
 
 fn mk_exists(binder_type: Expr, body: Expr) -> Expr {
@@ -46,7 +46,7 @@ fn mk_exists(binder_type: Expr, body: Expr) -> Expr {
             Expr::const_(Name::from_string("Exists"), vec![Level::zero()]),
             binder_type.clone(),
         ),
-        Expr::lam(clean_kernel::BinderInfo::Default, binder_type, body),
+        Expr::lam(BinderInfo::Default, binder_type, body),
     )
 }
 
@@ -181,7 +181,7 @@ fn test_classify_int_negsucc_as_atom() {
 fn test_classify_forall_dependent_pi() {
     let nat_ty = mk_const("Nat");
     let body = Expr::bvar(0);
-    let expr = Expr::pi(clean_kernel::BinderInfo::Default, nat_ty, body);
+    let expr = Expr::pi(BinderInfo::Default, nat_ty, body);
     let form = classify_for_proof_translation(&expr);
     assert!(
         matches!(form, SmtLogicalForm::Forall { .. }),

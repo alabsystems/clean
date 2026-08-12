@@ -111,8 +111,8 @@ fn test_kernel_infer_accepts_recursor_is_index_shaped() {
         .get("KernelInferAccepts.rec")
         .expect("KernelInferAccepts.rec should be registered");
     // Normalize the Debug rendering by dropping the (deterministic but
-    // algorithm-dependent) cached_hash digits so the pin survives hash-fn or
-    // cache churn while still freezing the structural shape.
+    // algorithm-dependent) lean4_hash hex digits so the pin survives hash-fn
+    // or cache churn while still freezing the structural shape.
     let ty = strip_hashes(&format!(
         "{:?}",
         rec.elaborated_type
@@ -122,14 +122,26 @@ fn test_kernel_infer_accepts_recursor_is_index_shaped() {
 
     // Index-motive shape: the motive binds two explicit KExpr indices and the
     // major premise KernelInferAccepts st x y (rendered with de Bruijn vars).
+    //
+    // Rendering note: `Name`'s Debug is the ITERATIVE depth/suffix form of
+    // kernel commit 8e2f207b9 ("harden deep certificate authority paths") —
+    // the old derived Debug recursed through the `Arc<Name>` parent chain and
+    // could overflow the native stack on adversarially deep names, the same
+    // hardening already applied to Name's Serialize/Deserialize (e55cfb3ba).
+    // `Name { inner: Str(Name { inner: Anon }, "KExpr"), cached_hash: .. }`
+    // therefore now renders as
+    // `Name { depth: 1, suffix: ["KExpr"], lean4_hash: <16 hex> }` (strip_hashes
+    // drops the hash). The STRUCTURAL content pinned here — binder infos,
+    // multiplicities, the two explicit KExpr index binders, the 3-argument
+    // major-premise spine, and the Sort-Param (large-eliminating) motive
+    // codomain — is unchanged from the original pin.
     let motive_shape = concat!(
         "Pi(BinderData { info: Default, mult: Many }, ",
-        "Const(Name { inner: Str(Name { inner: Anon }, \"KExpr\") }, []), ",
+        "Const(Name { depth: 1, suffix: [\"KExpr\"] }, []), ",
         "Pi(BinderData { info: Default, mult: Many }, ",
-        "Const(Name { inner: Str(Name { inner: Anon }, \"KExpr\") }, []), ",
+        "Const(Name { depth: 1, suffix: [\"KExpr\"] }, []), ",
         "Pi(BinderData { info: Default, mult: Many }, ",
-        "App(App(App(Const(Name { inner: Str(Name { inner: Anon }, ",
-        "\"KernelInferAccepts\") }, []), ",
+        "App(App(App(Const(Name { depth: 1, suffix: [\"KernelInferAccepts\"] }, []), ",
         "BVar(2)), BVar(1)), BVar(0)), Sort(Param("
     );
     assert!(
@@ -145,11 +157,11 @@ fn test_kernel_infer_accepts_recursor_is_index_shaped() {
         ty.find(needle)
             .unwrap_or_else(|| panic!("recursor type should mention {needle}: {ty}"))
     };
-    let sort_pos = pos("\"KernelInferAccepts\") }, \"sort\")");
-    let const_pos = pos("\"KernelInferAccepts\") }, \"const\")");
-    let app_pos = pos("\"KernelInferAccepts\") }, \"app\")");
-    let lam_pos = pos("\"KernelInferAccepts\") }, \"lam\")");
-    let pi_pos = pos("\"KernelInferAccepts\") }, \"pi\")");
+    let sort_pos = pos("suffix: [\"KernelInferAccepts\", \"sort\"]");
+    let const_pos = pos("suffix: [\"KernelInferAccepts\", \"const\"]");
+    let app_pos = pos("suffix: [\"KernelInferAccepts\", \"app\"]");
+    let lam_pos = pos("suffix: [\"KernelInferAccepts\", \"lam\"]");
+    let pi_pos = pos("suffix: [\"KernelInferAccepts\", \"pi\"]");
     assert!(
         sort_pos < const_pos && const_pos < app_pos && app_pos < lam_pos && lam_pos < pi_pos,
         "KernelInferAccepts.rec minor premises should follow declaration order \
@@ -262,11 +274,13 @@ fn test_kernel_check_accepts_recursor_is_param_promoted() {
     // Param-promoted motive shape: the motive binds ONLY the major premise
     // KernelCheckAccepts st e T (rendered with de Bruijn vars over the three
     // promoted parameters) — no KExpr index binders inside the motive.
+    // (Name rendering per the 8e2f207b9 iterative Debug — see the note in
+    // test_kernel_infer_accepts_recursor_is_index_shaped; the pinned structure
+    // is unchanged.)
     let motive_shape = concat!(
         "Pi(BinderData { info: Implicit, mult: Many }, ",
         "Pi(BinderData { info: Default, mult: Many }, ",
-        "App(App(App(Const(Name { inner: Str(Name { inner: Anon }, ",
-        "\"KernelCheckAccepts\") }, []), ",
+        "App(App(App(Const(Name { depth: 1, suffix: [\"KernelCheckAccepts\"] }, []), ",
         "BVar(2)), BVar(1)), BVar(0)), Sort(Param("
     );
     assert!(
@@ -277,22 +291,24 @@ fn test_kernel_check_accepts_recursor_is_param_promoted() {
 
     // The single minor's conclusion applies the motive to the mk application.
     assert!(
-        ty.contains("\"KernelCheckAccepts\") }, \"mk\")"),
+        ty.contains("suffix: [\"KernelCheckAccepts\", \"mk\"]"),
         "KernelCheckAccepts.rec's minor should conclude at the mk application: {ty}"
     );
 }
 
-/// Drop `cached_hash: <digits>` runs from a Debug rendering (the hashes are
+/// Drop `lean4_hash: <hex>` runs from a Debug rendering (the hashes are
 /// deterministic per name but tied to the hash algorithm; the structural pin
-/// must not depend on them).
+/// must not depend on them). Tracks kernel commit 8e2f207b9's iterative Name
+/// Debug, which renamed the printed field from `cached_hash` (decimal) to
+/// `lean4_hash` (16 hex digits).
 fn strip_hashes(s: &str) -> String {
     let mut out = String::new();
     let mut rest = s;
-    while let Some(i) = rest.find(", cached_hash: ") {
+    while let Some(i) = rest.find(", lean4_hash: ") {
         out.push_str(&rest[..i]);
-        rest = &rest[i + ", cached_hash: ".len()..];
+        rest = &rest[i + ", lean4_hash: ".len()..];
         let end = rest
-            .find(|c: char| !c.is_ascii_digit())
+            .find(|c: char| !c.is_ascii_hexdigit())
             .unwrap_or(rest.len());
         rest = &rest[end..];
     }

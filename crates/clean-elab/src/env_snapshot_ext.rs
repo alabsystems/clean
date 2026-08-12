@@ -8,6 +8,8 @@
 //! elaboration results, declaration fingerprinting, compression,
 //! serialization, rollback, change callbacks, and statistics.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Instant;
@@ -63,6 +65,8 @@ pub(crate) struct Checkpoint {
     label: String,
     decl_names: HashSet<Name>,
     fingerprints: HashMap<Name, DeclFingerprint>,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     created_at: Instant,
     decl_count: usize,
 }
@@ -106,6 +110,7 @@ impl Checkpoint {
 
     /// When this checkpoint was created.
     #[must_use]
+    #[allow(dead_code)] // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn created_at(&self) -> Instant {
         self.created_at
     }
@@ -171,6 +176,8 @@ impl EnvironmentDiff {
 #[derive(Debug, Clone)]
 pub(crate) struct MergeConflict {
     pub(crate) name: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) reason: String,
 }
 
@@ -228,6 +235,8 @@ impl MergeResult {
 pub(crate) struct CompressedSnapshot {
     pub(crate) label: String,
     pub(crate) sorted_names: Vec<Name>,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) aggregate_fingerprint: u64,
     pub(crate) decl_count: usize,
 }

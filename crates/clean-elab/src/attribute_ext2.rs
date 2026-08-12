@@ -7,6 +7,8 @@
 //!
 //! Reference: Lean 4 `src/Lean/Attributes.lean`, `src/Lean/Elab/DeclModifiers.lean`
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use crate::error::ElabError;
 use clean_kernel::name::Name;
 use std::collections::{HashMap, HashSet};
@@ -14,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 /// The kind of declaration an attribute is being applied to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) enum DeclKind {
     Definition,
     Theorem,
@@ -21,12 +24,15 @@ pub(crate) enum DeclKind {
     Structure,
     Instance,
     Abbrev,
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     Opaque,
     Axiom,
 }
 
 /// A parsed attribute with optional arguments from surface syntax.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct ParsedAttribute {
     pub(crate) name: String,
     pub(crate) args: Vec<String>,
@@ -37,6 +43,7 @@ pub(crate) struct ParsedAttribute {
 ///
 /// Handles simple attrs (`simp`), with arguments (`priority 100`),
 /// and removal syntax (`-simp`).
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn parse_attribute_list(input: &str) -> Result<Vec<ParsedAttribute>, ElabError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -66,6 +73,7 @@ pub(crate) fn parse_attribute_list(input: &str) -> Result<Vec<ParsedAttribute>, 
     Ok(attrs)
 }
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn parse_attribute_tokens(input: &str) -> Result<Vec<String>, ElabError> {
     let mut tokens = Vec::new();
     let mut current = String::new();
@@ -99,6 +107,7 @@ fn parse_attribute_tokens(input: &str) -> Result<Vec<String>, ElabError> {
 }
 
 /// Pairs of mutually exclusive attributes.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 const CONFLICT_PAIRS: &[(&str, &str)] = &[
     ("inline", "noinline"),
     ("reducible", "irreducible"),
@@ -108,6 +117,7 @@ const CONFLICT_PAIRS: &[(&str, &str)] = &[
     ("scoped", "local"),
 ];
 
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn valid_decl_kinds(attr_name: &str) -> Option<&'static [DeclKind]> {
     match attr_name {
         "simp" | "congr" | "ext" | "refl" | "symm" => {
@@ -131,6 +141,7 @@ fn valid_decl_kinds(attr_name: &str) -> Option<&'static [DeclKind]> {
 }
 
 /// Check whether an attribute is valid for a given declaration kind.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn validate_attribute_for_decl(
     attr_name: &str,
     decl_kind: DeclKind,
@@ -154,6 +165,7 @@ pub(crate) fn supports_file_scope_attribute_removal(attr_name: &str) -> bool {
 
 /// Detect conflicts among a set of attributes. Returns first conflicting pair.
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn detect_conflicts(attr_names: &[&str]) -> Option<(&'static str, &'static str)> {
     let set: HashSet<&str> = attr_names.iter().copied().collect();
     for &(a, b) in CONFLICT_PAIRS {
@@ -166,6 +178,7 @@ pub(crate) fn detect_conflicts(attr_names: &[&str]) -> Option<(&'static str, &'s
 
 /// Scope qualifier for an extended attribute.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) enum Ext2Scope {
     Global,
     Scoped(Name),
@@ -173,10 +186,12 @@ pub(crate) enum Ext2Scope {
 }
 
 /// A user-defined attribute handler callback.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) type CustomAttrHandler =
     Box<dyn Fn(&Name, &[String]) -> Result<(), String> + Send + Sync>;
 
 /// A registered custom attribute.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct CustomAttrDecl {
     pub(crate) name: String,
     pub(crate) description: String,
@@ -195,6 +210,7 @@ impl std::fmt::Debug for CustomAttrDecl {
 
 /// A record of an attribute applied to a declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct AppliedAttribute {
     pub(crate) attr_name: String,
     pub(crate) decl_name: Name,
@@ -204,6 +220,7 @@ pub(crate) struct AppliedAttribute {
 
 /// Collected statistics about attribute operations.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct AttributeStats {
     pub(crate) applied_by_kind: HashMap<String, u64>,
     pub(crate) conflicts_detected: u64,
@@ -214,6 +231,7 @@ pub(crate) struct AttributeStats {
 
 /// Extended attribute manager: parsing, validation, scoping, inheritance,
 /// removal, custom registration, and statistics.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct ExtendedAttributeManager {
     applied: HashMap<Name, Vec<AppliedAttribute>>,
     custom_attrs: HashMap<String, CustomAttrDecl>,
@@ -240,8 +258,10 @@ impl Default for ExtendedAttributeManager {
     }
 }
 
+#[allow(dead_code)] // 2026-08-10: staged prototype; no caller for these methods.
 impl ExtendedAttributeManager {
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn new() -> Self {
         Self {
             applied: HashMap::new(),
@@ -252,6 +272,7 @@ impl ExtendedAttributeManager {
     }
 
     /// Apply an attribute to a declaration. Checks for conflicts.
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn apply_attribute(&mut self, attr: AppliedAttribute) -> Result<(), ElabError> {
         let decl_entries = self.applied.entry(attr.decl_name.clone()).or_default();
         let existing: Vec<&str> = decl_entries.iter().map(|a| a.attr_name.as_str()).collect();
@@ -276,6 +297,7 @@ impl ExtendedAttributeManager {
     }
 
     /// Remove a previously applied attribute (`attribute [-simp]`).
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn remove_attribute(
         &mut self,
         decl_name: &Name,
@@ -299,6 +321,7 @@ impl ExtendedAttributeManager {
     }
 
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn has_attribute(&self, decl_name: &Name, attr_name: &str) -> bool {
         self.applied
             .get(decl_name)
@@ -306,6 +329,7 @@ impl ExtendedAttributeManager {
     }
 
     #[must_use]
+    #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) fn get_attributes(&self, decl_name: &Name) -> &[AppliedAttribute] {
         self.applied.get(decl_name).map_or(&[], Vec::as_slice)
     }
@@ -424,6 +448,7 @@ impl ExtendedAttributeManager {
 }
 
 /// Parse a `@[priority N]` argument.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn parse_priority_arg(args: &[String]) -> Result<u32, ElabError> {
     let s = args.first().ok_or_else(|| {
         ElabError::ParseError("@[priority] requires a numeric argument".to_owned())
@@ -434,11 +459,13 @@ pub(crate) fn parse_priority_arg(args: &[String]) -> Result<u32, ElabError> {
 
 /// Parse a `@[deprecated "msg"]` argument. Returns empty string if missing.
 #[must_use]
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn parse_deprecated_arg(args: &[String]) -> String {
     args.first().cloned().unwrap_or_default()
 }
 
 /// Parse an `@[extern "abi"]` argument.
+#[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn parse_extern_arg(args: &[String]) -> Result<String, ElabError> {
     args.first()
         .cloned()

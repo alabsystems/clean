@@ -95,6 +95,7 @@ pub(crate) struct NNMulConsts {
     eq_subst: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl NNMulConsts {
     pub(crate) fn new() -> Self {
         let lvl1 = Level::succ(Level::zero());

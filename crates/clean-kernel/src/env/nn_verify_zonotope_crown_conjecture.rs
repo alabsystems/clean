@@ -61,6 +61,8 @@ struct ProofConsts {
     /// `Eq.trans` at universe level 1.
     eq_trans: Expr,
     /// `Eq.refl` at universe level 1 (via `rfl`).
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_refl: Expr,
 }
 
@@ -90,6 +92,7 @@ impl ProofConsts {
 
     /// `rfl @α @a` — reflexivity proof `a = a`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn refl(&self, alpha: Expr, a: Expr) -> Expr {
         Expr::apps(self.eq_refl.clone(), [alpha, a])
     }
@@ -179,6 +182,7 @@ pub(super) fn build_single_layer_transitivity_proof(c: &ZonotopeCrownConsts) -> 
 ///   Eq (IB m) (zonotope_linear_propagate m n W b input)
 ///              (crown_backward_linear m n W b input)`
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) fn build_single_layer_transitivity_type(c: &ZonotopeCrownConsts) -> Expr {
     let mut b = EnvDeclBuilder::new();
     let (m_id, m) = b.fresh_local(c.base.nat.clone());
@@ -229,6 +233,7 @@ pub(super) fn build_single_layer_transitivity_type(c: &ZonotopeCrownConsts) -> E
 /// where `network_induction` is a helper axiom that encapsulates the
 /// Nat.rec induction step using single_layer_transitivity at each layer.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) fn build_network_proof(c: &ZonotopeCrownConsts) -> Expr {
     // The network induction helper has exactly the theorem type,
     // so the proof is just applying it to all arguments.

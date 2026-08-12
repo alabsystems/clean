@@ -172,8 +172,32 @@ pub struct KernelInstanceInfo {
     pub value: Option<Expr>,
 }
 
-/// Default instance priority
+/// Clean's fabricated priority for an instance whose real priority is UNKNOWN.
+///
+/// **This is not Lean's default.** Lean's default for an unannotated `instance`
+/// is [`LEAN_DEFAULT_INSTANCE_PRIORITY`] (1000); 100 is Lean's `low`. The value
+/// here is deliberately low so that a guess ranks BELOW anything whose real
+/// priority is known — in particular below every `InstanceEntry` the `.olean`
+/// import decodes (`clean-olean`'s shape heuristic backfills at this value on
+/// purpose, so a real registration always outranks a fabricated one).
+///
+/// A hand-registered prelude instance that MIRRORS A REAL LEAN INSTANCE must
+/// therefore NOT use this constant: its priority is known, and it is whatever
+/// the shipped `.olean` serializes. Using 100 there is the defect
+/// `data/prelude_instance_priority_census.json` measures and
+/// `scripts/check_prelude_instance_priority_ratchet.py` ratchets shut.
 pub const DEFAULT_INSTANCE_PRIORITY: u32 = 100;
+
+/// Lean 4's priority for an `instance` declared with no `(priority := …)`.
+///
+/// Ground truth is the `u64` Lean serializes into `Lean.Meta.instanceExtension`
+/// in every shipped `.olean`, **not** any attribute in Lean's source. Reading
+/// the number off a source attribute is what produced three separate defects:
+/// `@[default_instance 100] instance instOfNatNat …` was read as priority 100
+/// (`8d80c9d98`), but `@[default_instance]` is a DIFFERENT TABLE — it orders
+/// literal-type DEFAULTING, not `synthInstance` candidate selection — and the
+/// `instance` itself is unannotated, so its real priority is this 1000.
+pub const LEAN_DEFAULT_INSTANCE_PRIORITY: u32 = 1000;
 
 // ============================================================================
 // Attribute Registry Types (#1133)

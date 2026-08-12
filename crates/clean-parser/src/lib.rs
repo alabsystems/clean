@@ -249,6 +249,16 @@ pub struct ParserRecoveryDiagnostic {
     pub actual_indent: Option<u32>,
     /// Original parser error message.
     pub message: String,
+    /// The tactic token whose grammar failed, when the recovery happened inside
+    /// a `by` block.
+    ///
+    /// Measurement integrity (T0, `docs/plans/TACTICS_TO_100_2026-07-29.md`
+    /// §RC-Q): a tactic-block recovery degrades the declaration to a synthetic
+    /// sorry. Without this field nothing in the whole pipeline names the tactic
+    /// that did nothing, so any coverage script keyed on `UnknownTactic`
+    /// under-reports the real gap. `None` for non-tactic recoveries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tactic: Option<String>,
 }
 
 /// File parse result with recovery diagnostics.

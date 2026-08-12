@@ -23,8 +23,11 @@ mod cmd_commit;
 mod cmd_compile;
 mod cmd_core;
 mod cmd_discover;
+mod cmd_drift;
 mod cmd_export_cert;
+mod cmd_extract;
 mod cmd_factory;
+mod cmd_false_controls;
 mod cmd_features;
 mod cmd_fold;
 mod cmd_help;
@@ -32,6 +35,7 @@ mod cmd_kernel;
 mod cmd_lake;
 mod cmd_lsp;
 mod cmd_math;
+mod cmd_math_map;
 mod cmd_mathverse;
 mod cmd_native_library;
 mod cmd_olean;
@@ -203,6 +207,14 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
         Commands::Replacement { command } => cmd_replacement::handle_replacement_command(command)?,
         Commands::Factory { command } => cmd_factory::handle_factory_command(command)?,
         Commands::Math { command } => cmd_math::handle_math_command(command)?,
+        Commands::MathMap { command } => cmd_math_map::handle_math_map_command(command)?,
+        // `None`: no parent-loaded environment is threaded through the
+        // top-level dispatcher, so `drift snapshot` uses `--project` or the
+        // Clean prelude environment.
+        Commands::Drift { command } => cmd_drift::handle_drift_command(command, None)?,
+        Commands::FalseControls { command } => {
+            cmd_false_controls::handle_false_control_command(command)?;
+        }
         Commands::Project { command } => cmd_project::handle_project_command(command)?,
         Commands::Attempts { command } => cmd_attempts::handle_attempt_command(command)?,
         Commands::Artifacts { command } => cmd_artifacts::handle_artifacts_command(command)?,
@@ -230,6 +242,7 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
         Commands::Olean(args) => cmd_olean::handle_olean_command(args)?,
         Commands::Compile(args) => cmd_compile::handle_compile_command(args)?,
         Commands::Run(args) => cmd_run::handle_run_command(args)?,
+        Commands::Extract(args) => cmd_extract::handle_extract_command(&args)?,
         Commands::SorryTrace(args) => cmd_sorry_trace::handle_sorry_trace_command(args)?,
         Commands::SorryCensus(args) => cmd_sorry_census::handle_sorry_census_command(args)?,
         Commands::Server(_) => {
@@ -523,6 +536,37 @@ pub mod __test_support {
             name: "clean_cli::cmd_math::FEATURES",
             slice: crate::cmd_math::FEATURES,
             allowed_roots: &["math"],
+        },
+        // `clean math-map ingest` + `clean math-map keys list|verify` — the
+        // user-facing driver for the fail-closed MathMap/Harmonic patch-bundle
+        // ingest pipeline that lives in `clean_mathverse::math_map`. The
+        // handlers live in `clean-cli/src/cmd_math_map.rs` because they combine
+        // the mathverse ingest engine with CLI-owned exit-code policy, so the
+        // descriptors live here rather than in `clean-mathverse`.
+        FeatureSource {
+            name: "clean_cli::cmd_math_map::FEATURES",
+            slice: crate::cmd_math_map::FEATURES,
+            allowed_roots: &["math-map"],
+        },
+        // `clean drift snapshot|diff` — the user-facing driver for the
+        // statement-preservation snapshot/diff engine in
+        // `clean_mathverse::drift`. The handlers live in
+        // `clean-cli/src/cmd_drift.rs` because they combine that engine with
+        // CLI-owned exit-code policy, so the descriptors live here rather than
+        // in `clean-mathverse`.
+        FeatureSource {
+            name: "clean_cli::cmd_drift::FEATURES",
+            slice: crate::cmd_drift::FEATURES,
+            allowed_roots: &["drift"],
+        },
+        // `clean false-controls run|replay-attempt` — the user-facing driver
+        // for the known-bad-input probe engine in
+        // `clean_mathverse::false_control_suite`, with the same split of
+        // engine (mathverse) versus exit-code policy (CLI).
+        FeatureSource {
+            name: "clean_cli::cmd_false_controls::FEATURES",
+            slice: crate::cmd_false_controls::FEATURES,
+            allowed_roots: &["false-controls"],
         },
         FeatureSource {
             name: "clean_cli::cmd_project::FEATURES",

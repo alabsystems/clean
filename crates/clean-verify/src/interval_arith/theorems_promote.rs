@@ -12,9 +12,19 @@
 //!
 //! Part of #3362 Acceptance Criterion #2.
 
-use crate::proofs::promote::{promote_single, PromotionError};
+use crate::proofs::promote::PromotionError;
+use crate::spec::SpecError;
+
+// Only `compute_proof_statuses_dynamically` uses these, and it is gated on
+// `any(test, feature = "test-utils")` because it needs
+// `Specification::new_interval_arith_test_spec`. Gate the imports identically
+// so a plain build does not carry them unused.
+#[cfg(any(test, feature = "test-utils"))]
+use crate::proofs::promote::promote_single;
+#[cfg(any(test, feature = "test-utils"))]
 use crate::proofs::ProofLibrary;
-use crate::spec::{ProofStatus, SpecError, Specification};
+#[cfg(any(test, feature = "test-utils"))]
+use crate::spec::{ProofStatus, Specification};
 
 /// Errors that can surface when computing dynamic proof statuses.
 #[derive(Debug, thiserror::Error)]

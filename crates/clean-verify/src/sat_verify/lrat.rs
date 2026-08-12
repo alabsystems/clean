@@ -1467,7 +1467,7 @@ mod tests {
     #[test]
     fn test_streaming_text_lrat_simple() {
         let input = b"3 1 -2 0 4 -5 0\n7 d 1 4 9 0\n";
-        let mut reader = std::io::BufReader::new(&input[..]);
+        let mut reader = io::BufReader::new(&input[..]);
 
         let step1 = parse_text_lrat_streaming(&mut reader)
             .expect("should parse")
@@ -1514,7 +1514,7 @@ mod tests {
         data.extend(encode_uleb128(9));
         data.extend(encode_uleb128(0));
 
-        let mut reader = std::io::BufReader::new(&data[..]);
+        let mut reader = io::BufReader::new(&data[..]);
 
         let step1 = parse_binary_lrat_streaming(&mut reader)
             .expect("should parse")
@@ -1545,7 +1545,7 @@ mod tests {
     #[test]
     fn test_streaming_text_verify_simple_unsat() {
         let proof_text = b"3 0 1 2 0\n";
-        let reader = std::io::BufReader::new(&proof_text[..]);
+        let reader = io::BufReader::new(&proof_text[..]);
 
         let result = verify_lrat_streaming_text(
             reader,
@@ -1569,7 +1569,7 @@ mod tests {
         data.extend(encode_uleb128(encode_binary_hint(2)));
         data.extend(encode_uleb128(0));
 
-        let reader = std::io::BufReader::new(&data[..]);
+        let reader = io::BufReader::new(&data[..]);
         let result = verify_lrat_streaming_binary(
             reader,
             1,
@@ -1609,7 +1609,7 @@ mod tests {
             .expect("batch verify");
 
         // Streaming verification.
-        let reader = std::io::BufReader::new(proof_text.as_bytes());
+        let reader = io::BufReader::new(proof_text.as_bytes());
         let streaming_result =
             verify_lrat_streaming_text(reader, 3, &original_clauses).expect("streaming verify");
 
@@ -1624,6 +1624,7 @@ mod tests {
     /// n pigeons, n-1 holes. Variable p_{i,j} = (i-1)*(n-1) + j.
     /// At-least-one clauses: each pigeon must go in at least one hole.
     /// At-most-one clauses: each hole holds at most one pigeon.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     fn php_cnf(n: u32) -> (u32, Vec<(ClauseId, Vec<Lit>)>) {
         let holes = n - 1;
         let num_vars = n * holes;
@@ -1657,6 +1658,7 @@ mod tests {
     ///
     /// This constructs a proof by successively narrowing possibilities.
     /// PHP(4,3): 4 pigeons, 3 holes, 12 variables, guaranteed UNSAT.
+    #[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     fn php43_lrat_proof(original_clauses: &[(ClauseId, Vec<Lit>)]) -> Vec<LratStep> {
         // For PHP(4,3) we build the LRAT proof by running the DRAT-to-LRAT
         // converter on a known DRAT proof.
@@ -1742,7 +1744,7 @@ mod tests {
         });
 
         // Add some deletions to exercise streaming deletion path.
-        let del_start_id = next_proof_id + 1;
+        let _del_start_id = next_proof_id + 1;
         proof_steps.push(LratStep::Delete {
             clause_ids: vec![ClauseId(1), ClauseId(2)],
         });
@@ -1773,7 +1775,7 @@ mod tests {
 
         // Text streaming verification.
         let text_proof = format_lrat_text_steps(&proof_steps);
-        let text_reader = std::io::BufReader::new(text_proof.as_bytes());
+        let text_reader = io::BufReader::new(text_proof.as_bytes());
         let streaming_text_result =
             verify_lrat_streaming_text(text_reader, num_vars, &original_clauses)
                 .expect("streaming text verify should succeed");
@@ -1795,7 +1797,7 @@ mod tests {
         );
 
         // Binary streaming verification.
-        let binary_reader = std::io::BufReader::new(&binary_proof[..]);
+        let binary_reader = io::BufReader::new(&binary_proof[..]);
         let streaming_binary_result =
             verify_lrat_streaming_binary(binary_reader, num_vars, &original_clauses)
                 .expect("streaming binary verify should succeed");

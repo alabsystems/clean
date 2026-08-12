@@ -75,6 +75,19 @@ pub struct SimpConfig {
     /// main loop to evaluate ground expressions (e.g., `2 + 3 → 5`).
     /// Default: true.
     pub use_simprocs: bool,
+    /// How deep the conditional-rewrite discharger may recurse (RC-J).
+    ///
+    /// A conditional simp lemma (`(h : b ≤ a) : a - b + b = a`) leaves a
+    /// side condition once its LHS matches. `simp/discharge.rs` tries to
+    /// close that side condition; its last stage runs `simp` on the premise,
+    /// which can itself match a conditional lemma. This counter bounds that
+    /// recursion so a lemma whose premise requires itself terminates instead
+    /// of looping. `0` disables the recursive stage entirely (the
+    /// `assumption` / `rfl` / `True.intro` stages still run).
+    ///
+    /// Mirrors Lean 4's `Simp.Config.maxDischargeDepth`, whose upstream
+    /// default is also `2`.
+    pub discharge_depth: usize,
     /// Named constants to delta-unfold during simplification.
     ///
     /// Maps each unfoldable constant name to its stored definition body.
@@ -95,7 +108,8 @@ impl SimpConfig {
     ///
     /// ENSURES: `max_steps` is 1000, `beta` and `eta` are enabled,
     ///   `unfold` is disabled, lemma lists and exclude set are empty,
-    ///   `only` is false (use full @[simp] set), `use_hypotheses` is false.
+    ///   `only` is false (use full @[simp] set), `use_hypotheses` is false,
+    ///   `discharge_depth` is 2 (Lean's `maxDischargeDepth` default).
     pub fn new() -> Self {
         SimpConfig {
             max_steps: 1000,
@@ -109,6 +123,7 @@ impl SimpConfig {
             only: false,
             use_hypotheses: false,
             use_simprocs: true,
+            discharge_depth: 2,
             unfold_defs: HashMap::new(),
         }
     }

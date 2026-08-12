@@ -66,6 +66,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants reused across type and value construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct IntAddNegSelfConsts {
     int_type: Expr,
     nat_type: Expr,
@@ -126,6 +127,7 @@ impl IntAddNegSelfConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn neg_succ(&self, n: Expr) -> Expr {
         Expr::app(self.int_neg_succ.clone(), n)
     }

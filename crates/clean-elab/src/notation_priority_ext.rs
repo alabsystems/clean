@@ -9,6 +9,9 @@ pub(crate) use super::notation_priority::{
     PriorityResolver,
 };
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 #[path = "notation_priority_ext_detail.rs"]
 mod detail;
 

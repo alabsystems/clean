@@ -64,6 +64,8 @@ struct MinflConsts {
     nat_mul: Expr,
     int_of_nat: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     int_mul_one: Expr,
     rat_mk: Expr,
     rat_mul: Expr,
@@ -169,6 +171,7 @@ impl MinflConsts {
         Expr::app(self.nat_succ.clone(), self.nat_one())
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn nsucc(&self, k: &Expr) -> Expr {
         Expr::app(self.nat_succ.clone(), k.clone())
     }

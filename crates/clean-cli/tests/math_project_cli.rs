@@ -1355,7 +1355,7 @@ fn math_obligation_validate_accepts_structured_kernel_goal_with_stable_fingerpri
             "commit": "legacy-serialized-kernel-goal"
         },
         "goal": {
-            "expr": serde_json::to_string_pretty(&clean_kernel::Expr::prop())
+            "expr": serde_json::to_string_pretty(&Expr::prop())
                 .expect("serialize Expr"),
             "pretty": "Prop"
         },
@@ -1546,7 +1546,7 @@ fn math_proof_state_open_obligation_distinguishes_invalid_serialized_goal() {
 #[test]
 fn math_proof_state_open_obligation_fails_closed_for_pretty_only_local_context() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let goal_expr = serde_json::to_string(&clean_kernel::Expr::prop()).expect("serialize Expr");
+    let goal_expr = serde_json::to_string(&Expr::prop()).expect("serialize Expr");
     let obligation_path = temp.path().join("pretty_only_local_context.json");
     let payload = serde_json::json!({
         "schema_version": "clean-obligation-v1",

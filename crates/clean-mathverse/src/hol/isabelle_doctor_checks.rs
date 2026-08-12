@@ -15,8 +15,6 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::super::isabelle_index;
-use super::super::isabelle_pure_verify::snapshot::{self, SnapshotError, SnapshotHeaderInfo};
 use super::{home_dir, run_capture, BuildIdentity, Check, DoctorConfig, Status};
 
 /// Naive absolute-path token matcher: `/Users/…`, `$HOME/…`, `~/…` runs that
@@ -519,6 +517,7 @@ fn collect_shell_scripts(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
 /// Naive path-token extraction: `/Users/…`, `$HOME/…`, and `~/…` runs that look
 /// like file references (a `.`-bearing final component). Stops at shell/quoting
 /// delimiters. Deliberately conservative to keep false positives low.
+#[cfg(any(test, doc))]
 pub(super) fn extract_path_tokens(text: &str) -> Vec<String> {
     let mut tokens: Vec<String> = Vec::new();
     for cap in PATH_TOKEN_RE.find_iter(text) {

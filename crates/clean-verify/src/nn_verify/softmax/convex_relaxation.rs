@@ -37,6 +37,12 @@
 //! - Wei et al., "Certified Robustness of Transformers" (NeurIPS 2021)
 //! - Bonaert et al., "Fast and Precise Certification of Transformers" (PLDI 2021)
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use super::lse::{log_sum_exp, softmax};
 
 /// Result of softmax convex relaxation over a box `[lower, upper]`.
@@ -219,6 +225,7 @@ pub(crate) fn lse_tangent_lower_bound(x0: &[f64]) -> LinearBound {
 ///
 /// Panics if inputs have different lengths or are empty.
 #[must_use]
+#[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
 pub(crate) fn lse_secant_upper_bound(lower: &[f64], upper: &[f64]) -> LinearBound {
     let n = lower.len();
     assert_eq!(n, upper.len(), "bounds must have equal length");

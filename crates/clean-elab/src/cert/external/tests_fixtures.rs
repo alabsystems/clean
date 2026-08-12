@@ -45,6 +45,41 @@ fn test_fixture_farkas_loads_and_verifies() {
 }
 
 #[test]
+fn test_fixture_tll_instance_6_0_farkas_and_entailment() {
+    // NY's TLL structure-aware bound for tllverifybench instance_6_0, emitted as
+    // exact-rational external certs (crates/ny-cert example tll_instance_6_0).
+    // Binding single-selector cell slice: L_12(x) >= global_LB over cell C*.
+    let fjson = std::fs::read_to_string(fixture_path("tll_instance_6_0_farkas.json"))
+        .expect("tll farkas fixture should exist");
+    match serde_json::from_str::<ExternalCertificate>(&fjson).expect("tll farkas deserializes") {
+        ExternalCertificate::Farkas(farkas) => {
+            let residual = verify_farkas_certificate(&farkas).expect("tll farkas cert must verify");
+            // Strict (Lt) contradiction: residual must be non-positive (here 0).
+            assert!(
+                !residual.is_positive(),
+                "strict Farkas contradiction requires non-positive residual, got {residual:?}"
+            );
+        }
+        other => panic!("expected Farkas variant, got {other:?}"),
+    }
+
+    let ejson = std::fs::read_to_string(fixture_path("tll_instance_6_0_entailment.json"))
+        .expect("tll entailment fixture should exist");
+    match serde_json::from_str::<ExternalCertificate>(&ejson).expect("tll entailment deserializes")
+    {
+        ExternalCertificate::Entailment(ent) => {
+            let (derived, claimed) =
+                verify_entailment_certificate(&ent).expect("tll entailment cert must verify");
+            assert!(
+                derived <= claimed,
+                "entailment should hold: derived {derived:?} <= claimed {claimed:?}"
+            );
+        }
+        other => panic!("expected Entailment variant, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_fixture_entailment_loads_and_verifies() {
     let json = std::fs::read_to_string(fixture_path("gamma_crown_entailment_valid.json"))
         .expect("entailment fixture should exist");

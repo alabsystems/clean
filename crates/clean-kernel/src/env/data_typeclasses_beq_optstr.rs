@@ -457,7 +457,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instBEqOption"),
             class_name: Name::from_string("BEq"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });

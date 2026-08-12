@@ -239,7 +239,7 @@ pub fn theorem_registry() -> Vec<TheoremEntry> {
     entries.extend(super::nullstellensatz::c028_spec::c028_theorem_entries());
     // C4515 (gamma-crown mail #3524): Rat-typed IBP linear soundness spec,
     // kernel-backed by `NNVerify.ibp_linear_sound`.
-    entries.extend(ibp_rat::c4515_theorem_entries());
+    entries.extend(c4515_theorem_entries());
     entries
 }
 

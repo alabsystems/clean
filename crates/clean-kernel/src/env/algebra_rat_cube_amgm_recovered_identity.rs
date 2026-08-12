@@ -43,6 +43,7 @@ impl CubeAmGmConstsRecovered {
 
     /// `pub(super)` re-export of `poly_expr`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn poly_expr_pub(&self, poly: &BTreeMap<Mono, i64>, p: &Expr, q: &Expr) -> Expr {
         self.poly_expr(poly, p, q)
     }

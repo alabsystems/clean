@@ -354,6 +354,7 @@ fn build_hetero_ctor_type(
     b.finish(r)
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     fn init_hetero_op_with_flavor(&mut self, flavor: HeteroOpFlavor) -> Result<(), EnvError> {
         let class_name = Name::from_string(flavor.class_name);
@@ -396,12 +397,12 @@ impl Environment {
             types: vec![InductiveType {
                 name: class_name.clone(),
                 type_: Expr::pi(
-                    BinderInfo::Implicit,
+                    BinderInfo::Default,
                     type_u.clone(),
                     Expr::pi(
-                        BinderInfo::Implicit,
+                        BinderInfo::Default,
                         type_v.clone(),
-                        Expr::pi(BinderInfo::Implicit, type_w.clone(), result_type),
+                        Expr::pi(BinderInfo::Default, type_w.clone(), result_type),
                     ),
                 ),
                 constructors: vec![Constructor {
@@ -481,7 +482,7 @@ impl Environment {
             num_params: 1,
             types: vec![InductiveType {
                 name: class_name.clone(),
-                type_: Expr::pi(BinderInfo::Implicit, type_u.clone(), type_u.clone()),
+                type_: Expr::pi(BinderInfo::Default, type_u.clone(), type_u.clone()),
                 constructors: vec![Constructor {
                     name: ctor_name,
                     type_: ctor_type,
@@ -547,9 +548,9 @@ impl Environment {
             types: vec![InductiveType {
                 name: Name::from_string("Pow"),
                 type_: Expr::pi(
-                    BinderInfo::Implicit,
+                    BinderInfo::Default,
                     type_u.clone(),
-                    Expr::pi(BinderInfo::Implicit, type_v.clone(), result_type),
+                    Expr::pi(BinderInfo::Default, type_v.clone(), result_type),
                 ),
                 constructors: vec![Constructor {
                     name: Name::from_string("Pow.mk"),
@@ -2072,7 +2073,7 @@ impl Environment {
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instNegFloat"),
             class_name: Name::from_string("Neg"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });

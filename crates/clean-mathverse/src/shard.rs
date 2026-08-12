@@ -421,7 +421,7 @@ impl ShardWriter {
         // asserting `add_level(zero) == 0` to fail at index 1.
         let mut string_dedup = hashbrown::HashMap::new();
         string_dedup.insert(String::new(), 0);
-        let zero_level = clean_kernel::flat::FlatLevel::zero();
+        let zero_level = FlatLevel::zero();
         let mut level_dedup = hashbrown::HashMap::new();
         level_dedup.insert(level_to_bytes(&zero_level), 0);
         Self {
@@ -815,7 +815,7 @@ impl ShardWriter {
     /// gained at least one bit.
     pub(crate) fn apply_closed_axiom_profiles(
         &mut self,
-        closed: &std::collections::HashMap<String, AxiomProfile>,
+        closed: &HashMap<String, AxiomProfile>,
     ) -> usize {
         let mut upgraded = 0usize;
         for c in &mut self.constants {
@@ -855,6 +855,7 @@ impl ShardWriter {
 
     /// Read back an expression by arena index, or `None` if out of range
     /// (test/audit helper for inspecting emitted `FlatExpr` trees).
+    #[cfg(test)]
     pub(crate) fn expr_at(&self, idx: u32) -> Option<FlatExpr> {
         self.exprs.get(idx as usize).copied()
     }
@@ -2950,7 +2951,7 @@ fn validate_constant_headers(
         if name.chars().any(|ch| matches!(ch, '/')) {
             // warn!("constant {i} declaration name {name:?} contains a path separator");
         }
-        if let Some(previous) = seen_names.insert(name, i) {
+        if let Some(_previous) = seen_names.insert(name, i) {
             // warn!("constant {i} duplicates declaration name {name:?} first used by constant {previous}");
         }
         if constant.type_idx >= header.expr_count {
@@ -5038,12 +5039,12 @@ mod tests {
         let s0 = writer.add_string("Test.all_tags");
         let e_const = writer.add_expr(FlatExpr::const_ref(s0, u32::MAX)); // tag 2
         let e_app = writer.add_expr(FlatExpr::app(e_sort, e_bvar)); // tag 3
-        let e_lam = writer.add_expr(FlatExpr::lam(0, e_sort, e_bvar)); // tag 4
-        let e_pi = writer.add_expr(FlatExpr::pi(0, e_sort, e_bvar)); // tag 5
-        let e_let = writer.add_expr(FlatExpr::let_expr(e_sort, e_bvar, e_sort)); // tag 6
-        let e_nat = writer.add_expr(FlatExpr::lit_nat(42)); // tag 7
-        let e_str = writer.add_expr(FlatExpr::lit_str(s0)); // tag 8
-        let e_proj = writer.add_expr(FlatExpr::proj(s0, 0, e_sort)); // tag 9
+        let _e_lam = writer.add_expr(FlatExpr::lam(0, e_sort, e_bvar)); // tag 4
+        let _e_pi = writer.add_expr(FlatExpr::pi(0, e_sort, e_bvar)); // tag 5
+        let _e_let = writer.add_expr(FlatExpr::let_expr(e_sort, e_bvar, e_sort)); // tag 6
+        let _e_nat = writer.add_expr(FlatExpr::lit_nat(42)); // tag 7
+        let _e_str = writer.add_expr(FlatExpr::lit_str(s0)); // tag 8
+        let _e_proj = writer.add_expr(FlatExpr::proj(s0, 0, e_sort)); // tag 9
         let _e_fvar = writer.add_expr(FlatExpr::fvar(100)); // tag 10
 
         // Use the last complex expr as the type for our constant
@@ -5123,7 +5124,7 @@ mod tests {
     /// Helper: build a single-constant shard with the given decl_kind and
     /// level parameter names, write it to `path`, and return the path.
     fn build_shard_with_decl_kind(
-        dir: &std::path::Path,
+        dir: &Path,
         name: &str,
         decl_kind: DeclKind,
         level_param_names: &[&str],

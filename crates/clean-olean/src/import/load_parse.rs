@@ -64,14 +64,15 @@ pub(crate) struct LoadConstant {
     pub(crate) recursor_val: Option<LoadRecursorValData>,
     /// Reducibility hints (for definitions only).
     pub(crate) hints: Option<ReducibilityHintsData>,
-    /// `DefinitionVal.safety` (for `ConstantKind::Definition` only).
+    /// Declaration safety for definitions, axioms, and opaques.
     ///
     /// Lean `unsafe def`s are recursive with no termination proof; replaying
     /// one as an ordinary safe `Definition` through one-shot `add_decl` fails
     /// on its self-reference (`Unknown constant: <self>`). Preserving the flag
-    /// lets consumers route unsafe definitions to a trusted-context lane
-    /// (mirrors `ParsedConstant::definition_safety`). `None` for
-    /// non-definitions or `DefnVal`s that predate the `safety` slot.
+    /// lets consumers route non-safe declarations to a trusted-context lane
+    /// (mirrors `ParsedConstant::definition_safety`). Axioms and opaques use
+    /// this historical field for their `isUnsafe` Bool; `None` is reserved for
+    /// kinds that carry no declaration-safety field.
     pub(crate) definition_safety: Option<DefinitionSafety>,
 }
 
@@ -86,6 +87,7 @@ pub(crate) struct LoadRecursorValData {
     /// Recursor rules with raw RHS pointers.
     pub(crate) rules: Vec<LoadRecursorRule>,
     pub(crate) k: bool,
+    pub(crate) is_unsafe: bool,
 }
 
 /// A recursor rule with a raw pointer to the RHS expression.
@@ -329,6 +331,7 @@ fn read_load_constant_info(region: &CompactedRegion<'_>, ptr: u64) -> OleanResul
     let header = region.read_header_at(offset)?;
 
     let kind = match header.tag {
+        0 => ConstantKind::Axiom,
         1 => ConstantKind::Definition,
         2 => ConstantKind::Theorem,
         3 => ConstantKind::Opaque,
@@ -336,7 +339,7 @@ fn read_load_constant_info(region: &CompactedRegion<'_>, ptr: u64) -> OleanResul
         5 => ConstantKind::Inductive,
         6 => ConstantKind::Constructor,
         7 => ConstantKind::Recursor,
-        _ => ConstantKind::Axiom,
+        tag => return Err(OleanError::InvalidObjectTag { tag, offset }),
     };
 
     // XxxVal is the first field
@@ -357,7 +360,7 @@ fn read_load_constant_info(region: &CompactedRegion<'_>, ptr: u64) -> OleanResul
     // Read reducibility hints
     let hints = region.read_reducibility_hints(&kind, val_offset, &val_header)?;
 
-    // Read DefinitionSafety (safe/unsafe/partial) for definitions.
+    // Read declaration safety for definitions, axioms, and opaques.
     let definition_safety = region.read_definition_safety(&kind, val_offset, &val_header)?;
 
     // Parse extra fields based on kind
@@ -459,8 +462,7 @@ fn read_load_recursor_val_data(
     let rules_ptr = region.read_u64_at(val_offset + 56)?;
     let rules = read_load_recursor_rules(region, rules_ptr)?;
 
-    let k = region.read_bool_at_pub(val_offset + 64)?;
-    // is_unsafe at offset 72 is not needed by the direct converter; skip.
+    let (k, is_unsafe) = region.read_recursor_bool_flags(val_offset)?;
 
     Ok(LoadRecursorValData {
         all,
@@ -470,6 +472,7 @@ fn read_load_recursor_val_data(
         num_minors,
         rules,
         k,
+        is_unsafe,
     })
 }
 

@@ -4,37 +4,19 @@
 
 use clean_kernel::{Expr, ExprKind};
 
-fn nat_const_value(expr: &Expr) -> Option<u64> {
-    let mut current = expr;
-    let mut succs = 0_u64;
+use super::nat_expr_eval::read_nat_numeral;
 
-    loop {
-        match current.kind() {
-            ExprKind::Lit(clean_kernel::expr::Literal::Nat(n)) => {
-                return n.to_u64()?.checked_add(succs);
-            }
-            ExprKind::Const(name, _) => {
-                let name = name.to_string();
-                return match name.as_str() {
-                    "Nat.zero" => Some(succs),
-                    "Nat.one" | "1" => succs.checked_add(1),
-                    _ => None,
-                };
-            }
-            ExprKind::App(f, arg) => match f.kind() {
-                ExprKind::Const(name, _) if name.to_string() == "Nat.succ" => {
-                    succs = succs.checked_add(1)?;
-                    current = arg;
-                }
-                _ => return None,
-            },
-            _ => return None,
-        }
-    }
-}
-
+/// Recognize a non-negative ring constant.
+///
+/// The Nat spellings come from the shared `nat_expr_eval::read_nat_numeral`
+/// reader, which is what makes the `@OfNat.ofNat α k inst` form the elaborator
+/// builds for a source numeral fold here. Before that (RC-H) this file carried
+/// its own reader that saw only `Nat.zero` / a `Nat.succ` chain / a raw
+/// `Lit(Nat)`, so `ring_normalize` mapped every source numeral to an opaque
+/// `RingExpr::Unknown` atom and `ring` could not prove `0 + x = x` or
+/// `1 * x = x`.
 pub(crate) fn nonnegative_ring_const_value(expr: &Expr) -> Option<u64> {
-    nat_const_value(expr).or_else(|| match expr.kind() {
+    read_nat_numeral(expr).or_else(|| match expr.kind() {
         ExprKind::Const(name, _) => {
             let name = name.to_string();
             match name.as_str() {
@@ -44,7 +26,7 @@ pub(crate) fn nonnegative_ring_const_value(expr: &Expr) -> Option<u64> {
             }
         }
         ExprKind::App(f, arg) => match f.kind() {
-            ExprKind::Const(name, _) if name.to_string() == "Int.ofNat" => nat_const_value(arg),
+            ExprKind::Const(name, _) if name.to_string() == "Int.ofNat" => read_nat_numeral(arg),
             _ => None,
         },
         _ => None,

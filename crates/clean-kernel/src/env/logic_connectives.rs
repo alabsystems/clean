@@ -269,7 +269,14 @@ impl Environment {
             let r = result;
             let r = b.mk_pi(h_id, BinderInfo::Default, pw, r);
             let r = b.mk_pi(w_id, BinderInfo::Default, alpha.clone(), r);
-            let r = b.mk_pi(p_id, BinderInfo::Default, p_ty, r);
+            // The predicate binder is IMPLICIT (Lean parity:
+            // `@Exists.intro : {α : Sort u} → {p : α → Prop} → (w : α) →
+            // p w → Exists p`). It was Default, so `Exists.intro w h`
+            // matched the WITNESS against the predicate slot (the p23
+            // battery pin). Explicit-p call sites keep working through the
+            // application elaborator's fits-probe. The TYPE former's p stays
+            // explicit (Lean: `Exists {α} (p : α → Prop) : Prop`).
+            let r = b.mk_pi(p_id, BinderInfo::Implicit, p_ty, r);
             let r = b.mk_pi(alpha_id, BinderInfo::Implicit, sort_u.clone(), r);
             b.finish(r)
         };

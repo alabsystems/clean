@@ -48,6 +48,7 @@ const MCIH: &str = "NNVerify.Block.monolithic_crown_ihstep";
 const MCIH_SUCC_UNFOLD: &str = "NNVerify.Block.monolithic_crown_ihstep_succ_unfold";
 const MCF: &str = "NNVerify.Block.monolithic_crown_faithful";
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn make_env() -> Environment {
     let mut env = Environment::new();
     env.init_nn_verify_blockwise_crown_ext()
@@ -108,6 +109,7 @@ fn peel_outer_lams(expr: &Expr) -> (Expr, usize) {
     (cursor, depth)
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn get_value(env: &Environment, name: &str) -> Expr {
     env.get_const(&Name::from_string(name))
         .unwrap_or_else(|| panic!("{name} should be registered"))

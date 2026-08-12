@@ -7,6 +7,8 @@
 //! Builds on [`crate::instance_priority`] / [`crate::instance_priority_ext`].
 //! Reference: Lean 4 `src/Lean/Meta/SynthInstance.lean`
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use clean_kernel::expr::Expr;
 use clean_kernel::name::Name;
 use std::collections::HashMap;
@@ -53,7 +55,11 @@ pub(crate) enum OverlapStrategy {
 #[derive(Debug, Clone)]
 pub(crate) struct InstanceCandidate {
     pub(crate) name: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) class: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) expr: Expr,
     pub(crate) type_: Expr,
     /// Effective numeric priority (higher = tried first).
@@ -61,6 +67,8 @@ pub(crate) struct InstanceCandidate {
     /// Number of type arguments (proxy for specificity).
     pub(crate) specificity: u32,
     pub(crate) is_local: bool,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) defining_module: Option<Name>,
 }
 
@@ -69,7 +77,11 @@ pub(crate) struct InstanceCandidate {
 pub(crate) struct OverlapInfo {
     pub(crate) first: Name,
     pub(crate) second: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) class: Name,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) type_name: Name,
 }
 
@@ -81,6 +93,8 @@ pub(crate) struct ResolutionStats {
     pub(crate) diamonds_resolved: u64,
     pub(crate) depth_limit_hits: u64,
     pub(crate) max_depth_observed: u32,
+    #[allow(dead_code)]
+    // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) local_instances_used: u64,
     pub(crate) coherence_violations: u64,
 }

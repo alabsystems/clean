@@ -762,7 +762,7 @@ fn test_if_uint8_eq_resolves_instance_no_sorry() {
     );
 
     // The whole elaborated term type-checks (no unresolved metas, real instance).
-    let mut ctx = ElabCtx::new(&env);
+    let ctx = ElabCtx::new(&env);
     let ty = ctx
         .infer_type(&expr)
         .expect("UInt8 if-eq elaborated term should type-check");

@@ -57,7 +57,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (a_id, _a) = b.fresh_local(type_u.clone());
             let r = Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone())));
-            let r = b.mk_pi(a_id, BinderInfo::Implicit, type_u.clone(), r);
+            let r = b.mk_pi(a_id, BinderInfo::Default, type_u.clone(), r);
             b.finish(r)
         };
 
@@ -183,7 +183,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (n_id, n) = b.fresh_local(nat_const.clone());
             let r = Expr::app(Expr::app(nat_le_c.clone(), n.clone()), n);
-            let r = b.mk_pi(n_id, BinderInfo::Default, nat_const.clone(), r);
+            let r = b.mk_pi(n_id, BinderInfo::Implicit, nat_const.clone(), r);
             b.finish(r)
         };
 
@@ -302,7 +302,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (a_id, _a) = b.fresh_local(type_u.clone());
             let r = Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone())));
-            let r = b.mk_pi(a_id, BinderInfo::Implicit, type_u.clone(), r);
+            let r = b.mk_pi(a_id, BinderInfo::Default, type_u.clone(), r);
             b.finish(r)
         };
 

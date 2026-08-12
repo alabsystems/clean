@@ -44,13 +44,9 @@
 //!
 //! `DerivedProved`, empty axiom closures.
 
+use super::nf_head::HNF;
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
-
-/// The hereditary normal-form-head hypothesis, as in the other rounds.
-const HNF: &str = "(hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
-     Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (OptionType.some KExpr r) -> \
-     nf_head r) ";
 
 impl Specification {
     /// Rounds at the component-free heads.
@@ -127,7 +123,20 @@ impl Specification {
             "def_eq_complete_leaf_lit n x bb v1 v2",
             "",
         );
-        vec![sort, lit]
+        let bvar = (
+            "bvar",
+            "(i1 : Nat)",
+            "(KExpr.bvar i1)",
+            "BvarShape",
+            "nf_tag_forces_bvar i1",
+            "(i2 : Nat)",
+            "(KExpr.bvar i2)",
+            "par_reduces_cd_star_bvar_inv_eq the_red_env",
+            "kexpr_bvar_inj i1 i2",
+            "def_eq_complete_leaf_bvar n x bb i1 i2",
+            "",
+        );
+        vec![sort, lit, bvar]
             .into_iter()
             .map(
                 |(head, lbind, lform, shape, forces, rbind, rform, inv, inj, step, _extra)| {

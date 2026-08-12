@@ -1,0 +1,11 @@
+# Registry format for Aristotle/Harmonic signing keys.
+# Replace the disabled placeholder with the real ed25519 service key before
+# enabling production ingest from a remote service.
+schema_version = "clean-math_map-trusted-keys-v1"
+
+[[keys]]
+service = "math_map"
+key_id = "math_map-placeholder-disabled"
+algorithm = "ed25519"
+public_key = "REPLACE_WITH_REAL_MATH_MAP_ED25519_PUBLIC_KEY"
+status = "disabled"

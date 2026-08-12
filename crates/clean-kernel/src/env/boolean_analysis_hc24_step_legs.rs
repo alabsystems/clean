@@ -156,6 +156,7 @@ fn step_s2_pointwise(
     b.finish_child(b.mk_lam(k_id, BinderInfo::Default, c.fin_of(&p2n), proof))
 }
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn lhs_sum_clone(c: &StepConsts, a: &Expr, b: &Expr) -> Expr {
     c.add(a.clone(), b.clone())
 }

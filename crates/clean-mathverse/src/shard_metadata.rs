@@ -258,7 +258,7 @@ mod tests {
     fn test_write_and_load_metadata() {
         let dir = tempfile::tempdir().expect("create temp dir");
         let shard_path = dir.path().join("test.mathverse");
-        std::fs::write(&shard_path, b"fake shard").expect("write fake shard");
+        fs::write(&shard_path, b"fake shard").expect("write fake shard");
 
         let mut meta = ShardMetadata::new("TestSystem");
         meta.push(MetadataEntry {

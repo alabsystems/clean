@@ -80,9 +80,13 @@ pub mod env_fingerprint;
 // The blessed choke point for all `std::env::set_var`/`remove_var` in this
 // crate (production + tests + `tests/` integration binaries). Doc-hidden: it is
 // process-environment plumbing, not part of the crate's mathematical API.
+pub mod drift;
 pub mod evidence_query;
 pub mod evidence_refresh;
 pub mod external_patch_attempt;
+pub mod false_control_suite;
+// --- Untrusted patch-bundle ingest (Aristotle/MathMap interop) ---
+pub mod math_map;
 #[doc(hidden)]
 pub mod process_env;
 // `metrics` declaration removed to match Wave 39 ("re-delete metrics.rs stub"):

@@ -19,7 +19,9 @@
 //! translation pipeline.
 
 use crate::hol::isabelle::translate::IsabelleTranslator;
-use crate::hol::isabelle::types::{IsaTerm, IsaTheorem, IsaType, ProofStatus};
+use crate::hol::isabelle::types::{IsaTerm, IsaType};
+#[cfg(test)]
+use crate::hol::isabelle::types::{IsaTheorem, ProofStatus};
 use crate::types::{AxiomProfile, TrustLevel};
 
 // ---------------------------------------------------------------------------

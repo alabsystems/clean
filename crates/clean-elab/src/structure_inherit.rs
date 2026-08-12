@@ -39,6 +39,9 @@ pub(crate) enum InheritError {
     /// Field name collision between own and inherited fields that cannot be
     /// resolved by override (the types are incompatible).
     #[error("field `{field}` conflicts: inherited from `{origin}`, also declared locally")]
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     FieldConflict { field: Name, origin: Name },
 
     /// Two distinct parents contribute a field with the same name but

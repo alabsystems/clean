@@ -17,6 +17,7 @@
 //! 3. clean chains N certificates via T70 (entailment transitivity)
 //! 4. Result: machine-checked proof that network maps input bounds to output bounds
 
+pub mod branch_cover;
 pub(crate) mod chain;
 pub mod composition;
 pub mod compositional;

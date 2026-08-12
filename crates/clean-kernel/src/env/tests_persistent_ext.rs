@@ -9,7 +9,7 @@
 
 use super::ext_simp::{simp_ext_idx, SimpExtEntry, SimpExtState};
 use super::persistent_ext::{
-    get_ext_idx, register_persistent_ext, EnvExtensionStates, ExtensionIdx, PersistentExtEntry,
+    get_ext_idx, register_persistent_ext, EnvExtensionStates, PersistentExtEntry,
     PersistentExtState,
 };
 use super::types::{
@@ -220,7 +220,7 @@ impl PersistentExtEntry for AttrEntry {
 /// State: maps declaration name -> set of attribute names.
 #[derive(Clone, Debug, Default)]
 struct AttrState {
-    attrs: hashbrown::HashMap<Name, Vec<Name>>,
+    attrs: HashMap<Name, Vec<Name>>,
 }
 
 impl PersistentExtState for AttrState {

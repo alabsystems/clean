@@ -85,6 +85,8 @@ struct WitnessConsts {
     ratq: Expr,
     // Carrier.
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     raw_mk: Expr,
     raw_num: Expr,
     raw_eff_denom: Expr,
@@ -129,6 +131,7 @@ struct WitnessConsts {
     exists_intro: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl WitnessConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

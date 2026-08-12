@@ -281,7 +281,7 @@ pub(super) fn register_poly_insts(
     // G4 anchor set: the (method, instance shape) pairs Isabelle's own
     // `instantiation` targets declared — a method-at-constructor body `_def`
     // registers ONLY at one of these (see `register_method_inst_def`).
-    let anchors: std::collections::BTreeSet<(String, String)> = registry
+    let anchors: BTreeSet<(String, String)> = registry
         .values()
         .filter_map(|v| v.alias_of.clone().map(|m| (m, isa_shape_key(&v.fn_ty))))
         .collect();
@@ -289,7 +289,7 @@ pub(super) fn register_poly_insts(
     // batch declines registration (see `alt_def_head` — registering the head
     // collapses the `_alt_def`'s recorded rewriting chain to a tautology and
     // kernel-rejects a previously-verified node).
-    let alt_heads: std::collections::BTreeSet<String> = theorems
+    let alt_heads: BTreeSet<String> = theorems
         .iter()
         .filter_map(|t| alt_def_head(t).map(str::to_string))
         .collect();

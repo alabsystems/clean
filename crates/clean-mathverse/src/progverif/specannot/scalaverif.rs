@@ -317,7 +317,7 @@ mod tests {
     fn test_stainless_extraction() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("example.scala");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 object Example {
@@ -363,7 +363,7 @@ object Example {
     fn test_lisa_extraction() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("Proofs.scala");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 object Proofs {

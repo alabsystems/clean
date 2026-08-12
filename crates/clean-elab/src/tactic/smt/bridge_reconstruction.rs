@@ -272,7 +272,12 @@ pub(super) fn recover_verified_goal_after_reconstruction_gap_with_requirement(
 /// Production callers now use `_with_requirement` directly; this permissive
 /// wrapper is retained for test convenience (e.g. `tests.rs` fail-closed
 /// regression).
-#[cfg(test)]
+// 2026-07-31: its sole caller
+// (`smt::tests::recovery::test_recover_verified_goal_after_reconstruction_gap_preserves_tactic_name`)
+// is itself `#[cfg(not(feature = "ay-smt"))]`, so with `ay-smt` on this wrapper
+// has no caller at all. Gated to mirror the caller exactly rather than blanket
+// `allow(dead_code)`, so the two cfgs cannot drift apart silently.
+#[cfg(all(test, not(feature = "ay-smt")))]
 pub(super) fn recover_verified_goal_after_reconstruction_gap(
     state: &mut ProofState,
     goal: &Goal,

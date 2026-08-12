@@ -15,11 +15,13 @@ pub mod incremental;
 pub mod integration;
 pub mod kernel_verified_manifest;
 /// Re-import verdict-cache population post-pass (P1 brick 3a).
+#[cfg(test)]
 pub(crate) mod reimport_cache_pass;
 pub mod sharded;
 /// Merkle trust receipt over a kernel-verified declaration set (P4).
 pub mod trust_receipt;
 /// Persistent verdict cache keyed by the Merkle-DAG verified hash (P1 brick 2).
+#[cfg(test)]
 pub(crate) mod verdict_cache;
 
 use crate::error::MathverseResult;

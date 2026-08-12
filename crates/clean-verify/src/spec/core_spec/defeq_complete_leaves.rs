@@ -58,7 +58,7 @@ struct Leaf {
     intro: &'static str,
 }
 
-const LEAVES: [Leaf; 3] = [
+const LEAVES: [Leaf; 4] = [
     Leaf {
         head: "sort",
         binders: "(u1 : Level) (u2 : Level)",
@@ -82,6 +82,18 @@ const LEAVES: [Leaf; 3] = [
                     (whnf_fuel_red the_red_env n b) (OptionType.some KExpr (KExpr.lit z))) \
                     v2 v1 (Eq.symm Nat v1 v2 hv) hb",
         intro: "def_eq_struct_intro_lit (def_eq_fuel the_red_env n) v1",
+    },
+    Leaf {
+        head: "bvar",
+        binders: "(i1 : Nat) (i2 : Nat)",
+        left: "(KExpr.bvar i1)",
+        right: "(KExpr.bvar i2)",
+        eqs: "(hi : Eq Nat i1 i2)",
+        transport: "Eq.substType Nat \
+                    (fun (z : Nat) => Eq (OptionType KExpr) \
+                    (whnf_fuel_red the_red_env n b) (OptionType.some KExpr (KExpr.bvar z))) \
+                    i2 i1 (Eq.symm Nat i1 i2 hi) hb",
+        intro: "def_eq_struct_intro_bvar (def_eq_fuel the_red_env n) i1",
     },
     Leaf {
         head: "const",
@@ -115,7 +127,12 @@ impl Specification {
     }
 
     /// Generated so the shape tests read the proof terms, not this file's prose.
-    fn complete_leaf_decls() -> Vec<(String, String)> {
+    ///
+    /// `pub(super)` because `defeq_fuel_wh3_mono` retargets these same sources
+    /// onto the three-way algorithm. Sharing the generator rather than copying
+    /// the table is deliberate: the two families cannot drift apart, and a fix to
+    /// a leaf's transport lands in both.
+    pub(super) fn complete_leaf_decls() -> Vec<(String, String)> {
         LEAVES
             .iter()
             .map(|lf| {
@@ -170,13 +187,16 @@ mod tests {
             .collect()
     }
 
-    /// One leaf per component-free head. `pi`/`lam`/`app`/`proj` are recursive
-    /// and live in the step module; `let_` cannot be a whnf at all.
+    /// One leaf per component-free head — `sort`, `lit`, `const` and `bvar`.
+    /// `pi`/`lam`/`app`/`proj` are recursive and live in the step module;
+    /// `let_` cannot be a whnf at all. `bvar` joined when `nf_head` gained its
+    /// arm: a bound variable carries a payload but no components, so it is a
+    /// leaf in exactly the sense `lit` is.
     #[test]
     fn test_one_leaf_per_component_free_head() {
-        assert_eq!(LEAVES.len(), 3);
+        assert_eq!(LEAVES.len(), 4);
         let heads: Vec<&str> = LEAVES.iter().map(|l| l.head).collect();
-        for h in ["sort", "lit", "const"] {
+        for h in ["sort", "lit", "const", "bvar"] {
             assert!(heads.contains(&h), "missing leaf for {h}");
         }
         for recursive in ["pi", "lam", "app", "proj"] {

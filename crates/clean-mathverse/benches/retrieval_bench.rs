@@ -15,7 +15,7 @@ use std::hint::black_box;
 
 use clean_kernel::flat::FlatExpr;
 use clean_mathverse::cross_system_index::CrossSystemIndex;
-use clean_mathverse::discrim::{fingerprint_for_search, DiscrimKey, DiscrimTree};
+use clean_mathverse::discrim::{fingerprint_for_search, DiscrimTree};
 use clean_mathverse::embedding::{BM25Index, MathEmbedding};
 use clean_mathverse::equivalence::EquivalenceDetector;
 use clean_mathverse::graph_alpha::{ConceptEdge, ConceptGraph, ConceptNode};
@@ -256,7 +256,7 @@ fn bench_type_search(c: &mut Criterion) {
         });
 
         // Also bench exact search with FlatExpr query.
-        let reader = ShardReader::from_bytes(&shard_bytes).expect("shard read");
+        let _reader = ShardReader::from_bytes(&shard_bytes).expect("shard read");
         // Build a query arena for Pi(Nat, Star).
         let query_exprs = vec![
             FlatExpr::const_ref(0, u32::MAX), // 0: Nat (name_idx=0)
@@ -451,8 +451,8 @@ fn bench_embedding(c: &mut Criterion) {
 
 /// Benchmark: DomainSearchEngine over a small graph.
 fn bench_domain_search(c: &mut Criterion) {
-    use clean_mathverse::graph_alpha::{build_domain_index, DomainIndex};
-    use clean_mathverse::search::{search_domain_query, DomainSearchEngine};
+    use clean_mathverse::graph_alpha::build_domain_index;
+    use clean_mathverse::search::search_domain_query;
 
     let mut group = c.benchmark_group("domain_search");
 

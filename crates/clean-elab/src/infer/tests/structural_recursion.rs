@@ -269,7 +269,7 @@ fn test_course_of_values_fib_lowers_and_computes() {
 
     // The transform emits two declarations.
     assert!(
-        matches!(result, crate::ElabResult::Multiple(ref rs) if rs.len() == 2),
+        matches!(result, ElabResult::Multiple(ref rs) if rs.len() == 2),
         "course-of-values fib should produce two declarations (aux + wrapper), got {result:?}"
     );
 
@@ -625,7 +625,7 @@ fn test_recursive_theorem_structural_elaborates_and_kernel_checks() {
         .expect("recursive theorem should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Theorem { .. }),
+        matches!(result, ElabResult::Theorem { .. }),
         "expected a Theorem result, got {result:?}"
     );
 
@@ -664,7 +664,7 @@ fn test_recursive_theorem_termination_by_elaborates_and_kernel_checks() {
         .expect("recursive theorem with termination_by should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Theorem { .. }),
+        matches!(result, ElabResult::Theorem { .. }),
         "expected a Theorem result, got {result:?}"
     );
     assert!(
@@ -687,7 +687,7 @@ fn test_non_recursive_theorem_unaffected_by_termination_handling() {
         .expect("non-recursive theorem should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Theorem { .. }),
+        matches!(result, ElabResult::Theorem { .. }),
         "expected a Theorem result, got {result:?}"
     );
 
@@ -736,7 +736,7 @@ fn test_equation_form_factorial_lowers_via_nat_rec() {
         .expect("equation-form factorial should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 
@@ -769,7 +769,7 @@ fn test_equation_form_list_length_lowers_via_list_rec() {
         .expect("equation-form list length should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 
@@ -804,7 +804,7 @@ fn test_equation_form_non_recursive_bool_unchanged() {
         .expect("non-recursive equation def should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 
@@ -848,7 +848,7 @@ fn test_equation_form_multiarg_non_recursive_still_elaborates() {
         .expect("multi-arg non-recursive equation def should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
     assert!(
@@ -873,7 +873,7 @@ fn test_equation_form_recursive_theorem_lowers_via_nat_rec() {
         .expect("equation-form recursive theorem should elaborate and kernel-check");
 
     assert!(
-        matches!(result, crate::ElabResult::Theorem { .. }),
+        matches!(result, ElabResult::Theorem { .. }),
         "expected a Theorem result, got {result:?}"
     );
 
@@ -941,7 +941,7 @@ fn test_equation_form_multiarg_recursive_nat_add_lowers_via_nat_rec() {
     let result = crate::elaborate_decl_and_register(&mut env, &decl)
         .expect("multi-arg recursive equation def should elaborate and kernel-check");
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 
@@ -991,7 +991,7 @@ fn test_equation_form_multiarg_recursive_decreasing_second_arg() {
     let result = crate::elaborate_decl_and_register(&mut env, &decl)
         .expect("dec-arg-second recursive equation def should elaborate and kernel-check");
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 
@@ -1068,7 +1068,7 @@ fn test_equation_form_multiarg_two_structural_positions_nested_rec() {
          match and kernel-check",
     );
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 
@@ -1131,7 +1131,7 @@ fn test_equation_form_multiarg_leading_binders_do_block_recursion() {
          kernel-check",
     );
     assert!(
-        matches!(result, crate::ElabResult::Definition { .. }),
+        matches!(result, ElabResult::Definition { .. }),
         "expected a Definition result, got {result:?}"
     );
 

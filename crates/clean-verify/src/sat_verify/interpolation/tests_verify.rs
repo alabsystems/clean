@@ -5,9 +5,7 @@
 //! Integration tests for the unified Craig property verification module.
 
 use super::extract::{ExtractionAlgorithm, InterpolantExtractor};
-use super::verify::{
-    quick_check_variable_restriction, verify_craig_property, CraigVerifyError, CraigVerifyResult,
-};
+use super::verify::{quick_check_variable_restriction, verify_craig_property, CraigVerifyError};
 use super::PropFormula;
 
 #[test]

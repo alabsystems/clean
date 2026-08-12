@@ -18,6 +18,9 @@ use clean_parser::SurfaceExpr;
 /// into a `WellFounded.fix` application.
 #[cfg(test)]
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct PreDefinition {
     /// Fully qualified declaration name.
     pub(crate) name: clean_kernel::name::Name,
@@ -34,6 +37,9 @@ pub(crate) struct PreDefinition {
 /// Represents the user-provided `termination_by` expression that maps
 /// function arguments to a well-ordered domain (typically `Nat` via `sizeOf`).
 #[derive(Debug, Clone)]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) struct TerminationMeasure {
     /// Parameter names bound in the measure expression.
     /// These correspond to the function's arguments that appear in the measure.

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crate::error::{MathverseError, MathverseResult};
+use crate::error::MathverseResult;
 use crate::lean4::olean::batch::{Lean4BatchConfig, Lean4BatchImporter};
 use crate::library::MathverseLibrary;
 use crate::manifest::LibraryLoader;
@@ -787,7 +787,7 @@ mod tests {
             return;
         }
 
-        let coq_extract = std::path::PathBuf::from("/tmp/coq_stdlib_extract.txt");
+        let coq_extract = PathBuf::from("/tmp/coq_stdlib_extract.txt");
         let coq_path = if coq_extract.exists() {
             Some(coq_extract.as_path())
         } else {
@@ -796,7 +796,7 @@ mod tests {
         };
 
         let tmp = tempfile::tempdir().expect("tempdir");
-        let result = super::build_combined_library(
+        let result = build_combined_library(
             Path::new(LEAN4_LIB),
             coq_path,
             &tmp.path().join("mathverse"),

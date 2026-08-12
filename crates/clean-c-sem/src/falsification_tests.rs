@@ -21,7 +21,6 @@
 //! obligation must still verify. If a fix over-tightens and breaks one of
 //! those, the VC-gen — not the guard — is wrong.
 
-use crate::auto::ProofStatus;
 use crate::parser::CParser;
 use crate::verified::VerifiedFunction;
 

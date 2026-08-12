@@ -10,12 +10,7 @@
 //! out of the original single-file module purely for readability — the code is
 //! moved verbatim, the behaviour is byte-identical.
 
-use std::collections::BTreeMap;
-
-use clean_kernel::expr::FVarId;
-use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::Expr;
 
 use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
 use super::*;
@@ -679,7 +674,7 @@ pub(crate) fn collect_spine(p: &IsaProof) -> (&IsaProof, Vec<SpineArg>) {
 pub(crate) fn shift_term(t: &IsaTerm, cutoff: i64, delta: i64) -> IsaTerm {
     // Budget guard (see [`shift_proof`]): cut a pathological term clone. Return
     // the O(1) `Bound 0` sentinel; the poisoned result is discarded upstream.
-    if !super::subst_step_ok() {
+    if !subst_step_ok() {
         return IsaTerm::Bound { i: 0 };
     }
     match t {
@@ -706,7 +701,7 @@ pub(crate) fn subst_term_in_term(t: &IsaTerm, t_cut: i64, repl: &IsaTerm) -> Isa
     // Budget guard (see [`shift_proof`]): cut a pathological term substitution
     // (a big `repl` duplicated at many `Bound` positions). O(1) `Bound 0`
     // sentinel; the poisoned result is discarded by `translate_redex`.
-    if !super::subst_step_ok() {
+    if !subst_step_ok() {
         return IsaTerm::Bound { i: 0 };
     }
     match t {
@@ -742,7 +737,7 @@ pub(crate) fn map_proof_terms(
     // substitution (the Zorn/`Abst`-elimination blowup — a big term duplicated
     // across the proof). O(1) `Nop`; the poisoned result is discarded by
     // `translate_redex`, which rejects the line.
-    if !super::subst_step_ok() {
+    if !subst_step_ok() {
         return IsaProof::Nop;
     }
     match p {
@@ -798,7 +793,7 @@ pub(crate) fn shift_proof(p: &IsaProof, cutoff: i64, delta: i64) -> IsaProof {
     // itself grind. The result is discarded by `translate_redex` (it rejects the
     // line on poison), so the sentinel value is irrelevant. No-op (recurses
     // normally) when no budget is configured.
-    if !super::subst_step_ok() {
+    if !subst_step_ok() {
         return IsaProof::Nop;
     }
     match p {
@@ -840,7 +835,7 @@ pub(crate) fn subst_pbound0_in_proof(body: &IsaProof, repl: &IsaProof, p_cut: i6
     // Budget guard (see [`shift_proof`]): cut a pathological quadratic/exponential
     // clone. Return the O(1) `Nop` sentinel (a deep `body.clone()` would itself
     // grind); the poisoned result is discarded by `translate_redex`.
-    if !super::subst_step_ok() {
+    if !subst_step_ok() {
         return IsaProof::Nop;
     }
     match body {

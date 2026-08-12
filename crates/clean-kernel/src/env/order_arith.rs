@@ -1308,6 +1308,7 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: Returns `true` iff `self.fate_x_order_stubs_init == true`
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_fate_x_order_stubs(&self) -> bool {
         self.fate_x_order_stubs_init
     }

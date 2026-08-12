@@ -24,6 +24,12 @@
 //! - Haken (1985): "The intractability of resolution"
 //! - Mézard, Parisi, Zecchina (2002): random k-SAT threshold
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use crate::spec::ProofStatus;
 
 // ---------------------------------------------------------------------------
@@ -64,6 +70,7 @@ const RANDOM_3SAT_THRESHOLD: f64 = 4.267;
 const HARD_REGION_MARGIN: f64 = 1.0;
 
 /// Constant in Haken's lower bound exponent: 2^{n / HAKEN_DIVISOR}.
+#[allow(dead_code)] // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
 const HAKEN_DIVISOR: f64 = 20.0;
 
 /// Constant in the tree-resolution lower bound for PHP.

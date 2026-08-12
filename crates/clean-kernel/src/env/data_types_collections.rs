@@ -9,7 +9,10 @@
 //! Numeric types (Bool, Nat, Int) are in `data_types_nat.rs`.
 
 use crate::env::decl_builder::EnvDeclBuilder;
-use crate::env::{Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType};
+use crate::env::{
+    Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType,
+    KernelInstanceInfo, LEAN_DEFAULT_INSTANCE_PRIORITY,
+};
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
@@ -1795,14 +1798,21 @@ impl Environment {
             value: inst_membership_value,
             is_reducible: true,
         })?;
-        // Register it as a `Membership` instance so `a ∈ l` resolves: the
-        // Definition (a genuine `Membership.mk` body, no axiom) existed but was
-        // never in the instance registry, so `Membership α (List α)` synthesis
-        // failed (`FailedToSynthesizeInstance`) and `a ∈ l` did not elaborate.
-        self.register_instance(crate::env::KernelInstanceInfo {
+        // Register `List.instMembership` in the class-instance registry so the
+        // elaborator's typeclass synthesis (`init_instances_from_env` walks
+        // `get_class_instances("Membership")`) can discharge a `Membership α
+        // (List α)` goal — i.e. so surface `a ∈ (l : List α)` elaborates. The
+        // `add_decl` above only makes the instance a NAMED constant; without a
+        // `register_instance` entry it is invisible to synthesis, so `∈` over a
+        // `List` (and every bounded binder `∀ x ∈ (l : List _), …` that
+        // desugars through it) failed with `FailedToSynthesizeInstance`.
+        // `type_/value = None` lets the elaborator recover the (correct-binder)
+        // type from the registered constant, matching the `instFunctorList`
+        // registration pattern in `data_functor.rs`.
+        self.register_instance(KernelInstanceInfo {
             name: Name::from_string("List.instMembership"),
             class_name: Name::from_string("Membership"),
-            priority: crate::env::DEFAULT_INSTANCE_PRIORITY,
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -1956,6 +1966,34 @@ impl Environment {
     #[allow(dead_code)] // Used by integration tests
     pub(crate) fn has_list_mem(&self) -> bool {
         self.list_mem_init
+    }
+
+    /// Ensure `List.contains` (core Lean-4 `BEq`-based membership test) is
+    /// available.
+    ///
+    /// Lean 4 v4.30.0-rc2 (`Init/Data/List/Basic.lean`):
+    /// ```lean
+    /// def elem [BEq α] (a : α) : List α → Bool
+    ///   | []      => false
+    ///   | b :: bs => match a == b with | true => true | false => elem a bs
+    /// def contains (as : List α) (a : α) : Bool := as.elem a
+    /// ```
+    /// `contains as a` decides whether `a` occurs in `as` under `BEq`. The
+    /// SINGLE registrar of the definition is `init_beq_list` (tail of
+    /// `init_beq`), which installs Lean's `elem`-shaped `List.rec` fold; this
+    /// wrapper only pulls in that dependency chain so standalone callers stay
+    /// self-contained. Do not register `List.contains` here as well — the
+    /// dependency call creates the constant first, so a second `add_decl` is a
+    /// `DuplicateName` (exactly the parallel-branch merge collision this
+    /// wrapper replaced, 2026-08-05). In the import-verification lane
+    /// `init_beq_list` withholds the stub and the genuine `List.contains`
+    /// imports through the checked path instead.
+    ///
+    /// Idempotent: `init_list` / `init_beq` are flag-guarded and the registrar
+    /// itself is lookup-guarded, so repeated calls are no-ops.
+    pub fn init_list_contains(&mut self) -> Result<(), EnvError> {
+        self.init_list()?;
+        self.init_beq()
     }
 
     /// Initialize String type
@@ -2506,8 +2544,8 @@ mod list_mem_tests {
         let tc = TypeChecker::new(&env);
 
         let u_name = Name::from_string("u");
-        let u = crate::level::Level::param(u_name.clone());
-        let type_u = Expr::sort(crate::level::Level::succ(u.clone()));
+        let u = Level::param(u_name.clone());
+        let type_u = Expr::sort(Level::succ(u.clone()));
         let list_const = Expr::const_(Name::from_string("List"), vec![u.clone()]);
 
         // Build `fun {α : Type u} (a : α) (l : List α) => <body α a l>` for each
@@ -3229,5 +3267,202 @@ mod list_combinator_tests {
         // Sanity: the list argument really is `List Bool` (element type Bool),
         // i.e. we did not accidentally re-transpose.
         let _ = list_bool_ty;
+    }
+}
+
+#[cfg(test)]
+mod list_contains_tests {
+    //! Regression coverage for `List.contains` — the core Lean-4 `BEq`-based
+    //! membership test. Before this was registered, `a.contains x` failed with
+    //! `Unknown identifier: List.contains` even under `--prelude lean4-core`
+    //! (Clean-side prelude gap; AY's LRAT soundness proofs cite it).
+    use super::*;
+    use crate::env::{ConstantKind, ProofQuality};
+    use crate::tc::TypeChecker;
+
+    fn env_with_contains() -> Environment {
+        let mut env = Environment::new();
+        env.init_list_contains()
+            .expect("List.contains should initialize");
+        env
+    }
+
+    fn nat_lit(n: u64) -> Expr {
+        let mut e = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+        let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+        for _ in 0..n {
+            e = Expr::app(succ.clone(), e.clone());
+        }
+        e
+    }
+
+    #[test]
+    fn test_contains_init_idempotent() {
+        let mut env = env_with_contains();
+        env.init_list_contains()
+            .expect("idempotent re-initialization should succeed");
+        assert!(
+            env.get_const(&Name::from_string("List.contains")).is_some(),
+            "List.contains should be registered"
+        );
+    }
+
+    /// `List.contains` is a reducible `Definition` whose type + value
+    /// kernel-check, and it introduces NO domain axioms (the `init_beq_list`
+    /// registrar builds it as an axiom-free `List.rec` fold over `BEq.beq`).
+    #[test]
+    fn test_contains_is_axiom_free_definition() {
+        let env = env_with_contains();
+        let info = env
+            .get_const(&Name::from_string("List.contains"))
+            .expect("List.contains should be registered");
+        assert_eq!(info.kind, ConstantKind::Definition);
+        assert!(info.value.is_some(), "definition must retain its value");
+
+        let tc = TypeChecker::new(&env);
+        let _sort = tc
+            .infer_type(&info.type_)
+            .expect("List.contains type should infer a sort");
+
+        // A `Definition` is `NotATheorem` for proof-quality purposes; the
+        // soundness signal that matters is that its transitive closure carries
+        // NO domain-specific axiom.
+        let quality = env
+            .proof_quality(&Name::from_string("List.contains"))
+            .expect("proof_quality should be reported");
+        assert!(
+            matches!(quality, ProofQuality::NotATheorem),
+            "List.contains is a Definition (NotATheorem), got {quality:?}"
+        );
+        let deps = env
+            .axiom_deps(&Name::from_string("List.contains"))
+            .expect("axiom_deps should be reported");
+        assert!(
+            deps.is_empty(),
+            "List.contains must have an empty domain-axiom closure, got {deps:?}"
+        );
+    }
+
+    /// Fidelity: `List.contains` reduces on a ground input exactly like Lean's
+    /// `elem`-based definition. `[1, 2].contains 2 ≡ true`,
+    /// `[1, 2].contains 3 ≡ false`, `([] : List Nat).contains 0 ≡ false`.
+    #[test]
+    fn test_contains_reduces_on_ground_nat_input() {
+        let env = env_with_contains();
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
+        let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);
+        // instBEqNat : BEq Nat, registered by init_beq (pulled in transitively).
+        let inst = Expr::const_(Name::from_string("instBEqNat"), vec![]);
+        let list_cons = Expr::const_(Name::from_string("List.cons"), vec![Level::zero()]);
+        let list_nil = Expr::const_(Name::from_string("List.nil"), vec![Level::zero()]);
+        let contains = Expr::const_(Name::from_string("List.contains"), vec![Level::zero()]);
+
+        // l : List Nat := [1, 2]
+        let nil_nat = Expr::app(list_nil, nat.clone());
+        let tail = Expr::apps(
+            list_cons.clone(),
+            [nat.clone(), nat_lit(2), nil_nat.clone()],
+        );
+        let l = Expr::apps(list_cons, [nat.clone(), nat_lit(1), tail]);
+
+        let tc = TypeChecker::new(&env);
+        // Well-typed at Bool.
+        let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
+        let member = Expr::apps(
+            contains.clone(),
+            [nat.clone(), inst.clone(), l.clone(), nat_lit(2)],
+        );
+        let inferred = tc
+            .infer_type(&member)
+            .expect("List.contains application should type-check");
+        assert!(
+            tc.is_def_eq(&inferred, &bool_ty),
+            "List.contains result type must be Bool, got {inferred:?}"
+        );
+        assert!(
+            tc.is_def_eq(&member, &bool_true),
+            "[1,2].contains 2 must reduce to true"
+        );
+
+        let non_member = Expr::apps(
+            contains.clone(),
+            [nat.clone(), inst.clone(), l.clone(), nat_lit(3)],
+        );
+        assert!(
+            tc.is_def_eq(&non_member, &bool_false),
+            "[1,2].contains 3 must reduce to false"
+        );
+
+        let empty = Expr::apps(contains, [nat.clone(), inst, nil_nat, nat_lit(0)]);
+        assert!(
+            tc.is_def_eq(&empty, &bool_false),
+            "([] : List Nat).contains 0 must reduce to false"
+        );
+    }
+}
+
+#[cfg(test)]
+mod list_mem_instance_tests {
+    //! Regression coverage for `List.instMembership` being wired into the
+    //! class-instance registry (not merely added as a named constant). Before
+    //! this, `init_list_mem` registered `List.instMembership` via `add_decl`
+    //! but never `register_instance`d it, so the elaborator's typeclass
+    //! synthesis (`init_instances_from_env` walks `get_class_instances`) could
+    //! not discharge a `Membership α (List α)` goal — surface `a ∈ (l : List α)`
+    //! (and every bounded binder `∀ x ∈ (l : List _), …` that desugars through
+    //! it, pervasive in AY's LRAT soundness statements) failed with
+    //! `FailedToSynthesizeInstance`.
+    use super::*;
+
+    fn env_with_list_mem() -> Environment {
+        let mut env = Environment::new();
+        env.init_list_mem()
+            .expect("List.Mem/instMembership should initialize");
+        env
+    }
+
+    /// `List.instMembership` is discoverable as an instance of the `Membership`
+    /// class — the exact registry lookup `init_instances_from_env` performs.
+    #[test]
+    fn test_list_instmembership_registered_as_class_instance() {
+        let env = env_with_list_mem();
+
+        // The named constant exists (add_decl path)…
+        assert!(
+            env.get_const(&Name::from_string("List.instMembership"))
+                .is_some(),
+            "List.instMembership should be registered as a constant"
+        );
+
+        // …AND it is indexed under the `Membership` class, which is what
+        // typeclass synthesis actually consults.
+        let instances = env.get_class_instances(&Name::from_string("Membership"));
+        assert!(
+            instances
+                .iter()
+                .any(|i| i.name == Name::from_string("List.instMembership")),
+            "List.instMembership must be in get_class_instances(\"Membership\"); \
+             found: {:?}",
+            instances.iter().map(|i| &i.name).collect::<Vec<_>>()
+        );
+    }
+
+    /// Idempotent: a second `init_list_mem` must not double-register the
+    /// instance (which would perturb resolution order).
+    #[test]
+    fn test_list_instmembership_registration_idempotent() {
+        let mut env = env_with_list_mem();
+        env.init_list_mem()
+            .expect("idempotent re-initialization should succeed");
+        let count = env
+            .get_class_instances(&Name::from_string("Membership"))
+            .iter()
+            .filter(|i| i.name == Name::from_string("List.instMembership"))
+            .count();
+        assert_eq!(
+            count, 1,
+            "List.instMembership must be registered exactly once, got {count}"
+        );
     }
 }

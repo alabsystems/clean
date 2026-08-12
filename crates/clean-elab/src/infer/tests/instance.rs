@@ -2151,7 +2151,7 @@ fn test_has_metavars() {
     assert!(!ctx.has_metavars(&fvar));
 
     // FVar with metavar tag IS a metavar
-    let mvar = Expr::fvar(MetaState::to_fvar(crate::unify::MetaId(0)));
+    let mvar = Expr::fvar(MetaState::to_fvar(MetaId(0)));
     assert!(ctx.has_metavars(&mvar));
 
     // App containing metavar

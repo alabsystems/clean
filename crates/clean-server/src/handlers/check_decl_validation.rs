@@ -456,6 +456,7 @@ mod tests {
                 Expr::const_(Name::from_string("Nat"), vec![]),
             )],
             derived_instances: vec![],
+            wants_deep_induction: false,
             modifiers: clean_parser::DeclModifiers::default(),
         };
 
@@ -651,6 +652,7 @@ mod tests {
                 (Name::from_string("Value.aggregate"), aggregate_type),
             ],
             derived_instances: vec![],
+            wants_deep_induction: false,
             modifiers: clean_parser::DeclModifiers::default(),
         };
 

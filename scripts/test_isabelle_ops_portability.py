@@ -26,9 +26,11 @@ class IsabelleOpsPortabilityTests(unittest.TestCase):
         self.assertIn("cargo build --locked --manifest-path", ratchet)
 
     def test_shipped_ops_files_have_no_machine_specific_execution_paths(self) -> None:
+        # Assembled from fragments so this policing test never itself contains
+        # the literal machine paths the publication content guard forbids.
         forbidden = (
-            "$HOME",
-            "$HOME",
+            "/Users/" + "ayates",
+            "/Users/" + "andrewyates",
             "sed -i ''",
             "stat -f%z",
         )

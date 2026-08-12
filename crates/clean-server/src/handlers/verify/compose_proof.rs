@@ -124,7 +124,28 @@ pub async fn handle_compose_proof(
     let original_tactics = parse_tactic_script(&theorem.original_proof);
 
     // --- Elaborate ---
-    super::initialize_verify_file_env(state).await;
+    let initialize_start = Instant::now();
+    if let Err(error) = super::initialize_verify_file_env(state).await {
+        let elapsed_ns = start.elapsed().as_nanos() as u64;
+        return compose_error_response(
+            id,
+            Some(theorem),
+            Some(original_tactics.join("\n")),
+            0,
+            TimingBreakdown {
+                parse_ns,
+                elaborate_ns: 0,
+                verify_ns: 0,
+                total_ns: elapsed_ns,
+            },
+            &format!("failed to initialize verification environment: {error}"),
+            vec!["check the server's kernel environment".into()],
+        );
+    }
+    // Environment construction is prerequisite setup, not proof execution.
+    // Keep it in reported wall-clock latency without consuming the caller's
+    // parsing/elaboration/replay budget.
+    let effective_timeout = timeout.saturating_add(initialize_start.elapsed());
 
     let elaborate_start = Instant::now();
     let surface_expr = match parse_expr_with_tactics_exact(&theorem.goal, &state.tactic_patterns) {
@@ -181,7 +202,7 @@ pub async fn handle_compose_proof(
     let mut sorry_index = 0usize;
 
     for (index, tactic) in original_tactics.iter().enumerate() {
-        if start.elapsed() > timeout {
+        if start.elapsed() > effective_timeout {
             let composed_proof = rewritten_tactics
                 .iter()
                 .cloned()

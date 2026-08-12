@@ -221,6 +221,7 @@ impl ReconcileConsts {
     }
     /// `pm∘f := fun (x : HCPoint n) => pm (f x)` — the deg-band carrier `b`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn pm_f(&self, parent: &EnvDeclBuilder, n: &Expr, f: &Expr) -> Expr {
         let mut d = EnvDeclBuilder::child_of(parent);
         let hcp = self.hcpoint_of(n);

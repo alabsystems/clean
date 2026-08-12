@@ -61,7 +61,7 @@ fn collect_failures(result: &ElabResult, out: &mut Vec<String>) {
 fn assert_empty_closure(env: &Environment, name: &str) {
     let closure: Vec<String> = env
         .axiom_deps(&Name::from_string(name))
-        .map(|deps| deps.iter().map(std::string::ToString::to_string).collect())
+        .map(|deps| deps.iter().map(ToString::to_string).collect())
         .unwrap_or_else(|| panic!("{name} should be registered with a computable value"));
     assert!(
         closure.is_empty(),

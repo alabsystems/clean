@@ -8,7 +8,7 @@
 //! expression structure without requiring interpreter state.
 
 use crate::expr::{EvalResult, Expr, MatchArm, Stmt};
-use crate::types::{ConstGenericArg, ConstGenericValue, Mutability, RustType, TypeParamDef};
+use crate::types::{ConstGenericArg, Mutability, RustType, TypeParamDef};
 use crate::values::Value;
 use std::collections::HashMap;
 
@@ -54,16 +54,6 @@ pub(super) fn contains_type_param(ty: &RustType) -> bool {
 }
 
 impl Interpreter {
-    pub(super) fn resolve_const_generic(
-        &self,
-        name: &str,
-        args: &HashMap<String, ConstGenericValue>,
-    ) -> ConstGenericValue {
-        args.get(name)
-            .cloned()
-            .unwrap_or(ConstGenericValue::Unknown)
-    }
-
     pub(super) fn normalized_runtime_type(&self, ty: &RustType) -> RustType {
         self.ctx.normalize_type(ty).erase_anonymous_lifetimes()
     }

@@ -38,6 +38,8 @@ use crate::name::Name;
 /// Pre-resolved handles + smart-constructors for the `NNRat` order/max layer.
 pub(crate) struct NNRatMaxConsts {
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     prop: Expr,
     rat: Expr,
     rat_zero: Expr,

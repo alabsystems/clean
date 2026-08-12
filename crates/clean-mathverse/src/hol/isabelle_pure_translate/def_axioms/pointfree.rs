@@ -498,7 +498,7 @@ impl Ctx {
             name: String::new(),
             serial: 0,
             prop,
-            proof: super::super::super::isabelle_pure::IsaProof::Min,
+            proof: IsaProof::Min,
         };
         match self.prove_pointfree_def_raw(&thm, binders)? {
             Some((_ty, proof)) => Ok(Some(proof)),

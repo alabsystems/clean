@@ -133,7 +133,6 @@ impl Environment {
                         &rec_level_params,
                         decl.num_params,
                         num_motives,
-                        num_indices,
                         *num_fields,
                         recursive_flags,
                         field_types,
@@ -704,7 +703,6 @@ impl Environment {
                         &cases_level_params,
                         decl.num_params,
                         num_motives,
-                        num_indices,
                         *num_fields,
                         recursive_flags,
                         field_types,
@@ -817,7 +815,6 @@ impl Environment {
                         &rec_on_level_params,
                         decl.num_params,
                         num_motives,
-                        num_indices,
                         *num_fields,
                         recursive_flags,
                         field_types,
@@ -1125,6 +1122,7 @@ impl Environment {
     ///
     /// ENSURES: O(n) where n = expression nodes (uses HashSet for O(1) lookup)
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn type_mentions_any_inductive_impl(
         &self,
         ty: &Expr,

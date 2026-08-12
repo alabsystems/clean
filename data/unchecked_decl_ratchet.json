@@ -10,7 +10,7 @@
     }
   ],
   "extend_constants": {
-    "note": "Production call sites of the bulk extend_constants_unchecked / extend_constants_structural bypass. Addresses #4: these are NOT counted by add_decl_*_count above (which track only add_decl_structural/add_decl_unchecked). Each production site below carries a // SOUNDNESS: comment at its call. ENFORCEMENT: scripts/check_extend_constants_ratchet.py (wired into scripts/local_gate.sh) fails the pre-push gate if any source .extend_constants_*( call site is not accounted for in production_sites or test_excluded_sites, or if a production count exceeds the baseline. test_excluded_sites are listed explicitly because they live in inline #[cfg(test)] blocks that path globs do not catch. Counts are flat-or-down: removing a bypass should lower the baseline. G4 (2026-07-01): the GENUINE-DEBT generated_overlay.rs overlay lane was moved OFF extend_constants_unchecked onto the new kernel-checked extend_constants_checked (infer_sort every type + check_type every value-bearing record, UnknownConst-tolerant for legitimate forward/external refs) — the sole trust-bearing unchecked overlay bypass is CLOSED, dropping unchecked_production_count 2 -> 1 (only the isolated merge_check.rs scratch env remains as a production unchecked bypass).",
+    "note": "Production call sites of the bulk extend_constants_unchecked / extend_constants_structural bypass. Addresses #4: these are NOT counted by add_decl_*_count above (which track only add_decl_structural/add_decl_unchecked). Each production site below carries a // SOUNDNESS: comment at its call. ENFORCEMENT: scripts/check_extend_constants_ratchet.py (wired into scripts/local_gate.sh) fails the pre-push gate if any source .extend_constants_*( call site is not accounted for in production_sites or test_excluded_sites, or if a production count exceeds the baseline. test_excluded_sites are listed explicitly because they live in inline #[cfg(test)] blocks that path globs do not catch. Counts are flat-or-down: removing a bypass should lower the baseline. G4 (2026-07-01): the GENUINE-DEBT generated_overlay.rs overlay lane was moved OFF extend_constants_unchecked onto the new kernel-checked extend_constants_checked (infer_sort every type + check_type every value-bearing record, UnknownConst-tolerant for legitimate forward/external refs) \u2014 the sole trust-bearing unchecked overlay bypass is CLOSED, dropping unchecked_production_count 2 -> 1 (only the isolated merge_check.rs scratch env remains as a production unchecked bypass).",
     "unchecked_production_count": 1,
     "structural_production_count": 5,
     "production_sites": [
@@ -28,7 +28,7 @@
       {
         "file": "crates/clean-mathverse/src/cli/graduate_closure_cache.rs",
         "method": "extend_constants_structural",
-        "trust": "SAME IMPORT BOUNDARY, content-addressed: the content-addressed closure cache (graduate --env olean warm load) materializes the SAME definitional constants, from the SAME .olean set, that load_register.rs registers via this exact hook — the cache only changes the source of the bytes (a blake3-union-digest-bound, per-constant-recon-digest-stamped .mathverse shard) not the trust. Constants stored Unverified; every graduation candidate is re-type-checked from scratch downstream (graduate_with_base_keep_env -> add_decl check_type), so a wrong cached byte fails a candidate's recheck, it cannot mint a KernelVerified. Fail-closed: any union-digest / per-shard-binding / coverage / decode mismatch falls back to the eager .olean reconstruction. Opt-in via $CLEAN_CLOSURE_CACHE_DIR (off by default)."
+        "trust": "SAME IMPORT BOUNDARY, content-addressed: the content-addressed closure cache (graduate --env olean warm load) materializes the SAME definitional constants, from the SAME .olean set, that load_register.rs registers via this exact hook \u2014 the cache only changes the source of the bytes (a blake3-union-digest-bound, per-constant-recon-digest-stamped .mathverse shard) not the trust. Constants stored Unverified; every graduation candidate is re-type-checked from scratch downstream (graduate_with_base_keep_env -> add_decl check_type), so a wrong cached byte fails a candidate's recheck, it cannot mint a KernelVerified. Fail-closed: any union-digest / per-shard-binding / coverage / decode mismatch falls back to the eager .olean reconstruction. Opt-in via $CLEAN_CLOSURE_CACHE_DIR (off by default)."
       },
       {
         "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
@@ -62,6 +62,11 @@
         "method": "extend_constants_unchecked",
         "occurrences": 3,
         "reason": "inside the #[cfg(test)] mod at load_register.rs:1743 (seed_structure test helper + projection-index test fixtures). Compiled out of every non-test build. Previously unaccounted (stale ratchet after parallel work landed the projection-index tests); listed 2026-07-01."
+      },
+      {
+        "file": "crates/clean-verify/src/axiom_refutation_gate.rs",
+        "method": "extend_constants_unchecked",
+        "reason": "inside #[cfg(test)] mod tests (test_census_rejects_value_bearing_live_axiom): fabricates a deliberately ill-formed VALUE-BEARING axiom the kernel would refuse, so the axiom census can be asserted to REJECT it. The bypass is what makes the negative fixture constructible. Compiled out of every non-test build. Listed 2026-07-30 with the definitional-disagreement census port."
       }
     ]
   },

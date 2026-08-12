@@ -94,6 +94,8 @@ pub(crate) struct Norm43Consts {
     nnreal_add: Expr,
     nnreal_finsum: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nnreal_finsum_zero: Expr,
     nnreal_finsum_succ: Expr,
     pow43_gen: Expr,

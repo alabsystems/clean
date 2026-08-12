@@ -56,6 +56,8 @@ struct C {
     fin_sum_succ: Expr,
     nat_rec: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_nat: Expr,
     eq_rat_c: Expr,
     eq_refl_nat: Expr,

@@ -1182,7 +1182,7 @@ mod symm_trans_tests {
         let _ = &premise;
         assert!(
             args.iter().any(|a| matches!(a.kind(),
-                clean_kernel::expr::ExprKind::Const(n, _) if n.to_string() == "hyp_ab")),
+                ExprKind::Const(n, _) if n.to_string() == "hyp_ab")),
             "Eq.symm application must carry the premise proof `hyp_ab`"
         );
     }

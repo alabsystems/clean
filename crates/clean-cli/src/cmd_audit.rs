@@ -280,13 +280,13 @@ pub(crate) struct AuditTrustLedgerArgs {
     pub(crate) json: bool,
     /// Write report to this path.
     #[arg(long, value_name = "PATH")]
-    pub(crate) out: Option<std::path::PathBuf>,
+    pub(crate) out: Option<PathBuf>,
     /// Append this ledger as a trust_ledger authority-gate proof attempt.
     #[arg(long)]
     pub(crate) record_attempt: bool,
     /// Repository or project root containing the `.mathverse` attempt log.
     #[arg(long, value_name = "ROOT", requires = "record_attempt")]
-    pub(crate) root: Option<std::path::PathBuf>,
+    pub(crate) root: Option<PathBuf>,
 }
 
 pub(crate) fn handle_audit_command(command: AuditCommands) -> anyhow::Result<()> {
@@ -1114,6 +1114,26 @@ fn load_project_environment(
     load.module_errors
         .sort_by(|left, right| left.module.cmp(&right.module));
     load
+}
+
+/// Reconstruct a Lake project's source environment for snapshot consumers.
+///
+/// Fails closed: an incomplete reconstruction (prelude error, module load
+/// failure, or fewer modules loaded than discovered) is an error rather than a
+/// partial environment. A drift snapshot taken over a partially loaded
+/// environment would report every missing declaration as dropped, so a silent
+/// partial load could manufacture — or mask — statement-preservation drift.
+pub(crate) fn load_lake_project_source_environment(
+    project: &Path,
+    modules: &[String],
+) -> anyhow::Result<Environment> {
+    let workspace = clean_lake::Workspace::load(project)
+        .with_context(|| format!("failed to load Lake workspace from {}", project.display()))?;
+    let load = load_project_environment(&workspace, modules, false);
+    if !environment_reconstruction_complete(&load) {
+        bail!("{}", environment_reconstruction_rejection_reason(&load));
+    }
+    Ok(load.env)
 }
 
 fn load_project_source_environment(

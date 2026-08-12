@@ -80,6 +80,7 @@ use crate::name::Name;
 
 /// Shared carrier atoms for the three TCB bricks. Spellings byte-match the
 /// banked friedgut bricks (`L2Consts`, `CheapRungConsts`, the LOW band).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct TcbConsts {
     nat: Expr,
     rat: Expr,
@@ -762,6 +763,7 @@ struct Brick3Consts {
     l1: Level,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Brick3Consts {
     fn new() -> Self {
         let k = |s: &str| Expr::const_(Name::from_string(s), vec![]);

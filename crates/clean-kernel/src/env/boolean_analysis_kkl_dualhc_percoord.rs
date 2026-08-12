@@ -107,6 +107,8 @@ struct PerCoordConsts {
     mul_pos: Expr,
     pow_pos: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pow_mul_base: Expr,
     le_cancel: Expr,
     // measure-identity leaves (eR / h_meas discharge).
@@ -302,6 +304,7 @@ impl PerCoordConsts {
         Expr::app(self.one_mul.clone(), a)
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn pow_mul_base_at(&self, a: Expr, b: Expr, n: &Expr) -> Expr {
         Expr::apps(self.pow_mul_base.clone(), [a, b, n.clone()])
     }

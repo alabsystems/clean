@@ -341,7 +341,7 @@ impl Specification {
 
     /// The `def_eq_fuel_succ_mono` source term (split out so the shape tests
     /// can see which universe variant of the option inversion it uses).
-    fn def_eq_fuel_succ_mono_src() -> String {
+    pub(super) fn def_eq_fuel_succ_mono_src() -> String {
         "def def_eq_fuel_succ_mono : forall (k : Nat) (a : KExpr) (b : KExpr), \
              Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
              Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \

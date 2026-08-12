@@ -130,6 +130,7 @@ impl SigmaComplementConsts {
         Expr::apps(self.eq1.clone(), [self.nat.clone(), l, r])
     }
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) fn app1(&self, f: &Expr, x: Expr) -> Expr {
         Expr::app(f.clone(), x)
     }

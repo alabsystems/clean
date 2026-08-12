@@ -298,6 +298,8 @@ struct CollapseConsts {
     bfalse: Expr,
     nat_succ: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_lt: Expr,
     nat_beq: Expr,
     nat_beq_refl: Expr,
@@ -380,6 +382,7 @@ impl CollapseConsts {
     }
     /// `@Eq Nat l r`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn eq_nat(&self, l: Expr, r: Expr) -> Expr {
         Expr::apps(self.eq1.clone(), [self.nat.clone(), l, r])
     }

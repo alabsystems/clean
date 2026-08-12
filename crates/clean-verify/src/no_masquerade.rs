@@ -9,6 +9,12 @@
 //! and reports suspicious proof/declaration shapes that should block promotion
 //! until reviewed.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use clean_kernel::expr::ZFCSetExpr;
 use clean_kernel::{
     ConstantInfo, ConstantKind, Environment, Expr, ExprKind, FVarId, Name, Reducibility,

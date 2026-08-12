@@ -59,6 +59,7 @@ impl ScopedEnvVar {
     }
 
     /// Remove `key` for the guard's lifetime.
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn unset(key: &str) -> Self {
         let previous = std::env::var(key).ok();
         // Blessed choke point: see `set`.
@@ -84,6 +85,7 @@ impl Drop for ScopedEnvVar {
 
 /// Run `f` with `vars` set, serialized behind the process-wide env lock;
 /// previous values are restored afterwards (also on panic).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn with_serialized_env_vars<T>(vars: &[(&str, &str)], f: impl FnOnce() -> T) -> T {
     let _env_lock = lock_env();
     let _guards: Vec<_> = vars
@@ -95,6 +97,7 @@ pub(crate) fn with_serialized_env_vars<T>(vars: &[(&str, &str)], f: impl FnOnce(
 
 /// Run `f` with `vars` removed, serialized behind the process-wide env lock;
 /// previous values are restored afterwards (also on panic).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn with_serialized_env_vars_removed<T>(vars: &[&str], f: impl FnOnce() -> T) -> T {
     let _env_lock = lock_env();
     let _guards: Vec<_> = vars.iter().map(|key| ScopedEnvVar::unset(key)).collect();
@@ -106,10 +109,12 @@ pub(crate) fn with_serialized_env_vars_removed<T>(vars: &[&str], f: impl FnOnce(
 ///
 /// Every key touched is captured once on first touch and restored when the
 /// [`with_env_edits`] scope ends (also on panic).
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct EnvEditor {
     saved: Vec<(String, Option<String>)>,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl EnvEditor {
     fn save_once(&mut self, key: &str) {
         if !self.saved.iter().any(|(k, _)| k == key) {
@@ -149,6 +154,7 @@ impl Drop for EnvEditor {
 
 /// Run `f` with exclusive, restore-on-exit access to the process environment
 /// via an [`EnvEditor`].
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) fn with_env_edits<T>(f: impl FnOnce(&mut EnvEditor) -> T) -> T {
     let _env_lock = lock_env();
     let mut editor = EnvEditor { saved: Vec::new() };

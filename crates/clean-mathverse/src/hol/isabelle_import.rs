@@ -276,7 +276,6 @@ pub fn assemble_corpus(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as _;
 
     const FIXTURE: &str =
         include_str!("../../tests/fixtures/isabelle/hol_foundational_closure.jsonl");

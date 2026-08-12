@@ -28,6 +28,7 @@ def write_fixture(
     lock_query_revision: str = TEST_REV,
     lock_resolved_revision: str = TEST_REV,
     lock_sources: int = checker.AY_LOCK_SOURCE_COUNT,
+    lock_packages: list[str] | None = None,
 ) -> None:
     root.mkdir(parents=True, exist_ok=True)
     revisions = manifest_revisions or [TEST_REV] * len(checker.AY_MANIFEST_KEYS)
@@ -40,11 +41,12 @@ def write_fixture(
     (root / "Cargo.toml").write_text("\n".join(manifest_lines) + "\n")
 
     lock_lines = ["version = 4", ""]
-    for index in range(lock_sources):
+    packages = (lock_packages or list(checker.AY_LOCK_PACKAGE_NAMES))[:lock_sources]
+    for name in packages:
         lock_lines.extend(
             [
                 "[[package]]",
-                f'name = "ay-fixture-{index}"',
+                f'name = "{name}"',
                 'version = "0.0.0"',
                 (
                     f'source = "git+{checker.AY_REPO_URL}'
@@ -66,7 +68,7 @@ def test_reads_complete_committed_ay_graph_without_a_sibling(tmp_path: Path) -> 
     assert evidence.ay_lockfile_rev == TEST_REV
     assert evidence.ay_lockfile_commit == TEST_REV
     assert evidence.ay_manifest_pin_count == 7
-    assert evidence.ay_lock_source_count == 37
+    assert evidence.ay_lock_source_count == checker.AY_LOCK_SOURCE_COUNT
     assert not (tmp_path / "ay").exists()
 
 
@@ -98,7 +100,19 @@ def test_rejects_non_ay_key_aliasing_an_ay_package(
 def test_rejects_incomplete_lock_inventory(tmp_path: Path) -> None:
     write_fixture(tmp_path, lock_sources=checker.AY_LOCK_SOURCE_COUNT - 1)
 
-    with pytest.raises(checker.PinEvidenceError, match="exactly 37 AY Git sources"):
+    with pytest.raises(
+        checker.PinEvidenceError,
+        match=rf"exactly {checker.AY_LOCK_SOURCE_COUNT} AY Git sources",
+    ):
+        checker.read_pin_evidence(tmp_path)
+
+
+def test_rejects_same_size_but_substituted_lock_inventory(tmp_path: Path) -> None:
+    packages = list(checker.AY_LOCK_PACKAGE_NAMES)
+    packages[-1] = "ay-unexpected"
+    write_fixture(tmp_path, lock_packages=packages)
+
+    with pytest.raises(checker.PinEvidenceError, match="must exactly match"):
         checker.read_pin_evidence(tmp_path)
 
 

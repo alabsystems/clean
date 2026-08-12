@@ -27,9 +27,7 @@
 //! its axiom closure is empty (see the tests at the tail of this file).
 
 use super::decl_builder::EnvDeclBuilder;
-use crate::env::{
-    Declaration, EnvError, Environment, KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
-};
+use crate::env::{Declaration, EnvError, Environment, KernelInstanceInfo};
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
@@ -145,10 +143,17 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // 500, NOT `LEAN_DEFAULT_INSTANCE_PRIORITY`: this is one of the few
+        // core instances Lean annotates, and the shipped `.olean` serializes
+        // `priority: 500` for it. It must rank BELOW the concrete `BEq`
+        // instances (`instBEqNat`, `instBEqBool`, …, all unannotated at 1000)
+        // so a `BEq Nat` goal reaches `instBEqNat` rather than routing through
+        // `DecidableEq Nat`. Measured in
+        // `data/prelude_instance_priority_census.json`.
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instBEqOfDecidableEq"),
             class_name: Name::from_string("BEq"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: 500,
             type_: None,
             value: None,
         });

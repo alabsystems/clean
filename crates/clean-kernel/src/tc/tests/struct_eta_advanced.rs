@@ -296,7 +296,7 @@ fn test_struct_eta_ctor_concrete_fields_reflexive() {
         BinderInfo::Default,
     ));
 
-    let mk = super::struct_eta::build_prod_mk(&nat, &nat, x, y);
+    let mk = struct_eta::build_prod_mk(&nat, &nat, x, y);
     assert!(tc.is_def_eq(&mk, &mk), "Prod.mk Nat Nat x y reflexive");
 }
 

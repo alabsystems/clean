@@ -36,7 +36,10 @@ use super::decide_eq::decide_eq;
 use super::existential::existsi;
 use super::native_decide_eval::{execute_native_decide, NativeDecideExecOutcome};
 use super::proof_term::{assumption, constructor, exact, rfl};
-use super::smt::decide;
+// Kernel-evaluating `decide` ladder, not the bare SMT bridge — see the note in
+// `norm_num.rs`. This is `native_decide`'s fallback; the SMT bridge refuted
+// true ground goals such as `¬(3 = 4)` that `eval_decide` proves.
+use super::decide::eval_decide as decide;
 
 // ============================================================================
 // use_ - Existential introduction (like existsi but more convenient)

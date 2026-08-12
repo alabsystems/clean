@@ -634,3 +634,268 @@ fn test_def_eq_lam_body_needs_reduction() {
 }
 
 // --- CertVerifier::whnf tests ---
+
+// --- Type-directed def-eq: proof irrelevance (cert-engine parity) ---
+//
+// The verifier's `try_type_directed_eq` implements the kernel's proof
+// irrelevance rule fail-closed. These tests pin the positive case, the two
+// soundness-critical negative guards, and binder-context threading.
+
+#[test]
+fn test_def_eq_proof_irrel_same_prop_proofs_equal() {
+    let env = empty_env();
+    let mut verifier = CertVerifier::new(&env);
+    // P : Prop (an opaque proposition), h1 h2 : P.
+    let p = Expr::from_kind(ExprKind::FVar(FVarId(1)));
+    verifier
+        .register_fvar(FVarId(1), Expr::from_kind(ExprKind::Sort(Level::zero())))
+        .expect("register P");
+    verifier
+        .register_fvar(FVarId(2), p.clone())
+        .expect("register h1");
+    verifier.register_fvar(FVarId(3), p).expect("register h2");
+    let h1 = Expr::from_kind(ExprKind::FVar(FVarId(2)));
+    let h2 = Expr::from_kind(ExprKind::FVar(FVarId(3)));
+    assert!(
+        verifier.def_eq(&h1, &h2),
+        "two proofs of the same Prop must be def-eq (proof irrelevance)"
+    );
+}
+
+#[test]
+fn test_def_eq_proof_irrel_distinct_props_not_collapsed() {
+    let env = empty_env();
+    let mut verifier = CertVerifier::new(&env);
+    // P Q : Prop distinct opaque propositions; h1 : P, h2 : Q.
+    let p = Expr::from_kind(ExprKind::FVar(FVarId(1)));
+    let q = Expr::from_kind(ExprKind::FVar(FVarId(2)));
+    let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
+    verifier
+        .register_fvar(FVarId(1), prop.clone())
+        .expect("register P");
+    verifier.register_fvar(FVarId(2), prop).expect("register Q");
+    verifier
+        .register_fvar(FVarId(3), p.clone())
+        .expect("register h1");
+    verifier
+        .register_fvar(FVarId(4), q.clone())
+        .expect("register h2");
+    let h1 = Expr::from_kind(ExprKind::FVar(FVarId(3)));
+    let h2 = Expr::from_kind(ExprKind::FVar(FVarId(4)));
+    assert!(
+        !verifier.def_eq(&h1, &h2),
+        "proofs of DISTINCT Props must not be equated"
+    );
+    // SOUNDNESS GUARD: the Prop STATEMENTS themselves must never be
+    // collapsed — proof irrelevance identifies proofs, not propositions.
+    assert!(
+        !verifier.def_eq(&p, &q),
+        "distinct propositions must not be equated by proof irrelevance"
+    );
+}
+
+#[test]
+fn test_def_eq_proof_irrel_non_prop_data_not_collapsed() {
+    let env = empty_env();
+    let mut verifier = CertVerifier::new(&env);
+    // A : Type 0 (Sort 1); x y : A — data, not proofs.
+    let a = Expr::from_kind(ExprKind::FVar(FVarId(1)));
+    verifier
+        .register_fvar(
+            FVarId(1),
+            Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+        )
+        .expect("register A");
+    verifier
+        .register_fvar(FVarId(2), a.clone())
+        .expect("register x");
+    verifier.register_fvar(FVarId(3), a).expect("register y");
+    let x = Expr::from_kind(ExprKind::FVar(FVarId(2)));
+    let y = Expr::from_kind(ExprKind::FVar(FVarId(3)));
+    assert!(
+        !verifier.def_eq(&x, &y),
+        "distinct inhabitants of a non-Prop type must not be equated"
+    );
+}
+
+#[test]
+fn test_def_eq_proof_irrel_under_binder_threads_context() {
+    let env = empty_env();
+    let mut verifier = CertVerifier::new(&env);
+    // P : Prop, h : P. Compare (fun x : P => x) vs (fun x : P => h):
+    // the bodies BVar(0) and h are both proofs of P — equal only if the
+    // equality recursion correctly threads the binder type for BVar(0).
+    let p = Expr::from_kind(ExprKind::FVar(FVarId(1)));
+    verifier
+        .register_fvar(FVarId(1), Expr::from_kind(ExprKind::Sort(Level::zero())))
+        .expect("register P");
+    verifier
+        .register_fvar(FVarId(2), p.clone())
+        .expect("register h");
+    let h = Expr::from_kind(ExprKind::FVar(FVarId(2)));
+    let lam_id = Expr::lam(BinderInfo::Default, p.clone(), Expr::bvar(0));
+    let lam_const = Expr::lam(BinderInfo::Default, p, h);
+    assert!(
+        verifier.def_eq(&lam_id, &lam_const),
+        "proof irrelevance must see BVar types through the threaded context"
+    );
+}
+// Adversarial soundness battery — append to crates/clean-kernel/src/cert/tests/equality.rs
+// Result on the patched tree (2026-08-08): 6/7 pass; adv_nat_literals_malicious_prop_nat_env_kernel_parity FAILS
+// with "cert engine accepted a pair the kernel rejects: cert=true kernel=false".
+
+#[test]
+fn adv_nat_literals_not_collapsed_honest_env() {
+    use crate::env::Declaration;
+    let mut env = empty_env();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("Nat"),
+        level_params: vec![],
+        type_: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+    })
+    .expect("add Nat axiom");
+    let verifier = CertVerifier::new(&env);
+    let one = Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::from(1u64))));
+    let two = Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::from(2u64))));
+    assert!(!verifier.def_eq(&one, &two), "cert engine equated 1 and 2");
+    let tc = crate::TypeChecker::new(&env);
+    assert!(!tc.is_def_eq(&one, &two), "kernel equated 1 and 2");
+}
+
+#[test]
+fn adv_nat_literals_malicious_prop_nat_env_kernel_parity() {
+    use crate::env::Declaration;
+    // MALICIOUS env: axiom Nat : Prop. The cert engine must not accept
+    // anything the kernel def-eq rejects on the same env.  <-- FAILS
+    let mut env = empty_env();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("Nat"),
+        level_params: vec![],
+        type_: Expr::from_kind(ExprKind::Sort(Level::zero())),
+    })
+    .expect("add malicious Nat axiom");
+    let verifier = CertVerifier::new(&env);
+    let tc = crate::TypeChecker::new(&env);
+    let one = Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::from(1u64))));
+    let two = Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::from(2u64))));
+    let cert_says = verifier.def_eq(&one, &two);
+    let kernel_says = tc.is_def_eq(&one, &two);
+    assert!(
+        !cert_says || kernel_says,
+        "cert engine accepted a pair the kernel rejects: cert={cert_says} kernel={kernel_says}"
+    );
+}
+
+#[test]
+fn adv_cert_level_fvar_claiming_wrong_literal_type_rejected() {
+    use crate::env::Declaration;
+    let mut env = empty_env();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("Nat"),
+        level_params: vec![],
+        type_: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+    })
+    .expect("add Nat axiom");
+    let mut verifier = CertVerifier::new(&env);
+    let one = Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::from(1u64))));
+    let two = Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::from(2u64))));
+    verifier
+        .register_fvar(FVarId(7), one)
+        .expect("register fvar at Lit 1");
+    let cert = ProofCert::FVar {
+        id: FVarId(7),
+        type_: Box::new(two),
+    };
+    let res = verifier.verify(&cert, &Expr::from_kind(ExprKind::FVar(FVarId(7))));
+    assert!(
+        res.is_err(),
+        "certificate claiming FVar : (Lit 2) against context (Lit 1) must be rejected"
+    );
+}
+
+#[test]
+fn adv_nested_binder_proofs_of_different_props_not_collapsed() {
+    let env = empty_env();
+    let verifier = CertVerifier::new(&env);
+    let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
+    let mk = |body: Expr| {
+        let l4 = Expr::lam(BinderInfo::Default, Expr::bvar(1), body); // hq : q
+        let l3 = Expr::lam(BinderInfo::Default, Expr::bvar(1), l4); // hp : p
+        let l2 = Expr::lam(BinderInfo::Default, prop.clone(), l3); // q : Prop
+        Expr::lam(BinderInfo::Default, prop.clone(), l2) // p : Prop
+    };
+    let t_hp = mk(Expr::bvar(1));
+    let t_hq = mk(Expr::bvar(0));
+    assert!(
+        !verifier.def_eq(&t_hp, &t_hq),
+        "cert engine collapsed proofs of DIFFERENT propositions under nested binders"
+    );
+    let tc = crate::TypeChecker::new(&env);
+    assert!(!tc.is_def_eq(&t_hp, &t_hq), "kernel collapsed them too?!");
+}
+
+#[test]
+fn adv_nested_binder_proofs_of_same_dependent_prop_equal() {
+    let env = empty_env();
+    let verifier = CertVerifier::new(&env);
+    let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
+    let mk = |body: Expr| {
+        let l3 = Expr::lam(BinderInfo::Default, Expr::bvar(1), body); // h2 : p
+        let l2 = Expr::lam(BinderInfo::Default, Expr::bvar(0), l3); // h : p
+        Expr::lam(BinderInfo::Default, prop.clone(), l2) // p : Prop
+    };
+    let t_h = mk(Expr::bvar(1));
+    let t_h2 = mk(Expr::bvar(0));
+    let tc = crate::TypeChecker::new(&env);
+    assert!(tc.is_def_eq(&t_h, &t_h2), "kernel should equate");
+    assert!(
+        verifier.def_eq(&t_h, &t_h2),
+        "cert engine missed proof irrelevance under a dependent binder context (lift arithmetic?)"
+    );
+}
+
+#[test]
+fn adv_nested_binder_data_not_collapsed() {
+    let env = empty_env();
+    let verifier = CertVerifier::new(&env);
+    let type0 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
+    let mk = |body: Expr| {
+        let l3 = Expr::lam(BinderInfo::Default, Expr::bvar(1), body); // y : A
+        let l2 = Expr::lam(BinderInfo::Default, Expr::bvar(0), l3); // x : A
+        Expr::lam(BinderInfo::Default, type0.clone(), l2) // A : Type
+    };
+    let t_x = mk(Expr::bvar(1));
+    let t_y = mk(Expr::bvar(0));
+    assert!(!verifier.def_eq(&t_x, &t_y), "collapsed distinct DATA");
+    let tc = crate::TypeChecker::new(&env);
+    assert!(!tc.is_def_eq(&t_x, &t_y), "kernel collapsed data?!");
+}
+
+#[test]
+fn adv_index_reversal_trap_data_after_proofs_not_collapsed() {
+    let env = empty_env();
+    let mut verifier = CertVerifier::new(&env);
+    let p = Expr::from_kind(ExprKind::FVar(FVarId(1)));
+    let a = Expr::from_kind(ExprKind::FVar(FVarId(2)));
+    verifier
+        .register_fvar(FVarId(1), Expr::from_kind(ExprKind::Sort(Level::zero())))
+        .expect("register P : Prop");
+    verifier
+        .register_fvar(
+            FVarId(2),
+            Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+        )
+        .expect("register A : Type");
+    let mk = |body: Expr| {
+        let l4 = Expr::lam(BinderInfo::Default, a.clone(), body); // y : A
+        let l3 = Expr::lam(BinderInfo::Default, a.clone(), l4); // x : A
+        let l2 = Expr::lam(BinderInfo::Default, p.clone(), l3); // h2 : P
+        Expr::lam(BinderInfo::Default, p.clone(), l2) // h1 : P
+    };
+    let t_x = mk(Expr::bvar(1));
+    let t_y = mk(Expr::bvar(0));
+    assert!(
+        !verifier.def_eq(&t_x, &t_y),
+        "index-reversal trap sprung: data typed as Prop and collapsed"
+    );
+}

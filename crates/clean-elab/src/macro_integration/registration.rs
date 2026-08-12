@@ -28,6 +28,9 @@ pub(super) fn quotation_category(content: &str) -> SyntaxKind {
 /// it lets the computed-body evaluator reuse it on a body it has already parsed
 /// and resolved, so the produced `Syntax` is byte-identical to the equivalent
 /// direct quotation.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(super) fn syntax_quote_from_body(body: &SurfaceExpr, content: &str) -> SyntaxQuote {
     SyntaxQuote::new(surface_to_syntax(body), quotation_category(content))
 }

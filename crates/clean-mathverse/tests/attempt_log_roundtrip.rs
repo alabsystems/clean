@@ -495,7 +495,7 @@ fn replay_binding_validation_fails_closed_for_incomplete_accepted_attempts() {
         .expect_err("missing solver artifact should fail");
     assert!(err.to_string().contains("solver/proof artifact"));
 
-    accepted.solver_artifact = Some(clean_mathverse::attempt_log::ArtifactRef {
+    accepted.solver_artifact = Some(ArtifactRef {
         blake3: hash("empty-proof"),
         byte_len: 0,
         kind: Some("solver/lrat".to_owned()),
@@ -505,7 +505,7 @@ fn replay_binding_validation_fails_closed_for_incomplete_accepted_attempts() {
         .expect_err("zero-length solver artifact should fail");
     assert!(err.to_string().contains("non-zero byte_len"));
 
-    accepted.solver_artifact = Some(clean_mathverse::attempt_log::ArtifactRef {
+    accepted.solver_artifact = Some(ArtifactRef {
         blake3: hash("proof"),
         byte_len: 5,
         kind: Some("solver/lrat".to_owned()),

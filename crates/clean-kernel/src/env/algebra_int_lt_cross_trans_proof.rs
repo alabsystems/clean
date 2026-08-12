@@ -31,6 +31,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants for the strict cross-multiplication proof terms.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct LtCrossConsts {
     int: Expr,
     nat: Expr,
@@ -173,6 +174,7 @@ impl LtCrossConsts {
     }
     /// `fun (w : Int) => Int.le w r`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn le_right_fn(&self, parent: &EnvDeclBuilder, r: Expr) -> Expr {
         let mut mb = EnvDeclBuilder::child_of(parent);
         let (w_id, w) = mb.fresh_local(self.int.clone());

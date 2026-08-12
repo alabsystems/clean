@@ -98,6 +98,8 @@ struct FinalConsts {
     pow_nat_succ: Expr,
     mul_one: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     mul_comm: Expr,
     mul_assoc: Expr,
     mmmc: Expr,
@@ -106,6 +108,7 @@ struct FinalConsts {
     nat_rec: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl FinalConsts {
     fn new() -> Self {
         let l1 = Level::succ(Level::zero());

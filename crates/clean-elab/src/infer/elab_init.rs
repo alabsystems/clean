@@ -517,7 +517,7 @@ impl<'a> ElabCtx<'a> {
     ) {
         self.nested_mutual_aux_arms =
             source.map(
-                |(container_short, arms, sibling_func_names)| super::NestedMutualAuxArms {
+                |(container_short, arms, sibling_func_names)| NestedMutualAuxArms {
                     container_short,
                     arms,
                     sibling_func_names,
@@ -556,17 +556,12 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Replace the user term elaborators for file-scoped `elab ... : term` state.
-    pub(crate) fn set_user_term_elabs(
-        &mut self,
-        elabs: std::collections::HashMap<String, super::user_term::UserTermElab>,
-    ) {
+    pub(crate) fn set_user_term_elabs(&mut self, elabs: HashMap<String, user_term::UserTermElab>) {
         self.user_term_elabs = elabs;
     }
 
     /// Move out the user term elaborators after declaration elaboration.
-    pub(crate) fn take_user_term_elabs(
-        &mut self,
-    ) -> std::collections::HashMap<String, super::user_term::UserTermElab> {
+    pub(crate) fn take_user_term_elabs(&mut self) -> HashMap<String, user_term::UserTermElab> {
         std::mem::take(&mut self.user_term_elabs)
     }
 

@@ -1108,11 +1108,6 @@ fn nat_le_trans(a: Expr, b: Expr, cc: Expr, h1: Expr, h2: Expr) -> Expr {
     Expr::apps(c("Nat.le_trans"), [a, b, cc, h1, h2])
 }
 
-/// `@Nat.lt_irrefl a : Nat.lt a a → False`.
-fn nat_lt_irrefl(a: Expr) -> Expr {
-    Expr::apps(c("Nat.lt_irrefl"), [a])
-}
-
 /// `@False.elim.{u} goal h : goal` where `goal : Sort u`, `h : False`.
 /// We only ever eliminate into `Prop`, so `u := 0`.
 fn false_elim_prop(goal: Expr, h: Expr) -> Expr {

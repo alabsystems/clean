@@ -5,18 +5,16 @@
 //! Overloaded class-method dictionary-equation scanning and the type-variable
 //! matching helpers for the Isabelle Pure translator (`DictEquation`,
 //! `scan_method_dicts`, `dict_equation_from_symmetric`, `build_method_def`,
-//! `term_app_spine`, `is_overloaded_method_const`, `subst_tvar`, `match_tvar`,
-//! `sole_tvar`, `all_tvars`). Moved verbatim from the original single-file
+//! `term_app_spine`, `is_overloaded_method_const`, `match_tvar`, `subst_tvars`,
+//! `all_tvars`). Moved from the original single-file
 //! `classes` module; behaviour is byte-identical.
 
 use std::collections::BTreeMap;
 
-use clean_kernel::expr::FVarId;
-use clean_kernel::level::Level;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
+use clean_kernel::{BinderInfo, Declaration, Expr};
 
-use super::super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
+use super::super::super::isabelle_pure::{IsaProof, IsaTerm, IsaType};
 use super::super::*;
 
 /// One recovered **dictionary equation** for an overloaded class method, scanned
@@ -495,7 +493,7 @@ pub(crate) fn method_obj_tvars(ty: &IsaType) -> Option<Vec<(String, i64)>> {
 /// **Simultaneously** substitute the type variables of `subs` in `ty` (each
 /// `((name, index), replacement)` pair applied in one pass — never sequentially,
 /// so a swap instantiation `'b ↦ 'a, 'a ↦ 'b` cannot capture the just-inserted
-/// occurrences). The multi-tvar generalization of [`subst_tvar`], used to
+/// occurrences). Used to
 /// instantiate a [`MethodDefInfo`]'s stored impl/operation types at a use-site's
 /// solved object types.
 pub(crate) fn subst_tvars(ty: &IsaType, subs: &[((String, i64), IsaType)]) -> IsaType {
@@ -567,20 +565,6 @@ pub(crate) fn match_tvars(
         .collect()
 }
 
-/// Substitute every occurrence of the type variable `tv` in `ty` with `repl`.
-/// Used to instantiate a [`MethodDefInfo`]'s stored operation types (which
-/// reference the object `TVar`) at a use-site's concrete object type.
-pub(crate) fn subst_tvar(ty: &IsaType, tv: &(String, i64), repl: &IsaType) -> IsaType {
-    match ty {
-        IsaType::TVar { n, i } if *n == tv.0 && *i == tv.1 => repl.clone(),
-        IsaType::TVar { .. } | IsaType::TFree { .. } => ty.clone(),
-        IsaType::Type { n, a } => IsaType::Type {
-            n: n.clone(),
-            a: a.iter().map(|t| subst_tvar(t, tv, repl)).collect(),
-        },
-    }
-}
-
 /// Solve the object type variable `tv` by matching a stored (`'a`-carrying) HOL
 /// type `pat` against a use-site instantiated type `inst`. Returns the type `'a`
 /// was instantiated to, or `None` on a structural mismatch. (A first-order
@@ -621,40 +605,11 @@ pub(crate) fn match_tvar(pat: &IsaType, inst: &IsaType, tv: &(String, i64)) -> O
     }
 }
 
-/// The single `TVar` `(name, index)` appearing in a HOL type, or `None` if there
-/// is not exactly one distinct type variable (the object type of an overloaded
-/// method is always its sole type variable).
-pub(crate) fn sole_tvar(ty: &IsaType) -> Option<(String, i64)> {
-    let mut found: Option<(String, i64)> = None;
-    pub(crate) fn go(ty: &IsaType, found: &mut Option<(String, i64)>, ok: &mut bool) {
-        match ty {
-            IsaType::TVar { n, i } => match found {
-                Some((fn_, fi)) if fn_ == n && *fi == *i => {}
-                Some(_) => *ok = false,
-                None => *found = Some((n.clone(), *i)),
-            },
-            IsaType::TFree { .. } => *ok = false,
-            IsaType::Type { a, .. } => {
-                for t in a {
-                    go(t, found, ok);
-                }
-            }
-        }
-    }
-    let mut ok = true;
-    go(ty, &mut found, &mut ok);
-    if ok {
-        found
-    } else {
-        None
-    }
-}
-
 /// Every distinct `TVar` `(name, index)` appearing in a HOL type, in
 /// **first-occurrence (canonical) order**, or `None` if there is **no** type
 /// variable at all or any **fixed** type variable (`TFree`) is present.
 ///
-/// This generalizes [`sole_tvar`] to the multi-type-variable list functions
+/// This supports multi-type-variable list functions
 /// (`map : ('a⇒'b)⇒'a list⇒'b list`, `foldr/foldl : ('b⇒'a⇒'b)⇒'b⇒'a list⇒'b`,
 /// `zip : 'a list⇒'b list⇒('a×'b) list`, `those : 'a option list⇒'a list option`).
 /// The order is the order in which a left-to-right walk of the function's HOL

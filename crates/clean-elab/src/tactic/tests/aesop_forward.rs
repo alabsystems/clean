@@ -55,15 +55,16 @@ fn test_forward_basic() {
     // Goal: R (something we can't prove)
     // Context: hp : P
     let r = Expr::const_(Name::from_string("R"), vec![]);
-    let mut state = ProofState::new(env, r);
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        r,
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Run aesop - it should apply forward rule and add Q to context
     // even though it can't close the goal R
@@ -130,15 +131,16 @@ fn test_forward_no_duplicate() {
     // Goal: R (something we can't prove)
     // Context: hp : P
     let r = Expr::const_(Name::from_string("R"), vec![]);
-    let mut state = ProofState::new(env, r.clone());
-
-    // Add hp : P to context
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        r.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Run aesop with limited iterations
     let config = AesopConfig {
@@ -232,13 +234,16 @@ fn test_forward_chain() {
     });
 
     // Goal: R, Context: hp : P
-    let mut state = ProofState::new(env, r.clone());
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        r.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Run aesop - should chain p_to_q then q_to_r, potentially closing goal
     let result = aesop(&mut state);
@@ -330,13 +335,16 @@ fn test_forward_backtrack_isolation() {
 
     // Create a state that should NOT have Q added if forward rules don't run
     // Goal: R, Context: hp : P
-    let mut state = ProofState::new(env, r.clone());
-    state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
-        fvar: FVarId::new(100),
-        name: "hp".to_string(),
-        ty: p.clone(),
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        r.clone(),
+        vec![LocalDecl {
+            fvar: FVarId::new(100),
+            name: "hp".to_string(),
+            ty: p.clone(),
+            value: None,
+        }],
+    );
 
     // Clone the state to test isolation
     let original_ctx_len = state.current_goal().unwrap().local_ctx.len();

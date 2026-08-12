@@ -28,6 +28,9 @@ use super::core::{ProofState, TacticError, TacticResult};
 /// Result of a successful `auto_cascade` invocation, recording which
 /// sub-tactic closed the goal.
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct CascadeResult {
     /// Name of the sub-tactic that succeeded.
     pub(crate) winner: &'static str,
@@ -81,6 +84,9 @@ pub fn auto_cascade(state: &mut ProofState) -> TacticResult {
 ///
 /// REQUIRES: `state.goals` is non-empty.
 /// ENSURES: Same as `auto_cascade`, plus returns the winner name on success.
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn auto_cascade_with_info(state: &mut ProofState) -> Result<CascadeResult, TacticError> {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);

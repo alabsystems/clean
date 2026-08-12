@@ -41,6 +41,7 @@ use crate::name::Name;
 #[cfg(test)]
 pub(super) struct LearnedClauseConsts {
     pub(super) nat: Expr,
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) bool_: Expr,
     pub(super) prop: Expr,
     pub(super) type0: Expr,

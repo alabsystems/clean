@@ -10,7 +10,7 @@
 
 use super::support::make_nat_env_with_eq;
 use super::*;
-use crate::env::{ConstantInfo, TrustedEnvExt};
+use crate::env::ConstantInfo;
 use crate::inductive::{Constructor, InductiveDecl, InductiveType};
 
 /// Helper: create an environment with Nat, Eq, and an opaque constant
@@ -118,6 +118,7 @@ fn fb_descr_decl() -> InductiveDecl {
 ///   | pure : A -> FbResult A
 ///   | bind : OpaqueType -> FbResult A -> FbResult A
 /// ```
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn fb_result_decl() -> InductiveDecl {
     let u = Name::from_string("u");
     let fr = Name::from_string("FbResult");

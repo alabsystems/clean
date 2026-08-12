@@ -117,6 +117,7 @@ pub(crate) fn decl_content_fingerprint(decl: &Declaration) -> Result<[u8; 32], F
 }
 
 /// The declaration's own fully-qualified name.
+#[cfg(test)]
 fn decl_name(decl: &Declaration) -> &Name {
     match decl {
         Declaration::Definition { name, .. }
@@ -129,6 +130,7 @@ fn decl_name(decl: &Declaration) -> &Name {
 /// The constants directly referenced by a declaration's type and value — its
 /// `direct_deps` for the Merkle-DAG verified hash. The declaration's own name is
 /// excluded (a constant is not its own dependency).
+#[cfg(test)]
 pub(crate) fn direct_dep_names(decl: &Declaration) -> std::collections::HashSet<Name> {
     let (_, type_, value) = content_parts(decl);
     let mut set = type_.collect_constants();
@@ -155,6 +157,7 @@ pub(crate) fn direct_dep_names(decl: &Declaration) -> std::collections::HashSet<
 /// already-processed declaration, or the leaf fingerprint of a trusted-closure
 /// constant. Returns `Ok(None)` when *any* dependency is unresolved — the caller
 /// then cannot soundly reuse a cached verdict and must verify `d` fresh.
+#[cfg(test)]
 pub(crate) fn decl_verified_hash(
     decl: &Declaration,
     dep_hash: impl Fn(&Name) -> Option<[u8; 32]>,

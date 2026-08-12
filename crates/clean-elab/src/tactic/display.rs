@@ -56,6 +56,9 @@ pub(crate) struct ExprFormatter {
     /// Maximum recursion depth for nested expressions
     pub max_depth: usize,
     /// Target line width for wrapping (advisory, not enforced)
+    // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+    // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub line_width: usize,
 }
 
@@ -346,6 +349,9 @@ fn format_binder_suffix(info: BinderInfo, buf: &mut String) {
 /// ENSURES: empty `decls` produces empty string
 /// ENSURES: each declaration occupies exactly one line (no trailing newline)
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_local_context(
     decls: &[LocalDecl],
     env: &Environment,
@@ -383,6 +389,9 @@ pub(crate) fn format_local_context(
 /// REQUIRES: `goal` is a valid Goal from a ProofState
 /// ENSURES: returned string always contains the `⊢` turnstile line
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_goal(goal: &Goal, env: &Environment) -> String {
     let config = ExprFormatter::default();
     format_goal_with_config(goal, env, &config)
@@ -390,6 +399,9 @@ pub(crate) fn format_goal(goal: &Goal, env: &Environment) -> String {
 
 /// Format a goal with explicit formatter configuration.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_goal_with_config(
     goal: &Goal,
     env: &Environment,
@@ -439,6 +451,9 @@ pub(crate) fn format_goal_with_config(
 /// ENSURES: completed states produce `"no goals"`
 /// ENSURES: single-goal states omit the count header
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_proof_state(state: &ProofState, env: &Environment) -> String {
     let config = ExprFormatter::default();
     format_proof_state_with_config(state, env, &config)
@@ -446,6 +461,9 @@ pub(crate) fn format_proof_state(state: &ProofState, env: &Environment) -> Strin
 
 /// Format proof state with explicit formatter configuration.
 #[must_use]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_proof_state_with_config(
     state: &ProofState,
     env: &Environment,

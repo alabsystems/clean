@@ -49,6 +49,8 @@ pub(super) struct ZonotopeConsts {
     pub(super) and: Expr,
     pub(super) eq: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(super) exists: Expr,
     /// `Exists` applied at universe `Sort (u+1)` — used for witness types in
     /// `Type 0` (like `NNVec k`).

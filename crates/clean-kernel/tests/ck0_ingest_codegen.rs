@@ -502,6 +502,10 @@ struct Pipeline {
     env: MinimalEnv,
     target_ty: Term,
     target_proof: Term,
+    // 2026-07-31: written by `run_pipeline` but never read back — the assertions
+    // in this file go through `records`. Kept (not deleted) because it is the
+    // pipeline's own record of what the closure computation produced.
+    #[allow(dead_code)]
     closure: Vec<AdmitItem>,
     records: Vec<AdmitRecord>,
 }
@@ -752,10 +756,7 @@ fn faithful_bv_add_comm_type_matches_clean() {
     // REAL bvEq / bvAdd / BV4 gate-fidelity substrate (NOT a stub).
     let mut clean_consts: HashSet<KName> = HashSet::new();
     collect_consts(&ci.type_, &mut clean_consts);
-    let clean_const_strs: HashSet<String> = clean_consts
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
+    let clean_const_strs: HashSet<String> = clean_consts.iter().map(ToString::to_string).collect();
     let mut raw_consts: HashSet<String> = HashSet::new();
     collect_raw_consts(&ty_raw, &mut raw_consts);
     assert_eq!(
@@ -905,7 +906,7 @@ fn foundational_codegen_ingest_no_axiom_no_unchecked() {
         .axiom_deps(&KName::from_string(BV_ADD_COMM))
         .expect("bvAdd_comm registered")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     domain.sort();
     assert!(

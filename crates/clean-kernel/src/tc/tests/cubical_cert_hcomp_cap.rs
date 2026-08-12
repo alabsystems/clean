@@ -79,8 +79,7 @@ fn nat_cubical_env() -> Environment {
         }],
     };
     env.add_inductive(decl).expect("Nat inductive registers");
-    crate::tc::reduction::kan::register_kan_system_axioms(&mut env)
-        .expect("cofibration axioms register");
+    reduction::kan::register_kan_system_axioms(&mut env).expect("cofibration axioms register");
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("j"),
         level_params: vec![],

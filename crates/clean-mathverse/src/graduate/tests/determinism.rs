@@ -10,7 +10,6 @@
 // injectable (`GraduationRequest::decided_at_epoch_s`); pinning it must yield
 // byte-identical shards. This test is the gate that would have caught Stage J.
 
-use super::*;
 
 const PINNED_DECISION: u64 = 1_700_000_000;
 

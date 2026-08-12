@@ -54,6 +54,7 @@ use crate::level::Level;
 use crate::name::Name;
 
 /// Cached kernel constants for the rung-4b proofs.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct C {
     nat: Expr,
     zero: Expr,
@@ -84,6 +85,7 @@ struct C {
     false_elim0: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl C {
     fn new() -> Self {
         let one_lvl = Level::succ(Level::zero());

@@ -21,36 +21,48 @@ use crate::ParseError;
 impl Parser {
     /// Parse exists: ∃ x, P x
     pub(super) fn exists_body(&mut self, start_span: Span) -> Result<SurfaceExpr, ParseError> {
-        let binders = self.binders()?;
-
-        // Bounded/conditional exists (Mathlib macros):
+        // `paren_guards` come from parenthesized bounded binders `∃ (x ∈ s), p`;
+        // the trailing unparenthesized form `∃ x ∈ s, p` is handled below. For
+        // `∃`, every guard is conjoined with the body:
         //   ∃ x ∈ S, P x   ≡  ∃ x, x ∈ S ∧ P x
         //   ∃ n > 0, P n   ≡  ∃ n, n > 0 ∧ P n
-        let body = if let Some(last_binder) = binders.last() {
-            if let Some(guard) = self.try_bounded_guard(last_binder)? {
-                self.expect(&TokenKind::Comma)?;
-                let body = self.expr()?;
-                let guard_span = guard.span();
-                let body_span = body.span();
-                let span = guard_span.merge(body_span);
-                SurfaceExpr::App(
-                    span,
-                    Box::new(SurfaceExpr::Ident(span, "And".to_string())),
-                    vec![SurfaceArg::positional(guard), SurfaceArg::positional(body)],
-                )
-            } else if self.eat(&TokenKind::In) {
-                // Filter quantifier: ∃ᶠ x in F, body (Mathlib Filter.Frequently)
-                let _filter = self.arrow_expr()?;
-                self.expect(&TokenKind::Comma)?;
-                self.expr()?
-            } else {
-                self.expect(&TokenKind::Comma)?;
-                self.expr()?
-            }
+        let (binders, paren_guards) = self.quant_binders()?;
+
+        let trailing_guard = match binders.last() {
+            Some(last_binder) => self.try_bounded_guard(last_binder)?,
+            None => None,
+        };
+
+        let raw_body = if trailing_guard.is_some() {
+            self.expect(&TokenKind::Comma)?;
+            self.expr()?
+        } else if self.eat(&TokenKind::In) {
+            // Filter quantifier: ∃ᶠ x in F, body (Mathlib Filter.Frequently)
+            let _filter = self.arrow_expr()?;
+            self.expect(&TokenKind::Comma)?;
+            self.expr()?
         } else {
             self.expect(&TokenKind::Comma)?;
             self.expr()?
         };
+
+        // Conjoin the guards with the body: trailing guard nearest the body,
+        // then parenthesized guards in reverse binder order.
+        let conj = |guard: SurfaceExpr, acc: SurfaceExpr| {
+            let span = guard.span().merge(acc.span());
+            SurfaceExpr::App(
+                span,
+                Box::new(SurfaceExpr::Ident(span, "And".to_string())),
+                vec![SurfaceArg::positional(guard), SurfaceArg::positional(acc)],
+            )
+        };
+        let mut body = raw_body;
+        if let Some(guard) = trailing_guard {
+            body = conj(guard, body);
+        }
+        for guard in paren_guards.into_iter().rev() {
+            body = conj(guard, body);
+        }
 
         // Build nested Exists applications. Lean's `Exists : {α} → (α → Prop) →
         // Prop` takes the predicate as its ONLY explicit argument (α is implicit,
@@ -113,31 +125,37 @@ impl Parser {
         &mut self,
         start_span: Span,
     ) -> Result<SurfaceExpr, ParseError> {
-        let binders = self.binders()?;
-
-        // Bounded/conditional unique exists (Mathlib macros):
+        // Parenthesized bounded binders `∃! (x ∈ s), p` contribute guards
+        // conjoined with the body, matching the unparenthesized `∃! x ∈ s, p`:
         //   ∃! x ∈ S, P x   ≡  ∃! x, x ∈ S ∧ P x
         //   ∃! n > 0, P n   ≡  ∃! n, n > 0 ∧ P n
-        let body = if let Some(last_binder) = binders.last() {
-            if let Some(guard) = self.try_bounded_guard(last_binder)? {
-                self.expect(&TokenKind::Comma)?;
-                let body = self.expr()?;
-                let guard_span = guard.span();
-                let body_span = body.span();
-                let span = guard_span.merge(body_span);
-                SurfaceExpr::App(
-                    span,
-                    Box::new(SurfaceExpr::Ident(span, "And".to_string())),
-                    vec![SurfaceArg::positional(guard), SurfaceArg::positional(body)],
-                )
-            } else {
-                self.expect(&TokenKind::Comma)?;
-                self.expr()?
-            }
-        } else {
+        let (binders, paren_guards) = self.quant_binders()?;
+
+        let trailing_guard = match binders.last() {
+            Some(last_binder) => self.try_bounded_guard(last_binder)?,
+            None => None,
+        };
+
+        let raw_body = {
             self.expect(&TokenKind::Comma)?;
             self.expr()?
         };
+
+        let conj = |guard: SurfaceExpr, acc: SurfaceExpr| {
+            let span = guard.span().merge(acc.span());
+            SurfaceExpr::App(
+                span,
+                Box::new(SurfaceExpr::Ident(span, "And".to_string())),
+                vec![SurfaceArg::positional(guard), SurfaceArg::positional(acc)],
+            )
+        };
+        let mut body = raw_body;
+        if let Some(guard) = trailing_guard {
+            body = conj(guard, body);
+        }
+        for guard in paren_guards.into_iter().rev() {
+            body = conj(guard, body);
+        }
 
         // Build nested ExistsUnique applications. Mathlib's `ExistsUnique
         // (p : α → Prop)` takes the predicate as its ONLY explicit argument

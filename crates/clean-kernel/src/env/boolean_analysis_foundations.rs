@@ -650,7 +650,7 @@ mod tests {
     use crate::env::types::ConstantKind;
     use crate::env::Environment;
     use crate::expr::{BinderInfo, Expr, ExprKind};
-    use crate::level::Level;
+
     use crate::name::Name;
     use crate::tc::TypeChecker;
 

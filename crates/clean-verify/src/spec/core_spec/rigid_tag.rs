@@ -26,10 +26,10 @@
 //! disappear entirely — they become one tag equation, with `kexpr_discr` doing
 //! the rest.
 //!
-//! ## The five arms
+//! ## The six arms
 //!
 //! Every arm applies the star inversion for its head shape and then transports
-//! the tag. Four of the five inversions were already in tree or landed in this
+//! the tag. Five of the six inversions were already in tree or landed in this
 //! program; the fifth — for applications — is the one whose multi-step version
 //! needed `rigid_app_head` to exist at all.
 //!
@@ -66,7 +66,7 @@ impl Specification {
         Ok(())
     }
 
-    /// The five minor premises of the tag-preservation induction.
+    /// The six minor premises of the tag-preservation induction.
     fn rigid_tag_arms() -> String {
         let motive_at = |x: &str| {
             format!(
@@ -162,6 +162,18 @@ impl Specification {
             body = via_equation("(KExpr.proj s i sub2)", "heq")
         ));
 
+        // bvar: LAST, matching the constructor order. Like `lit` and unlike
+        // `pi`, its inversion is in EQUATION form and returns an `Eq KExpr`
+        // outright, so no `LiftP` wrap is needed.
+        arms.push_str(&format!(
+            "(fun (i : Nat) (w : KExpr) \
+             (hs : par_reduces_cd_star env (KExpr.bvar i) w) => {body}) ",
+            body = via_equation(
+                "(KExpr.bvar i)",
+                "par_reduces_cd_star_bvar_inv_eq env i w hs"
+            )
+        ));
+
         arms
     }
 
@@ -186,7 +198,7 @@ impl Specification {
              diagonal cases plus 42 cross-head absurdities, a term at def_eq_struct scale. \
              Factoring through kexpr_tag collapses it: the two sides meet in a single Eq.trans \
              through the common reduct, and the cross-head contradictions become one tag equation \
-             for kexpr_discr to dispatch. Each of the five arms applies the star inversion for its \
+             for kexpr_discr to dispatch. Each of the six arms applies the star inversion for its \
              head shape and transports the tag; in every case the two tags COMPUTE to the same \
              numeral, so the closing step is Eq.refl under a kexpr_tag congruence — the payoff of \
              kexpr_tag being a computing function rather than a relation. SCOPE: covers the rigid \
@@ -210,7 +222,7 @@ mod tests {
     /// wrap with two more of them — a test that has to be edited whenever the
     /// proof changes internally is not guarding anything.
     #[test]
-    fn test_rigid_tag_arms_has_five_minor_premises() {
+    fn test_rigid_tag_arms_has_six_minor_premises() {
         let arms = Specification::rigid_tag_arms();
         let chars: Vec<char> = arms.chars().collect();
         let mut depth: i64 = 0;
@@ -228,13 +240,13 @@ mod tests {
             }
         }
         assert_eq!(
-            top_level_lambdas, 5,
-            "rigid_app_head has five constructors, so the recursor takes five minor premises; \
+            top_level_lambdas, 6,
+            "rigid_app_head has six constructors, so the recursor takes six minor premises; \
              found {top_level_lambdas} top-level lambdas"
         );
     }
 
-    /// Declaration order of `rigid_app_head`: sort, pi, lit, app, proj.
+    /// Declaration order of `rigid_app_head`: sort, pi, lit, app, proj, bvar.
     #[test]
     fn test_rigid_tag_arms_declaration_order() {
         let arms = Specification::rigid_tag_arms();
@@ -244,6 +256,7 @@ mod tests {
             "par_reduces_cd_star_lit_inv_eq",
             "par_reduces_cd_star_rigid_app_inv",
             "par_reduces_cd_star_proj_inv",
+            "par_reduces_cd_star_bvar_inv_eq",
         ];
         let mut cursor = 0usize;
         for (position, mark) in landmarks.iter().enumerate() {

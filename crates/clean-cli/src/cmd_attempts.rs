@@ -1209,7 +1209,7 @@ fn print_replay_binding_report(report: &AttemptReplayBindingReport) {
     }
 }
 
-fn print_counts(label: &str, counts: &std::collections::BTreeMap<String, usize>, missing: usize) {
+fn print_counts(label: &str, counts: &BTreeMap<String, usize>, missing: usize) {
     println!("{label}:");
     if counts.is_empty() && missing == 0 {
         println!("  none: 0");

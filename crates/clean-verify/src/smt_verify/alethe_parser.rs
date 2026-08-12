@@ -4,6 +4,12 @@
 
 //! Alethe proof parser for clean's SMT proof DAG.
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use std::collections::{BTreeMap, HashMap};
 
 use thiserror::Error;
@@ -221,6 +227,8 @@ pub(crate) enum AletheRuleKind {
     Hole,
     Drup,
     Trust,
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in EITHER build (the module-level not(test) allow covers only the lib build).
     Custom(String),
 }
 
@@ -516,7 +524,7 @@ pub(crate) struct SmtProofDag {
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
-pub(crate) enum AletheParseError {
+pub enum AletheParseError {
     #[error("unexpected token at offset {offset}: expected {expected}, found {found}")]
     UnexpectedToken {
         offset: usize,

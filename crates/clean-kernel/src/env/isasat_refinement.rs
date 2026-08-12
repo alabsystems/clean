@@ -37,6 +37,7 @@ use crate::name::Name;
 
 /// Shared constants used across all IsaSAT refinement declarations.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) struct IsaSATConsts {
     pub(super) nat: Expr,
     pub(super) bool_: Expr,

@@ -201,7 +201,7 @@ fn false_lex_induction_zero_eq_one_over_product() {
     assert_not_proved(&induction(goal), "∀p∈Nat×Nat: 0=1");
 }
 
-/// progress.rs try_lattice_decomposition: false liveness `(x<5) ~> FALSE`.
+/// Retired lattice-decomposition heuristic: false liveness `(x<5) ~> FALSE`.
 #[test]
 fn false_liveness_x_lt_5_leads_to_false() {
     let p = TlaFormula::Expr(TlaExpr::Cmp(

@@ -364,16 +364,18 @@ fn test_fin_cases_bool_creates_two_subgoals() {
 
     // Goal: P(h) where h : Bool, P : Bool → Prop
     let p_const = Expr::const_(Name::from_string("P"), vec![]);
-    let mut state = ProofState::new(env, Expr::prop());
-    let fvar = state.fresh_fvar();
+    let fvar = FVarId::new(0);
     let target = Expr::app(p_const.clone(), Expr::fvar(fvar));
-    state.goals[0].target = target;
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar,
-        name: "h".to_string(),
-        ty: bool_ty,
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target,
+        vec![LocalDecl {
+            fvar,
+            name: "h".to_string(),
+            ty: bool_ty,
+            value: None,
+        }],
+    );
 
     let result = fin_cases(&mut state, "h");
     assert!(
@@ -415,16 +417,18 @@ fn test_fin_cases_unit_creates_one_subgoal() {
 
     // Goal: Q(h) where h : PUnit.{0}, Q : PUnit.{0} → Prop
     let q_const = Expr::const_(Name::from_string("Q"), vec![]);
-    let mut state = ProofState::new(env, Expr::prop());
-    let fvar = state.fresh_fvar();
+    let fvar = FVarId::new(0);
     let target = Expr::app(q_const, Expr::fvar(fvar));
-    state.goals[0].target = target;
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar,
-        name: "h".to_string(),
-        ty: unit_ty,
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        target,
+        vec![LocalDecl {
+            fvar,
+            name: "h".to_string(),
+            ty: unit_ty,
+            value: None,
+        }],
+    );
 
     let result = fin_cases(&mut state, "h");
     assert!(

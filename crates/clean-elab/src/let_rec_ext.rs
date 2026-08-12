@@ -2,8 +2,16 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+// Per-item expect (not a module-level allow): `LetRecBinding` is wired from
+// let_rec_ext2.rs; if production wiring lands, the expectation trips and the
+// annotation must be removed item-by-item.
+
 //! Extended let-rec elaboration with mutual recursion, termination metrics, WF recursion, type inference, capture analysis, unfolding equations, partial function support, and nested let-rec flattening.
 
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 use clean_kernel::expr::BinderInfo;
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
@@ -12,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) struct LetRecExtConfig {
     pub(crate) max_mutual_depth: usize,
     pub(crate) enable_wf_fallback: bool,
@@ -34,9 +43,14 @@ impl Default for LetRecExtConfig {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) enum TerminationMetric {
     Structural {
+        #[allow(dead_code)]
+        // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
         decreasing_arg: usize,
+        #[allow(dead_code)]
+        // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
         inductive_type: String,
     },
     WellFounded {
@@ -47,6 +61,7 @@ pub(crate) enum TerminationMetric {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) struct LetRecBinding {
     pub(crate) name: String,
     pub(crate) params: Vec<(String, Expr)>,
@@ -56,6 +71,7 @@ pub(crate) struct LetRecBinding {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) struct MutualBlock {
     pub(crate) bindings: Vec<LetRecBinding>,
     pub(crate) dep_graph: Vec<Vec<usize>>,
@@ -63,26 +79,42 @@ pub(crate) struct MutualBlock {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) struct CaptureInfo {
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) binding_idx: usize,
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) captured_names: Vec<String>,
     pub(crate) captured_fvars: Vec<u64>,
 }
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) struct UnfoldingEquation {
     pub(crate) name: String,
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) lhs: Expr,
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) rhs: Expr,
     pub(crate) is_simp: bool,
 }
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) struct PartialFnInfo {
     pub(crate) name: String,
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) missing_cases: Vec<Expr>,
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) default_value: Option<Expr>,
 }
 
 #[derive(Debug, Clone, Error)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) enum LetRecExtError {
     #[error("mutual recursion depth {depth} exceeds max {max}")]
     MutualRecursionTooDeep { depth: usize, max: usize },
@@ -95,9 +127,12 @@ pub(crate) enum LetRecExtError {
     #[error("partial function not allowed: {name}")]
     PartialFunctionNotAllowed { name: String },
     #[error("nested let-rec flattening failed: {reason}")]
+    #[allow(dead_code)]
+    // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
     NestedFlattenFailed { reason: String },
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn build_mutual_block(
     bindings: &[(String, Vec<(String, Expr)>, Option<Expr>, Expr)],
     config: &LetRecExtConfig,
@@ -153,6 +188,7 @@ pub(crate) fn build_mutual_block(
     Ok(block)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn compute_dep_graph(bindings: &[LetRecBinding]) -> Vec<Vec<usize>> {
     bindings
         .iter()
@@ -171,6 +207,7 @@ pub(crate) fn compute_dep_graph(bindings: &[LetRecBinding]) -> Vec<Vec<usize>> {
         .collect()
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn detect_termination_metric(
     binding: &LetRecBinding,
     _all_bindings: &[LetRecBinding],
@@ -198,14 +235,17 @@ pub(crate) fn detect_termination_metric(
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn wf_placeholder_measure() -> Expr {
     Expr::app(Expr::const_str("Nat.succ"), Expr::const_str("Nat.zero"))
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn wf_placeholder_relation() -> Expr {
     Expr::app(Expr::const_str("WellFounded.placeholderRel"), Expr::type_())
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn infer_return_type(binding: &LetRecBinding) -> Option<Expr> {
     binding.return_type.clone().or_else(|| {
         Some(match binding.body.kind() {
@@ -217,6 +257,7 @@ pub(crate) fn infer_return_type(binding: &LetRecBinding) -> Option<Expr> {
     })
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn analyze_captures(block: &MutualBlock) -> Vec<CaptureInfo> {
     let local_ids: HashSet<u64> = block
         .bindings
@@ -249,6 +290,7 @@ pub(crate) fn analyze_captures(block: &MutualBlock) -> Vec<CaptureInfo> {
         .collect()
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn generate_unfolding_equations(block: &MutualBlock) -> Vec<UnfoldingEquation> {
     block
         .bindings
@@ -277,6 +319,7 @@ pub(crate) fn generate_unfolding_equations(block: &MutualBlock) -> Vec<Unfolding
         .collect()
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn check_partial_functions(
     block: &MutualBlock,
     config: &LetRecExtConfig,
@@ -303,6 +346,7 @@ pub(crate) fn check_partial_functions(
     Ok(infos)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn flatten_nested_let_recs(expr: &Expr) -> (Vec<LetRecBinding>, Expr) {
     let mut bindings = Vec::new();
     let mut next_fvar = 10_000u64;
@@ -310,6 +354,7 @@ pub(crate) fn flatten_nested_let_recs(expr: &Expr) -> (Vec<LetRecBinding>, Expr)
     (bindings, body)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn encode_wf_recursion(binding: &LetRecBinding, metric: &TerminationMetric) -> Expr {
     let (measure, relation) = match metric {
         TerminationMetric::WellFounded { measure, relation } => (measure.clone(), relation.clone()),
@@ -326,6 +371,7 @@ pub(crate) fn encode_wf_recursion(binding: &LetRecBinding, metric: &TerminationM
     Expr::app(Expr::app(Expr::app(fix, measure), relation), lambda_body)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn encode_structural_recursion(binding: &LetRecBinding, decreasing_arg: usize) -> Expr {
     let rec_name = binding
         .params
@@ -354,6 +400,7 @@ pub(crate) fn encode_structural_recursion(binding: &LetRecBinding, decreasing_ar
         })
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn topological_sort_bindings(
     dep_graph: &[Vec<usize>],
 ) -> Result<Vec<usize>, LetRecExtError> {
@@ -403,6 +450,7 @@ pub(crate) fn topological_sort_bindings(
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn collect_fvars(expr: &Expr, out: &mut HashSet<u64>) {
     match expr.kind() {
         ExprKind::FVar(id) => {
@@ -426,12 +474,14 @@ fn collect_fvars(expr: &Expr, out: &mut HashSet<u64>) {
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn mentions_fvar(expr: &Expr, target: u64) -> bool {
     let mut fvars = HashSet::new();
     collect_fvars(expr, &mut fvars);
     fvars.contains(&target)
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn collect_recursive_calls(expr: &Expr, target: u64, out: &mut Vec<Vec<Expr>>) {
     if let Some((head, args)) = app_spine(expr) {
         if matches!(head.kind(), ExprKind::FVar(id) if id.as_u64() == target) {
@@ -459,6 +509,7 @@ fn collect_recursive_calls(expr: &Expr, target: u64, out: &mut Vec<Vec<Expr>>) {
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn app_spine(expr: &Expr) -> Option<(&Expr, Vec<&Expr>)> {
     let mut args = Vec::new();
     let mut current = expr;
@@ -474,6 +525,7 @@ fn app_spine(expr: &Expr) -> Option<(&Expr, Vec<&Expr>)> {
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn inductive_type_name(expr: &Expr) -> Option<String> {
     match expr.kind() {
         ExprKind::Const(name, _) => Some(name.to_string()),
@@ -482,6 +534,7 @@ fn inductive_type_name(expr: &Expr) -> Option<String> {
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn find_partial_marker(expr: &Expr) -> Option<Expr> {
     match expr.kind() {
         ExprKind::Const(name, _) if is_partial_name(&name.to_string()) => Some(expr.clone()),
@@ -497,6 +550,7 @@ fn find_partial_marker(expr: &Expr) -> Option<Expr> {
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn contains_const(expr: &Expr, needle: &str) -> bool {
     match expr.kind() {
         ExprKind::Const(name, _) => name.to_string() == needle,
@@ -514,12 +568,14 @@ fn contains_const(expr: &Expr, needle: &str) -> bool {
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn is_partial_name(name: &str) -> bool {
     ["nomatch", "panic", "unreachable", "match.partial"]
         .iter()
         .any(|needle| name.contains(needle))
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn flatten_expr(expr: &Expr, acc: &mut Vec<LetRecBinding>, next_fvar: &mut u64) -> Expr {
     match expr.kind() {
         ExprKind::Let(name, ty, val, body, _) => {
@@ -565,6 +621,7 @@ fn flatten_expr(expr: &Expr, acc: &mut Vec<LetRecBinding>, next_fvar: &mut u64) 
     }
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 fn peel_lambdas(expr: &Expr) -> (Vec<(String, Expr)>, Expr) {
     let mut params = Vec::new();
     let mut current = expr;

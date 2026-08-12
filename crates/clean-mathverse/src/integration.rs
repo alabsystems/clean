@@ -2221,7 +2221,7 @@ fn test_real_olean_provenance() {
         };
 
         let mut writer = ShardWriter::new();
-        let stats = match import_module(&module, &mut writer) {
+        let _stats = match import_module(&module, &mut writer) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("SKIP {}: {e}", path.display());

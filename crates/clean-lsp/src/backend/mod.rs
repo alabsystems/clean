@@ -98,6 +98,7 @@ pub(crate) mod modifier_bits {
     pub(crate) const DECLARATION: u32 = 1 << 0;
     pub(crate) const DEFINITION: u32 = 1 << 1;
     pub(crate) const READONLY: u32 = 1 << 2;
+    #[cfg(test)]
     pub(crate) const DEPRECATED: u32 = 1 << 3;
     pub(crate) const DEFAULT_LIBRARY: u32 = 1 << 4;
 }

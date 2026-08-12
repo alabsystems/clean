@@ -26,7 +26,10 @@ mod ay_solver_translation;
 mod ay_solver_types;
 mod ay_tactics;
 mod ay_types;
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
 #[cfg(feature = "ay-smt")]
+#[cfg(test)]
 pub(crate) mod batch_search;
 mod bridge_reconstruction;
 mod bridge_validation;

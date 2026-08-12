@@ -37,6 +37,7 @@ use crate::name::Name;
 
 /// Extended McCormick constants (reuses base Rat/le infrastructure).
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct McExtConsts {
     rat: Expr,
     prop: Expr,
@@ -55,6 +56,7 @@ struct McExtConsts {
 }
 
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl McExtConsts {
     #[cfg(test)]
     fn new() -> Self {

@@ -133,14 +133,35 @@ impl Parser {
                             self.advance();
                         }
                     }
-                    self.expect(&TokenKind::RBrace)?;
+                    // Capture the CLOSING BRACE's own span (the line-399
+                    // getElem pattern): `expect` advances, so a later
+                    // `current_span()` is the FOLLOWING token — an
+                    // over-extended span whose `end` defeats the byte-
+                    // adjacency check for any postfix after `.{…}`
+                    // (`X.{u}.ty` misparsed `.ty` as a leading-dot argument
+                    // instead of a projection — refuter finding).
+                    let end_span = self.expect(&TokenKind::RBrace)?.span;
 
-                    // For now, just annotate the expression with universe info
-                    // The actual effect is that we parsed past the .{...}
-                    // The elaborator will handle the universe instantiation
-                    let end_span = self.current_span();
-                    let span = expr.span().merge(end_span);
-                    expr = SurfaceExpr::UniverseInst(span, Box::new(expr), levels);
+                    // Like projection below, `.{…}` attaches to the LAST
+                    // ARGUMENT when one is pending, not the application head:
+                    // `@f PUnit.{u+1} x` instantiates `PUnit`, not `f` (the
+                    // dot-adjacency check above already guarantees the levels
+                    // hug the preceding atom). Head attachment only when there
+                    // are no pending args (`Foo.{u v}` and `Foo.{u} x y`).
+                    // Previously this always wrapped the head, silently
+                    // re-leveling the FUNCTION — the U2 battery P14 bug.
+                    if let Some(last_arg) = pending_args.pop() {
+                        let span = last_arg.expr.span().merge(end_span);
+                        let inst = SurfaceExpr::UniverseInst(span, Box::new(last_arg.expr), levels);
+                        pending_args.push(SurfaceArg {
+                            span,
+                            expr: inst,
+                            name: last_arg.name,
+                        });
+                    } else {
+                        let span = expr.span().merge(end_span);
+                        expr = SurfaceExpr::UniverseInst(span, Box::new(expr), levels);
+                    }
                     continue;
                 }
 
@@ -665,7 +686,10 @@ impl Parser {
                 .tokens
                 .get(self.pos + offset)
                 .is_some_and(|t| t.preceded_by_newline)
-            && self.kind_at(offset + 1) == Some(&TokenKind::Colon)
+            && matches!(
+                self.kind_at(offset + 1),
+                Some(TokenKind::Colon | TokenKind::ColonEq)
+            )
         {
             return false;
         }
@@ -761,6 +785,8 @@ impl Parser {
                 | TokenKind::Axiom
                 | TokenKind::Example
                 | TokenKind::Inductive
+                | TokenKind::Codata
+                | TokenKind::Codef
                 | TokenKind::Structure
                 | TokenKind::Class
                 | TokenKind::Instance
@@ -1240,7 +1266,33 @@ impl Parser {
                 self.advance(); // consume @
                                 // Parse the expression following @
                                 // This should be an identifier or parenthesized expression
-                let inner = self.atom_expr()?;
+                let mut inner = self.atom_expr()?;
+                // `@Foo.bar.baz` — fold an ADJACENT dotted chain into the
+                // identifier before wrapping in Explicit. Ordinary heads leave
+                // dots to app_expr's projection postfix, whose
+                // back-to-qualified-constant recovery does not look through
+                // an Explicit node — `@Codata.IMIntl` otherwise resolves just
+                // `Codata` and fails. Adjacency (no whitespace before the dot)
+                // matches the leading-dot constructor rule above.
+                if let SurfaceExpr::Ident(id_span, name) = &inner {
+                    let mut full_name = name.clone();
+                    let mut final_span = *id_span;
+                    while self.check(&TokenKind::Dot) {
+                        if self.current_span().start != final_span.end {
+                            break;
+                        }
+                        if let Some(TokenKind::Ident(next)) = self.peek_kind(1).cloned() {
+                            self.advance(); // dot
+                            final_span = self.current_span();
+                            self.advance(); // ident
+                            full_name.push('.');
+                            full_name.push_str(&next);
+                        } else {
+                            break;
+                        }
+                    }
+                    inner = SurfaceExpr::Ident(id_span.merge(final_span), full_name);
+                }
                 let end_span = inner.span();
                 Ok(SurfaceExpr::Explicit(span.merge(end_span), Box::new(inner)))
             }

@@ -129,7 +129,7 @@ fn compound_simp() -> CompoundTacticEntry {
     }
 }
 
-fn simp_names(lemmas: &[clean_parser::SurfaceExpr]) -> Vec<String> {
+fn simp_names(lemmas: &[SurfaceExpr]) -> Vec<String> {
     lemmas
         .iter()
         .map(super::builtins::surface_expr_to_name)
@@ -139,7 +139,7 @@ fn simp_names(lemmas: &[clean_parser::SurfaceExpr]) -> Vec<String> {
 fn simp_goal_with_lemmas(
     ps: &mut ProofState,
     only: bool,
-    lemmas: &[clean_parser::SurfaceExpr],
+    lemmas: &[SurfaceExpr],
 ) -> Result<(), TacticError> {
     let names = simp_names(lemmas);
     if only {
@@ -260,7 +260,7 @@ fn rw_hyp_rules(
 fn simp_hyps(
     ps: &mut ProofState,
     only: bool,
-    lemmas: &[clean_parser::SurfaceExpr],
+    lemmas: &[SurfaceExpr],
     hyps: &[String],
 ) -> Result<(), TacticError> {
     let names = simp_names(lemmas);

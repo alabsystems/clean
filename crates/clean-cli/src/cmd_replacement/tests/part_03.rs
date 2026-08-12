@@ -5,7 +5,6 @@
 //! Tests (slice 3) for the `clean replacement` command group,
 //! split from the original single-file `cmd_replacement.rs` tests module.
 
-use super::support::*;
 use crate::cmd_replacement::*;
 
 #[test]
@@ -159,6 +158,81 @@ fn replacement_status_accounts_python_wrappers_and_certification_gate() {
     assert!(certification_gate
         .fail_closed_reason
         .contains("clean full Lean4 replacement is not certified"));
+}
+
+/// Regression guard for commit fc6794736 ("release: remove ghost readiness
+/// dependencies"), which dropped `mathverse-download-pytest` from the Python-wrapper
+/// inventory: the wrapper it claimed to have replaced
+/// (`tests/test_download_mathverse_library.py`) was never tracked in this repository, so
+/// the migration proof was a ghost. Retiring a ghost and losing a real Rust capability
+/// both look like "one row left the wrapper inventory", so pin the difference: no
+/// Rust-owned replacement-critical row may leave the proof list without an explicit
+/// `retired:` command, and the mathverse download launch gate must still be reachable as a
+/// Rust product surface.
+#[test]
+fn retired_ghost_python_wrapper_keeps_its_rust_capability() {
+    let Ok(report) = ReplacementStatusReport::current() else {
+        eprintln!("SKIP: replacement status report artifacts not present on this machine");
+        return;
+    };
+    let accounting = &report.readiness_accounting;
+    let tooling = &report.rust_first_tooling;
+
+    for row in tooling
+        .commands
+        .iter()
+        .filter(|row| row.status == ToolMigrationStatus::RustOwned && row.replacement_critical)
+    {
+        assert!(
+            accounting
+                .rust_owned_python_wrapper_proofs
+                .iter()
+                .any(|proof| proof.id == row.id)
+                || row.command.starts_with("retired: "),
+            "Rust-owned replacement-critical row {} left the Python-wrapper proof list \
+             without a documented `retired:` command; a renamed, moved, or reworded legacy \
+             command silently dropping out of the inventory is a regression, not a cleanup",
+            row.id
+        );
+    }
+
+    let mathverse = tooling
+        .commands
+        .iter()
+        .find(|row| row.id == "mathverse-download-pytest")
+        .expect("mathverse download row must stay in the rust-first tooling inventory");
+    assert_eq!(mathverse.status, ToolMigrationStatus::RustOwned);
+    assert!(mathverse.replacement_critical);
+    assert!(mathverse
+        .planned_rust_surface
+        .starts_with("clean mathverse download"));
+    assert!(
+        accounting.product_surfaces.iter().any(|surface| {
+            surface.id == "mathverse-download-pytest"
+                && surface.surface.starts_with("clean mathverse download")
+                && surface.status == ToolMigrationStatus::RustOwned
+        }),
+        "retiring the ghost Python wrapper must not drop the Rust-owned mathverse download \
+         launch gate from the product surfaces"
+    );
+
+    // The ghost must stay a ghost: the row declares no Python command, and the Python test
+    // it once named is absent from the repository. If that file is ever added, the row's
+    // "never tracked" claim becomes false and this gate fires instead of quietly lying.
+    assert!(mathverse.command.starts_with("retired: "));
+    assert!(!is_python_wrapper_command(mathverse.command));
+    assert!(
+        !accounting
+            .python_wrappers
+            .iter()
+            .any(|wrapper| wrapper.id == "mathverse-download-pytest"),
+        "a row with no Python command must not be counted as a Python wrapper"
+    );
+    assert!(
+        !repo_artifact_path("tests/test_download_mathverse_library.py").exists(),
+        "tests/test_download_mathverse_library.py is back: mathverse-download-pytest is no \
+         longer a ghost row and must be re-classified in python_tool_migration_rows()"
+    );
 }
 
 #[test]

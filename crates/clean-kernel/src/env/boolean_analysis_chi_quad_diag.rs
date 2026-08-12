@@ -85,6 +85,8 @@ struct DiagConsts {
     #[cfg(test)]
     quad_ortho: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     false_c: Expr,
     false_elim: Expr,
     or_c: Expr,
@@ -100,6 +102,7 @@ struct DiagConsts {
     congr_arg_br: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl DiagConsts {
     fn new() -> Self {
         let l0 = Level::zero();

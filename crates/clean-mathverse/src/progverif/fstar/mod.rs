@@ -142,7 +142,7 @@ pub struct FStarImportResult {
 
 /// Known F* effects and their totality classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EffectCategory {
+pub enum EffectCategory {
     /// Total (terminating) effects: Tot, Lemma.
     Total,
     /// Partial (potentially non-terminating) effects: Div, ML.
@@ -303,7 +303,7 @@ impl FStarImporter {
 // ============================================================================
 
 /// Classify an F* effect name into its category.
-pub(crate) fn classify_effect(name: &str) -> EffectCategory {
+pub fn classify_effect(name: &str) -> EffectCategory {
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
         "tot" | "lemma" | "pure" | "ghost" => EffectCategory::Total,

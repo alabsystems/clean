@@ -13,6 +13,8 @@ use clean_kernel::{Expr, ExprKind};
 
 use crate::unify::MetaState;
 
+use super::combinator::try_tactic;
+use super::proof_term::assumption;
 use super::tc_app;
 use super::{Goal, ProofState, TacticError, TacticResult};
 
@@ -32,7 +34,9 @@ use super::{Goal, ProofState, TacticError, TacticResult};
 /// REQUIRES: On `Ok(())`, the current goal is a recognized inequality accepted
 ///   by [`match_inequality`].
 /// ENSURES: On `Ok(())`, either closes a reflexive non-strict inequality or
-///   replaces the goal with congruence subgoals via [`gcongr_inequality`].
+///   replaces the goal with congruence subgoals via [`gcongr_inequality`], each
+///   of which is then offered to the trivial side-goal discharger
+///   ([`discharge_gcongr_subgoals`]).
 /// ENSURES: Returns `Err(GoalMismatch)` for non-inequality goals and
 ///   `Err(SearchExhausted)` when no supported monotonicity rule applies.
 pub fn gcongr(state: &mut ProofState) -> TacticResult {
@@ -41,12 +45,140 @@ pub fn gcongr(state: &mut ProofState) -> TacticResult {
 
     // Try to match an inequality
     if let Some((rel, ty, inst, lhs, rhs)) = match_inequality(&target) {
-        return gcongr_inequality(state, &goal, rel, &ty, &inst, &lhs, &rhs);
+        let goals_before = state.goals().len();
+        gcongr_inequality(state, &goal, rel, &ty, &inst, &lhs, &rhs)?;
+        // Every decomposition path closes the original goal and inserts its
+        // subgoals at the FRONT, so the new goals are `[0, num_new)`.
+        let num_new = state
+            .goals()
+            .len()
+            .saturating_sub(goals_before.saturating_sub(1));
+        discharge_gcongr_subgoals(state, num_new);
+        return Ok(());
     }
 
     Err(TacticError::GoalMismatch(
         "gcongr: goal must be an inequality".to_string(),
     ))
+}
+
+/// Try to discharge the `count` subgoals `gcongr` just inserted at the front of
+/// the queue, leaving any it cannot close in place.
+///
+/// Lean's `gcongr` does not stop at the decomposition: its *main* subgoals go to
+/// a `gcongr_assumption`-style step and its *side* goals to `gcongr_discharger`
+/// (`positivity` by default). Without any discharger, `a + 1 ≤ b + 1` with
+/// `h : a ≤ b` in context decomposed and then left BOTH `a ≤ b` and `1 ≤ 1`
+/// open, so the tactic never actually proved anything on its own.
+///
+/// This is the TRIVIAL subset of that behaviour — `assumption` and reflexivity
+/// (see [`discharge_front_trivially`]); a `positivity`-grade discharger for
+/// genuine side conditions (`0 ≤ c`) is not attempted here. Every close still
+/// goes through the kernel-checked `exact`/`close_goal` path, and a subgoal that
+/// resists both rungs is left untouched, so nothing is ever closed without a
+/// checked proof term.
+fn discharge_gcongr_subgoals(state: &mut ProofState, count: usize) {
+    let mut pos = 0usize;
+    for _ in 0..count {
+        if pos >= state.goals().len() {
+            break;
+        }
+        let before = state.goals().len();
+        // `focus_goal` runs the discharger with this subgoal as the front goal
+        // and restores the preceding goals afterwards, so the queue order the
+        // caller sees is preserved.
+        let _ = state.focus_goal(pos, discharge_front_trivially);
+        if state.goals().len() >= before {
+            // Not closed: keep it and move on to the next subgoal.
+            pos += 1;
+        }
+    }
+}
+
+/// Close the FRONT goal if one of the two trivial rungs applies.
+///
+/// 1. `assumption` — the congruence premise is already a hypothesis (`h : a ≤ b`
+///    for the `a + 1 ≤ b + 1` decomposition). This is the rung that makes
+///    `gcongr` useful at all.
+/// 2. reflexivity — the shared operand's subgoal (`1 ≤ 1`, `c ≤ c`), closed by
+///    the same `{Type}.le_refl` term the top-level reflexive case uses.
+///
+/// Each rung runs under [`try_tactic`], so a failed attempt restores the goal
+/// queue and its meta scope; the goal is reported closed only when the queue
+/// actually shrank.
+fn discharge_front_trivially(state: &mut ProofState) -> TacticResult {
+    let before = state.goals().len();
+    let _ = try_tactic(state, assumption);
+    if state.goals().len() < before {
+        return Ok(());
+    }
+    let _ = try_tactic(state, close_reflexive_front_ineq);
+    if state.goals().len() < before {
+        return Ok(());
+    }
+    Err(TacticError::SearchExhausted {
+        tactic: "gcongr".into(),
+        detail: "side goal is neither a hypothesis nor a reflexive inequality".into(),
+    })
+}
+
+/// Close a front goal of the form `x ≤ x` / `x ≥ x` via `{Type}.le_refl`.
+fn close_reflexive_front_ineq(state: &mut ProofState) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let target = state.metas.instantiate(&goal.target);
+    let Some((rel, ty, _inst, lhs, rhs)) = match_inequality(&target) else {
+        return Err(TacticError::GoalMismatch(
+            "gcongr: side goal is not an inequality".to_string(),
+        ));
+    };
+    if !state.is_def_eq(&goal, &lhs, &rhs) {
+        return Err(TacticError::GoalMismatch(
+            "gcongr: side goal is not reflexive".to_string(),
+        ));
+    }
+    close_reflexive_ineq(state, &goal, rel, &ty, &lhs)
+}
+
+/// Close `goal` (whose sides are definitionally equal) with `{Type}.le_refl lhs`.
+///
+/// Shared by the top-level all-arguments-equal case and the side-goal
+/// discharger. Generic in the type: it looks up `{Type}.le_refl` in the
+/// environment (Nat, Int, Real, Rat, or any type with one registered) rather
+/// than hardcoding `Nat.le_refl`, and fails closed when it is absent.
+fn close_reflexive_ineq(
+    state: &mut ProofState,
+    goal: &Goal,
+    rel: IneqRel,
+    ty: &Expr,
+    lhs: &Expr,
+) -> TacticResult {
+    let refl_proof = match rel {
+        IneqRel::Le | IneqRel::Ge => {
+            let type_name = match ty.kind() {
+                ExprKind::Const(name, _) => name.to_string(),
+                _ => {
+                    return Err(TacticError::InvalidTarget {
+                        tactic: "gcongr".into(),
+                        detail: "reflexivity requires a named type constant".into(),
+                    });
+                }
+            };
+            let le_refl_name = Name::from_string(&format!("{type_name}.le_refl"));
+            if state.env().get_const(&le_refl_name).is_none() {
+                return Err(TacticError::EnvironmentMissing {
+                    constant: format!("{type_name}.le_refl"),
+                });
+            }
+            Expr::app(Expr::const_(le_refl_name, vec![]), lhs.clone())
+        }
+        IneqRel::Lt | IneqRel::Gt => {
+            return Err(TacticError::InvalidTarget {
+                tactic: "gcongr".into(),
+                detail: "strict inequality cannot hold for equal terms".into(),
+            });
+        }
+    };
+    state.close_goal(goal, refl_proof)
 }
 
 /// Inequality relation type
@@ -167,38 +299,11 @@ fn gcongr_inequality(
             if differing.is_empty() {
                 // All args equal, close with reflexivity via close_goal (checked).
                 // Part of #2154: previously used metas.assign (bypassed type check).
-                let refl_proof = match rel {
-                    IneqRel::Le | IneqRel::Ge => {
-                        // Generic reflexivity: look up {Type}.le_refl in the
-                        // environment. Works for Nat, Int, Real, Rat, or any
-                        // type with a registered le_refl axiom.
-                        // Part of #2075: previously hardcoded Nat.le_refl,
-                        // producing ill-typed proofs for non-Nat types.
-                        let type_name = match ty.kind() {
-                            ExprKind::Const(name, _) => name.to_string(),
-                            _ => {
-                                return Err(TacticError::InvalidTarget {
-                                    tactic: "gcongr".into(),
-                                    detail: "reflexivity requires a named type constant".into(),
-                                });
-                            }
-                        };
-                        let le_refl_name = Name::from_string(&format!("{type_name}.le_refl"));
-                        if state.env().get_const(&le_refl_name).is_none() {
-                            return Err(TacticError::EnvironmentMissing {
-                                constant: format!("{type_name}.le_refl"),
-                            });
-                        }
-                        Expr::app(Expr::const_(le_refl_name, vec![]), lhs.clone())
-                    }
-                    IneqRel::Lt | IneqRel::Gt => {
-                        return Err(TacticError::InvalidTarget {
-                            tactic: "gcongr".into(),
-                            detail: "strict inequality cannot hold for equal terms".into(),
-                        });
-                    }
-                };
-                return state.close_goal(goal, refl_proof);
+                // The closer is shared with the side-goal discharger; it is
+                // generic in the type (looks up `{Type}.le_refl` rather than
+                // hardcoding `Nat.le_refl`, which produced ill-typed proofs for
+                // non-Nat types — part of #2075).
+                return close_reflexive_ineq(state, goal, rel, ty, lhs);
             }
 
             // General function decomposition with differing args requires

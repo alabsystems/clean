@@ -266,20 +266,21 @@ fn test_change_at_accepts_delta_reducible_nested_subexpr() {
     .unwrap();
 
     let goal_ty = Expr::const_(Name::from_string("B"), vec![]);
-    let mut state = ProofState::new(env, goal_ty);
-
-    // Hypothesis h : Fam MyA
-    let fvar = state.fresh_fvar();
+    let fvar = FVarId::new(0);
     let f_my_a = Expr::app(
         Expr::const_(Name::from_string("Fam"), vec![]),
         Expr::const_(Name::from_string("MyA"), vec![]),
     );
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar,
-        name: "h".to_string(),
-        ty: f_my_a,
-        value: None,
-    });
+    let mut state = ProofState::with_context(
+        env,
+        goal_ty,
+        vec![LocalDecl {
+            fvar,
+            name: "h".to_string(),
+            ty: f_my_a,
+            value: None,
+        }],
+    );
 
     // change_at h to Fam A
     let f_a = Expr::app(

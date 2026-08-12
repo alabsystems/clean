@@ -98,6 +98,8 @@ struct NatLeftDistribConsts {
     nat_add: Expr,
     nat_mul: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_succ: Expr,
     nat_rec: Expr,
     eq_const: Expr,

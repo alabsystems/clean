@@ -14,8 +14,8 @@ workspace = true
 [dependencies]
 # Read-only dependency on the Mathverse library. `default-features = false`
 # drops the `automation` feature → no `clean-auto` → no AY solver graph or
-# `../trust-ir` sibling path dependency, so this crate builds in a bare Docker /
-# Cloud Build context.
+# external TrustIR compiler graph, so this crate builds in a bare Docker / Cloud
+# Build context.
 clean-mathverse = { workspace = true, default-features = false }
 axum.workspace = true
 tower-http = { workspace = true }

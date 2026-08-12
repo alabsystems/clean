@@ -77,6 +77,7 @@ impl<'a> ElabCtx<'a> {
                 ty,
                 constructors,
                 derived_instances,
+                wants_deep_induction,
                 modifiers,
             } => ElabResult::Inductive {
                 name,
@@ -98,6 +99,7 @@ impl<'a> ElabCtx<'a> {
                         level_params: inst.level_params,
                     })
                     .collect(),
+                wants_deep_induction,
                 modifiers,
             },
             ElabResult::MutualInductive {

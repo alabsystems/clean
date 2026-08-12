@@ -472,11 +472,26 @@ fn split_or_hypothesis(
     // appends at the back: `cases` pops the front goal and pushes `num_ctors`
     // branch goals, so they occupy `[goals_before - 1 .. goals_after)`.
     let goals_before = state.goals().len();
+    // Snapshot the scrutinee goal's context length too. `cases` builds every
+    // branch context as "this context MINUS the scrutinee, PLUS that
+    // constructor's fields", so `branch_ctx_len - (ctx_len_before - 1)` is
+    // exactly the number of fields that constructor appended — per branch, and
+    // legitimately ZERO for a nullary constructor (`Nat.zero`, `Option.none`,
+    // `List.nil`). Reading the field as the context's `.last()` decl instead
+    // (what this did before) picks up an unrelated outer hypothesis on a
+    // nullary branch, and the WRONG field on a multi-field one.
+    let ctx_len_before = state
+        .current_goal()
+        .ok_or(TacticError::NoGoals)?
+        .local_ctx
+        .len();
     cases(state, hyp_name)?;
     let goals_after = state.goals().len();
     // Net new goals = goals_after - (goals_before - 1).
     let num_new = goals_after.saturating_sub(goals_before.saturating_sub(1));
     let new_goal_start = goals_after.saturating_sub(num_new);
+    // `cases` removed the scrutinee from every branch context.
+    let ctx_len_after_removal = ctx_len_before.saturating_sub(1);
 
     // First pass: apply the SIMPLE (in-place) sub-patterns to each branch's field
     // by direct index, exactly like `eval_rcases_inner`. `Name` renames the field,
@@ -485,12 +500,9 @@ fn split_or_hypothesis(
     // focuses the branch goal — mirroring `apply_field_patterns`, which never
     // reorders goals during the in-place rename phase. This avoids disturbing the
     // goal queue (and the assembled `casesOn` proof term's branch metas) while
-    // names are assigned. The deferred targets are recorded by the field's
-    // generated name so they can be re-resolved after focusing. (A NAME, not the
-    // FVar id: sibling `Or` branches reset `next_fvar` to the same base in
-    // `cases`, so `Or.inl`'s and `Or.inr`'s field FVars share an id — only their
-    // auto-generated names, `inl_0` vs `inr_0`, distinguish the branches.)
-    let mut deferred: Vec<(String, RIntroPattern)> = Vec::new();
+    // names are assigned. The deferred targets are recorded per branch (see
+    // `BranchWork`) so they can be re-resolved after focusing.
+    let mut deferred: Vec<BranchWork> = Vec::new();
     for (alt_idx, branch_pos) in (new_goal_start..goals_after).enumerate() {
         if branch_pos >= state.goals().len() {
             break;
@@ -498,29 +510,74 @@ fn split_or_hypothesis(
         let Some(pattern) = effective.get(alt_idx) else {
             break;
         };
-        // The constructor field (the disjunct hypothesis) is the LAST decl that
-        // `cases` appended to this branch goal's context.
-        let Some(field_decl) = state.goals()[branch_pos].local_ctx.last() else {
-            return Err(TacticError::HypothesisNotFound(
-                "rcases: case-split branch produced no field hypothesis".into(),
-            ));
-        };
-        let field_idx = state.goals()[branch_pos].local_ctx.len() - 1;
-        let field_name = field_decl.name.clone();
-
-        match pattern {
-            RIntroPattern::Wildcard => {
-                // Keep the auto-generated field name; nothing to do.
+        // Locate THIS branch's constructor fields by the count `cases` appended
+        // (see `ctx_len_after_removal`), never by `.last()`.
+        let branch_ctx_len = state.goals()[branch_pos].local_ctx.len();
+        let num_fields = branch_ctx_len.saturating_sub(ctx_len_after_removal);
+        if num_fields == 0 {
+            // A NULLARY constructor branch (`Nat.zero`, `Option.none`,
+            // `List.nil`) binds nothing. `_` and a name have nothing to bind, so
+            // they are no-ops — Lean's rcases is deliberately liberal here and
+            // auto-names whatever the pattern does not cover. A pattern that
+            // asks to DESTRUCTURE or SUBSTITUTE a field, however, cannot be
+            // honoured at all, so it ERRORS rather than silently doing nothing
+            // (and, above all, rather than renaming an unrelated outer
+            // hypothesis, which is what the `.last()` read did).
+            match pattern {
+                RIntroPattern::Wildcard | RIntroPattern::Name(_) => continue,
+                RIntroPattern::Tuple(sub) | RIntroPattern::Anonymous(sub) if sub.is_empty() => {
+                    continue;
+                }
+                _ => {
+                    return Err(TacticError::InvalidTarget {
+                        tactic: "rcases".into(),
+                        detail: format!(
+                            "alternation branch {alt_idx} of '{hyp_name}' is a constructor with \
+                             no fields, so its pattern has nothing to destructure; use `_`"
+                        ),
+                    });
+                }
             }
-            RIntroPattern::Name(new_name) => {
-                state.goals[branch_pos].local_ctx[field_idx].name = new_name.clone();
+        }
+        let field_start = branch_ctx_len - num_fields;
+        // One pattern per field, Lean-style (see `expand_branch_pattern`).
+        let per_field = expand_branch_pattern(pattern, num_fields);
+        let mut branch_deferred: Vec<(FVarId, RIntroPattern)> = Vec::new();
+        let mut locate_name: Option<String> = None;
+        state.invalidate_tc_cache();
+        for (offset, field_pattern) in per_field.iter().enumerate() {
+            let field_idx = field_start + offset;
+            match field_pattern {
+                RIntroPattern::Wildcard => {
+                    // Keep the auto-generated field name; nothing to do.
+                }
+                RIntroPattern::Name(new_name) => {
+                    state.goals[branch_pos].local_ctx[field_idx].name = new_name.clone();
+                }
+                // Anything that further destructs the field (nested tuple, nested
+                // alternation, or a `rfl` substitution) is deferred so it can run with
+                // the branch goal focused as the front goal.
+                other => {
+                    let decl = &state.goals()[branch_pos].local_ctx[field_idx];
+                    // The branch is LOCATED by a deferred field's generated name
+                    // (a NAME, not the FVar id: sibling `Or` branches reset
+                    // `next_fvar` to the same base in `cases`, so `Or.inl`'s and
+                    // `Or.inr`'s field FVars share an id — only their
+                    // auto-generated names, `inl_0` vs `inr_0`, distinguish the
+                    // branches). Within the extracted branch the FVar id is then
+                    // the right handle, exactly as `destruct_hypothesis` uses it.
+                    if locate_name.is_none() {
+                        locate_name = Some(decl.name.clone());
+                    }
+                    branch_deferred.push((decl.fvar, other.clone()));
+                }
             }
-            // Anything that further destructs the field (nested tuple, nested
-            // alternation, or a `rfl` substitution) is deferred so it can run with
-            // the branch goal focused as the front goal.
-            other => {
-                deferred.push((field_name, other.clone()));
-            }
+        }
+        if let Some(locate_name) = locate_name {
+            deferred.push(BranchWork {
+                locate_name,
+                fields: branch_deferred,
+            });
         }
     }
 
@@ -552,24 +609,14 @@ fn split_or_hypothesis(
     // `⟨hp, hq⟩ | ⟨hr, hs⟩` case.
     let branch_fvar_base = state.next_fvar;
     let mut branch_fvar_max = branch_fvar_base;
-    for (field_name, pattern) in deferred {
+    for work in deferred {
         let branch_pos = state
             .goals()
             .iter()
-            .position(|g| g.local_ctx.iter().any(|d| d.name == field_name))
+            .position(|g| g.local_ctx.iter().any(|d| d.name == work.locate_name))
             .ok_or_else(|| {
                 TacticError::HypothesisNotFound(
                     "rcases: deferred alternation branch goal not found".into(),
-                )
-            })?;
-        let field_fvar = state.goals()[branch_pos]
-            .local_ctx
-            .iter()
-            .find(|d| d.name == field_name)
-            .map(|d| d.fvar)
-            .ok_or_else(|| {
-                TacticError::HypothesisNotFound(
-                    "rcases: deferred alternation field vanished before focus".into(),
                 )
             })?;
         // Pull the single target branch out of the queue and run the sub-pattern
@@ -578,7 +625,16 @@ fn split_or_hypothesis(
         let branch = state.goals.remove(branch_pos).ok_or(TacticError::NoGoals)?;
         state.next_fvar = branch_fvar_base;
         let mut focused = state.clone_with_goal(branch);
-        apply_subpattern_to_field(&mut focused, field_fvar, &pattern)?;
+        // A multi-field constructor can defer MORE THAN ONE field (`rcases l with
+        // _ | ⟨x, xs⟩` on a `List`, where `xs` may itself be destructured). Run
+        // them all inside this branch's sub-state, and route each through the
+        // "…_all_goals" form: an earlier field's split multiplies the branch into
+        // siblings that all carry the later field's FVar, so the later pattern
+        // must reach every one of them (the same discipline
+        // `destruct_hypothesis`'s second pass uses).
+        for (field_fvar, pattern) in &work.fields {
+            apply_subpattern_to_field_all_goals(&mut focused, *field_fvar, pattern)?;
+        }
         branch_fvar_max = branch_fvar_max.max(focused.next_fvar);
         state.merge_meta_state(&focused);
         // Re-insert the (possibly multiplied) result goals at the branch's
@@ -590,6 +646,60 @@ fn split_or_hypothesis(
     state.next_fvar = branch_fvar_max;
 
     Ok(())
+}
+
+/// The deferred (goal-splitting) work for ONE alternation branch.
+///
+/// `locate_name` is the generated name of the branch's first deferred field; it
+/// identifies the branch goal in the shared queue after the in-place renames.
+/// `fields` pairs each deferred field's FVar with the sub-pattern to apply once
+/// the branch has been extracted into its own single-goal sub-state.
+struct BranchWork {
+    locate_name: String,
+    fields: Vec<(FVarId, RIntroPattern)>,
+}
+
+/// Expand ONE alternation branch's pattern into exactly one pattern per field of
+/// that branch's constructor (`num_fields ≥ 1`).
+///
+/// Lean's rcases (`Init/RCases.lean`): "A pattern like `⟨a, b, c⟩ | ⟨d, e⟩` will
+/// do a split over the inductive datatype, naming the first three parameters of
+/// the first constructor as `a,b,c` … If the list is not as long as the number of
+/// arguments to the constructor … the remaining variables will be automatically
+/// named. If there are too many arguments … then it will be treated as
+/// `⟨a, ⟨b, c⟩⟩`, splitting the last parameter as necessary."
+///
+/// So:
+/// * A tuple pattern on a MULTI-field constructor (`⟨x, xs⟩` on `List.cons`)
+///   distributes over the fields, padding with `_` and grouping an over-long
+///   tail into the last field.
+/// * Every other pattern — and any pattern on a SINGLE-field constructor —
+///   applies to the FIRST field, with the remaining fields keeping their
+///   generated names. This is what keeps `rcases h with ⟨hp, hq⟩ | hr` on
+///   `(p ∧ q) ∨ r` recursing INTO `Or.inl`'s single field rather than trying to
+///   spread `hp`/`hq` across fields that do not exist.
+fn expand_branch_pattern(pattern: &RIntroPattern, num_fields: usize) -> Vec<RIntroPattern> {
+    let mut expanded = match pattern {
+        RIntroPattern::Tuple(sub) | RIntroPattern::Anonymous(sub)
+            if num_fields > 1 && !sub.is_empty() =>
+        {
+            if sub.len() > num_fields {
+                sub[..num_fields - 1]
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::once(RIntroPattern::Tuple(
+                        sub[num_fields - 1..].to_vec(),
+                    )))
+                    .collect()
+            } else {
+                sub.clone()
+            }
+        }
+        other => vec![other.clone()],
+    };
+    // Fields the pattern does not mention keep their generated names.
+    expanded.resize(num_fields, RIntroPattern::Wildcard);
+    expanded
 }
 
 /// Apply a single rintro pattern

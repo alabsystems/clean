@@ -76,6 +76,8 @@ pub(crate) struct CancelConsts {
     exists_intro: Expr,
     exists_elim: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_rat: Expr,
     eq_trans: Expr,
     eq_symm: Expr,

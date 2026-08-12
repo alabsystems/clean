@@ -38,6 +38,19 @@ pub(crate) const MAX_DECOMPRESSED_CERT_NODES: usize = 1_000_000;
 /// DAG, including payload bytes multiplied by sharing expansion.
 pub(crate) const MAX_DECOMPRESSED_CERT_BYTES: usize = 256 * 1024 * 1024;
 
+/// Wire-proportional GROWTH factor for the plain-bincode certificate
+/// decode: a large carrier may claim up to `wire x 1024` owned bytes even
+/// where that exceeds the flat `MAX_DECOMPRESSED_CERT_BYTES` budget
+/// (backstopped by the archive-wide `MAX_DECODE_NODES`). Rationale: the
+/// flat budgets bound what a SMALL forged carrier can make the decoder
+/// allocate; a carrier that actually transmits megabytes may
+/// proportionally claim more, which is the standard resource-bounding
+/// posture and what real deep-term bundles (the indexed M-type
+/// graduation bundle: >1M nodes from a 660 KiB carrier, ~400x) need.
+/// Small carriers see EXACTLY the old flat budgets — the decompression
+/// bomb defenses are unchanged.
+pub(crate) const CERT_WIRE_EXPANSION: usize = 1024;
+
 /// Maximum serialized size of one certificate in a streaming archive.
 pub(crate) const MAX_STREAM_CERT_BYTES: usize = 256 * 1024 * 1024;
 
@@ -67,6 +80,15 @@ pub(crate) const ARCHIVE_DECODE_LIMITS: DecodeResourceLimits = DecodeResourceLim
     max_depth: MAX_DECODE_DEPTH,
 };
 
+/// Upper bound on how many in-memory bytes one wire byte may claim during
+/// decode.  bincode's limit config meters capacity claims (in-memory element
+/// sizes), which legitimately exceed wire bytes for structured data: a
+/// varint-packed `u64` claims 8 bytes for 1-3 wire bytes, and boxed recursive
+/// enum nodes claim tens.  64x envelopes every shape observed in real bundles
+/// (~14x) with margin, while still capping what a small forged carrier can
+/// make the decoder pre-allocate (a 100-byte header authorizes at most 6.4 KiB).
+const DECODE_CLAIM_AMPLIFICATION: usize = 64;
+
 /// Conservative upper bound charged for each certificate/kernel structural
 /// node decoded from bincode.  This covers the largest recursive enums, Box or
 /// Arc bookkeeping, and allocator slack; carrier bytes are charged separately.
@@ -90,11 +112,17 @@ pub(crate) fn decode_bincode_limited<T: DeserializeOwned>(bytes: &[u8]) -> Resul
 pub(crate) fn decode_certificate_bincode_limited<T: DeserializeOwned>(
     bytes: &[u8],
 ) -> Result<T, String> {
-    decode_certificate_bincode_with_limits(
-        bytes,
-        MAX_DECOMPRESSED_CERT_NODES,
-        MAX_DECOMPRESSED_CERT_BYTES,
-    )
+    // Wire-proportional GROWTH: small carriers keep the flat budgets (the
+    // decompression-bomb defenses are unchanged); a carrier that actually
+    // transmits more may claim proportionally more, backstopped by the
+    // archive-wide node ceiling. Real deep-term bundles (the indexed
+    // M-type graduation bundle: >1M nodes from a 660 KiB carrier, ~400x
+    // claim/wire) need this headroom.
+    let owned = MAX_DECOMPRESSED_CERT_BYTES.max(bytes.len().saturating_mul(CERT_WIRE_EXPANSION));
+    let nodes = MAX_DECOMPRESSED_CERT_NODES
+        .max(owned / CERTIFICATE_DECODE_NODE_BYTES)
+        .min(MAX_DECODE_NODES);
+    decode_certificate_bincode_with_limits(bytes, nodes, owned)
 }
 
 fn decode_certificate_bincode_with_limits<T: DeserializeOwned>(
@@ -147,20 +175,34 @@ pub(crate) fn decode_bincode_with_limits<T: DeserializeOwned>(
     let seed = LimitedSeed::<T>::new(DecodeBudgets::new(container_budget, limits.max_nodes));
 
     // Owned strings and byte buffers are allocated inside bincode before a
-    // serde visitor sees them.  Select a compile-time bincode limit no larger
-    // than the next bounded size class for this input.  Thus a tiny carrier
-    // can never authorize a large allocation, while valid carriers retain
-    // enough budget to decode their own bytes.
+    // serde visitor sees them.  Select a compile-time bincode limit by size
+    // class so a tiny carrier can never authorize a large allocation.
+    //
+    // The class must be chosen against the carrier's ALLOCATION CLAIMS, not
+    // its wire length: bincode's limit meters in-memory capacity claims
+    // (`size_of::<T>() * len` per container), and structured graphs claim a
+    // large multiple of their wire bytes (small varint-encoded fields expand
+    // to full-width in-memory fields; boxed enum nodes claim tens of bytes
+    // per few wire bytes).  Classing on the raw wire length made ~1.1 MiB
+    // archives whose claims run ~14x the wire size die at the 16 MiB class
+    // with `LimitExceeded` — a legitimate `export-cert` bundle failed its own
+    // `cert verify` roundtrip.  `DECODE_CLAIM_AMPLIFICATION` bounds that
+    // in-memory expansion; the per-node and per-container budgets in
+    // `LimitedSeed` remain the fine-grained structural meter.
+    let claim_budget = bytes
+        .len()
+        .saturating_mul(DECODE_CLAIM_AMPLIFICATION)
+        .max(4 * 1024);
     let decoded = with_decode_resource_limits(limits, || {
-        if bytes.len() <= 4 * 1024 {
+        if claim_budget <= 4 * 1024 {
             decode_seed_with_limit::<T, { 4 * 1024 }>(bytes, seed)
-        } else if bytes.len() <= 64 * 1024 {
+        } else if claim_budget <= 64 * 1024 {
             decode_seed_with_limit::<T, { 64 * 1024 }>(bytes, seed)
-        } else if bytes.len() <= 1024 * 1024 {
+        } else if claim_budget <= 1024 * 1024 {
             decode_seed_with_limit::<T, { 1024 * 1024 }>(bytes, seed)
-        } else if bytes.len() <= 16 * 1024 * 1024 {
+        } else if claim_budget <= 16 * 1024 * 1024 {
             decode_seed_with_limit::<T, { 16 * 1024 * 1024 }>(bytes, seed)
-        } else if bytes.len() <= 256 * 1024 * 1024 {
+        } else if claim_budget <= 256 * 1024 * 1024 {
             decode_seed_with_limit::<T, { 256 * 1024 * 1024 }>(bytes, seed)
         } else {
             decode_seed_with_limit::<T, { MAX_UNCOMPRESSED_ARCHIVE_BYTES }>(bytes, seed)
@@ -902,5 +944,45 @@ mod tests {
                 || step_error.contains("structural node count"),
             "unexpected definitional-equality error: {step_error}"
         );
+    }
+
+    /// Regression for the export-cert -> cert verify roundtrip failure
+    /// (2026-08-04): the size class fed bincode's limit with the WIRE length,
+    /// but bincode meters in-memory allocation claims, which run a large
+    /// multiple of wire bytes for structured data. A ~2.4 MiB carrier of
+    /// varint-packed tuples claims ~8x its wire size in `Vec<u64>` capacity
+    /// alone — under wire-length classing it landed in the 16 MiB class and
+    /// died with LimitExceeded; under claim classing it decodes fine.
+    #[test]
+    fn test_decode_structured_carrier_claims_exceed_wire_class_roundtrips() {
+        // 800k rows of three small u64s: wire ~3 bytes/row (varint), claims
+        // 24 bytes/row in-memory — the amplification shape real cert bundles
+        // exhibit (boxed enum graphs), in a cheap synthetic carrier.
+        let rows: Vec<(u64, u64, u64)> = (0..800_000u64).map(|i| (i % 7, i % 5, i % 3)).collect();
+        let bytes = bincode::serde::encode_to_vec(&rows, bincode::config::standard()).unwrap();
+        assert!(
+            bytes.len() > 1024 * 1024 && bytes.len() < 16 * 1024 * 1024,
+            "fixture must land above the 1 MiB wire class (got {})",
+            bytes.len()
+        );
+        let decoded: Vec<(u64, u64, u64)> = decode_bincode_with_limits(
+            &bytes,
+            DecodeResourceLimits {
+                max_nodes: MAX_DECODE_NODES,
+                max_depth: MAX_DECODE_DEPTH,
+            },
+        )
+        .expect("legitimate structured carrier must decode under claim-classed limits");
+        assert_eq!(decoded.len(), rows.len());
+    }
+
+    /// The claim-amplification factor must still forbid tiny forged carriers
+    /// from authorizing large allocations: a length-prefix-only payload keeps
+    /// being rejected, exactly as before the classing fix.
+    #[test]
+    fn test_decode_tiny_forged_carrier_still_rejected_after_claim_classing() {
+        let prefix = huge_length_prefix();
+        assert!(decode_bincode_limited::<Vec<u8>>(&prefix).is_err());
+        assert!(decode_bincode_limited::<String>(&prefix).is_err());
     }
 }

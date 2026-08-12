@@ -16,7 +16,7 @@ use clean_kernel::{Declaration, Expr, Name as LeanName};
 
 use crate::types::{AxiomProfile, Provenance, SourceSystem, TrustLevel};
 
-use super::error::{HolError, HolResult};
+use super::error::HolResult;
 
 /// Base axiom profile shared by all HOL-family imports.
 ///

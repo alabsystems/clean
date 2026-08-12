@@ -46,6 +46,8 @@ struct MinMaxConsts {
     bool_rec_1: Expr,
     nonneg_rec_0: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     int_of_nat: Expr,
     int_sub: Expr,
     int_le: Expr,

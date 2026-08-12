@@ -156,11 +156,9 @@ fn compute_axiom_closures(env: &Environment, names: &[Name]) -> Vec<DeclAxiomClo
         .map(|name| {
             let deps = env.axiom_deps(name).unwrap_or_default();
             let trust = env.trust_marker_deps(name).unwrap_or_default();
-            let mut non_foundational: Vec<String> =
-                deps.iter().map(std::string::ToString::to_string).collect();
+            let mut non_foundational: Vec<String> = deps.iter().map(ToString::to_string).collect();
             non_foundational.sort();
-            let mut trust_markers: Vec<String> =
-                trust.iter().map(std::string::ToString::to_string).collect();
+            let mut trust_markers: Vec<String> = trust.iter().map(ToString::to_string).collect();
             trust_markers.sort();
             DeclAxiomClosure {
                 declaration: name.to_string(),

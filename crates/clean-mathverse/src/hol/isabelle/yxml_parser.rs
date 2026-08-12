@@ -363,15 +363,6 @@ fn require_attr<'a>(tree: &'a YxmlTree, attr: &str) -> Result<&'a str> {
     })
 }
 
-/// Helper to get a required child element.
-fn require_child<'a>(tree: &'a YxmlTree, child_tag: &str) -> Result<&'a YxmlTree> {
-    tree.find_child(child_tag)
-        .ok_or_else(|| YxmlError::MissingChild {
-            parent: tree.tag_name().unwrap_or("<text>").to_owned(),
-            child: child_tag.to_owned(),
-        })
-}
-
 /// Parse an Isabelle type from a YXML tree.
 ///
 /// Isabelle encodes types in YXML as:

@@ -76,6 +76,8 @@ struct IntNegSuccMulSubNatNatConsts {
     int_sub_nat_nat: Expr,
     eq_const: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq_refl: Expr,
     eq_symm: Expr,
     eq_trans: Expr,

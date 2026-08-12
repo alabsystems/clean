@@ -483,8 +483,34 @@ impl Parser {
         {
             self.advance(); // consume the `|`
             let alt_span = self.current_span();
-            let name = self.expect_ident("case alternative")?;
-            let args = self.parse_ident_list();
+            // Lean 4's `inductionAlt` names the constructor with
+            // `(group("@"? ident) <|> hole)` (`Init/Tactics.lean`), so `_` is a
+            // legal alternative name meaning "every remaining case". The
+            // elaborator already implements it — `builtins_phase3d_intro.rs`
+            // looks up `alts.iter().find(|a| a.name == "_")` — but
+            // `expect_ident` rejected the `_` token, so the whole `by` block
+            // recovered to a synthetic sorry and that branch was dead code
+            // (plan brick T5b / RC-Q).
+            let name = if self.eat(&TokenKind::Underscore) {
+                "_".to_string()
+            } else {
+                self.expect_ident("case alternative")?
+            };
+            // Lean's alt arguments are `binderIdent*`, so `_` is a legal
+            // ANONYMOUS binder: `| succ k _ => …`. `parse_ident_list` stops at
+            // `_`, which then failed `expect(FatArrow)` and recovered the whole
+            // block to a synthetic sorry. Record it literally as "_", exactly
+            // as `parse_tactic_case`/`parse_ident_list_to_named` already do.
+            let mut args = Vec::new();
+            loop {
+                if let Some(n) = self.try_eat_ident() {
+                    args.push(n);
+                } else if self.eat(&TokenKind::Underscore) {
+                    args.push("_".to_string());
+                } else {
+                    break;
+                }
+            }
             self.expect(&TokenKind::FatArrow)?;
             let tactics = self.tactic_seq_until_pipe()?;
             alts.push(SurfaceInductionAlt {

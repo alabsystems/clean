@@ -109,6 +109,9 @@ pub(crate) enum MutualDeclKind {
 /// A declaration header for mutual-block detection.
 #[derive(Debug, Clone)]
 pub(crate) struct DeclHeader {
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(crate) name: String,
     pub(crate) kind: MutualDeclKind,
 }
@@ -168,6 +171,9 @@ pub(crate) fn section_variable_names(section_vars: &[String], _ns: &Name) -> Vec
 #[derive(Debug, Clone)]
 pub(crate) struct DeferredCommand {
     /// Unique identifier for ordering.
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(crate) id: u64,
     /// Declaration name (for dependency tracking).
     pub(crate) name: Name,

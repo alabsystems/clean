@@ -285,11 +285,11 @@ impl Ctx {
         if entry.type_param_keys.is_empty() && entry.term_param_keys.is_empty() {
             return Ok(None);
         }
-        let tyinst_by_key: BTreeMap<String, &super::super::super::isabelle_pure::IsaType> = tyinst
+        let tyinst_by_key: BTreeMap<String, &IsaType> = tyinst
             .iter()
             .map(|ti| (format!("{}.{}", ti.n, ti.i), &ti.ty))
             .collect();
-        let tminst_by_key: BTreeMap<String, &super::super::super::isabelle_pure::IsaTerm> = tminst
+        let tminst_by_key: BTreeMap<String, &IsaTerm> = tminst
             .iter()
             .map(|ti| (format!("{}.{}", ti.n, ti.i), &ti.t))
             .collect();

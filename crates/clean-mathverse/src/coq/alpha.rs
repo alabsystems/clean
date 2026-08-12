@@ -456,7 +456,7 @@ impl CicSort {
     /// The concrete predicative index of a `Type i` sort, if this is one and its
     /// level is a plain concrete `Type i` (not an algebraic/polymorphic level).
     /// `Prop`/`Set` and structural levels return `None`.
-    pub(crate) fn type_level_nat(&self) -> Option<u32> {
+    pub fn type_level_nat(&self) -> Option<u32> {
         match self {
             CicSort::Type(l) => l.as_concrete_type(),
             _ => None,
@@ -469,7 +469,7 @@ impl CoqUniverseLevel {
     /// (equivalently a `Succ^i(base)` reducing to a fixed nat); `None` for
     /// polymorphic (`Var`) or algebraic (`Max`) levels the importer must not
     /// flatten. `Set` is `Type 0`; `Prop` has no predicative `Type` index.
-    pub(crate) fn as_concrete_type(&self) -> Option<u32> {
+    pub fn as_concrete_type(&self) -> Option<u32> {
         match self {
             CoqUniverseLevel::Type(i) => Some(*i),
             CoqUniverseLevel::Set => Some(0),
@@ -2224,6 +2224,7 @@ impl SerapiNormCtx {
     /// Register an inductive's shape. Failure to derive the shape only
     /// removes Case/Fix reconstruction for it (fail closed), never the
     /// inductive import itself.
+    #[cfg(test)]
     fn register(
         &mut self,
         ind_name: &str,
@@ -11023,9 +11024,7 @@ pub enum CicSortExt {
 ///
 /// Accepts `(Case scrutinee return_type (Branch ctor nargs body) ...)` in
 /// addition to the basic form already handled by `sexp_to_cic`.
-pub(crate) fn sexp_to_cic_match_branches(
-    sexp: &Sexp,
-) -> Result<Vec<CicMatchBranch>, MathverseError> {
+pub fn sexp_to_cic_match_branches(sexp: &Sexp) -> Result<Vec<CicMatchBranch>, MathverseError> {
     let items = match sexp {
         Sexp::List(v) if !v.is_empty() => v,
         _ => return Err(coq_err("expected list for Case branches")),
@@ -11077,7 +11076,7 @@ pub(crate) fn sexp_to_cic_match_branches(
 ///
 /// Each branch is encoded as a lambda wrapping `nargs` bound variables
 /// around the branch body. If `nargs == 0` the body is emitted directly.
-pub(crate) fn match_branch_to_flat(branch: &CicMatchBranch, w: &mut ShardWriter) -> u32 {
+pub fn match_branch_to_flat(branch: &CicMatchBranch, w: &mut ShardWriter) -> u32 {
     let body_idx = cic_to_flat_expr(&branch.body, w);
     if branch.nargs == 0 {
         return body_idx;
@@ -11095,9 +11094,7 @@ pub(crate) fn match_branch_to_flat(branch: &CicMatchBranch, w: &mut ShardWriter)
 /// Parse a mutual fixpoint definition from s-expression form.
 ///
 /// Accepts `(MutualFix ((name type body rec_arg) ...) focus_idx)`.
-pub(crate) fn sexp_to_mutual_fixpoint(
-    sexp: &Sexp,
-) -> Result<(Vec<CicFixBody>, u32), MathverseError> {
+pub fn sexp_to_mutual_fixpoint(sexp: &Sexp) -> Result<(Vec<CicFixBody>, u32), MathverseError> {
     let items = match sexp {
         Sexp::List(v) if !v.is_empty() => v,
         _ => return Err(coq_err("expected list for MutualFix")),
@@ -11184,7 +11181,7 @@ pub fn import_mutual_fixpoint(
 }
 
 /// Lower a `CicSortExt` (including SProp) into the FlatLevel arena.
-pub(crate) fn sort_ext_to_flat(sort: &CicSortExt, w: &mut ShardWriter) -> u32 {
+pub fn sort_ext_to_flat(sort: &CicSortExt, w: &mut ShardWriter) -> u32 {
     match sort {
         CicSortExt::Prop | CicSortExt::SProp => w.add_level(FlatLevel::zero()),
         CicSortExt::Set => {
@@ -11211,7 +11208,7 @@ pub(crate) fn sort_ext_to_flat(sort: &CicSortExt, w: &mut ShardWriter) -> u32 {
 /// the levels are lowered into the level arena and a level list offset is
 /// constructed for the `const_ref` encoding. This is the universe-aware
 /// variant of `cic_to_flat_expr`.
-pub(crate) fn cic_to_flat_expr_with_universes(
+pub fn cic_to_flat_expr_with_universes(
     term: &CicTerm,
     universes: &Option<CoqUniverseInstance>,
     w: &mut ShardWriter,
@@ -11336,7 +11333,7 @@ pub enum CicPrimOp {
 /// Primitive operations are encoded as named constants in the Mathverse format,
 /// using the `__coq_prim__` namespace to distinguish them from regular
 /// user-defined constants.
-pub(crate) fn cic_primitive_to_flat(op: &CicPrimOp, w: &mut ShardWriter) -> u32 {
+pub fn cic_primitive_to_flat(op: &CicPrimOp, w: &mut ShardWriter) -> u32 {
     let name = match op {
         CicPrimOp::Int63Add => "__coq_prim__.int63.add",
         CicPrimOp::Int63Sub => "__coq_prim__.int63.sub",
@@ -11370,7 +11367,7 @@ pub(crate) fn cic_primitive_to_flat(op: &CicPrimOp, w: &mut ShardWriter) -> u32 
 }
 
 /// Parse a primitive operation name (from SerAPI output) into a `CicPrimOp`.
-pub(crate) fn parse_prim_op(name: &str) -> Result<CicPrimOp, MathverseError> {
+pub fn parse_prim_op(name: &str) -> Result<CicPrimOp, MathverseError> {
     match name {
         "Int63add" | "int63_add" => Ok(CicPrimOp::Int63Add),
         "Int63sub" | "int63_sub" => Ok(CicPrimOp::Int63Sub),

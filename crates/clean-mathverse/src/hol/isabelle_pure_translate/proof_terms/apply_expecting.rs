@@ -2,7 +2,7 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! `impl Ctx` bidirectional (expecting-driven) recovery: `apply_thm_expecting`,
+//! `impl Ctx` bidirectional (expecting-driven) recovery,
 //! `translate_eq_expecting`, and the `…_dict` reflexive-discharge gate
 //! `dict_sides_registered`. Split out of the original `proof_terms` module
 //! verbatim.
@@ -12,7 +12,7 @@ use super::super::*;
 use super::*;
 use clean_kernel::expr::FVarId;
 use clean_kernel::level::Level;
-use clean_kernel::Expr;
+use clean_kernel::{BinderInfo, Expr, Name};
 use std::collections::BTreeMap;
 
 /// Node cap on `expected` for the stage-3 Miller predicate solve
@@ -69,7 +69,7 @@ impl Ctx {
 
     /// The registered type of a discovered param FVar (type / term / hypothesis
     /// param), or `None` for any other expression. Used by
-    /// [`Self::apply_thm_expecting`] to solve type sentinels from a
+    /// [`Self::apply_thm_expecting_with_tables`] to solve type sentinels from a
     /// conclusion-pinned binder value's known type.
     pub(crate) fn clean_fvar_param_ty(&self, e: &Expr) -> Option<Expr> {
         use clean_kernel::expr::ExprKind;
@@ -109,18 +109,7 @@ impl Ctx {
     /// the forward path handled — it only adds the conclusion-driven recoveries.
     /// The kernel re-checks the result against `expected`, so a wrong recovery is
     /// rejected, never miscounted.
-    pub(crate) fn apply_thm_expecting(
-        &mut self,
-        entry: &ClosureEntry,
-        spine: &[SpineArg],
-        expected: &Expr,
-        closure: &Closure,
-        binders: &mut Vec<Binder>,
-    ) -> Result<Expr, TranslateError> {
-        self.apply_thm_expecting_with_tables(entry, spine, expected, &[], closure, binders)
-    }
-
-    /// [`Self::apply_thm_expecting`] with the reference's recorded (generic)
+    /// Expecting-driven application with the reference's recorded (generic)
     /// `tminst` table threaded as a LAST-RESORT fill source: a term binder that
     /// is neither conclusion-pinned, nor spine-matched, nor a `const:` op can
     /// still be pinned by its recorded IDENTITY table entry (`?x ↦ x` /
@@ -382,7 +371,7 @@ impl Ctx {
         // Wrap `body` in the `n` binders, OUTERMOST first: `λdoms[0]. … λdoms[n-1]. body`.
         let mut sol_p = body;
         for tau in doms.into_iter().rev() {
-            sol_p = Expr::lam(clean_kernel::BinderInfo::Default, tau, sol_p);
+            sol_p = Expr::lam(BinderInfo::Default, tau, sol_p);
         }
         MILLER_EMITTED.fetch_add(1, Relaxed);
         presolution.insert(head_fv, sol_p);
@@ -841,7 +830,7 @@ impl Ctx {
         let snap_queue = self.premise_queue.clone();
         let snap_leading = self.leading_active;
         let depth0 = binders.len();
-        let mut restore = |ctx: &mut Self, binders: &mut Vec<Binder>| {
+        let restore = |ctx: &mut Self, binders: &mut Vec<Binder>| {
             ctx.type_params = snap_types.clone();
             ctx.term_params = snap_terms.clone();
             ctx.hyp_params = snap_hyps.clone();
@@ -959,7 +948,7 @@ impl Ctx {
         let snap_queue = self.premise_queue.clone();
         let snap_leading = self.leading_active;
         let depth0 = binders.len();
-        let mut restore = |ctx: &mut Self, binders: &mut Vec<Binder>| {
+        let restore = |ctx: &mut Self, binders: &mut Vec<Binder>| {
             ctx.type_params = snap_types.clone();
             ctx.term_params = snap_terms.clone();
             ctx.hyp_params = snap_hyps.clone();
@@ -1795,7 +1784,7 @@ impl Ctx {
         let ExprKind::Const(n, levels) = eq_head.kind() else {
             return None;
         };
-        if *n != clean_kernel::name::Name::from_string("Eq") {
+        if *n != Name::from_string("Eq") {
             return None;
         }
         let mut found = false;
@@ -1821,8 +1810,8 @@ impl Ctx {
         let ExprKind::App(eq_head, _alpha) = f2.kind() else {
             return false;
         };
-        matches!(eq_head.kind(), clean_kernel::expr::ExprKind::Const(n, _)
-            if *n == clean_kernel::name::Name::from_string("Eq"))
+        matches!(eq_head.kind(), ExprKind::Const(n, _)
+            if *n == Name::from_string("Eq"))
     }
 
     /// **Dictionary-glue recovery** for a failed proof argument with a known clean

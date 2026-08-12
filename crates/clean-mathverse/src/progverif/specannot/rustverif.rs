@@ -641,7 +641,7 @@ mod tests {
     fn test_verus_extraction_from_temp_dir() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("example.rs");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 proof fn lemma_add_comm(x: int, y: int)
@@ -703,7 +703,7 @@ pub broadcast proof fn lemma_broadcast()
     fn test_kani_extraction_from_temp_dir() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("test.rs");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 #[kani::proof]
@@ -756,7 +756,7 @@ fn increment(x: u32) -> u32 {
     fn test_creusot_extraction_from_temp_dir() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("creusot_test.rs");
-        std::fs::write(
+        fs::write(
             &src,
             r#"
 #[requires(x > 0)]

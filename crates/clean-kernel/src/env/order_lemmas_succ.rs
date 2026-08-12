@@ -595,7 +595,7 @@ impl Environment {
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instLENat"),
                 class_name: Name::from_string("LE"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
                 type_: Some(ty),
                 value: Some(Expr::const_(Name::from_string("instLENat"), vec![])),
             });
@@ -604,10 +604,45 @@ impl Environment {
             .get_const(&Name::from_string("instLTNat"))
             .map(|c| c.type_.clone());
         if let Some(ty) = inst_lt_nat_ty {
+            // Lean's INSTANCE priority for `instLTNat` is the unannotated
+            // default, 1000: `Init/Prelude.lean:1901` declares
+            // `instance instLTNat : LT Nat where …` with no `(priority := …)`,
+            // and the shipped `Init/Prelude.olean` serializes exactly that into
+            // `Lean.Meta.instanceExtension`. Same class of misregistration —
+            // and same repair — as `instOfNatNat` (48ab18f3e).
+            //
+            // `DEFAULT_INSTANCE_PRIORITY` is 100, i.e. Lean's `low`. Priority
+            // DOMINATES candidate ordering (`clean-elab`'s `candidate_order`
+            // sorts on `Reverse(priority)` before any head-specificity
+            // tie-break), so 100 sank `instLTNat` below EVERY imported `LT`
+            // instance — all of which carry Lean's real 1000. Under
+            // `import Init` the winner became `Classical.Order.instLT`
+            // (`{α} [LE α] : LT α`, `Init/Data/Data/Order/Lemmas.lean:252`),
+            // which Lean declares `public scoped` and would never even
+            // consider outside `open scoped Classical.Order`. Every Clean-
+            // elaborated `0 < n` therefore came out as
+            // `@LT.lt Nat (Classical.Order.instLT Nat instLENat) 0 n`, whose
+            // unfolding is `0 ≤ n ∧ ¬ n ≤ 0` — NOT definitionally equal to the
+            // `@LT.lt Nat instLTNat 0 n` (= `Nat.le 1 n`) that every imported
+            // `0 < n` premise is stated with. So a `0 < n` hypothesis could not
+            // discharge a `0 < n` side condition, `Nat.div_self` /
+            // `Nat.succ_pred_eq_of_pos` / `Nat.zero_pow_of_pos` were unusable by
+            // `simp` AND by `exact`, and `(0 : Nat) < 5` was not even decidable.
+            //
+            // The `.olean` import cannot repair the value: Lean's decoded 1000
+            // reaches `register_real_instance_entries`
+            // (`clean-olean/src/import/load_register.rs`), which skips any name
+            // already in the registry — and this registration always runs
+            // first. The literal below is the only thing that decides it.
+            //
+            // `instLENat` above is deliberately left at 100 (same blast-radius
+            // argument as 48ab18f3e's sibling note): its resolution was measured
+            // Lean-faithful under `import Init` before and after this change, so
+            // there is no observed failure to justify reordering the `LE` table.
             self.register_instance(KernelInstanceInfo {
                 name: Name::from_string("instLTNat"),
                 class_name: Name::from_string("LT"),
-                priority: DEFAULT_INSTANCE_PRIORITY,
+                priority: 1000,
                 type_: Some(ty),
                 value: Some(Expr::const_(Name::from_string("instLTNat"), vec![])),
             });

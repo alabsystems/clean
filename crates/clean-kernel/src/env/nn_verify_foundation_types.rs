@@ -29,6 +29,8 @@ struct NNFoundationConsts {
     nn_mat: Expr,
     interval_bounds: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     zonotope: Expr,
     rat_abs: Expr,
     rat_sub: Expr,
@@ -65,6 +67,7 @@ impl NNFoundationConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn zono_of(&self, n: &Expr, k: &Expr) -> Expr {
         Expr::app(Expr::app(self.zonotope.clone(), n.clone()), k.clone())
     }

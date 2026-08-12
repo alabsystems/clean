@@ -114,9 +114,16 @@ pub(crate) struct TerminationHint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DecreaseEvidence {
     SubExprArg,
-    DestructorApp { destructor: String },
+    DestructorApp {
+        destructor: String,
+    },
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     PatternMatch,
-    InductiveType { type_name: String },
+    InductiveType {
+        type_name: String,
+    },
 }
 
 /// Collect termination hints for a binding by inspecting recursive call sites.

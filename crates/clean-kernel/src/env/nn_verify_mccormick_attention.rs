@@ -78,6 +78,7 @@ use crate::name::Name;
 use super::nn_verify_mccormick_attention_types;
 
 /// Constants for the C005 theorem construction.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) struct C005Consts {
     pub(crate) rat: Expr,
     #[cfg(test)]
@@ -166,6 +167,7 @@ impl C005Consts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn div(&self, a: Expr, b: Expr) -> Expr {
         Expr::app(Expr::app(self.rat_div.clone(), a), b)
     }

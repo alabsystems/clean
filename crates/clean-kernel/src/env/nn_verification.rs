@@ -117,6 +117,7 @@ impl Environment {
 
     /// Check if NNVerification foundation has been initialized.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_nn_verification(&self) -> bool {
         self.nn_verification_init
     }

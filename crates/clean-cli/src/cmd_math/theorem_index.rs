@@ -335,7 +335,7 @@ fn import_graph(candidates: &[TheoremCandidate]) -> BTreeMap<String, Vec<String>
 
 fn candidate_memory(
     candidate: &TheoremCandidate,
-    source_text: &str,
+    _source_text: &str,
     domain_signals: &CandidateDomainSignals,
     profile: Option<&DomainProfile>,
     obligation_memory: &ObligationMemory,

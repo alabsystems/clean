@@ -293,7 +293,7 @@ pub fn extract_matrix_lemmas(decls: &[CicDeclaration]) -> Vec<MathCompMatrixLemm
 
         let op = match detect_matrix_op(&decl.name) {
             Some(op) => op,
-            Option::None => continue,
+            None => continue,
         };
 
         let lemma = MathCompMatrixLemma {

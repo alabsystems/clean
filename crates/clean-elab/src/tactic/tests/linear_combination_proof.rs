@@ -23,21 +23,17 @@ fn setup_eq_goal_with_hyp(
 ) -> ProofState {
     let n_ty = Expr::const_(Name::from_string("N"), vec![]);
     let eq_target = make_eq(n_ty.clone(), goal_lhs, goal_rhs);
-    let mut state = ProofState::new(env, eq_target);
-
-    // Add hypothesis h : hyp_lhs = hyp_rhs
     let h_ty = make_eq(n_ty, hyp_lhs, hyp_rhs);
-    let h_fvar = state.fresh_fvar();
-    if let Some(goal) = state.current_goal_mut() {
-        goal.local_ctx.push(LocalDecl {
+    ProofState::with_context(
+        env,
+        eq_target,
+        vec![LocalDecl {
             name: "h".to_string(),
-            fvar: h_fvar,
+            fvar: FVarId::new(0),
             ty: h_ty,
             value: None,
-        });
-    }
-
-    state
+        }],
+    )
 }
 
 fn nat_var(name: &str) -> Expr {

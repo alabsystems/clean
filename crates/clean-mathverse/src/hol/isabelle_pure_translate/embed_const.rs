@@ -9,14 +9,9 @@
 //! `isabelle_pure_translate` module; behaviour is byte-identical (arm order
 //! and guards unchanged).
 
-use std::collections::BTreeMap;
+use clean_kernel::{BinderInfo, Expr};
 
-use clean_kernel::expr::FVarId;
-use clean_kernel::level::Level;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr};
-
-use super::super::isabelle_pure::{IsaProof, IsaProvenTheorem, IsaTerm, IsaType};
+use super::super::isabelle_pure::{IsaTerm, IsaType};
 use super::*;
 
 impl Ctx {

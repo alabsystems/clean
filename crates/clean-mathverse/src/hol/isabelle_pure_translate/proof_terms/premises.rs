@@ -11,7 +11,7 @@ use super::super::super::isabelle_pure::IsaTerm;
 use super::super::*;
 use super::*;
 use clean_kernel::expr::FVarId;
-use clean_kernel::{BinderInfo, Expr};
+use clean_kernel::{BinderInfo, Expr, Name};
 
 impl Ctx {
     /// Best-effort proof of an implication chain `A₁ ⟹ … ⟹ Aₙ ⟹ C` whose raw
@@ -120,7 +120,7 @@ impl Ctx {
                 // kernel re-checks the application, so a wrong recovery is
                 // rejected — never miscounted.
                 d
-            } else if let Some(budget) = super::super::premise_budget_exhausted() {
+            } else if let Some(budget) = premise_budget_exhausted() {
                 // The premise-instantiation search hit its deterministic step
                 // budget ([`PREMISE_STEP_BUDGET_DEFAULT`] / `ISA_PREMISE_STEP_BUDGET`)
                 // — a pathological, effectively-unbounded premise shape (the
@@ -183,7 +183,6 @@ impl Ctx {
         &mut self,
         prop: &IsaTerm,
     ) -> Result<Option<Expr>, TranslateError> {
-        use clean_kernel::expr::ExprKind;
         // Only the `Real`-membership pass embeds the conclusion to the def-const;
         // under `Erase` it is `True` and the ordinary arms already discharge it.
         if !self.class_membership {
@@ -323,7 +322,6 @@ impl Ctx {
     /// membership-intro build — never a partial/unsound witness). See
     /// [`Ctx::prove_class_membership_intro`].
     fn build_membership_witness(body: &Expr, premise_tys: &[Expr], n: usize) -> Option<Expr> {
-        use clean_kernel::expr::ExprKind;
         // A premise-matching leaf (checked first so a premise whose own type is
         // `True`/`And`-shaped is still discharged by its hypothesis, not rebuilt).
         if let Some(pos) = premise_tys.iter().position(|t| t == body) {
@@ -336,7 +334,7 @@ impl Ctx {
         // `And P Q` node (`App(App(Const "And", P), Q)`).
         if let clean_kernel::expr::ExprKind::App(app_a, q) = body.kind() {
             if let clean_kernel::expr::ExprKind::App(and_head, p) = app_a.kind() {
-                if matches!(and_head.kind(), clean_kernel::expr::ExprKind::Const(n2, _) if *n2 == clean_kernel::name::Name::from_string("And"))
+                if matches!(and_head.kind(), clean_kernel::expr::ExprKind::Const(n2, _) if *n2 == Name::from_string("And"))
                 {
                     let hp = Self::build_membership_witness(p, premise_tys, n)?;
                     let hq = Self::build_membership_witness(q, premise_tys, n)?;
@@ -385,7 +383,6 @@ impl Ctx {
         binders: &mut Vec<Binder>,
         depth: usize,
     ) -> Result<Option<Expr>, TranslateError> {
-        use clean_kernel::expr::ExprKind;
         if depth > 64 {
             return Ok(None);
         }
@@ -401,7 +398,7 @@ impl Ctx {
         // `And P Q` node → recurse both, `And.intro`.
         if let clean_kernel::expr::ExprKind::App(app_a, q) = body.kind() {
             if let clean_kernel::expr::ExprKind::App(and_head, p) = app_a.kind() {
-                if matches!(and_head.kind(), clean_kernel::expr::ExprKind::Const(nm, _) if *nm == clean_kernel::name::Name::from_string("And"))
+                if matches!(and_head.kind(), clean_kernel::expr::ExprKind::Const(nm, _) if *nm == Name::from_string("And"))
                 {
                     let Some(hp) = self.build_membership_intro_rec(
                         p,
@@ -812,7 +809,7 @@ fn premise_instantiation_body(premise_tys: &[Expr], concl: &Expr, n: usize) -> O
     // unwinds to `None` with [`super::super::PREMISE_POISON`] latched — the
     // enclosing `prove_from_premises_inner` turns that into an honest
     // `premise-budget-cut` reject.
-    super::super::reset_premise_steps();
+    reset_premise_steps();
     let goal = beta_normal(concl);
     prove_goal(premise_tys, &goal, n, 6)
 }
@@ -826,7 +823,7 @@ fn prove_goal(premise_tys: &[Expr], goal: &Expr, n: usize, fuel: usize) -> Optio
     }
     // Deterministic step budget (see [`premise_instantiation_body`]): one step per
     // search node. On exhaustion the whole walk unwinds cheaply.
-    if !super::super::bump_premise_steps() {
+    if !bump_premise_steps() {
         return None;
     }
     if let Some(pos) = premise_tys.iter().position(|t| beta_normal(t) == *goal) {
@@ -863,7 +860,7 @@ fn drive_premise(
     }
     // Deterministic step budget (see [`premise_instantiation_body`]): one step per
     // search node. On exhaustion the whole walk unwinds cheaply.
-    if !super::super::bump_premise_steps() {
+    if !bump_premise_steps() {
         return None;
     }
     if *cur_ty == *goal {

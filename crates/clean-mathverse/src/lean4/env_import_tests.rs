@@ -273,7 +273,7 @@ fn test_import_preserves_const_reference_level_lists() {
     )
     .expect("reconstruct D value");
     match value.kind() {
-        clean_kernel::expr::ExprKind::Const(name, levels) => {
+        ExprKind::Const(name, levels) => {
             assert_eq!(name.to_string(), "C_poly");
             assert_eq!(
                 levels.len(),
@@ -404,7 +404,7 @@ fn test_import_stamps_inductive_family_metadata() {
     let flag_h = header("Flag");
     assert_eq!(
         flag_h.decl_kind,
-        crate::types::DeclKind::Inductive as u8,
+        DeclKind::Inductive as u8,
         "inductive type must carry DeclKind::Inductive (registry-driven), not Axiom",
     );
     assert_eq!(
@@ -412,18 +412,9 @@ fn test_import_stamps_inductive_family_metadata() {
         Some(0),
         "inductive root must carry the typed num_params stamp",
     );
-    assert_eq!(
-        header("Flag.a").decl_kind,
-        crate::types::DeclKind::Constructor as u8,
-    );
-    assert_eq!(
-        header("Flag.b").decl_kind,
-        crate::types::DeclKind::Constructor as u8,
-    );
-    assert_eq!(
-        header("Flag.rec").decl_kind,
-        crate::types::DeclKind::Recursor as u8,
-    );
+    assert_eq!(header("Flag.a").decl_kind, DeclKind::Constructor as u8,);
+    assert_eq!(header("Flag.b").decl_kind, DeclKind::Constructor as u8,);
+    assert_eq!(header("Flag.rec").decl_kind, DeclKind::Recursor as u8,);
 }
 
 #[test]
@@ -498,7 +489,7 @@ fn test_elided_env_shard_provenance_round_trips_all_policies() {
         assert_eq!(reader.header.constant_count, 5);
 
         // The provenance sidecar must decode and carry one record per constant.
-        let sidecar = crate::provenance::ProvenanceSidecar::from_bytes(&reader.provenance)
+        let sidecar = ProvenanceSidecar::from_bytes(&reader.provenance)
             .unwrap_or_else(|e| panic!("provenance decode under {policy:?} failed: {e}"));
         assert_eq!(
             sidecar.len(),

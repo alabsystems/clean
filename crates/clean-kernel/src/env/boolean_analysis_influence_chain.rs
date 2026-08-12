@@ -76,6 +76,8 @@ pub(crate) struct InflConsts {
     nat_le_step: Expr,
     fin: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fin_sum: Expr,
     fin_sum_congr: Expr,
     eq1: Expr,
@@ -307,6 +309,7 @@ impl InflConsts {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn fsum(&self, n: &Expr, g: Expr) -> Expr {
         Expr::apps(self.fin_sum.clone(), [n.clone(), g])
     }

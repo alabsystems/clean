@@ -14,8 +14,8 @@
 //! def mkAdd (x y : Syntax) : Syntax := `($x + $y)
 //! ```
 
-use crate::hygiene::HygieneState;
-use crate::syntax::{SourceInfo, Syntax, SyntaxKind};
+use crate::hygiene::{HygieneState, MacroScope};
+use crate::syntax::{SourceInfo, Syntax, SyntaxKind, SyntaxNode};
 use std::collections::HashMap;
 
 /// A syntax quotation with potential antiquotations
@@ -79,8 +79,10 @@ impl SyntaxQuote {
         contains_fresh_marker(&self.syntax)
     }
 
-    /// Substitute antiquotations **and** replace every fresh-name marker with a
-    /// distinct gensym'd identifier drawn from `hygiene`.
+    /// Substitute antiquotations, replace every fresh-name marker with a
+    /// distinct gensym'd identifier drawn from `hygiene`, **and rename every
+    /// binder the template itself introduces** so it cannot capture the syntax
+    /// spliced in through an antiquotation.
     ///
     /// This is the per-expansion path: the same stored template, applied twice,
     /// yields two *different* fresh ids because each call advances the
@@ -88,99 +90,303 @@ impl SyntaxQuote {
     /// scope). All markers carrying the **same prefix within one application**
     /// resolve to the **same** name (so `` `(fun $f => $f) `` binds and uses the
     /// one fresh `f`), while distinct applications get distinct names.
+    ///
+    /// # Hygiene of template-introduced binders
+    ///
+    /// The template walk is the *one* place where template-authored syntax and
+    /// caller-supplied syntax are still distinguishable: everything reached by
+    /// recursing through the stored template came from the macro author, and
+    /// everything produced by an antiquotation came from the call site. After
+    /// substitution the two are byte-identical and no post-pass can tell them
+    /// apart — which is exactly why hygiene has to happen here.
+    ///
+    /// So, while walking, a binder written literally in the template (`let a :=
+    /// 1; …`, `fun a => …`) is renamed to a scope-marked name and every
+    /// *template* reference under that binder is renamed with it. Spliced
+    /// subtrees are copied through untouched, so an identifier the caller passed
+    /// in keeps resolving to the caller's binding. That makes
+    /// `` macro "capture " x:term : term => `(let a := 1; $x + a) `` behave as
+    /// Lean 4 does: in `let a := 10; capture a` the spliced `a` is the caller's
+    /// `10`, not the template's `1`.
     pub fn substitute_hygienic(
         &self,
         bindings: &HashMap<String, Syntax>,
         hygiene: &mut HygieneState,
     ) -> Syntax {
-        // Gensym one concrete name per distinct marker prefix for THIS expansion.
-        let mut fresh_names: HashMap<String, String> = HashMap::new();
-        substitute_with_fresh(&self.syntax, bindings, hygiene, &mut fresh_names)
+        let mut subst = TemplateSubst {
+            bindings,
+            hygiene,
+            // Gensym one concrete name per distinct marker prefix for THIS expansion.
+            fresh_names: HashMap::new(),
+        };
+        subst.go(&self.syntax, &Renames::new())
+    }
+}
+
+/// Character marking a binder that macro hygiene renamed.
+///
+/// `✝` is rejected by the lexer's identifier rule (`is_ident_continue`), so a
+/// renamed template binder can never collide with a name the user could have
+/// written, nor with any spliced identifier (which is never renamed).
+const MACRO_BINDER_MARK: char = '✝';
+
+/// Renaming environment in force at a point in the template walk:
+/// template binder base name → its hygienic (scope-marked) name.
+///
+/// Empty at the root, extended when the walk enters the scope of a
+/// template-introduced binder, and **never** consulted for spliced syntax.
+type Renames = HashMap<String, String>;
+
+/// The hygienic template walk. See [`SyntaxQuote::substitute_hygienic`].
+struct TemplateSubst<'a> {
+    /// Antiquotation name → caller syntax captured by the pattern match.
+    bindings: &'a HashMap<String, Syntax>,
+    /// Scope state of the expansion currently being performed.
+    hygiene: &'a mut HygieneState,
+    /// Fresh-marker prefix → gensym'd name, memoized for THIS expansion so
+    /// repeated markers with one prefix (binder and its uses) agree.
+    fresh_names: HashMap<String, String>,
+}
+
+impl TemplateSubst<'_> {
+    /// The hygienic name for a template-introduced binder `base`.
+    ///
+    /// Keyed on the expansion's own macro scope, so two expansions of the same
+    /// macro (and an inner expansion nested inside an outer one) never share a
+    /// renamed binder, while two binders of the same name inside ONE template
+    /// share it harmlessly — the renaming is uniform, so ordinary shadowing
+    /// still picks the nearest enclosing binder.
+    fn binder_name(&self, base: &str) -> String {
+        let scope = self
+            .hygiene
+            .current_scope()
+            .unwrap_or_else(MacroScope::root);
+        format!("{base}{MACRO_BINDER_MARK}{}", scope.0)
+    }
+
+    /// Walk one template node under the active `renames`.
+    fn go(&mut self, syntax: &Syntax, renames: &Renames) -> Syntax {
+        // A fresh-name marker resolves to a gensym'd identifier, one per prefix.
+        if let Some(prefix) = syntax.fresh_marker_prefix() {
+            let name = match self.fresh_names.get(prefix) {
+                Some(existing) => existing.clone(),
+                None => {
+                    let minted = self.hygiene.gensym(prefix).mangled();
+                    self.fresh_names.insert(prefix.to_string(), minted.clone());
+                    minted
+                }
+            };
+            return Syntax::ident(&name);
+        }
+
+        // An antiquotation splices CALLER syntax: it is returned verbatim and is
+        // never subject to `renames`. This is the boundary that makes hygiene
+        // possible at all.
+        if syntax.is_antiquot() {
+            if let Some(antiquot) = Antiquotation::from_syntax(syntax) {
+                if let Some(replacement) = self.bindings.get(&antiquot.name) {
+                    return replacement.clone();
+                }
+            }
+            return syntax.clone();
+        }
+
+        match syntax {
+            // A template identifier bound by an enclosing template binder is
+            // renamed with it. Everything else — global constants such as
+            // `Nat.succ` or `HAdd.hAdd` — is left alone so it keeps resolving
+            // normally.
+            Syntax::Ident(info, name) => match renames.get(name) {
+                Some(renamed) => Syntax::Ident(info.clone(), renamed.clone()),
+                None => syntax.clone(),
+            },
+            Syntax::Node(node) => self.node(node, renames),
+            _ => syntax.clone(),
+        }
+    }
+
+    /// Dispatch a node: binder-introducing shapes get scope-aware treatment,
+    /// everything else is rebuilt child-wise (with splice expansion).
+    fn node(&mut self, node: &SyntaxNode, renames: &Renames) -> Syntax {
+        match node.kind.name_str() {
+            // `let x := v; body` / `let x : T := v; body`: `x` scopes over
+            // `body` only — neither `T` nor `v` may see it.
+            "let" if matches!(node.children.len(), 3 | 4) => self.let_like(node, renames, false),
+            // `let rec f := v; body`: `f` scopes over `v` as well as `body`.
+            "letRec" if matches!(node.children.len(), 3 | 4) => self.let_like(node, renames, true),
+            // Binder list followed by a body; a binder's type is elaborated
+            // before that binder is in scope, but sees the earlier ones.
+            "fun" | "forall" | "patternMatchLambda" if node.children.len() >= 2 => {
+                self.binder_list(node, renames)
+            }
+            // `if h : p then t else e`: `h` scopes over both branches, not `p`.
+            "ifDecidable" if node.children.len() == 4 => self.if_decidable(node, renames),
+            _ => self.plain_node(node, renames),
+        }
+    }
+
+    /// `let` / `letRec`: children are `[name, ty?, val, body]`.
+    fn let_like(&mut self, node: &SyntaxNode, renames: &Renames, recursive: bool) -> Syntax {
+        let has_ty = node.children.len() == 4;
+        let val_idx = if has_ty { 2 } else { 1 };
+
+        let mut inner = renames.clone();
+        let name_out = match template_binder_name(&node.children[0]) {
+            Some(base) => {
+                let renamed = self.binder_name(base);
+                inner.insert(base.to_string(), renamed.clone());
+                Syntax::Ident(node.children[0].source_info().clone(), renamed)
+            }
+            // The binder name itself is spliced (`` `(let $x := …) ``): there is
+            // no template-introduced name to protect.
+            None => self.go(&node.children[0], renames),
+        };
+
+        let mut out = Vec::with_capacity(node.children.len());
+        out.push(name_out);
+        if has_ty {
+            out.push(self.go(&node.children[1], renames));
+        }
+        // A recursive binding's value is inside the binder's scope; a plain
+        // `let`'s value is outside it.
+        let val_env = if recursive { &inner } else { renames };
+        out.push(self.go(&node.children[val_idx], val_env));
+        out.push(self.go(&node.children[val_idx + 1], &inner));
+        Syntax::node(node.kind.clone(), out)
+    }
+
+    /// `fun` / `forall` / `patternMatchLambda`: `[binder.., body]`.
+    fn binder_list(&mut self, node: &SyntaxNode, renames: &Renames) -> Syntax {
+        let body_idx = node.children.len() - 1;
+        let mut env = renames.clone();
+        let mut out = Vec::with_capacity(node.children.len());
+        for binder in &node.children[..body_idx] {
+            let (rendered, introduced) = self.binder(binder, &env);
+            out.push(rendered);
+            if let Some((base, renamed)) = introduced {
+                env.insert(base, renamed);
+            }
+        }
+        out.push(self.go(&node.children[body_idx], &env));
+        Syntax::node(node.kind.clone(), out)
+    }
+
+    /// `ifDecidable`: `[witness, prop, then, else]`.
+    fn if_decidable(&mut self, node: &SyntaxNode, renames: &Renames) -> Syntax {
+        let mut inner = renames.clone();
+        let witness = match template_binder_name(&node.children[0]) {
+            Some(base) => {
+                let renamed = self.binder_name(base);
+                inner.insert(base.to_string(), renamed.clone());
+                Syntax::Ident(node.children[0].source_info().clone(), renamed)
+            }
+            None => self.go(&node.children[0], renames),
+        };
+        let prop = self.go(&node.children[1], renames);
+        let then_br = self.go(&node.children[2], &inner);
+        let else_br = self.go(&node.children[3], &inner);
+        Syntax::node(node.kind.clone(), vec![witness, prop, then_br, else_br])
+    }
+
+    /// Render one binder of a binder list, reporting any rename it introduces
+    /// for what follows. A binder's type is rendered in `env` — the environment
+    /// *before* this binder is in scope.
+    fn binder(&mut self, binder: &Syntax, env: &Renames) -> (Syntax, Option<(String, String)>) {
+        // Bare-identifier binder (`fun x => …`).
+        if let Syntax::Ident(info, name) = binder {
+            if let Some(base) = template_binder_name(binder) {
+                let renamed = self.binder_name(base);
+                return (
+                    Syntax::Ident(info.clone(), renamed.clone()),
+                    Some((name.clone(), renamed)),
+                );
+            }
+            return (binder.clone(), None);
+        }
+
+        // Annotated binder node (`binderDefault`/`binderImplicit`/… `[name, ty]`).
+        if let Syntax::Node(node) = binder {
+            if node.kind.name_str().starts_with("binder") && !node.children.is_empty() {
+                let mut out = Vec::with_capacity(node.children.len());
+                let introduced = match template_binder_name(&node.children[0]) {
+                    Some(base) => {
+                        let renamed = self.binder_name(base);
+                        out.push(Syntax::Ident(
+                            node.children[0].source_info().clone(),
+                            renamed.clone(),
+                        ));
+                        Some((base.to_string(), renamed))
+                    }
+                    None => {
+                        out.push(self.go(&node.children[0], env));
+                        None
+                    }
+                };
+                for rest in &node.children[1..] {
+                    out.push(self.go(rest, env));
+                }
+                return (Syntax::node(node.kind.clone(), out), introduced);
+            }
+        }
+
+        // Anything else (antiquotation, fresh marker, pattern node): no
+        // template-introduced name to protect.
+        (self.go(binder, env), None)
+    }
+
+    /// Rebuild a non-binder node child-wise, expanding splice antiquotations.
+    fn plain_node(&mut self, node: &SyntaxNode, renames: &Renames) -> Syntax {
+        let has_splice_antiquot = node.children.iter().any(Syntax::is_antiquot_splice);
+        if !has_splice_antiquot {
+            let new_children: Vec<Syntax> =
+                node.children.iter().map(|c| self.go(c, renames)).collect();
+            return Syntax::node(node.kind.clone(), new_children);
+        }
+
+        let mut new_children = Vec::new();
+        for child in &node.children {
+            if !child.is_antiquot_splice() {
+                new_children.push(self.go(child, renames));
+                continue;
+            }
+            let bound = Antiquotation::from_syntax(child)
+                .and_then(|antiquot| self.bindings.get(&antiquot.name).cloned());
+            let Some(replacement) = bound else {
+                new_children.push(child.clone());
+                continue;
+            };
+            if replacement.kind().map(SyntaxKind::name_str) == Some("splice_list") {
+                // Spliced caller syntax: walked (so any nested marker/antiquot
+                // still resolves) but with an EMPTY rename environment, so the
+                // template's binders can never rewrite the caller's names.
+                let empty = Renames::new();
+                for splice_child in replacement.children() {
+                    new_children.push(self.go(splice_child, &empty));
+                }
+            } else {
+                new_children.push(replacement);
+            }
+        }
+        Syntax::node(node.kind.clone(), new_children)
+    }
+}
+
+/// The base name of a binder written literally in the template, if this binder
+/// position is one that hygiene should rename.
+///
+/// `None` for an antiquotation (the binder name is spliced from the call site,
+/// so there is nothing template-introduced to protect) and for the wildcard `_`
+/// (which has no references, so renaming it would only obscure the output).
+fn template_binder_name(syntax: &Syntax) -> Option<&str> {
+    match syntax {
+        Syntax::Ident(_, name) if !name.is_empty() && name != "_" => Some(name),
+        _ => None,
     }
 }
 
 /// Whether `syntax` contains a fresh-name marker anywhere in its tree.
 fn contains_fresh_marker(syntax: &Syntax) -> bool {
     syntax.is_fresh_marker() || syntax.children().iter().any(contains_fresh_marker)
-}
-
-/// Recursive substitution that also resolves fresh-name markers via gensym.
-///
-/// `fresh_names` memoizes prefix → gensym'd name so that repeated markers with
-/// the same prefix in one expansion resolve identically (the binder and its
-/// uses), while a fresh `HygieneState`/expansion produces a new mapping.
-fn substitute_with_fresh(
-    syntax: &Syntax,
-    bindings: &HashMap<String, Syntax>,
-    hygiene: &mut HygieneState,
-    fresh_names: &mut HashMap<String, String>,
-) -> Syntax {
-    // A fresh-name marker resolves to a gensym'd identifier, one per prefix.
-    if let Some(prefix) = syntax.fresh_marker_prefix() {
-        let name = fresh_names
-            .entry(prefix.to_string())
-            .or_insert_with(|| hygiene.gensym(prefix).mangled());
-        return Syntax::ident(name);
-    }
-
-    // Antiquotations behave exactly as in the static path.
-    if syntax.is_antiquot() {
-        if let Some(antiquot) = Antiquotation::from_syntax(syntax) {
-            if let Some(replacement) = bindings.get(&antiquot.name) {
-                return replacement.clone();
-            }
-        }
-        return syntax.clone();
-    }
-
-    match syntax {
-        Syntax::Node(node) => {
-            let has_splice_antiquot = node.children.iter().any(Syntax::is_antiquot_splice);
-            if has_splice_antiquot {
-                let mut new_children = Vec::new();
-                for child in &node.children {
-                    if child.is_antiquot_splice() {
-                        if let Some(antiquot) = Antiquotation::from_syntax(child) {
-                            if let Some(replacement) = bindings.get(&antiquot.name) {
-                                if let Some(kind) = replacement.kind() {
-                                    if kind.name_str() == "splice_list" {
-                                        for splice_child in replacement.children() {
-                                            new_children.push(substitute_with_fresh(
-                                                splice_child,
-                                                bindings,
-                                                hygiene,
-                                                fresh_names,
-                                            ));
-                                        }
-                                        continue;
-                                    }
-                                }
-                                new_children.push(replacement.clone());
-                                continue;
-                            }
-                        }
-                        new_children.push(child.clone());
-                    } else {
-                        new_children.push(substitute_with_fresh(
-                            child,
-                            bindings,
-                            hygiene,
-                            fresh_names,
-                        ));
-                    }
-                }
-                Syntax::node(node.kind.clone(), new_children)
-            } else {
-                let new_children: Vec<Syntax> = node
-                    .children
-                    .iter()
-                    .map(|c| substitute_with_fresh(c, bindings, hygiene, fresh_names))
-                    .collect();
-                Syntax::node(node.kind.clone(), new_children)
-            }
-        }
-        _ => syntax.clone(),
-    }
 }
 
 /// An antiquotation inside a quotation
@@ -800,5 +1006,192 @@ mod tests {
         let antiquot = Antiquotation::from_syntax(&syntax).unwrap();
         assert!(!antiquot.is_typed());
         assert_eq!(antiquot.category, None);
+    }
+
+    // ---- Hygiene of template-introduced binders ----
+    //
+    // These exercise `substitute_hygienic` directly: the template walk is the
+    // only place where template-authored and caller-spliced syntax are still
+    // distinguishable, so it is where hygiene must happen.
+
+    /// Run one hygienic expansion of `template` with `bindings`, inside a fresh
+    /// macro scope (as `HygienicExpander` does).
+    fn expand_template(template: Syntax, bindings: &[(&str, Syntax)]) -> Syntax {
+        let mut state = HygieneState::new();
+        let _scope = state.push_scope();
+        let map: HashMap<String, Syntax> = bindings
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), v.clone()))
+            .collect();
+        SyntaxQuote::term(template).substitute_hygienic(&map, &mut state)
+    }
+
+    #[test]
+    fn test_template_let_binder_renamed_spliced_ident_untouched() {
+        // Template `let a := 1; $x + a` applied with `$x := a` (the caller's own
+        // `a`). The template's binder and the template's `a` must be renamed
+        // together; the SPLICED `a` must survive verbatim so it still resolves
+        // to the caller's binding. Before this, both `a`s were identical after
+        // substitution and the template captured the argument.
+        let template = Syntax::mk_let(
+            Syntax::ident("a"),
+            None,
+            Syntax::mk_num(1),
+            Syntax::mk_app(
+                Syntax::ident("HAdd.hAdd"),
+                vec![Syntax::mk_antiquot("x"), Syntax::ident("a")],
+            ),
+        );
+        let result = expand_template(template, &[("x", Syntax::ident("a"))]);
+
+        let binder = result.child(0).and_then(Syntax::as_ident).unwrap();
+        assert_ne!(binder, "a", "template binder must be renamed");
+        assert!(
+            binder.starts_with('a'),
+            "renamed binder keeps its base name"
+        );
+
+        let sum = result.child(2).expect("let body");
+        assert_eq!(
+            sum.child(1).and_then(Syntax::as_ident),
+            Some("a"),
+            "the SPLICED argument must not be renamed"
+        );
+        assert_eq!(
+            sum.child(2).and_then(Syntax::as_ident),
+            Some(binder),
+            "the template's own reference must follow the renamed binder"
+        );
+    }
+
+    #[test]
+    fn test_template_global_constant_reference_not_renamed() {
+        // Guard against over-renaming: a template legitimately mentions global
+        // constants. Only binders the template introduces (and references to
+        // them) may be touched.
+        let template = Syntax::mk_app(
+            Syntax::ident("Nat.succ"),
+            vec![Syntax::mk_antiquot("x"), Syntax::ident("HAdd.hAdd")],
+        );
+        let result = expand_template(template, &[("x", Syntax::ident("n"))]);
+        assert_eq!(result.child(0).and_then(Syntax::as_ident), Some("Nat.succ"));
+        assert_eq!(result.child(1).and_then(Syntax::as_ident), Some("n"));
+        assert_eq!(
+            result.child(2).and_then(Syntax::as_ident),
+            Some("HAdd.hAdd"),
+            "a global constant in the template must resolve normally"
+        );
+    }
+
+    #[test]
+    fn test_template_let_value_is_outside_binder_scope() {
+        // In `let a := a; …` the right-hand `a` is the OUTER `a`, so it must not
+        // be renamed to the binder being introduced.
+        let template = Syntax::mk_let(
+            Syntax::ident("a"),
+            None,
+            Syntax::ident("a"),
+            Syntax::ident("a"),
+        );
+        let result = expand_template(template, &[]);
+        let binder = result.child(0).and_then(Syntax::as_ident).unwrap();
+        assert_eq!(
+            result.child(1).and_then(Syntax::as_ident),
+            Some("a"),
+            "a plain let's value is outside its own binder's scope"
+        );
+        assert_eq!(
+            result.child(2).and_then(Syntax::as_ident),
+            Some(binder),
+            "the body IS inside the binder's scope"
+        );
+    }
+
+    #[test]
+    fn test_template_fun_binder_renamed() {
+        // Lambda binders are template-introduced too.
+        let template = Syntax::mk_lambda(
+            vec![Syntax::ident("y")],
+            Syntax::mk_app(
+                Syntax::ident("f"),
+                vec![Syntax::ident("y"), Syntax::mk_antiquot("x")],
+            ),
+        );
+        let result = expand_template(template, &[("x", Syntax::ident("y"))]);
+        let binder = result.child(0).and_then(Syntax::as_ident).unwrap();
+        assert_ne!(binder, "y", "lambda binder must be renamed");
+        let body = result.child(1).expect("lambda body");
+        assert_eq!(body.child(1).and_then(Syntax::as_ident), Some(binder));
+        assert_eq!(
+            body.child(2).and_then(Syntax::as_ident),
+            Some("y"),
+            "the spliced `y` keeps referring to the caller's `y`"
+        );
+    }
+
+    #[test]
+    fn test_spliced_binder_name_not_renamed() {
+        // `` `(let $n := 1; $n) `` — the binder NAME comes from the call site, so
+        // there is nothing template-introduced to protect and it must pass
+        // through unchanged (this is how `do`-notation desugaring works).
+        let template = Syntax::mk_let(
+            Syntax::mk_antiquot("n"),
+            None,
+            Syntax::mk_num(1),
+            Syntax::mk_antiquot("n"),
+        );
+        let result = expand_template(template, &[("n", Syntax::ident("userVar"))]);
+        assert_eq!(result.child(0).and_then(Syntax::as_ident), Some("userVar"));
+        assert_eq!(result.child(2).and_then(Syntax::as_ident), Some("userVar"));
+    }
+
+    #[test]
+    fn test_wildcard_binder_not_renamed() {
+        // `fun _ => …` has no references; renaming `_` would only obscure the
+        // output (and several built-in desugarings rely on the literal `_`).
+        let template = Syntax::mk_lambda(vec![Syntax::ident("_")], Syntax::mk_antiquot("e"));
+        let result = expand_template(template, &[("e", Syntax::ident("body"))]);
+        assert_eq!(result.child(0).and_then(Syntax::as_ident), Some("_"));
+        assert_eq!(result.child(1).and_then(Syntax::as_ident), Some("body"));
+    }
+
+    #[test]
+    fn test_template_binder_distinct_per_expansion() {
+        // Two expansions of the same template must not share a renamed binder,
+        // so an outer expansion's binder cannot be captured by an inner one.
+        let template = || {
+            Syntax::mk_let(
+                Syntax::ident("a"),
+                None,
+                Syntax::mk_num(1),
+                Syntax::ident("a"),
+            )
+        };
+        let first = expand_template(template(), &[]);
+        let second = expand_template(template(), &[]);
+        assert_ne!(
+            first.child(0).and_then(Syntax::as_ident),
+            second.child(0).and_then(Syntax::as_ident),
+            "each expansion gets its own scope-marked binder"
+        );
+    }
+
+    #[test]
+    fn test_binderless_template_unchanged_by_hygiene() {
+        // NEGATIVE: a template with no binders expands byte-identically to the
+        // non-hygienic path, so the common case is untouched.
+        let template = Syntax::mk_app(
+            Syntax::ident("f"),
+            vec![Syntax::mk_antiquot("x"), Syntax::ident("g")],
+        );
+        let quote = SyntaxQuote::term(template.clone());
+        let mut bindings = HashMap::new();
+        bindings.insert("x".to_string(), Syntax::ident("arg"));
+        let mut state = HygieneState::new();
+        let _scope = state.push_scope();
+        assert_eq!(
+            quote.substitute_hygienic(&bindings, &mut state).pretty(),
+            quote.substitute(&bindings).pretty(),
+        );
     }
 }

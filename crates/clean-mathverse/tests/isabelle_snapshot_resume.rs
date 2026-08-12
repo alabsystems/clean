@@ -542,7 +542,7 @@ fn periodic_checkpoint_is_written_partial_and_tail_resumes_to_full() {
     let full_path = dir.join("full.jsonl");
     let out_snap = dir.join("state.snap");
     // The checkpoint path the driver derives: `<ISA_SNAPSHOT_OUT>.ckpt`.
-    let ckpt = std::path::PathBuf::from(format!(
+    let ckpt = PathBuf::from(format!(
         "{}.ckpt",
         out_snap.to_str().expect("utf8 snapshot path")
     ));
@@ -752,7 +752,7 @@ fn retry_periodic_checkpoint_with_env(env: &mut clean_mathverse::process_env::En
         // 3) CHECKPOINTED retry: ISA_SNAPSHOT_EVERY=2 writes `<new_snap>.ckpt` after
         //    the 2nd flip (partial), the last checkpoint kept.
         let new_snap = dir.join(format!("new_arm_{retry_workers}.snap"));
-        let ckpt = std::path::PathBuf::from(format!(
+        let ckpt = PathBuf::from(format!(
             "{}.ckpt",
             new_snap.to_str().expect("utf8 snapshot path")
         ));

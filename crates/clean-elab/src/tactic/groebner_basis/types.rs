@@ -47,6 +47,9 @@ pub struct IntPolynomial {
     pub(crate) terms: BTreeMap<Monomial, i128>,
 }
 
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 impl IntPolynomial {
     pub fn zero() -> Self {
         Self {

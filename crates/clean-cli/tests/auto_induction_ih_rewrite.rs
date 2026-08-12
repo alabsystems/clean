@@ -69,6 +69,7 @@ fn list_nat() -> Expr {
     Expr::apps(Expr::const_str_levels("List", vec![lvl0()]), [nat()])
 }
 /// `@List.nil Nat`.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn nil_nat() -> Expr {
     Expr::apps(Expr::const_str_levels("List.nil", vec![lvl0()]), [nat()])
 }

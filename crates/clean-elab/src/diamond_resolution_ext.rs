@@ -21,6 +21,9 @@ use thiserror::Error;
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub(crate) enum DiamondExtError {
     #[error("cycle detected in instance graph involving classes: {}", classes.join(", "))]
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     CycleDetected { classes: Vec<String> },
     #[error("no resolution strategy applicable for diamond at `{class}`")]
     NoApplicableStrategy { class: String },
@@ -337,7 +340,7 @@ impl DiamondResolverExt {
                     }
                 }
             }
-            for (_, c) in color.iter_mut() {
+            for c in color.values_mut() {
                 if *c == Color::Gray {
                     *c = Color::Black;
                 }

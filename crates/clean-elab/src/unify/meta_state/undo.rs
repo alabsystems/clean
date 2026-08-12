@@ -236,6 +236,13 @@ impl MetaState {
                     self.level_parent.remove(&name);
                 }
             }
+            UndoRecord::LevelBound { name, old_level } => {
+                if let Some(level) = old_level {
+                    self.level_bound.insert(name, level);
+                } else {
+                    self.level_bound.remove(&name);
+                }
+            }
             UndoRecord::LevelConcrete { name, old_level } => {
                 if let Some(level) = old_level {
                     self.level_concrete.insert(name, level);

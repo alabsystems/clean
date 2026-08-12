@@ -109,6 +109,7 @@ pub(super) fn nat_type() -> Expr {
     fixture_const("Nat")
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) fn invalid_type_mismatch_expr() -> Expr {
     Expr::app(fixture_const("f"), Expr::prop())
 }
@@ -169,6 +170,7 @@ pub(super) fn valid_nat_rec_expr() -> Expr {
     )
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(super) fn invalid_nat_rec_zero_case_expr() -> Expr {
     let motive = nat_rec_motive();
     let succ_case = nat_rec_succ_case();

@@ -6,7 +6,6 @@
 
 use super::*;
 use clean_kernel::env::Declaration;
-use clean_kernel::expr::ExprKind;
 
 fn setup_env_for_dependent_fin_cases() -> Environment {
     let mut env = Environment::new();
@@ -45,7 +44,7 @@ fn make_fin_literal(bound: u64, value: u64) -> Expr {
     // (defeq `Nat.le (value+1) bound`); build the constructive witness so the
     // `r{value}` axioms kernel-check. `isLt` is proof-irrelevant, so this need
     // not be byte-identical to the witness `fin_cases` synthesizes.
-    let is_lt = crate::tactic::norm_num_ext::build_nat_le_witness(value + 1, bound);
+    let is_lt = norm_num_ext::build_nat_le_witness(value + 1, bound);
     Expr::app(
         Expr::app(
             Expr::app(
@@ -58,39 +57,25 @@ fn make_fin_literal(bound: u64, value: u64) -> Expr {
     )
 }
 
-fn expect_fin_mk_value(goal: &Goal, expected_bound: u64, expected_value: u64) {
+fn expect_fin_case_scope(goal: &Goal, has_proved_equality: bool) {
     let hyp = goal
         .local_ctx
         .iter()
         .find(|decl| decl.name == "h")
         .expect("dependent Fin sub-goal should keep hypothesis h in context");
-    let value = hyp
-        .value
-        .as_ref()
-        .expect("dependent Fin sub-goal should assign h a constructor value");
-    let args = value.get_app_args();
-
     assert!(
-        matches!(value.get_app_fn().kind(), ExprKind::Const(name, _) if name.to_string() == "Fin.mk"),
-        "dependent Fin sub-goal should assign a Fin.mk constructor, got: {value:?}"
+        hyp.value.is_none(),
+        "fallback cases must not fake a let value"
     );
-    assert_eq!(args.len(), 3, "Fin.mk should be fully applied in sub-goals");
-    assert_eq!(*args[0], make_nat_literal(expected_bound));
-    assert_eq!(*args[1], make_nat_literal(expected_value));
-    // The `isLt` witness is now a constructive `Nat.le` proof (a
-    // `Nat.le.refl` / `Nat.le.step` chain), not the old ill-typed `False`
-    // placeholder.
-    let witness_head = args[2].get_app_fn();
-    assert!(
-        matches!(witness_head.kind(), ExprKind::Const(name, _)
-            if matches!(name.to_string().as_str(), "Nat.le.refl" | "Nat.le.step")),
-        "Fin.mk isLt witness should be a Nat.le.refl/step proof, got: {:?}",
-        args[2]
+    assert_eq!(
+        goal.local_ctx.iter().any(|decl| decl.name == "h_eq"),
+        has_proved_equality,
+        "only a branch introduced by an equality lambda may expose h_eq"
     );
 }
 
 /// `fin_cases` should preserve dependent targets on the Or.rec fallback path
-/// while assigning constructor values to the split hypothesis.
+/// while exposing only equality hypotheses established by the Or.rec proof.
 #[test]
 fn test_fin_cases_fin3_dependent_target_succeeds() {
     let env = setup_env_for_dependent_fin_cases();
@@ -100,15 +85,18 @@ fn test_fin_cases_fin3_dependent_target_succeeds() {
     );
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
-    let mut state = ProofState::new(env, Expr::prop());
-    let h_fvar = state.fresh_fvar();
-    state.goals[0].target = Expr::app(r_const.clone(), Expr::fvar(h_fvar));
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_fvar,
-        name: "h".to_string(),
-        ty: fin3_ty,
-        value: None,
-    });
+    let h_fvar = FVarId::new(0);
+    let target = Expr::app(r_const.clone(), Expr::fvar(h_fvar));
+    let mut state = ProofState::with_context(
+        env,
+        target,
+        vec![LocalDecl {
+            fvar: h_fvar,
+            name: "h".to_string(),
+            ty: fin3_ty,
+            value: None,
+        }],
+    );
 
     let result = fin_cases(&mut state, "h");
     assert!(
@@ -123,12 +111,12 @@ fn test_fin_cases_fin3_dependent_target_succeeds() {
             Expr::app(r_const.clone(), Expr::fvar(h_fvar)),
             "dependent Fin sub-goals should preserve the original target"
         );
-        expect_fin_mk_value(goal, 3, idx as u64);
+        expect_fin_case_scope(goal, idx + 1 < state.goals.len());
     }
 }
 
 #[test]
-fn test_fin_cases_fin3_branch_accepts_specialized_proof_via_let_binding() {
+fn test_fin_cases_fin3_branch_requires_equality_transport() {
     let env = setup_env_for_dependent_fin_cases();
     let fin3_ty = Expr::app(
         Expr::const_(Name::from_string("Fin"), vec![]),
@@ -136,15 +124,18 @@ fn test_fin_cases_fin3_branch_accepts_specialized_proof_via_let_binding() {
     );
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
-    let mut state = ProofState::new(env, Expr::prop());
-    let h_fvar = state.fresh_fvar();
-    state.goals[0].target = Expr::app(r_const, Expr::fvar(h_fvar));
-    state.goals[0].local_ctx.push(LocalDecl {
-        fvar: h_fvar,
-        name: "h".to_string(),
-        ty: fin3_ty,
-        value: None,
-    });
+    let h_fvar = FVarId::new(0);
+    let target = Expr::app(r_const, Expr::fvar(h_fvar));
+    let mut state = ProofState::with_context(
+        env,
+        target,
+        vec![LocalDecl {
+            fvar: h_fvar,
+            name: "h".to_string(),
+            ty: fin3_ty,
+            value: None,
+        }],
+    );
 
     fin_cases(&mut state, "h").expect("fin_cases should split a dependent Fin goal");
     let first_goal = state
@@ -152,7 +143,10 @@ fn test_fin_cases_fin3_branch_accepts_specialized_proof_via_let_binding() {
         .expect("fin_cases should leave the first branch as the current goal")
         .clone();
 
-    let _ = state
-        .verify_proof(&first_goal, &Expr::const_(Name::from_string("r0"), vec![]))
-        .expect("branch-local let-binding should let a specialized proof inhabit R h");
+    let result = state.verify_proof(&first_goal, &Expr::const_(Name::from_string("r0"), vec![]));
+    assert!(
+        result.is_err(),
+        "a specialized proof of R 0 must not inhabit R h without using h_eq transport"
+    );
+    assert!(first_goal.local_ctx.iter().any(|decl| decl.name == "h_eq"));
 }

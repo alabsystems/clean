@@ -121,7 +121,7 @@ impl Specification {
         };
 
         // The two component joins, once g1 = g2 and x1 = x2 are known.
-        let build = format!(
+        let build = String::from(
             "(fun (hsame : Eq KExpr (KExpr.app g1 x1) (KExpr.app g2 x2)) => \
              BinderJoinComponents.mk f1 a1 f2 a2 \
              (par_strips_witness_cd_star.intro the_red_env f1 f2 g1 hlf \
@@ -133,7 +133,7 @@ impl Specification {
              (fun (z : KExpr) => par_reduces_cd_star the_red_env a2 z) \
              x2 x1 (Eq.symm KExpr x1 x2 (app_inj_snd g1 x1 g2 x2 hsame)) hra))) \
              (Eq.trans KExpr (KExpr.app g1 x1) w (KExpr.app g2 x2) \
-             (Eq.symm KExpr w (KExpr.app g1 x1) heql) heqr)"
+             (Eq.symm KExpr w (KExpr.app g1 x1) heql) heqr)",
         );
 
         // Inversion of one leg, binding (g, x, heq, leg_f, leg_a).
@@ -226,7 +226,7 @@ impl Specification {
 
     fn proj_components_src() -> String {
         let goal = "ProjJoinComponents s1 i1 u1 s2 i2 u2";
-        let build = format!(
+        let build = String::from(
             "(fun (hsame : Eq KExpr (KExpr.proj s1 i1 v1) (KExpr.proj s2 i2 v2)) => \
              ProjJoinComponents.mk s1 i1 u1 s2 i2 u2 \
              (proj_inj_name s1 i1 v1 s2 i2 v2 hsame) \
@@ -236,7 +236,7 @@ impl Specification {
              (fun (z : KExpr) => par_reduces_cd_star the_red_env u2 z) \
              v2 v1 (Eq.symm KExpr v1 v2 (proj_inj_sub s1 i1 v1 s2 i2 v2 hsame)) hl2))) \
              (Eq.trans KExpr (KExpr.proj s1 i1 v1) w (KExpr.proj s2 i2 v2) \
-             (Eq.symm KExpr w (KExpr.proj s1 i1 v1) heq1) heq2)"
+             (Eq.symm KExpr w (KExpr.proj s1 i1 v1) heq1) heq2)",
         );
         let invert = |side: u8| {
             let (s, i, u, v, heq, hl, leg) = if side == 1 {

@@ -465,6 +465,9 @@ pub(crate) fn neg_neg_name(op_name: &str) -> Option<&'static str> {
 ///
 /// `Int.neg_add : -(a + b) = (-a) + (-b)`.
 /// Part of #3368.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn neg_add_distrib_name(op_name: &str) -> Option<&'static str> {
     match op_name {
         "Int.neg" => Some("Int.neg_add"),

@@ -153,6 +153,7 @@ fn build_sorry_value_for_t42(env: &Environment, c: &CrownBackwardConsts) -> Expr
 
 /// Shared constants for CROWN backward theorem construction.
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct CrownBackwardConsts {
     nat: Expr,
     rat: Expr,
@@ -176,6 +177,7 @@ struct CrownBackwardConsts {
 }
 
 #[cfg(test)]
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl CrownBackwardConsts {
     #[cfg(test)]
     fn new() -> Self {

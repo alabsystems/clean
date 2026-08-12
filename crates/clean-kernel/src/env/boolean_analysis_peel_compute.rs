@@ -60,6 +60,8 @@ enum PeelCase {
 /// Shared constants for the peel computation lemmas.
 struct PeelComputeConsts {
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     l0: Level,
     l1: Level,
     nat: Expr,

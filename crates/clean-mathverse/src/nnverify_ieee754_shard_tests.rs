@@ -97,7 +97,7 @@ fn shard_builds_and_round_trips() {
     );
 
     let bytes = builder.write_to_bytes().expect("serialize shard");
-    let reader = crate::shard::ShardReader::from_bytes(&bytes).expect("read shard");
+    let reader = ShardReader::from_bytes(&bytes).expect("read shard");
     assert_eq!(
         reader.constants.len(),
         NNVERIFY_IEEE754_DECLS.len(),
@@ -155,8 +155,7 @@ fn shard_registers_and_kernel_rechecks_with_empty_closure() {
 
     // --- the manifest on disk records the entry with matching counts ---
     let manifest_path = library_root.join("manifest.json");
-    let manifest =
-        crate::manifest::MathverseManifest::from_file(&manifest_path).expect("load manifest");
+    let manifest = MathverseManifest::from_file(&manifest_path).expect("load manifest");
     let on_disk = manifest
         .base_shards
         .iter()
@@ -225,8 +224,7 @@ fn register_is_idempotent() {
     assert_eq!(first.entry.content_hash, second.entry.content_hash);
 
     let manifest =
-        crate::manifest::MathverseManifest::from_file(library_root.join("manifest.json"))
-            .expect("load manifest");
+        MathverseManifest::from_file(library_root.join("manifest.json")).expect("load manifest");
     let count = manifest
         .base_shards
         .iter()

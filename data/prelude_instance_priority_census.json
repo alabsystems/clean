@@ -1,0 +1,434 @@
+{
+  "generated_by": "CLEAN_PRIORITY_CENSUS_UPDATE=1 cargo test --offline --release -p clean-olean --test prelude_instance_priority_census",
+  "import_root": "Init",
+  "totals": {
+    "prelude_instances": 152,
+    "lean_instance_entries": 3040,
+    "colliding": 60,
+    "mismatched": 0,
+    "modules_walked": 590,
+    "undecoded_instance_entries": 0
+  },
+  "rows": [
+    {
+      "name": "Array.instGetElem?NatLtSize",
+      "class": "GetElem?",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Array.instGetElemNatLtSize",
+      "class": "GetElem",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "List.instGetElem?NatLtLength",
+      "class": "GetElem?",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "List.instGetElemNatLtLength",
+      "class": "GetElem",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "List.instMembership",
+      "class": "Membership",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instAddNat",
+      "class": "Add",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instBEqOfDecidableEq",
+      "class": "BEq",
+      "clean_priority": 500,
+      "lean_priority": 500,
+      "mismatch": false
+    },
+    {
+      "name": "instBEqOption",
+      "class": "BEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableAnd",
+      "class": "Decidable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqBool",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqChar",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqNat",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqString",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqUInt16",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqUInt32",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqUInt64",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqUInt8",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqUSize",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableFalse",
+      "class": "Decidable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableNot",
+      "class": "Decidable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableOr",
+      "class": "Decidable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableTrue",
+      "class": "Decidable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instFunctorOption",
+      "class": "Functor",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instHasEquivOfSetoid",
+      "class": "HasEquiv",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instHashableBool",
+      "class": "Hashable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instHashableNat",
+      "class": "Hashable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instInhabitedBool",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instInhabitedList",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instInhabitedNat",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instInhabitedOption",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instInhabitedOrdering",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLEFloat",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLENat",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLEUInt16",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLEUInt32",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLEUInt64",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLEUInt8",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLEUSize",
+      "class": "LE",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTFloat",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTNat",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTUInt16",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTUInt32",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTUInt64",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTUInt8",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instLTUSize",
+      "class": "LT",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instMinNat",
+      "class": "Min",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instMulNat",
+      "class": "Mul",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instNegFloat",
+      "class": "Neg",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instOfNatNat",
+      "class": "OfNat",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instOrdBool",
+      "class": "Ord",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instOrdNat",
+      "class": "Ord",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instOrdOrdering",
+      "class": "Ord",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instReprBool",
+      "class": "Repr",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instReprList",
+      "class": "Repr",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instReprNat",
+      "class": "Repr",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instReprString",
+      "class": "Repr",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instSubNat",
+      "class": "Sub",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringBool",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringNat",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringString",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    }
+  ]
+}

@@ -5,6 +5,12 @@
 use clean_verify::test_utils::build_spec_with_stack;
 use clean_verify::{ProofLibrary, ProofStatus};
 
+// 2026-07-31: no test in this file currently asserts a `DerivedPending`
+// provenance — every case here is on the `assert_proved_no_deps` side. Kept
+// (not deleted) because the two helpers are the matched pair this file's
+// contract is written against: a provenance test that lands on the pending
+// side needs this exact assertion, and re-deriving it is how drift starts.
+#[allow(dead_code)]
 fn assert_pending_deps(
     report: &clean_verify::DependencyAuditReport,
     proof_name: &str,

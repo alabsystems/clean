@@ -468,6 +468,9 @@ fn attempt_certify(
         formula: None,
         function: Some(fid),
         source: None,
+        // Translation validation certifies the emitted function as a whole;
+        // it is not an instruction-local check and therefore has no IR site.
+        site: None,
     };
     let lineage = clean_cic_lineage_digest(&obligation);
     let cert = ProofCertificate {

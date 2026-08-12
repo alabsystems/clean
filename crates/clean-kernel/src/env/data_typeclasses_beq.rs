@@ -81,7 +81,7 @@ impl Environment {
             types: vec![InductiveType {
                 name: Name::from_string("BEq"),
                 type_: Expr::pi(
-                    BinderInfo::Implicit,
+                    BinderInfo::Default,
                     type_u.clone(),
                     Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone()))),
                 ),

@@ -28,7 +28,7 @@
 use std::io;
 
 use super::cdcl::proof_logging::{parse_drat_proof, ProofStep};
-use super::lrat::{ClauseId, LratChecker, LratResult, LratStep};
+use super::lrat::{ClauseId, LratChecker, LratStep};
 use super::types::Lit;
 use thiserror::Error;
 
@@ -1567,7 +1567,7 @@ mod tests {
     #[test]
     fn test_parse_drat_text_streaming_simple() {
         let input = b"1 -2 0\nd 1 -2 0\n0\n";
-        let mut reader = std::io::BufReader::new(&input[..]);
+        let mut reader = io::BufReader::new(&input[..]);
 
         let step1 = parse_drat_text_streaming(&mut reader)
             .expect("should parse")
@@ -1591,7 +1591,7 @@ mod tests {
     #[test]
     fn test_parse_drat_text_streaming_comments() {
         let input = b"c comment line\n1 2 0\nc another\n0\n";
-        let mut reader = std::io::BufReader::new(&input[..]);
+        let mut reader = io::BufReader::new(&input[..]);
 
         let step1 = parse_drat_text_streaming(&mut reader)
             .expect("should parse")
@@ -1620,7 +1620,7 @@ mod tests {
         data.push(b'a');
         data.push(0);
 
-        let mut reader = std::io::BufReader::new(&data[..]);
+        let mut reader = io::BufReader::new(&data[..]);
 
         let step1 = parse_drat_binary_streaming(&mut reader)
             .expect("should parse")
@@ -1660,7 +1660,7 @@ mod tests {
         let batch_steps = parse_drat_binary(&data).expect("batch should parse");
 
         // Streaming parse.
-        let mut reader = std::io::BufReader::new(&data[..]);
+        let mut reader = io::BufReader::new(&data[..]);
         let mut streaming_steps = Vec::new();
         while let Some(step) = parse_drat_binary_streaming(&mut reader).expect("should parse") {
             streaming_steps.push(step);
@@ -1675,7 +1675,7 @@ mod tests {
     fn test_convert_drat_to_lrat_streaming_text_simple() {
         let cnf = vec![vec![1], vec![-1]];
         let drat_text = b"0\n";
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = convert_drat_to_lrat_streaming(&cnf, reader, false)
             .expect("streaming conversion should succeed");
@@ -1693,7 +1693,7 @@ mod tests {
     fn test_convert_drat_to_lrat_streaming_text_three_clause() {
         let cnf = vec![vec![1, 2], vec![-1], vec![-2]];
         let drat_text = b"2 0\n0\n";
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = convert_drat_to_lrat_streaming(&cnf, reader, false)
             .expect("streaming conversion should succeed");
@@ -1709,7 +1709,7 @@ mod tests {
 
         let drat_data = [b'a', 0]; // 'a' marker + empty clause
 
-        let reader = std::io::BufReader::new(&drat_data[..]);
+        let reader = io::BufReader::new(&drat_data[..]);
         let result = convert_drat_to_lrat_streaming(&cnf, reader, true)
             .expect("streaming binary conversion should succeed");
 
@@ -1721,7 +1721,7 @@ mod tests {
     fn test_convert_drat_to_lrat_streaming_no_empty_clause() {
         let cnf = vec![vec![1, 2], vec![-1], vec![-2]];
         let drat_text = b"2 0\n"; // Derives {2} but not empty clause.
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = convert_drat_to_lrat_streaming(&cnf, reader, false);
         assert!(result.is_err());
@@ -1742,7 +1742,7 @@ mod tests {
 
         // Streaming text conversion.
         let drat_text = b"2 0\n0\n";
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
         let streaming_result = convert_drat_to_lrat_streaming(&cnf, reader, false)
             .expect("streaming conversion should succeed");
 
@@ -1771,7 +1771,7 @@ mod tests {
     fn test_verify_drat_streaming_text_simple() {
         let cnf = vec![vec![1], vec![-1]];
         let drat_text = b"0\n";
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = verify_drat_streaming(&cnf, reader, false)
             .expect("streaming verification should succeed");
@@ -1786,7 +1786,7 @@ mod tests {
     fn test_verify_drat_streaming_text_three_clause() {
         let cnf = vec![vec![1, 2], vec![-1], vec![-2]];
         let drat_text = b"2 0\n0\n";
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = verify_drat_streaming(&cnf, reader, false)
             .expect("streaming verification should succeed");
@@ -1802,7 +1802,7 @@ mod tests {
 
         let drat_data = [b'a', 0]; // 'a' marker + empty clause
 
-        let reader = std::io::BufReader::new(&drat_data[..]);
+        let reader = io::BufReader::new(&drat_data[..]);
         let result = verify_drat_streaming(&cnf, reader, true)
             .expect("streaming binary verification should succeed");
 
@@ -1814,7 +1814,7 @@ mod tests {
     fn test_verify_drat_streaming_with_deletion() {
         let cnf = vec![vec![1], vec![-1], vec![1, 2]];
         let drat_text = b"d 1 2 0\n0\n";
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = verify_drat_streaming(&cnf, reader, false)
             .expect("streaming verification with deletion should succeed");
@@ -1827,7 +1827,7 @@ mod tests {
     fn test_verify_drat_streaming_rup_failure() {
         let cnf = vec![vec![1, 2]]; // SAT formula.
         let drat_text = b"0\n"; // Empty clause cannot be RUP.
-        let reader = std::io::BufReader::new(&drat_text[..]);
+        let reader = io::BufReader::new(&drat_text[..]);
 
         let result = verify_drat_streaming(&cnf, reader, false);
         assert!(result.is_err());
@@ -1856,7 +1856,7 @@ mod tests {
         }
         drat_text.push_str("0\n");
 
-        let reader = std::io::BufReader::new(drat_text.as_bytes());
+        let reader = io::BufReader::new(drat_text.as_bytes());
         let result = verify_drat_streaming(&cnf, reader, false)
             .expect("large chain streaming verification should succeed");
 

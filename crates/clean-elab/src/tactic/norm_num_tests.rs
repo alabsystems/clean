@@ -451,7 +451,7 @@ fn test_eval_decide_nat_disequality_closes() {
     let env = Environment::with_prelude();
     let goal = nat_ne_goal(Expr::nat_lit(5), Expr::nat_lit(3));
     let mut state = ProofState::new(env, goal);
-    super::decide::eval_decide(&mut state).expect("decide should close 5 ≠ 3");
+    eval_decide(&mut state).expect("decide should close 5 ≠ 3");
     assert!(state.is_complete(), "disequality goal should be closed");
     assert_eq!(
         state.trusted_axiom_count(),
@@ -563,7 +563,7 @@ fn test_eval_decide_nat_gcd_le_comparison_closes() {
         Expr::nat_lit(6),
     );
     let mut state = ProofState::new(env, goal);
-    super::decide::eval_decide(&mut state).expect("decide should close gcd 12 18 <= 6");
+    eval_decide(&mut state).expect("decide should close gcd 12 18 <= 6");
     assert!(state.is_complete(), "gcd comparison goal should be closed");
     assert_eq!(
         state.trusted_axiom_count(),
@@ -581,7 +581,7 @@ fn test_eval_decide_nat_gcd_lt_false_rejected() {
         Expr::nat_lit(6),
     );
     let mut state = ProofState::new(env, goal);
-    let result = super::decide::eval_decide(&mut state);
+    let result = eval_decide(&mut state);
     assert!(
         result.is_err(),
         "decide must reject the false goal gcd 12 18 < 6"
@@ -632,7 +632,7 @@ fn test_eval_decide_int_div_negative_closes() {
     ); // Int.negSucc 1 = -2
     let goal = int_eq_goal(lhs, rhs);
     let mut state = ProofState::new(env, goal);
-    super::decide::eval_decide(&mut state).expect("decide should close (-7)/3 = -2");
+    eval_decide(&mut state).expect("decide should close (-7)/3 = -2");
     assert!(
         state.is_complete(),
         "Int.div equality goal should be closed"
@@ -650,7 +650,7 @@ fn test_eval_decide_int_div_wrong_value_rejected() {
     ); // Int.negSucc 2 = -3
     let goal = int_eq_goal(lhs, rhs);
     let mut state = ProofState::new(env, goal);
-    let result = super::decide::eval_decide(&mut state);
+    let result = eval_decide(&mut state);
     assert!(
         result.is_err(),
         "decide must reject the false goal (-7)/3 = -3"

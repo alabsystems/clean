@@ -70,6 +70,7 @@ impl OracleCheckResult {
     }
 
     /// Total number of candidates checked.
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub fn total(&self) -> usize {
         self.matched.len() + self.mismatches.len() + self.missing_reference.len()
     }
@@ -206,6 +207,7 @@ impl DeclSignatureOracle {
     }
 
     /// Get the reference type for a declaration name, if present.
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub fn get_reference(&self, name: &Name) -> Option<&Expr> {
         self.signatures.get(name)
     }

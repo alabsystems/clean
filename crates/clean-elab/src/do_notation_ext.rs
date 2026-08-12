@@ -30,6 +30,9 @@ use clean_parser::{DoCatchClause, DoElem, Span, SurfaceBinder, SurfaceBinderInfo
 /// Errors specific to extended do-notation desugaring.
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) enum DoExtError {
     /// A try block has no catch or finally clauses.
     #[error("try block requires at least one catch or finally clause")]
@@ -299,6 +302,9 @@ pub(crate) fn desugar_parser_try_catch(
 ///
 /// Converts `x := new_val` followed by remaining elements into surface
 /// let-shadowing with the rest of the block.
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn desugar_parser_reassign(
     var: &str,
     new_val: &SurfaceExpr,

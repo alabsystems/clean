@@ -71,7 +71,7 @@ impl Environment {
             let (n_id, _n) = b.fresh_local(nat_const.clone());
             let e = type_u.clone();
             let e = b.mk_pi(n_id, BinderInfo::Default, nat_const.clone(), e);
-            let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+            let e = b.mk_pi(alpha_id, BinderInfo::Default, type_u.clone(), e);
             b.finish(e)
         };
 
@@ -136,7 +136,7 @@ impl Environment {
                 ),
                 e,
             );
-            let e = b.mk_pi(n_id, BinderInfo::Implicit, nat_const.clone(), e);
+            let e = b.mk_pi(n_id, BinderInfo::Default, nat_const.clone(), e);
             let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
             b.finish(e)
         };
@@ -284,6 +284,7 @@ impl Environment {
     /// ENSURES: Returns `true` iff `init_ofnat_nat` has completed successfully
     /// ENSURES: Pure - no side effects
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     pub(crate) fn has_ofnat_nat(&self) -> bool {
         self.ofnat_nat_inst_init
     }

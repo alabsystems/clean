@@ -722,6 +722,9 @@ fn has_const_ref(expr: &Expr, target: &str) -> bool {
 }
 
 /// Helper: count the number of BVar references at a specific depth in an expression.
+// Test scaffolding not exercised by every including build — kept per the 2026-07-30
+// keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
+#[allow(dead_code)]
 fn count_bvar(expr: &Expr, idx: u32) -> usize {
     match expr.kind() {
         ExprKind::BVar(i) if *i == idx => 1,

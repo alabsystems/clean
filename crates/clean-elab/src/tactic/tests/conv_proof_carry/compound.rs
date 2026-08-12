@@ -359,7 +359,7 @@ fn test_conv_congr_surface_rewrite_kernel_checked_no_new_axioms() {
     // (2) The closed proof must KERNEL-TYPE-CHECK against the ORIGINAL goal type.
     //     This is the soundness boundary: the kernel — not the tactic — certifies
     //     that the assembled congruence proof actually proves `(y = x) → P x = P y`.
-    let tc = clean_kernel::TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc
         .infer_type(&proof)
         .expect("conv-congr proof term must kernel-type-check");
@@ -605,7 +605,7 @@ fn adversarial_conv_congr_wrong_witness_cannot_discharge_original() {
     // original false type.
     if state.goals.is_empty() {
         if let Some(proof) = state.closed_proof() {
-            let tc = clean_kernel::TypeChecker::new(&env);
+            let tc = TypeChecker::new(&env);
             if let Ok(inferred) = tc.infer_type(&proof) {
                 assert!(
                     !tc.is_def_eq(&inferred, &goal_ty),
@@ -671,7 +671,7 @@ fn adversarial_conv_congr_lift_is_faithful_not_overstrong() {
     );
     rfl(&mut state).expect("P x = P x closes by rfl");
     let proof = state.closed_proof().expect("closed");
-    let tc = clean_kernel::TypeChecker::new(&env);
+    let tc = TypeChecker::new(&env);
     let inferred = tc.infer_type(&proof).expect("kernel checks");
     assert!(
         tc.is_def_eq(&inferred, &goal_ty),

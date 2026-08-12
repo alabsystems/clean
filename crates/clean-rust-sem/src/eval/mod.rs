@@ -28,7 +28,7 @@
 //! Block:        ⟨{ s1; ...; sn; e }⟩ ↓ v  where each si executes, ⟨e⟩ ↓ v
 //! ```
 
-pub(super) mod atomics;
+pub mod atomics;
 mod call_dispatch;
 mod call_dispatch_traits;
 mod closure_capture;
@@ -1353,12 +1353,6 @@ impl Interpreter {
             }
         }
         false
-    }
-
-    fn shared_memory_root(&self, place: &Place) -> Option<Place> {
-        let root = self.tracked_place_root(place)?;
-        (self.shared_memory_roots.contains(&root) && self.binding_value_for_place(&root).is_some())
-            .then_some(root)
     }
 
     fn tracked_place_to_path(

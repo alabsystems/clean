@@ -366,7 +366,7 @@ async fn test_open_obligation_follow_up_handlers_cover_snapshot_apply_extract() 
         "Unexpected apply error: {:?}",
         apply_response.error
     );
-    let applied: crate::proof_state::ApplyTacticResult =
+    let applied: ApplyTacticResult =
         serde_json::from_value(apply_response.result.unwrap()).unwrap();
     assert!(applied.success, "sorry should close the obligation state");
     assert!(applied.is_solved);
@@ -778,7 +778,7 @@ async fn test_open_obligation_constructive_only_rejects_sorry_apply() {
         "policy rejection should be returned as an apply result: {:?}",
         apply_response.error
     );
-    let applied: crate::proof_state::ApplyTacticResult =
+    let applied: ApplyTacticResult =
         serde_json::from_value(apply_response.result.unwrap()).unwrap();
 
     assert!(!applied.success, "ConstructiveOnly must reject sorry");
@@ -865,7 +865,7 @@ async fn test_proof_state_failure_explain_retain_and_close_lifecycle() {
         "failed apply should be returned as an apply result: {:?}",
         apply_response.error
     );
-    let applied: crate::proof_state::ApplyTacticResult =
+    let applied: ApplyTacticResult =
         serde_json::from_value(apply_response.result.unwrap()).unwrap();
     assert!(!applied.success);
     let attempt_id = applied

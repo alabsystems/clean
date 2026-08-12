@@ -459,41 +459,48 @@ impl Parser {
 
     /// Parse forall body: (x : T) (y : U), B
     pub(super) fn forall_body(&mut self, start_span: Span) -> Result<SurfaceExpr, ParseError> {
-        let binders = self.binders()?;
-
-        // Bounded/conditional quantifiers (Mathlib macros):
+        // `paren_guards` come from parenthesized bounded binders `∀ (x ∈ s), p`;
+        // `try_bounded_guard` below handles the trailing unparenthesized form
+        // `∀ x ∈ s, p`. For `∀`, every guard becomes an implication antecedent:
         //   ∀ x ∈ S, P x   ≡  ∀ x, x ∈ S → P x
         //   ∀ n > 0, P n   ≡  ∀ n, n > 0 → P n
-        if let Some(last_binder) = binders.last() {
-            if let Some(guard) = self.try_bounded_guard(last_binder)? {
-                self.expect(&TokenKind::Comma)?;
-                let body = self.expr()?;
-                let guard_span = guard.span();
-                let body_span = body.span();
-                let guarded_body = SurfaceExpr::Arrow(
-                    guard_span.merge(body_span),
-                    Box::new(guard),
-                    Box::new(body),
-                );
-                let span = start_span.merge(guarded_body.span());
-                return Ok(SurfaceExpr::Pi(span, binders, Box::new(guarded_body)));
-            }
-        }
+        let (binders, paren_guards) = self.quant_binders()?;
 
-        // Filter quantifier: ∀ᶠ x in F, body (Mathlib Filter.Eventually)
-        // When `in` appears instead of `,`, parse the filter and then the body
-        if self.eat(&TokenKind::In) {
+        // Trailing unparenthesized guard on the last binder (Mathlib macros).
+        let trailing_guard = match binders.last() {
+            Some(last_binder) => self.try_bounded_guard(last_binder)?,
+            None => None,
+        };
+
+        let body = if trailing_guard.is_some() {
+            self.expect(&TokenKind::Comma)?;
+            self.expr()?
+        } else if self.eat(&TokenKind::In) {
+            // Filter quantifier: ∀ᶠ x in F, body (Mathlib Filter.Eventually).
+            // When `in` appears instead of `,`, parse the filter and then body.
             let _filter = self.arrow_expr()?;
             self.expect(&TokenKind::Comma)?;
-            let body = self.expr()?;
-            let span = start_span.merge(body.span());
-            return Ok(SurfaceExpr::Pi(span, binders, Box::new(body)));
+            self.expr()?
+        } else {
+            self.expect(&TokenKind::Comma)?;
+            self.expr()?
+        };
+
+        // Wrap the body: innermost is the trailing guard (nearest the body),
+        // then the parenthesized guards in reverse binder order, so the final
+        // implication chain reads `g0 → g1 → … → trailing → body`.
+        let mut guarded_body = body;
+        if let Some(guard) = trailing_guard {
+            let span = guard.span().merge(guarded_body.span());
+            guarded_body = SurfaceExpr::Arrow(span, Box::new(guard), Box::new(guarded_body));
+        }
+        for guard in paren_guards.into_iter().rev() {
+            let span = guard.span().merge(guarded_body.span());
+            guarded_body = SurfaceExpr::Arrow(span, Box::new(guard), Box::new(guarded_body));
         }
 
-        self.expect(&TokenKind::Comma)?;
-        let body = self.expr()?;
-        let span = start_span.merge(body.span());
-        Ok(SurfaceExpr::Pi(span, binders, Box::new(body)))
+        let span = start_span.merge(guarded_body.span());
+        Ok(SurfaceExpr::Pi(span, binders, Box::new(guarded_body)))
     }
 
     /// Parse a bounded/conditional guard after a quantifier binder.
@@ -558,6 +565,27 @@ impl Parser {
             Box::new(SurfaceExpr::Ident(binder.span, op.to_string())),
             vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
         )))
+    }
+
+    /// Parse a quantifier's binder list, harvesting any guards from
+    /// PARENTHESIZED bounded binders (`∀ (x ∈ s) (n > 0), p`).
+    ///
+    /// Returns the binders plus the desugared guard propositions collected, in
+    /// binder order. The enclosing quantifier wraps its body with these guards
+    /// (`→` for `∀`, `∧` for `∃`/`∃!`), matching Lean's binder-predicate
+    /// desugaring. Unparenthesized trailing guards (`∀ x ∈ s, p`) are still
+    /// handled separately by [`Parser::try_bounded_guard`] on the last binder.
+    ///
+    /// `pending_binder_guards` is cleared before parsing so a guard left behind
+    /// by a non-quantifier `binders()` caller (where `(x ∈ s)` is not valid and
+    /// is dropped) can never leak into this quantifier.
+    pub(super) fn quant_binders(
+        &mut self,
+    ) -> Result<(Vec<SurfaceBinder>, Vec<SurfaceExpr>), ParseError> {
+        self.pending_binder_guards.clear();
+        let binders = self.binders()?;
+        let guards = std::mem::take(&mut self.pending_binder_guards);
+        Ok((binders, guards))
     }
 
     /// Parse the value of a term-level `let` binding (`let x := <value>`) with
@@ -1201,9 +1229,10 @@ impl Parser {
             Err(err) => {
                 // On parse error, fall back to skipping tokens (graceful degradation).
                 // This ensures we don't break parsing of the rest of the file.
-                self.defer_parser_recovery("by tactic block", &err);
+                self.defer_tactic_parser_recovery("by tactic block", &err);
                 let recovered = self.skip_tactic_block(start_span);
                 self.flush_pending_parser_recoveries();
+                self.tactic_chain.clear();
                 recovered
             }
         };

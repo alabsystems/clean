@@ -1422,37 +1422,25 @@ fn nat_le_bare_expr(lhs: Expr, rhs: Expr) -> Expr {
 #[test]
 fn test_eval_nat_mod_basic() {
     // Direct evaluator: 17 % 5 = 2.
-    assert_eq!(
-        super::nat_expr_eval::eval_nat_expr(&nat_mod(17, 5)),
-        Some(2)
-    );
+    assert_eq!(eval_nat_expr(&nat_mod(17, 5)), Some(2));
 }
 
 #[test]
 fn test_eval_nat_div_basic() {
     // Direct evaluator: 20 / 4 = 5.
-    assert_eq!(
-        super::nat_expr_eval::eval_nat_expr(&nat_div(20, 4)),
-        Some(5)
-    );
+    assert_eq!(eval_nat_expr(&nat_div(20, 4)), Some(5));
 }
 
 #[test]
 fn test_eval_nat_mod_by_zero_is_dividend() {
     // Lean 4 convention: n % 0 = n. Matches the kernel's native reducer.
-    assert_eq!(
-        super::nat_expr_eval::eval_nat_expr(&nat_mod(10, 0)),
-        Some(10)
-    );
+    assert_eq!(eval_nat_expr(&nat_mod(10, 0)), Some(10));
 }
 
 #[test]
 fn test_eval_nat_div_by_zero_is_zero() {
     // Lean 4 convention: n / 0 = 0. Matches the kernel's native reducer.
-    assert_eq!(
-        super::nat_expr_eval::eval_nat_expr(&nat_div(10, 0)),
-        Some(0)
-    );
+    assert_eq!(eval_nat_expr(&nat_div(10, 0)), Some(0));
 }
 
 #[test]

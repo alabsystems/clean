@@ -79,6 +79,8 @@ struct H1Consts {
     nat_zero: Expr,
     nat_succ: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     nat_lt: Expr,
     nat_rec0: Expr,
     not_succ_le_zero: Expr,

@@ -276,27 +276,63 @@ fn test_trans_type_checks() {
 
     let tc = TypeChecker::new(&env);
 
+    // Lean's `Trans` universe ORDER: [u, v, w, u_1, u_2, u_3] — the three
+    // relation sorts first, then the three auto-bound carrier sorts.
+    let u = Name::from_string("u");
+    let v = Name::from_string("v");
+    let w = Name::from_string("w");
     let u1 = Name::from_string("u_1");
     let u2 = Name::from_string("u_2");
     let u3 = Name::from_string("u_3");
+    let u_level = Level::param(u.clone());
+    let v_level = Level::param(v.clone());
+    let w_level = Level::param(w.clone());
     let u1_level = Level::param(u1.clone());
     let u2_level = Level::param(u2.clone());
     let u3_level = Level::param(u3.clone());
     let sort_u1 = Expr::from_kind(ExprKind::Sort(u1_level.clone()));
     let sort_u2 = Expr::from_kind(ExprKind::Sort(u2_level.clone()));
     let sort_u3 = Expr::from_kind(ExprKind::Sort(u3_level.clone()));
-    let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
-    let type_zero = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
+    let sort_u = Expr::from_kind(ExprKind::Sort(u_level.clone()));
+    let sort_v = Expr::from_kind(ExprKind::Sort(v_level.clone()));
+    let sort_w = Expr::from_kind(ExprKind::Sort(w_level.clone()));
 
-    // Trans.{u_1, u_2, u_3} :
+    // `Sort (max 1 u u_1 u_2 u_3 v w)` — the class universe Lean computes.
+    let class_sort = {
+        let mut s = Level::succ(Level::zero());
+        for l in [
+            &u_level, &u1_level, &u2_level, &u3_level, &v_level, &w_level,
+        ] {
+            s = Level::max(s, l.clone());
+        }
+        Expr::from_kind(ExprKind::Sort(s))
+    };
+
+    let trans_levels = vec![
+        u_level.clone(),
+        v_level.clone(),
+        w_level.clone(),
+        u1_level.clone(),
+        u2_level.clone(),
+        u3_level.clone(),
+    ];
+
+    // Trans.{u, v, w, u_1, u_2, u_3} :
     //   {α : Sort u_1} → {β : Sort u_2} → {γ : Sort u_3} →
-    //   (r : α → β → Prop) → (s : β → γ → Prop) →
-    //   (t : α → γ → Prop) → Type
-    let trans_const = Expr::const_(
-        Name::from_string("Trans"),
-        vec![u1_level.clone(), u2_level.clone(), u3_level.clone()],
-    );
+    //   (r : α → β → Sort u) → (s : β → γ → Sort v) →
+    //   (t : outParam (α → γ → Sort w)) → Sort (max 1 u u_1 u_2 u_3 v w)
+    //
+    // This is Lean 4's spelling, character for character. It is NOT decoration:
+    // the `.olean` import is first-registered-wins, so a divergent prelude
+    // spelling here permanently discards Lean's `Trans` and every imported
+    // `Trans` instance stops type-checking against it.
+    let trans_const = Expr::const_(Name::from_string("Trans"), trans_levels.clone());
     let trans_type = tc.infer_type(&trans_const).unwrap();
+    // `t`'s binder domain: `outParam.{max (w+1) u_1 u_3} (α → γ → Sort w)`.
+    let out_param_level = Level::max(
+        Level::max(Level::succ(w_level.clone()), u1_level.clone()),
+        u3_level.clone(),
+    );
     let expected_trans_type = Expr::pi(
         BinderInfo::Implicit,
         sort_u1.clone(), // α : Sort u_1
@@ -308,29 +344,35 @@ fn test_trans_type_checks() {
                 sort_u3.clone(), // γ : Sort u_3
                 Expr::pi(
                     BinderInfo::Default,
-                    // r : α → β → Prop
+                    // r : α → β → Sort u
                     Expr::pi(
                         BinderInfo::Default,
                         Expr::bvar(2), // α
-                        Expr::pi(BinderInfo::Default, Expr::bvar(2), prop.clone()),
+                        Expr::pi(BinderInfo::Default, Expr::bvar(2), sort_u.clone()),
                     ),
                     Expr::pi(
                         BinderInfo::Default,
-                        // s : β → γ → Prop
+                        // s : β → γ → Sort v
                         Expr::pi(
                             BinderInfo::Default,
                             Expr::bvar(2), // β
-                            Expr::pi(BinderInfo::Default, Expr::bvar(2), prop.clone()),
+                            Expr::pi(BinderInfo::Default, Expr::bvar(2), sort_v.clone()),
                         ),
                         Expr::pi(
                             BinderInfo::Default,
-                            // t : α → γ → Prop
-                            Expr::pi(
-                                BinderInfo::Default,
-                                Expr::bvar(4), // α
-                                Expr::pi(BinderInfo::Default, Expr::bvar(3), prop.clone()),
+                            // t : outParam (α → γ → Sort w)
+                            Expr::app(
+                                Expr::const_(
+                                    Name::from_string("outParam"),
+                                    vec![out_param_level.clone()],
+                                ),
+                                Expr::pi(
+                                    BinderInfo::Default,
+                                    Expr::bvar(4), // α
+                                    Expr::pi(BinderInfo::Default, Expr::bvar(3), sort_w.clone()),
+                                ),
                             ),
-                            type_zero.clone(), // Type
+                            class_sort.clone(),
                         ),
                     ),
                 ),
@@ -339,11 +381,8 @@ fn test_trans_type_checks() {
     );
     assert_eq!(trans_type, expected_trans_type);
 
-    // Trans.trans now has 3 universe params
-    let trans_trans = Expr::const_(
-        Name::from_string("Trans.trans"),
-        vec![u1_level.clone(), u2_level.clone(), u3_level.clone()],
-    );
+    // `Trans.trans` carries the SAME six universe params, in the same order.
+    let trans_trans = Expr::const_(Name::from_string("Trans.trans"), trans_levels.clone());
     let trans_trans_type = tc.infer_type(&trans_trans).unwrap();
     // Check it has the right overall structure (Pi type)
     if let ExprKind::Pi(_, _, _) = &trans_trans_type.kind {
@@ -914,14 +953,14 @@ fn test_preorder_nat_value_is_preorder_mk() {
     // Walk the App spine of the value and collect the head + arguments.
     let mut head = value;
     let mut args: Vec<&Expr> = Vec::new();
-    while let crate::expr::ExprKind::App(f, a) = &head.kind {
+    while let ExprKind::App(f, a) = &head.kind {
         args.push(a);
         head = f;
     }
     args.reverse();
 
     match &head.kind {
-        crate::expr::ExprKind::Const(n, levels) => {
+        ExprKind::Const(n, levels) => {
             assert_eq!(
                 *n,
                 Name::from_string("Preorder.mk"),
@@ -947,7 +986,7 @@ fn test_preorder_nat_value_is_preorder_mk() {
     );
 
     let expect_const = |idx: usize, name: &str| match &args[idx].kind {
-        crate::expr::ExprKind::Const(n, _) => assert_eq!(
+        ExprKind::Const(n, _) => assert_eq!(
             *n,
             Name::from_string(name),
             "Preorder.mk arg {} should be `{}`, got {:?}",
@@ -1160,7 +1199,7 @@ fn test_nat_lt_trans_type_checks() {
     // masquerade (Nat.lt reduces to Nat.le, so the recursion is on Nat.le).
     let nat_le_rec = Name::from_string("Nat.le.rec");
     assert!(
-        super::test_helpers::expr_contains_const(proof_value, &nat_le_rec),
+        test_helpers::expr_contains_const(proof_value, &nat_le_rec),
         "Nat.lt_trans proof term must invoke `Nat.le.rec` (constructive induction)",
     );
     // Axiom closure must be empty (no domain-specific axioms).
@@ -1303,7 +1342,7 @@ fn test_nat_le_trans_is_constructive_theorem() {
     // "theorems" whose body is just `Nat.le_trans` axiom reference.
     let nat_le_rec = Name::from_string("Nat.le.rec");
     assert!(
-        super::test_helpers::expr_contains_const(proof_value, &nat_le_rec),
+        test_helpers::expr_contains_const(proof_value, &nat_le_rec),
         "Nat.le_trans proof term must invoke `Nat.le.rec` (constructive induction)",
     );
 
@@ -2169,7 +2208,7 @@ fn test_nat_minmax_lemmas_proofs_invoke_recursors() {
         let info = env.get_const(&Name::from_string(s)).expect(s);
         let v = info.value.as_ref().expect("proof term");
         assert!(
-            super::test_helpers::expr_contains_const(v, &bool_rec),
+            test_helpers::expr_contains_const(v, &bool_rec),
             "{s} proof must invoke `Bool.rec`",
         );
     }
@@ -2184,11 +2223,11 @@ fn test_nat_minmax_lemmas_proofs_invoke_recursors() {
         let info = env.get_const(&Name::from_string(s)).expect(s);
         let v = info.value.as_ref().expect("proof term");
         assert!(
-            super::test_helpers::expr_contains_const(v, &nat_rec),
+            test_helpers::expr_contains_const(v, &nat_rec),
             "{s} proof must invoke `Nat.rec`",
         );
         assert!(
-            super::test_helpers::expr_contains_const(v, &bool_rec),
+            test_helpers::expr_contains_const(v, &bool_rec),
             "{s} proof must invoke `Bool.rec`",
         );
     }
@@ -2198,11 +2237,11 @@ fn test_nat_minmax_lemmas_proofs_invoke_recursors() {
         let info = env.get_const(&Name::from_string(s)).expect(s);
         let v = info.value.as_ref().expect("proof term");
         assert!(
-            super::test_helpers::expr_contains_const(v, &nat_rec),
+            test_helpers::expr_contains_const(v, &nat_rec),
             "{s} proof must invoke `Nat.rec`",
         );
         assert!(
-            super::test_helpers::expr_contains_const(v, &eq_trans),
+            test_helpers::expr_contains_const(v, &eq_trans),
             "{s} proof must invoke `Eq.trans`",
         );
     }
@@ -3418,11 +3457,11 @@ fn test_inst_preorder_int_is_constructive_definition() {
     // (2) The value head is `Preorder.mk` (a real structure constructor), not
     // a bare axiom self-reference.
     let mut head: Expr = value.clone();
-    while let crate::expr::ExprKind::App(f, _) = head.kind() {
+    while let ExprKind::App(f, _) = head.kind() {
         head = (**f).clone();
     }
     match head.kind() {
-        crate::expr::ExprKind::Const(n, _) => assert_eq!(
+        ExprKind::Const(n, _) => assert_eq!(
             n.to_string(),
             "Preorder.mk",
             "instPreorderInt value root must be Preorder.mk"
@@ -3471,7 +3510,7 @@ fn test_inst_preorder_int_is_constructive_definition() {
             finfo.kind
         );
         match env.proof_quality(&fname) {
-            Some(crate::env::axiom_audit::ProofQuality::Constructive) => {}
+            Some(ProofQuality::Constructive) => {}
             other => panic!("{field} must be ProofQuality::Constructive, got {other:?}"),
         }
     }
@@ -3508,11 +3547,11 @@ fn test_inst_partial_order_int_is_constructive_definition() {
     // (2) The value head is `PartialOrder.mk` (a real structure constructor),
     // not a bare axiom self-reference.
     let mut head: Expr = value.clone();
-    while let crate::expr::ExprKind::App(f, _) = head.kind() {
+    while let ExprKind::App(f, _) = head.kind() {
         head = (**f).clone();
     }
     match head.kind() {
-        crate::expr::ExprKind::Const(n, _) => assert_eq!(
+        ExprKind::Const(n, _) => assert_eq!(
             n.to_string(),
             "PartialOrder.mk",
             "instPartialOrderInt value root must be PartialOrder.mk"
@@ -3565,7 +3604,7 @@ fn test_inst_partial_order_int_is_constructive_definition() {
         finfo.kind
     );
     match env.proof_quality(&antisymm) {
-        Some(crate::env::axiom_audit::ProofQuality::Constructive) => {}
+        Some(ProofQuality::Constructive) => {}
         other => panic!("Int.le_antisymm must be ProofQuality::Constructive, got {other:?}"),
     }
 
@@ -4885,11 +4924,12 @@ fn test_init_ofnat_nat() {
 /// two shapes as different.
 ///
 /// Ground truth: the shipped `Init/Prelude.olean` serializes `instOfNatNat` into
-/// `Lean.Meta.instanceExtension` with `priority: 1000`. The `.olean` import
-/// cannot repair a wrong value here — `register_real_instance_entries`
-/// (`clean-olean/src/import/load_register.rs`) skips any name already in the
-/// registry, and this prelude registration always runs first — so the constant
-/// below is the only thing that decides the order.
+/// `Lean.Meta.instanceExtension` with `priority: 1000`. Import now ADOPTS that
+/// serialized value even for an already-registered name
+/// (`register_real_instance_entries` in `clean-olean/src/import/load_register.rs`,
+/// via `Environment::adopt_instance_priority`), so a wrong guess no longer
+/// survives an import. It still survives in every environment that never
+/// imports — which is what this test pins.
 #[test]
 fn test_init_ofnat_nat_instance_priority_outranks_zero_to_ofnat0() {
     let mut env = Environment::new();
@@ -4932,6 +4972,71 @@ fn test_init_ofnat_nat_instance_priority_outranks_zero_to_ofnat0() {
         order,
         vec![inst_of_nat_nat, zero_to_ofnat0],
         "instOfNatNat must be tried before Zero.toOfNat0 for an `OfNat Nat _` goal"
+    );
+}
+
+/// `instLTNat` must carry Lean's real INSTANCE priority (1000), so it stays in
+/// the SAME candidate tier as every imported `LT` instance instead of sinking
+/// below all of them.
+///
+/// Regression: this was hand-registered at `DEFAULT_INSTANCE_PRIORITY` (100 —
+/// Lean's `low`), while `Init/Prelude.lean:1901` declares
+/// `instance instLTNat : LT Nat where …` with no `(priority := …)`, i.e. Lean's
+/// unannotated default of 1000 (and the shipped `Init/Prelude.olean` serializes
+/// exactly that). Priority DOMINATES `clean-elab`'s `candidate_order`, so at 100
+/// `instLTNat` ranked below every one of the ~30 imported `LT` instances and the
+/// winner for `LT Nat` became `Classical.Order.instLT` — an instance Lean
+/// declares `public scoped` and would never consider without
+/// `open scoped Classical.Order`.
+///
+/// The `.olean` import cannot repair it: `register_real_instance_entries`
+/// (`clean-olean/src/import/load_register.rs`) skips any name already in the
+/// registry and this registration always runs first, so the literal in
+/// `init_nat_decidable_ord` is the only thing that decides the order.
+#[test]
+fn test_init_nat_decidable_ord_instltnat_priority_is_lean_default() {
+    let mut env = Environment::new();
+    env.init_nat_decidable_ord().unwrap();
+
+    let lt = Name::from_string("LT");
+    let inst_lt_nat = Name::from_string("instLTNat");
+
+    let priority = env
+        .get_class_instances(&lt)
+        .iter()
+        .find(|i| i.name == inst_lt_nat)
+        .map(|i| i.priority)
+        .expect("instLTNat must be registered as an LT instance");
+    assert_eq!(
+        priority, 1000,
+        "instLTNat must use Lean's unannotated-instance default priority \
+         (1000, as serialized in Init/Prelude.olean), not `low` (100) — at 100 \
+         every imported LT instance outranks it and `0 < n` elaborates through \
+         the scoped `Classical.Order.instLT`"
+    );
+
+    // The order that actually matters: an imported general `LT α` instance
+    // arrives at Lean's decoded 1000. `instLTNat` must be in that same tier, so
+    // the elaborator's head-specificity tie-break (not priority) decides.
+    let general = Name::from_string("Classical.Order.instLT");
+    env.register_instance(KernelInstanceInfo {
+        name: general.clone(),
+        class_name: lt.clone(),
+        priority: 1000,
+        type_: None,
+        value: None,
+    });
+    let tiers: Vec<u32> = env
+        .get_class_instances(&lt)
+        .iter()
+        .filter(|i| i.name == inst_lt_nat || i.name == general)
+        .map(|i| i.priority)
+        .collect();
+    assert_eq!(
+        tiers,
+        vec![1000, 1000],
+        "instLTNat and an imported general `LT α` instance must share one \
+         priority tier; at 100 vs 1000 the general one wins outright"
     );
 }
 

@@ -69,7 +69,7 @@ fn test_cake_gate_rejects_tampered_record() {
     assert!(
         report.violations.iter().any(|v| matches!(
             v,
-            crate::shard_verify::cake_gate::CakeGateViolation::MissingGraduationNote { .. }
+            CakeGateViolation::MissingGraduationNote { .. }
         )),
         "tampered record must break the binding-digest note; violations: {:?}",
         report.violations

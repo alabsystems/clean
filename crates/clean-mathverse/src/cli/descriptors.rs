@@ -165,30 +165,6 @@ const REPLAY_CORPUS_DESC: FeatureDescriptor = FeatureDescriptor {
     feature_gate: None,
 };
 
-const REPLAY_STRICT_ATTEMPT_DESC: FeatureDescriptor = FeatureDescriptor {
-    path: &["mathverse", "replay-strict-attempt"],
-    summary: "Run the focused Mathverse strict replay attempt bridge (Experimental)",
-    description: "Lowers the checked benchmark.lean:65 replay fixture into an \
-         active clean proof state, verifies and loads the selected CleanNative \
-         shard fixture, then invokes strict mathverse_use fail-closed. The report is \
-         diagnostic replacement evidence: native-shard verification alone does \
-         not grant per-obligation strict replay credit.",
-    category: Category::Import,
-    stability: Stability::Experimental,
-    examples: &[Example {
-        cmd: "clean mathverse replay-strict-attempt --line65 --json",
-        what: "emit fail-closed strict mathverse_use replay attempt evidence for benchmark.lean:65",
-    }],
-    see_also: &[
-        "mathverse replay-corpus",
-        "mathverse validate-replay-report",
-    ],
-    references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],
-    domain_root: Some("mathverse"),
-    alternative_forms: &[],
-    feature_gate: None,
-};
-
 const VALIDATE_REPLAY_REPORT_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "validate-replay-report"],
     summary: "Validate Mathverse replay replacement report artifacts",
@@ -1264,10 +1240,6 @@ pub const FEATURES: &[FeatureDescriptor] = &[
     STATS_DESC,
     SYSTEMS_DESC,
     REPLAY_CORPUS_DESC,
-    // REPLAY_STRICT_ATTEMPT_DESC is omitted from the registry because the
-    // corresponding `MathverseCommands::ReplayStrictAttempt` clap variant has
-    // not been wired up. The descriptor remains as documentation of the
-    // intended verb; restore this entry once the clap binding lands.
     VALIDATE_REPLAY_REPORT_DESC,
     STAMP_VERIFIED_DESC,
     PER_CONSTANT_VERIFY_DESC,
@@ -1303,8 +1275,6 @@ pub const FEATURES: &[FeatureDescriptor] = &[
     UPLOAD_DESC,
     SERVE_DESC,
 ];
-
-const _REPLAY_STRICT_ATTEMPT_DESC_RESERVED: &FeatureDescriptor = &REPLAY_STRICT_ATTEMPT_DESC;
 
 #[cfg(test)]
 mod tests {

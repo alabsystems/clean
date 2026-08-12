@@ -10,11 +10,10 @@
 //! [`crate::rpc_widgets`] against the [`crate::handlers::ServerState`] widget
 //! store.
 //!
-//! clean has no elaboration-time `@[widget_module]` registration yet, so the
-//! store is populated explicitly (via [`ServerState::register_widget_source`]
-//! / [`ServerState::register_document_widgets`]); until elaboration wires that
-//! up, queries for unregistered documents/hashes degrade gracefully (empty
-//! widget list, `null` source).
+//! clean has no elaboration-time `@[widget_module]` registration yet; until
+//! elaboration wires that up, queries for unregistered documents/hashes degrade
+//! gracefully (empty widget list, `null` source). Tests populate the internal
+//! store directly through test-only helpers.
 //!
 //! Protocol reference: Lean.Widget.UserWidget
 //! <https://lean-lang.org/doc/api/Lean/Widget/UserWidget.html>

@@ -17,6 +17,9 @@ use super::{ProofState, TacticError, TacticResult};
 
 /// Specifies where an unfold operation should target.
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum UnfoldTarget {
     /// Unfold in the current goal target.
     Goal,

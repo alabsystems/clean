@@ -56,9 +56,18 @@ impl SearchBudget {
 /// Result of an advanced tactic search.
 #[derive(Debug, Clone)]
 pub(crate) enum TacticResult {
-    Found { proof: Expr, strategy: &'static str },
-    Exhausted { candidates_tried: usize },
-    BudgetExceeded { candidates_tried: usize },
+    Found {
+        proof: Expr,
+        strategy: &'static str,
+    },
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
+    Exhausted {
+        candidates_tried: usize,
+    },
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
+    BudgetExceeded {
+        candidates_tried: usize,
+    },
 }
 
 // ---------------------------------------------------------------------------

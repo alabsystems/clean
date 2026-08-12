@@ -46,6 +46,9 @@ pub(crate) enum SimprocResult {
     Done(SimpResult),
     /// The simproc made partial progress; simp should continue simplifying
     /// the result. Contains the partially simplified expression and proof.
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     Visit(SimpResult),
 }
 
@@ -134,6 +137,9 @@ impl SimprocSet {
     }
 
     /// Number of registered simprocs.
+    // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
+    // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn len(&self) -> usize {
         self.all.len()
     }

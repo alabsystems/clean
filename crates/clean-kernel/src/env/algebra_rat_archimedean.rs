@@ -59,6 +59,7 @@ use crate::name::Name;
 /// Pre-resolved constant handles + smart-constructors for the Archimedean
 /// bridge. All operate on the live `Rat` carrier through the same `Rat.mk
 /// (Int.ofNat ·) (Nat.succ Nat.zero)` natCast shape the KKL Nat-bridge uses.
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 struct ArchimedeanConsts {
     nat: Expr,
     int: Expr,
@@ -179,6 +180,7 @@ impl ArchimedeanConsts {
     /// `Rat.le_trans a b c h_ab h_bc : a ≤ c` (the toolkit `Rat.le_trans`,
     /// stated over the bare `Rat.le`; defeq to the `LE.le` surface).
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn le_trans_of(&self, a: Expr, b: Expr, c: Expr, h_ab: Expr, h_bc: Expr) -> Expr {
         Expr::apps(self.rat_le_trans.clone(), [a, b, c, h_ab, h_bc])
     }

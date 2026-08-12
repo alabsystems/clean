@@ -26,13 +26,28 @@ pub(super) enum CoreSpecBundle {
     Full,
     /// First 32 stages (foundation through substitution_def_eq), minus
     /// pi_injectivity — used by substitution/WHNF helper tests.
+    // 2026-07-31: only the `any(test, feature = "test-utils")` subset builders
+    // construct this variant (see the enum's own doc note), so a plain build
+    // sees it as never constructed. Gated to match those builders exactly.
+    #[cfg_attr(not(any(test, feature = "test-utils")), allow(dead_code))]
     Substitution,
     /// Full minus three late-stage omissions — used by implementation-soundness
     /// tests.
+    #[cfg_attr(not(any(test, feature = "test-utils")), allow(dead_code))]
     ImplementationSoundness,
     /// Foundation types (Nat) + interval arithmetic only — used by interval
     /// arithmetic promotion tests. Part of #3362.
+    #[cfg_attr(not(any(test, feature = "test-utils")), allow(dead_code))]
     IntervalArith,
+    /// Foundation types (Nat/Bool/Eq) + the `EvalIR` trust-ir semantics stage
+    /// only — used by the EvalIR tests and by the vacuity firewall's audit of
+    /// the EvalIR relations (crystal job C3).
+    ///
+    /// EvalIR deliberately depends on nothing else: it carries its own list and
+    /// option families rather than reusing the `expr_model` / `rec_env` ones, so
+    /// this bundle is two stages and builds in a fraction of the full spec's
+    /// time.
+    EvalIr,
 }
 
 /// One stage in the ordered core-spec registration plan.
@@ -1405,6 +1420,61 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // EvalIR: the Clean-side executable semantics for trust-ir (crystal job C3).
+    // Position is nearly free — the stage's only prerequisites are Nat, Bool and
+    // Eq from add_foundation_types, and every name it registers is IR*/ir_*
+    // prefixed, so it collides with nothing. It sits here rather than early so a
+    // failure in it cannot mask a failure in the metatheory lane, and BEFORE the
+    // kexpr_beq block below, which must stay last for the dedupe-guard reason
+    // documented there.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Crystal A2 and A4's prerequisites. `add_eval_ir_steps` and
+    // `add_eval_ir_activation` are ALSO in EVAL_IR_STAGE_APPLY (they need only
+    // Nat/Bool/Eq); the other two are Full-only.
+    //
+    // They cannot go in EVAL_IR_STAGE_APPLY: that bundle is deliberately scoped
+    // to Nat/Bool/Eq, and these stages need `Level` (from add_expr_model) and
+    // `level_is_zero` (from add_env_extensions). Hence a Full-bundle stage,
+    // positioned immediately after add_eval_ir so the IR* names it depends on
+    // are live.
+    //
+    // Registering them HERE is what puts them under the gates. They were
+    // previously reachable only from `new_eval_ir_prelude_spec`, so a single
+    // unit test elaborated and kernel-checked them, but `Specification::new()`
+    // did not contain them — which meant the axiom_ratchet census never counted
+    // them and, worse, the VACUITY FIREWALL never audited A2's two new inductive
+    // relations. The standing rule is that the firewall runs on every generated
+    // relation; a relation that is well-typed but empty passes every axiom gate
+    // silently, which is precisely the failure this programme keeps hitting.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_repr,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_fuel,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_steps,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_cost,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_activation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // kexpr_beq CORE + its soundness, wired LIVE (step 2a of
     // docs/plans/DEFEQ_COMPLETENESS_PROGRAM_2026-07-25.md). Both modules were
     // proven but reachable only from #[cfg(test)] builders, so the LIVE spec had
@@ -1515,11 +1585,101 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // ── C4 / the crystal: the CtxRep bridge ─────────────────────────────
+    // designs/2026-07-29-crystal-deployed-kernel-bridge.md §1.1. Registered
+    // AFTER the ImplInfer stages because it consumes their syntax (ImplExpr,
+    // LCtx, LocalDecl, lctx_lookup, ImplConstInfo, impl_inst_levels) and joins
+    // it to layer 2 (KExpr, ctx_lookup, lift_at, lift_at_compose,
+    // KernelInfers — all live since add_dependent_sn_richmodel / the expr_model
+    // lift stages) plus option_some_inj (add_rec_env) and
+    // option_none_ne_some_type (add_par_reduces_c). Terminal for the same
+    // reason the C1 stages are: purely additive, so nothing earlier can depend
+    // on it and no existing registration order moves.
+    //
+    // Same bundle policy as C1: NOT in Substitution or ImplementationSoundness,
+    // because no declaration outside this lane references any of its names and
+    // those bundles are minimal subset builders.
+    CoreSpecStage {
+        apply: Specification::add_ctx_rep,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ── M4 / the crystal: impl_infer_sound ──────────────────────────────
+    // designs/2026-07-29-unified-implinfer-relation.md step M4. Runs AFTER
+    // add_ctx_rep because it consumes C4's representation apparatus verbatim
+    // (`to_kexpr_at`, `rho_index`) rather than re-deriving it, and joins it to
+    // the layer-2 lift calculus (`lift_at`, add_expr_model) and the Nat
+    // arithmetic tower (`nat_add_assoc` / `nat_add_comm` / `nat_succ_add`,
+    // add_foundation_arith_lemmas; `nat_sub_self_add_zero`, add_snschema).
+    // Terminal and Full-only for the same reasons as C1/C4: purely additive.
+    CoreSpecStage {
+        apply: Specification::add_impl_infer_sound,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Crystal A4 and A5. LAST, and the position is load-bearing: A5 composes
+    // with `level_is_zero_sound` and `level_eval`, which the kexpr_beq_sound
+    // stage registers well after `add_eval_ir`. Placed with the other EvalIR
+    // stages it elaborated fine in the scratchpad -- which builds the whole
+    // spec and only THEN adds candidates, so it cannot see a stage-ordering
+    // fault at all -- and then failed the real build with an unknown
+    // identifier surfacing as a bogus arity error.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_correct,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The width-one chain retargeted to CleanMode::has_cubical_layer, a SHIPPED
+    // kernel function already in the class the compiler flips.
+    //
+    // AFTER add_eval_ir_correct, and the order is load-bearing: its A5-analogue
+    // consumes `ir_outcome_bool`, which that stage registers. Placed earlier it
+    // elaborates fine in the scratchpad -- which builds the whole spec and only
+    // THEN appends candidates, so it is structurally blind to stage ordering --
+    // and then fails the real build with an unknown identifier surfacing as a
+    // bogus arity error. Same trap that cost a cycle on A5.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_mode,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ── premise-satisfiability witnesses ────────────────────────────────
+    // GENUINELY LAST, and it has to be: these witness predicates from four
+    // lanes (EvalIR syntax/state, the eval_ir MODE lane, the ImplInfer mode
+    // gate, faithful-whnf), so the stage must run after every one of them.
+    // Measured, not assumed — placed after add_impl_infer_sound it failed
+    // with "Unknown identifier: CleanModeR", which add_eval_ir_mode registers
+    // further down this very list. Purely additive; nothing references these
+    // names.
+    CoreSpecStage {
+        apply: Specification::add_premise_witnesses,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
 ];
 
 const INTERVAL_ARITH_STAGE_APPLY: &[CoreSpecStageApply] = &[
     Specification::add_foundation_types,
     Specification::add_interval_arith_spec,
+];
+
+/// Foundation types + the EvalIR stage. Nothing else: the EvalIR stage's only
+/// prerequisites are `Nat`, `Bool` (both from `add_foundation_types`) and `Eq`.
+const EVAL_IR_STAGE_APPLY: &[CoreSpecStageApply] = &[
+    Specification::add_foundation_types,
+    Specification::add_eval_ir,
+    // The machine-level crystal lemmas also belong to this dependency-scoped
+    // bundle, because they genuinely need nothing but Nat/Bool/Eq and the IR
+    // types: `ir_steps` and its faithfulness equation, and the activation
+    // lemma's leaf arms, which take a raw `ir_mem_lookup` equation and never
+    // mention `Level` or `EncodesLevelArc`.
+    //
+    // Being here is what makes them cheap to iterate on. The remaining A4 work
+    // is machine-shape reasoning, and this bundle builds in a fraction of the
+    // full spec's time. `add_eval_ir_repr` and `add_eval_ir_cost` stay
+    // Full-only: they need `Level` and `level_is_zero` respectively.
+    Specification::add_eval_ir_steps,
+    Specification::add_eval_ir_activation,
 ];
 
 /// Apply the ordered stages for the requested bundle to the specification.
@@ -1540,6 +1700,9 @@ pub(super) fn run_bundle(
                     .iter()
                     .any(|apply| std::ptr::fn_addr_eq(*apply, stage.apply))
             }
+            CoreSpecBundle::EvalIr => EVAL_IR_STAGE_APPLY
+                .iter()
+                .any(|apply| std::ptr::fn_addr_eq(*apply, stage.apply)),
         };
         if include {
             (stage.apply)(spec)?;

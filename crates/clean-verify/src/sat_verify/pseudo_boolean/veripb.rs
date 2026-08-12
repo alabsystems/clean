@@ -17,13 +17,19 @@
 //! Pseudo-Boolean Proofs", AAAI 2021.
 //! VeriPB format: <https://github.com/StephanGocht/VeriPB>
 
+// 2026-07-31: the `pub(crate)` items in this module are exercised only by its
+// own `#[cfg(test)]` tests, so only the non-test `lib` build sees them as dead.
+// Scoped to `not(test)` on purpose: the `lib test` build still enforces
+// `dead_code` in full, so an item with no caller anywhere still fails the gate.
+#![cfg_attr(not(test), allow(dead_code))]
+
 use std::fmt::Write;
 
 use super::normalize::normalize;
 use super::rules::{verify_rule, PbRule};
 use super::types::{PbConstraint, PbFormula};
 use super::PbError;
-use crate::sat_verify::proof_complexity::cutting_planes::{CpStep, CuttingPlanesProof};
+use crate::sat_verify::proof_complexity::cutting_planes::CuttingPlanesProof;
 
 /// A single step in a VeriPB proof.
 #[derive(Debug, Clone, PartialEq, Eq)]

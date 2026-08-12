@@ -1457,8 +1457,7 @@ mod tests {
     #[test]
     fn c1_catches_fabricated_theorem() {
         use super::super::Declaration;
-        use crate::env::TrustedEnvExt;
-        use crate::expr::{BinderInfo, Expr};
+        use crate::expr::Expr;
 
         let mut env = Environment::new();
         env.init_true_false().expect("init true/false");

@@ -115,6 +115,8 @@ struct BridgeLevelConsts {
     mul_mul_mul_comm: Expr,
     one_mul: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     eq1: Expr,
     eq_refl1: Expr,
     eq_symm1: Expr,

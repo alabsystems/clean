@@ -147,6 +147,9 @@ impl MutualBlock {
     /// Wraps entries into a `SurfaceDecl::Mutual` and delegates to
     /// [`ElabCtx::elab_decl`] which dispatches to the two-pass mutual
     /// elaboration in `infer/elab_mutual.rs`.
+    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+    #[allow(dead_code)]
     pub(crate) fn elaborate_all(
         &self,
         ctx: &mut ElabCtx<'_>,
@@ -290,6 +293,9 @@ pub(crate) fn collect_surface_refs(expr: &SurfaceExpr, names: &[&str], out: &mut
 /// The returned block has a pre-built dependency graph. Callers should
 /// call [`MutualBlock::check_well_founded`] before elaboration.
 #[must_use]
+// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
+// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+#[allow(dead_code)]
 pub(crate) fn build_mutual_block_from_surface(decls: &[SurfaceDecl]) -> MutualBlock {
     let mut block = MutualBlock::new();
 

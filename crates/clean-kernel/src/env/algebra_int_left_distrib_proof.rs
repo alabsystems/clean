@@ -106,6 +106,7 @@ struct IntLeftDistribConsts {
     nas: Expr,
 }
 
+#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl IntLeftDistribConsts {
     fn new() -> Self {
         let type1 = Level::succ(Level::zero());

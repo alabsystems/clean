@@ -1084,7 +1084,7 @@ fn test_no_confusion_type_parameterized_typechecks() {
         Err(e) => {
             panic!(
                 "Wrap.noConfusionType value failed type check:\n  error: {:?}\n  type: {:?}\n  value: {:?}",
-                e, &nct.type_, nct.value.as_ref().unwrap()
+                e, nct.type_, nct.value.as_ref().unwrap()
             );
         }
     }
@@ -6128,7 +6128,7 @@ fn test_list_reverse_is_reverse_aux_lean_faithful() {
     // λ {α} (l : List α) => @List.reverse α l  vs  λ {α} (l) => @List.reverseAux α l []
     let build = |body_fn: &dyn Fn(&Expr, &Expr) -> Expr| -> Expr {
         // Build closed lambdas via the env decl builder (fresh locals + mk_lam).
-        let mut b = super::decl_builder::EnvDeclBuilder::new();
+        let mut b = decl_builder::EnvDeclBuilder::new();
         let (alpha_id, alpha_l) = b.fresh_local(alpha_ty.clone());
         let list_alpha = Expr::app(list_const.clone(), alpha_l.clone());
         let (l_id, l) = b.fresh_local(list_alpha.clone());
@@ -10099,7 +10099,7 @@ fn test_indexed_recursor_lambda_index_remap() {
         .expect("W.rec must be registered");
 
     // The recursor type must be well-formed under the kernel.
-    let tc = crate::tc::TypeChecker::with_mode(&env, env.mode());
+    let tc = TypeChecker::with_mode(&env, env.mode());
     let _sort = tc
         .infer_sort(&rec.type_)
         .expect("W.rec type must be well-typed");
@@ -11659,7 +11659,7 @@ fn test_string_append_and_happend_are_axiom_free() {
             .get_const(&n)
             .unwrap_or_else(|| panic!("{name} must be a declared constant in the prelude"));
         // The declared type must itself type-check (be a valid Sort).
-        let tc = crate::TypeChecker::new(&env);
+        let tc = TypeChecker::new(&env);
         let _ = tc
             .infer_type(&info.type_)
             .unwrap_or_else(|e| panic!("{name} type must infer cleanly: {e:?}"));

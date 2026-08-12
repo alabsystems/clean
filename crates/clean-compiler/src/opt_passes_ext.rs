@@ -523,6 +523,10 @@ fn licm_scan(body: &IRBody, defined: &mut HashSet<VarId>, out: &mut Vec<VarId>) 
 #[derive(Debug, Clone)]
 pub(crate) struct InlineCost {
     pub(crate) body_size: usize,
+    // Folded into `score` (weight 2 per param) rather than read directly;
+    // retained so an argument-count cap can be applied on its own, the way
+    // Lean's inliner bounds callee arity — 2026-07-31.
+    #[allow(dead_code)]
     pub(crate) param_count: usize,
     pub(crate) is_recursive: bool,
     pub(crate) score: u32,

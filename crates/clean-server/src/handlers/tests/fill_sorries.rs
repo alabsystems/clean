@@ -2,7 +2,6 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-pub(super) use crate::handlers::verify::SorryGoalInfo;
 pub(super) use crate::handlers::*;
 
 pub(super) fn fill_sorries_params(content: &str, tactic_sequence: &[&str]) -> FillSorriesParams {
@@ -44,22 +43,6 @@ pub(super) async fn fill_sorries_result(
 ) -> FillSorriesResult {
     serde_json::from_value(fill_sorries_response_value(state, content, tactic_sequence).await)
         .expect("fillSorries result should deserialize")
-}
-
-pub(super) fn assert_string_list_contains(items: &[String], expected: &str, label: &str) {
-    assert!(
-        items
-            .iter()
-            .any(|item| item == expected || item.contains(expected)),
-        "expected {label} {expected:?} in {items:?}"
-    );
-}
-
-pub(super) fn assert_goal_target_looks_like_equality(target: &str) {
-    assert!(
-        target.starts_with("Eq") || target.contains(" = "),
-        "expected equality-style target, got: {target:?}"
-    );
 }
 
 #[test]

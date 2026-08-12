@@ -67,6 +67,8 @@ struct WSpectralConsts {
     subset_sum_swap: Expr,
     noise_compose: Expr,
     #[cfg(test)]
+    #[allow(dead_code)]
+    // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     noise_density_symm: Expr,
     chi: Expr,
     rat_mul_comm: Expr,
@@ -219,6 +221,7 @@ impl WSpectralConsts {
     }
     /// `noiseDensityW_symm ρ n x y : dens(ρ,x,y) = dens(ρ,y,x)`.
     #[cfg(test)]
+    #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
     fn dens_symm(&self, rho: &Expr, n: &Expr, x: &Expr, y: &Expr) -> Expr {
         Expr::apps(
             self.noise_density_symm.clone(),

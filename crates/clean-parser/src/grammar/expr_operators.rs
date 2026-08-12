@@ -451,6 +451,43 @@ impl Parser {
     }
 
     /// Comparison expressions: A = B, A ≠ B, A < B, A ≤ B, etc.
+    /// Build `head left right`, splitting an arrow tail off `right` first:
+    /// every infix:50 comparison binds TIGHTER than `→`, but `bind_expr`
+    /// swallows the arrow into the RHS — `a < b → c` must parse as
+    /// `(a < b) → c`, never `a < (b → c)`. Mirrors the long-standing `=`
+    /// arm behavior; probed via `x ≠ Nat.zero → Nat` (ExpectedSort(Nat))
+    /// and the `<`/`≤`/`∈` analogs.
+    fn cmp_with_arrow_tail(
+        span: Span,
+        head: &str,
+        left: SurfaceExpr,
+        right: SurfaceExpr,
+        end_span: Span,
+    ) -> SurfaceExpr {
+        let (right, arrow_tail) = match right {
+            SurfaceExpr::Arrow(_, domain, codomain) => (*domain, Some(codomain)),
+            other => (other, None),
+        };
+        let cmp = SurfaceExpr::App(
+            span.merge(right.span()),
+            Box::new(SurfaceExpr::Ident(span, head.to_string())),
+            vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
+        );
+        match arrow_tail {
+            Some(codomain) => SurfaceExpr::Arrow(span.merge(end_span), Box::new(cmp), codomain),
+            None => cmp,
+        }
+    }
+
+    /// Split an arrow tail off a comparison RHS (see [`Self::cmp_with_arrow_tail`]);
+    /// for arms with non-standard argument order/wrapping (`∈`, `∉`).
+    fn split_arrow_tail(right: SurfaceExpr) -> (SurfaceExpr, Option<Box<SurfaceExpr>>) {
+        match right {
+            SurfaceExpr::Arrow(_, domain, codomain) => (*domain, Some(codomain)),
+            other => (other, None),
+        }
+    }
+
     pub(super) fn cmp_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let mut left = self.bind_expr()?;
         // Tracks whether a 50-class comparison has already been consumed at this
@@ -504,11 +541,25 @@ impl Parser {
             } else if self.eat(&TokenKind::Ne) {
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
+                // Arrow-tail split, exactly as the `=` arm above: `≠` is
+                // infix:50 and binds TIGHTER than `→`, but bind_expr swallows
+                // the arrow into the RHS — `a ≠ b → c` must be `(a ≠ b) → c`,
+                // not `a ≠ (b → c)` (probed: `x ≠ Nat.zero → Nat` produced
+                // ExpectedSort(Nat)).
+                let (right, arrow_tail) = match right {
+                    SurfaceExpr::Arrow(_, domain, codomain) => (*domain, Some(codomain)),
+                    other => (other, None),
+                };
+                let ne_expr = SurfaceExpr::App(
+                    span.merge(right.span()),
                     Box::new(SurfaceExpr::Ident(span, "Ne".to_string())),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
+                left = if let Some(codomain) = arrow_tail {
+                    SurfaceExpr::Arrow(span.merge(end_span), Box::new(ne_expr), codomain)
+                } else {
+                    ne_expr
+                };
             } else if self.eat(&TokenKind::BNe) {
                 // ASCII `a != b` is Boolean disequality (Bool), distinct from
                 // `≠` → `Ne` (Prop). Lean defines `bne a b := !(a == b)`; we
@@ -531,35 +582,19 @@ impl Parser {
             } else if self.eat(&TokenKind::Lt) {
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "LT.lt".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "LT.lt", left, right, end_span);
             } else if self.eat(&TokenKind::Le) {
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "LE.le".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "LE.le", left, right, end_span);
             } else if self.eat(&TokenKind::Gt) {
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "GT.gt".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "GT.gt", left, right, end_span);
             } else if self.eat(&TokenKind::Ge) {
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "GE.ge".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "GE.ge", left, right, end_span);
             } else if self.eat(&TokenKind::HEq) {
                 // Heterogeneous equality: a ≍ b
                 let right = self.bind_expr()?;
@@ -630,65 +665,63 @@ impl Parser {
                 // BEq equality check: a == b
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "BEq.beq".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "BEq.beq", left, right, end_span);
             } else if self.eat(&TokenKind::Elem) {
                 // Membership: a ∈ b → Membership.mem b a (note argument swap per Lean 4 spec)
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
+                let (right, arrow_tail) = Self::split_arrow_tail(right);
+                let mem = SurfaceExpr::App(
+                    span.merge(right.span()),
                     Box::new(SurfaceExpr::Ident(span, "Membership.mem".to_string())),
                     vec![SurfaceArg::positional(right), SurfaceArg::positional(left)],
                 );
+                left = match arrow_tail {
+                    Some(codomain) => {
+                        SurfaceExpr::Arrow(span.merge(end_span), Box::new(mem), codomain)
+                    }
+                    None => mem,
+                };
             } else if self.eat(&TokenKind::NotElem) {
                 // Not membership: a ∉ b → ¬(Membership.mem b a)
                 let right = self.bind_expr()?;
                 let end_span = right.span();
+                let (right, arrow_tail) = Self::split_arrow_tail(right);
                 let mem_expr = SurfaceExpr::App(
-                    span.merge(end_span),
+                    span.merge(right.span()),
                     Box::new(SurfaceExpr::Ident(span, "Membership.mem".to_string())),
                     vec![
                         SurfaceArg::positional(right.clone()),
                         SurfaceArg::positional(left),
                     ],
                 );
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
+                let not_expr = SurfaceExpr::App(
+                    span.merge(right.span()),
                     Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
                     vec![SurfaceArg::positional(mem_expr)],
                 );
+                left = match arrow_tail {
+                    Some(codomain) => {
+                        SurfaceExpr::Arrow(span.merge(end_span), Box::new(not_expr), codomain)
+                    }
+                    None => not_expr,
+                };
             } else if self.eat(&TokenKind::Subset) {
                 // a ⊆ b → HasSubset.Subset a b (infix:50)
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HasSubset.Subset".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "HasSubset.Subset", left, right, end_span);
             } else if self.eat(&TokenKind::ProperSubset) {
                 // a ⊂ b → HasSSubset.SSubset a b (infix:50)
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HasSSubset.SSubset".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "HasSSubset.SSubset", left, right, end_span);
             } else if self.eat(&TokenKind::Dvd) {
                 // a ∣ b → Dvd.dvd a b (infix:50, non-associative). `∣` (U+2223
                 // DIVIDES) is distinct from the ASCII pattern bar `|`.
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "Dvd.dvd".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "Dvd.dvd", left, right, end_span);
             } else {
                 break;
             }
@@ -917,9 +950,30 @@ impl Parser {
         // Attempt to parse binder-style pi types: (x : T) → U, {x : T} → U, [x : T] → U
         // Use lookahead to avoid exponential backtracking on nested brackets/parens
         let saved_pos = self.pos;
+        // The speculative `binders()` below may recognize a parenthesized
+        // bounded binder (`(x ∈ s)`, `(r ≥ w)`) and stash its guard in
+        // `pending_binder_guards`. Both exits must account for that stash:
+        // on backtrack the tokens re-parse as a plain expression, so a
+        // retained guard would smuggle a spurious antecedent into whatever
+        // quantifier drains the stash next (found via the trust bridge:
+        // `(hs : ¬(r ≥ Int.ofNat w))` in a ∀ body grew a phantom
+        // `r ≥ Int.ofNat w →` around the body); on a successful Pi parse the
+        // guards belong to THIS arrow's binders and must wrap THIS body.
+        let saved_guards = self.pending_binder_guards.len();
         if self.looks_like_binder_start() {
             if let Ok(binders) = self.binders() {
-                if self.eat(&TokenKind::Arrow) {
+                // A guard stashed during this speculation means `binders()`
+                // consumed a parenthesized bounded binder (`(n > 0)`,
+                // `(x ∈ s)`). That sugar belongs to QUANTIFIERS only (Lean's
+                // binder predicates); in arrow position `(n > 0) → U` is a
+                // plain arrow whose domain is the proposition `n > 0`, and in
+                // a type ascription like `(hs : ¬(r ≥ w))` the inner group is
+                // an ordinary expression. Accepting the binder reading here
+                // both mis-parses the arrow AND leaks the stashed guard to
+                // whatever quantifier drains it next (found via the trust
+                // bridge: a ∀ body grew a phantom `r ≥ Int.ofNat w →`
+                // antecedent). Reject the speculation entirely.
+                if self.pending_binder_guards.len() == saved_guards && self.eat(&TokenKind::Arrow) {
                     // Pi-type body parses at full precedence (see the normal
                     // arrow case below): `(x : T) → P x = Q` is `… → (P x = Q)`.
                     let body = self.expr()?;
@@ -930,8 +984,10 @@ impl Parser {
                     return Ok(SurfaceExpr::Pi(span, binders, Box::new(body)));
                 }
             }
-            // Backtrack if this wasn't a binder-arrow form
+            // Backtrack if this wasn't a binder-arrow form — including any
+            // guard the speculative parse stashed.
             self.pos = saved_pos;
+            self.pending_binder_guards.truncate(saved_guards);
         }
 
         let mut left = self.sum_expr()?;

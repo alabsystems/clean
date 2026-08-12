@@ -232,10 +232,10 @@ impl Specification {
         // motives. `inner` is the b-side eliminator with `na` fixed; `outer`
         // wraps it over the a-side.
         let inner = "(fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env k) na ny)";
-        let outer = format!(
+        let outer = String::from(
             "(fun (nx : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
              Bool.false (fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env k) nx ny) \
-             (whnf_fuel_red the_red_env k b))"
+             (whnf_fuel_red the_red_env k b))",
         );
 
         // Step 2: rewrite the b-side scrutinee from `whnf_fuel_red … b` back to

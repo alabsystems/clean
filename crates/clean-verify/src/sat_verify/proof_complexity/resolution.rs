@@ -398,7 +398,7 @@ mod tests {
     #[test]
     fn test_resolution_verify_against_formula_order_independent() {
         // Formula clause {2, 1} should match proof input {1, 2}.
-        let formula = [vec![2, 1], vec![-1]];
+        let _formula = [vec![2, 1], vec![-1]];
         let mut proof = ResolutionProof::new();
         proof.add_input(vec![1, 2]);
         proof.add_input(vec![-1]);

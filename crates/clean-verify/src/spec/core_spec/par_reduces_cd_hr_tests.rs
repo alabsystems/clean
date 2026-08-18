@@ -6,15 +6,12 @@
 //! Hindley-Rosen assembly).
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec. `add_par_reduces_cd_hr` is in the
 /// substitution bundle (`in_substitution: true` in `bundles.rs`).
 fn build_hr_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The macro relations are registered with their recursors and constructors.

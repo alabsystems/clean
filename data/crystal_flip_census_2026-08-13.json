@@ -1,0 +1,413 @@
+{
+ "schema": "clean.crystal.flip_census.v1",
+ "measured_utc_date": "2026-08-13",
+ "note": "Whole-crate clean-kernel trust-ir differential + codegen-flip census, re-measured at HEAD by lane 4. Independent driver/parser (scratchpad lane4/{measure,an,census}.py), not a transcription of an earlier record. Both profiles spell -Cdebug-assertions explicitly, so the two compiles are of the SAME program (13,769 bodies each).",
+ "clean_commit": "2821390fb4a0a5d69d14a885cb0725b2c9cfed38",
+ "compiler": {
+  "sealed_snapshot": "$HOME/trust/scratchpad/laneP/seal-lane4",
+  "seal_verified": "scripts/seal_driver.sh verify -> OK",
+  "perturbation_classes_registered": [
+   "enum-reshape",
+   "enum-case-value",
+   "enum-ctor",
+   "enum-disc-index",
+   "switch-map",
+   "enum-payload",
+   "marker-order",
+   "marker-drop",
+   "agg-field-order",
+   "marker-arm"
+  ],
+  "contrast": "build/<host>/stage1/bin/trustc registers 6 of those (no marker-* / agg-field-order)",
+  "version_stamp_is_not_source_identity": true
+ },
+ "profiles": {
+  "O3": {
+   "argv": "cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-dump=ir:DUMP ; RUSTFLAGS=-Ztrust-verify=off -Cdebuginfo=0",
+   "totals": {
+    "bodies": 13769,
+    "lowered": 9065,
+    "spliced": 7569,
+    "lineage_rows": 13141
+   },
+   "verdicts": {
+    "agreed": 1541,
+    "unsupported": 12228
+   },
+   "agreed": 1541,
+   "markers_exact": 1082,
+   "chainable_agreed_mk_unsup_spliced": 1082,
+   "residual_wall2_rows": 459,
+   "residual_wall2_def_paths": 330,
+   "residual_wall2_bodyful": 26,
+   "flip_events_codegen": 177,
+   "flip_events_ctfe": 32,
+   "flip_events_foreign_crate": 0,
+   "flip_events_lineage_mismatch": 0,
+   "flip_events_zero_calls": 209,
+   "fallback_events": 17,
+   "fallback_reasons": {
+    "[ctfe-gate] const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "[gate] shim: abi rederive: generic fn signature": 13,
+    "[gate] shim: abi rederive: generic closure": 2
+   },
+   "codegen_flip_census": {
+    "load": 15,
+    "store": 6,
+    "single_block": 157,
+    "icmp": 6,
+    "switch": 18,
+    "multi_block": 20,
+    "cast": 3,
+    "arith": 6,
+    "condbr": 2
+   },
+   "codegen_flips_carrying_a_computing_construct": 14,
+   "codegen_flips_with_panic_arm": 0,
+   "computing_bodies": [
+    {
+     "def_path": "expr::bvar_in_range",
+     "blocks": 7,
+     "instrs": 13,
+     "icmp": 4,
+     "condbr": 2,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_char::is_valid_char",
+     "blocks": 7,
+     "instrs": 15,
+     "icmp": 3,
+     "condbr": 2,
+     "asserts": 0
+    },
+    {
+     "def_path": "flat::types::FlatFlags::contains",
+     "blocks": 1,
+     "instrs": 6,
+     "icmp": 1,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "sem_memory_model::Address::is_null",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "memory_model::MemoryRegion::is_empty",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "memory_model::AllocationId::is_null",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::persistent_ext::ExtensionIdx::index",
+     "blocks": 1,
+     "instrs": 3,
+     "cast": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "cert::builder::state::NodeId::index",
+     "blocks": 1,
+     "instrs": 3,
+     "cast": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "flat::types::FlatFlags::with",
+     "blocks": 1,
+     "instrs": 6,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "cast": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    }
+   ]
+  },
+  "O0": {
+   "argv": "... -Copt-level=0 -Cdebug-assertions=off ...",
+   "totals": {
+    "bodies": 13769,
+    "lowered": 9065,
+    "spliced": 7569,
+    "lineage_rows": 13141
+   },
+   "verdicts": {
+    "agreed": 1541,
+    "unsupported": 12228
+   },
+   "agreed": 1541,
+   "markers_exact": 1082,
+   "chainable_agreed_mk_unsup_spliced": 1082,
+   "residual_wall2_rows": 459,
+   "residual_wall2_def_paths": 330,
+   "residual_wall2_bodyful": 26,
+   "flip_events_codegen": 191,
+   "flip_events_ctfe": 42,
+   "flip_events_foreign_crate": 0,
+   "flip_events_lineage_mismatch": 0,
+   "flip_events_zero_calls": 233,
+   "fallback_events": 452,
+   "fallback_reasons": {
+    "[ctfe-gate] const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "[gate] call with non-Continue unwind in span stitching": 392,
+    "[gate] shim: abi rederive: generic fn signature": 43,
+    "[gate] local type outside fragment: expr::types::BinderInfo": 1,
+    "[gate] shim: abi rederive: generic closure": 2,
+    "[gate] local type outside fragment: &'{erased} std::vec::Vec<std::vec::Vec<tc::reduction::cofib::CofibAtom, std::alloc::Global>, std::alloc::Global>": 1,
+    "[gate] local type outside fragment: &'{erased} std::vec::Vec<vc_protocol::VcObligation, std::alloc::Global>": 1,
+    "[gate] local type outside fragment: &'{erased} std::vec::Vec<(std::string::String, vc_protocol::VcResult), std::alloc::Global>": 1,
+    "[gate] local type outside fragment: &'{erased} expr::Expr": 1,
+    "[gate] local type outside fragment: &'{erased} level::Level": 2,
+    "[gate] local type outside fragment: &'{erased} level::LevelArc": 2,
+    "[gate] local type outside fragment: &'{erased} str": 2,
+    "[gate] local type outside fragment: env::origin::OriginTrust": 2
+   },
+   "codegen_flip_census": {
+    "single_block": 160,
+    "switch": 24,
+    "multi_block": 31,
+    "icmp": 12,
+    "load": 20,
+    "arith": 11,
+    "cast": 6,
+    "condbr": 7,
+    "gep": 2,
+    "store": 6
+   },
+   "codegen_flips_carrying_a_computing_construct": 24,
+   "codegen_flips_with_panic_arm": 4,
+   "computing_bodies": [
+    {
+     "def_path": "env::native_reducers_sint::to_signed",
+     "blocks": 7,
+     "instrs": 36,
+     "icmp": 4,
+     "arith": 3,
+     "cast": 5,
+     "condbr": 2,
+     "asserts": 4
+    },
+    {
+     "def_path": "env::native_reducers_bitvec::to_signed",
+     "blocks": 7,
+     "instrs": 35,
+     "icmp": 4,
+     "arith": 2,
+     "cast": 5,
+     "condbr": 2,
+     "asserts": 4
+    },
+    {
+     "def_path": "expr::bvar_in_range",
+     "blocks": 7,
+     "instrs": 13,
+     "icmp": 4,
+     "condbr": 2,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_char::is_valid_char",
+     "blocks": 7,
+     "instrs": 15,
+     "icmp": 3,
+     "condbr": 2,
+     "asserts": 0
+    },
+    {
+     "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+     "blocks": 4,
+     "instrs": 9,
+     "icmp": 1,
+     "cast": 2,
+     "condbr": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_bool_ext::nat_gcd",
+     "blocks": 6,
+     "instrs": 12,
+     "icmp": 2,
+     "arith": 1,
+     "condbr": 1,
+     "asserts": 1
+    },
+    {
+     "def_path": "flat::types::FlatFlags::contains",
+     "blocks": 1,
+     "instrs": 6,
+     "icmp": 1,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+     "blocks": 1,
+     "instrs": 13,
+     "icmp": 1,
+     "arith": 1,
+     "asserts": 1
+    },
+    {
+     "def_path": "expr::types::BigNat::is_zero::{closure#0}",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "flat::types::FlatFlags::with",
+     "blocks": 1,
+     "instrs": 6,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "cert::cross_project::hex_digit",
+     "blocks": 18,
+     "instrs": 36,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "cert::builder::state::NodeId::index",
+     "blocks": 1,
+     "instrs": 3,
+     "cast": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::types::Reducibility::height",
+     "blocks": 4,
+     "instrs": 10,
+     "gep": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+     "blocks": 4,
+     "instrs": 5,
+     "condbr": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::types::SimpPriority::value",
+     "blocks": 4,
+     "instrs": 10,
+     "gep": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::persistent_ext::ExtensionIdx::index",
+     "blocks": 1,
+     "instrs": 3,
+     "cast": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "arith": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+     "blocks": 1,
+     "instrs": 2,
+     "cast": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "memory_model::AllocationId::is_null",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "memory_model::MemoryRegion::is_empty",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    },
+    {
+     "def_path": "sem_memory_model::Address::is_null",
+     "blocks": 1,
+     "instrs": 4,
+     "icmp": 1,
+     "asserts": 0
+    }
+   ]
+  }
+ },
+ "trust_commit_of_sealed_compiler": "352aa0306ddc0852fc2f7bb44fdd423329694127",
+ "trust_head_when_written": "a1ad6c99f11c05dbc56a63b66f8572de01038928",
+ "trust_head_delta_note": "trust main advanced to a1ad6c99f1 while this ran; `git diff --stat 352aa0306d..a1ad6c99f1 -- flip_registry.rs flip.rs to_mir.rs mir_differential.rs` is EMPTY, so the sealed compiler is current for the flip path."
+}

@@ -24,18 +24,25 @@
 //! instLE<T> : LE <T> := @LE.mk.{0} <T> <T>.le
 //! instLT<T> : LT <T> := @LT.mk.{0} <T> <T>.lt
 //!
-//! <T>.decLe : (a b : <T>) → Decidable (<T>.le a b) :=
+//! <T>.decLe : (a b : <T>) → Decidable (@LE.le.{0} <T> instLE<T> a b) :=
 //!   fun (a b : <T>) => Nat.decLe (<T>.val a) (<T>.val b)
-//! <T>.decLt : (a b : <T>) → Decidable (<T>.lt a b) :=
+//! <T>.decLt : (a b : <T>) → Decidable (@LT.lt.{0} <T> instLT<T> a b) :=
 //!   fun (a b : <T>) => Nat.decLt (<T>.val a) (<T>.val b)
 //! ```
 //!
-//! `<T>.decLe`'s declared result `Decidable (<T>.le a b)` δ-unfolds `<T>.le` and
-//! β-reduces to `Decidable (Nat.le (<T>.val a) (<T>.val b))`, which is exactly
-//! the type of `Nat.decLe (<T>.val a) (<T>.val b)` — so the body is def-eq to
-//! the declared type and the kernel accepts the `Definition` (NO axiom). The
-//! `Nat.lt` case is identical via `Nat.decLt`. This is the wrapper analogue of
-//! how `instDecidableEq<T>` wraps `Nat.decEq` on the `<T>.val` projections.
+//! `<T>.decLe`/`<T>.decLt` are declared THROUGH the order-class projections —
+//! Lean's exact serialized spelling — and NOT over the bare `<T>.le a b`.
+//! `.olean` import is first-registered-wins, so a bare-spelled prelude type
+//! would permanently shadow Lean's real statement (the `bare_spelled` class of
+//! `data/prelude_collision_census.json`; same defect family as the retired
+//! `Trans` stub). `Decidable (@LE.le.{0} <T> instLE<T> a b)` δ-unfolds
+//! `LE.le`/`instLE<T>` (projection of `LE.mk <T> <T>.le`) to
+//! `Decidable (<T>.le a b)`, then δ-unfolds `<T>.le` and β-reduces to
+//! `Decidable (Nat.le (<T>.val a) (<T>.val b))`, which is exactly the type of
+//! `Nat.decLe (<T>.val a) (<T>.val b)` — so the body is def-eq to the declared
+//! type and the kernel accepts the `Definition` (NO axiom). The `Nat.lt` case
+//! is identical via `Nat.decLt`. This is the wrapper analogue of how
+//! `instDecidableEq<T>` wraps `Nat.decEq` on the `<T>.val` projections.
 //!
 //! # Decidable instances (typeclass form)
 //!
@@ -248,19 +255,33 @@ impl Environment {
             })?;
         }
 
-        // ── <name>.decLe : (a b : <T>) → Decidable (<T>.le a b) ──
+        // ── <name>.decLe : (a b : <T>) → Decidable (@LE.le.{0} <T> instLE<T> a b) ──
         //   := fun (a b : <T>) => Nat.decLe (<T>.val a) (<T>.val b)
-        // ── <name>.decLt : (a b : <T>) → Decidable (<T>.lt a b) ──
+        // ── <name>.decLt : (a b : <T>) → Decidable (@LT.lt.{0} <T> instLT<T> a b) ──
         //   := fun (a b : <T>) => Nat.decLt (<T>.val a) (<T>.val b)
-        let dec_def = |rel: &Expr, nat_dec: &Expr| -> (Expr, Expr) {
+        //
+        // The declared results go THROUGH the order-class projections — Lean's
+        // exact serialized spelling. `.olean` import is first-registered-wins,
+        // so a bare `Decidable (<T>.le a b)` here would permanently shadow
+        // Lean's real statement (prelude-collision census `bare_spelled` class,
+        // data/prelude_collision_census.json). The class form δ-unfolds through
+        // `LE.le`/`instLE<T>` to `<T>.le a b` and on to
+        // `Nat.le (<T>.val a) (<T>.val b)`, so the same value still checks.
+        let inst_le_const = Expr::const_(Name::from_string(&inst_le_name), vec![]);
+        let inst_lt_const = Expr::const_(Name::from_string(&inst_lt_name), vec![]);
+        // `@LE.le.{0} <T> instLE<T> a b` / `@LT.lt.{0} <T> instLT<T> a b`
+        let le_tc = |a: Expr, bv: Expr| {
+            Expr::apps(le_le.clone(), [ty_c.clone(), inst_le_const.clone(), a, bv])
+        };
+        let lt_tc = |a: Expr, bv: Expr| {
+            Expr::apps(lt_lt.clone(), [ty_c.clone(), inst_lt_const.clone(), a, bv])
+        };
+        let dec_def = |tc: &dyn Fn(Expr, Expr) -> Expr, nat_dec: &Expr| -> (Expr, Expr) {
             let ty = {
                 let mut b = EnvDeclBuilder::new();
                 let (a_id, a) = b.fresh_local(ty_c.clone());
                 let (bv_id, bv) = b.fresh_local(ty_c.clone());
-                let concl = Expr::app(
-                    dec.clone(),
-                    Expr::apps(rel.clone(), [a.clone(), bv.clone()]),
-                );
+                let concl = Expr::app(dec.clone(), tc(a.clone(), bv.clone()));
                 let e = b.mk_pi(bv_id, BinderInfo::Default, ty_c.clone(), concl);
                 let e = b.mk_pi(a_id, BinderInfo::Default, ty_c.clone(), e);
                 b.finish(e)
@@ -278,7 +299,7 @@ impl Environment {
         };
 
         if self.get_const(&Name::from_string(&dec_le_name)).is_none() {
-            let (type_, value) = dec_def(&le_rel, &nat_dec_le);
+            let (type_, value) = dec_def(&le_tc, &nat_dec_le);
             self.add_decl(Declaration::Definition {
                 name: Name::from_string(&dec_le_name),
                 level_params: vec![],
@@ -288,7 +309,7 @@ impl Environment {
             })?;
         }
         if self.get_const(&Name::from_string(&dec_lt_name)).is_none() {
-            let (type_, value) = dec_def(&lt_rel, &nat_dec_lt);
+            let (type_, value) = dec_def(&lt_tc, &nat_dec_lt);
             self.add_decl(Declaration::Definition {
                 name: Name::from_string(&dec_lt_name),
                 level_params: vec![],
@@ -302,17 +323,8 @@ impl Environment {
         //   := <name>.decLe
         // ── instDecidable<name>Lt : (a b : <T>) → Decidable (@LT.lt <T> instLT<T> a b) ──
         //   := <name>.decLt
-        // The typeclass-form result `@LE.le <T> instLE<T> a b` reduces to
-        // `<T>.le a b`, def-eq to the `<T>.decLe` result, so the body checks.
-        let inst_le_const = Expr::const_(Name::from_string(&inst_le_name), vec![]);
-        let inst_lt_const = Expr::const_(Name::from_string(&inst_lt_name), vec![]);
-        // `@LE.le.{0} <T> instLE<T> a b` / `@LT.lt.{0} <T> instLT<T> a b`
-        let le_tc = |a: Expr, bv: Expr| {
-            Expr::apps(le_le.clone(), [ty_c.clone(), inst_le_const.clone(), a, bv])
-        };
-        let lt_tc = |a: Expr, bv: Expr| {
-            Expr::apps(lt_lt.clone(), [ty_c.clone(), inst_lt_const.clone(), a, bv])
-        };
+        // Identical statement to `<T>.decLe`/`<T>.decLt` above — one statement,
+        // two names, exactly as Lean spells both.
 
         let inst_dec_def = |tc: &dyn Fn(Expr, Expr) -> Expr, dec_const: Expr| -> (Expr, Expr) {
             let ty = {
@@ -559,10 +571,18 @@ impl Environment {
         // `succ_lhs = false` builds decLe (`ble a.toNat b.toNat`); `true` builds
         // decLt (`ble a.toNat.succ b.toNat` ≡ `Nat.lt a.toNat b.toNat`).
         let build_dec = |succ_lhs: bool| -> (Expr, Expr) {
-            let rel_const = if succ_lhs {
-                lt_rel.clone()
+            // The declared result goes THROUGH the order-class projection
+            // (`@LE.le.{0} <T> instLE<T> a b` / `@LT.lt.{0} <T> instLT<T> a b`)
+            // — Lean's exact serialized spelling. `.olean` import is
+            // first-registered-wins, so a bare `Decidable (<T>.le a b)` here
+            // would permanently shadow Lean's real statement
+            // (prelude-collision census `bare_spelled` class). The class form
+            // δ-unfolds through `LE.le`/`instLE<T>` to `<T>.le a b`, so the
+            // same `dite` value still checks.
+            let (proj, inst_name) = if succ_lhs {
+                ("LT.lt", inst_lt_name.as_str())
             } else {
-                le_rel.clone()
+                ("LE.le", inst_le_name.as_str())
             };
             let ty = {
                 let mut b = EnvDeclBuilder::new();
@@ -570,7 +590,15 @@ impl Environment {
                 let (bv_id, bv) = b.fresh_local(ty_c.clone());
                 let concl = Expr::app(
                     dec.clone(),
-                    Expr::apps(rel_const.clone(), [a.clone(), bv.clone()]),
+                    Expr::apps(
+                        Expr::const_(Name::from_string(proj), vec![zero.clone()]),
+                        [
+                            ty_c.clone(),
+                            Expr::const_(Name::from_string(inst_name), vec![]),
+                            a.clone(),
+                            bv.clone(),
+                        ],
+                    ),
                 );
                 let e = b.mk_pi(bv_id, BinderInfo::Default, ty_c.clone(), concl);
                 let e = b.mk_pi(a_id, BinderInfo::Default, ty_c.clone(), e);
@@ -926,6 +954,74 @@ mod tests {
                     .unwrap_or_else(|| panic!("{inst} registered"));
                 let names: Vec<String> = deps.iter().map(|n| n.to_string()).collect();
                 assert!(names.is_empty(), "{inst} must be axiom-free, got {names:?}");
+            }
+        }
+    }
+
+    /// **Prelude-collision regression (bare-spelled family fix, 2026-08-10).**
+    ///
+    /// Lean serializes `<T>.decLe` / `<T>.decLt` THROUGH the order classes —
+    /// `(a b : <T>) → Decidable (@LE.le.{0} <T> instLE<T> a b)` (resp. `LT`) —
+    /// and `.olean` import is first-registered-wins, so a prelude type spelled
+    /// over the bare `<T>.le a b` permanently shadowed Lean's real statement
+    /// (the `bare_spelled` class of `data/prelude_collision_census.json`; same
+    /// defect family as the retired 3-universe `Trans` stub). Assert every
+    /// wrapper's declared `decLe`/`decLt` type is Expr-EQUAL to the
+    /// class-projection spelling, and hence identical to the corresponding
+    /// `instDecidable<T>Le` / `instDecidable<T>Lt` statement.
+    ///
+    /// This test FAILS against the pre-fix bare `Decidable (<T>.le a b)` types.
+    #[test]
+    fn test_wrapper_dec_le_lt_declared_in_lean_class_projection_spelling() {
+        for &name in WRAPPERS {
+            let env = env_with(name);
+            let ty_c = Expr::const_(Name::from_string(name), vec![]);
+            for (dec_name, proj, inst_name, inst_dec_name) in [
+                (
+                    format!("{name}.decLe"),
+                    "LE.le",
+                    format!("instLE{name}"),
+                    format!("instDecidable{name}Le"),
+                ),
+                (
+                    format!("{name}.decLt"),
+                    "LT.lt",
+                    format!("instLT{name}"),
+                    format!("instDecidable{name}Lt"),
+                ),
+            ] {
+                let expected = {
+                    let mut b = EnvDeclBuilder::new();
+                    let (a_id, a) = b.fresh_local(ty_c.clone());
+                    let (bv_id, bv) = b.fresh_local(ty_c.clone());
+                    let proj_c = Expr::const_(Name::from_string(proj), vec![Level::zero()]);
+                    let inst_c = Expr::const_(Name::from_string(&inst_name), vec![]);
+                    let class_prop = Expr::apps(proj_c, [ty_c.clone(), inst_c, a, bv]);
+                    let concl = Expr::app(
+                        Expr::const_(Name::from_string("Decidable"), vec![]),
+                        class_prop,
+                    );
+                    let e = b.mk_pi(bv_id, BinderInfo::Default, ty_c.clone(), concl);
+                    let e = b.mk_pi(a_id, BinderInfo::Default, ty_c.clone(), e);
+                    b.finish(e)
+                };
+                let info = env
+                    .get_const(&Name::from_string(&dec_name))
+                    .unwrap_or_else(|| panic!("{dec_name} should be registered"));
+                assert_eq!(
+                    info.type_, expected,
+                    "{dec_name} must be declared at Lean's class-projection \
+                     spelling `(a b : {name}) → Decidable (@{proj}.{{0}} {name} \
+                     {inst_name} a b)`, got `{}`",
+                    info.type_
+                );
+                let inst_info = env
+                    .get_const(&Name::from_string(&inst_dec_name))
+                    .unwrap_or_else(|| panic!("{inst_dec_name} should be registered"));
+                assert_eq!(
+                    inst_info.type_, info.type_,
+                    "{inst_dec_name} and {dec_name} must state the identical type"
+                );
             }
         }
     }

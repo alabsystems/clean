@@ -85,8 +85,9 @@ PY
 # 1b. The R2 indexed M-type core + the two elaborator regression locks
 #     (exact counts so a silently-dropped decl trips the gate).
 for spec in "MTypeIndexed.lean:229" "MTypeIndexedPoly.lean:229" \
-            "MTypeIndexedPoly2.lean:229" "ITreeHK.lean:249" \
-            "ITreeEco.lean:317" \
+            "../../../../crates/clean-elab/data/MTypeIndexedPoly2.lean:229" \
+            "ITreeHK.lean:249" \
+            "ITreeEco.lean:336" \
             "../../clean-iris/proof/IrisCore.lean:46" \
             "../../clean-iris/proof/IrisCMRA.lean:63" \
             "elab_fvar_hygiene_regression.lean:21" \

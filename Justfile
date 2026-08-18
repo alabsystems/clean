@@ -87,8 +87,19 @@ axiom-audit-release-check:
 # ── Lint / Format ──────────────────────────────────────────────────────────
 
 # Clippy gate (workspace-wide deny level from [workspace.lints.clippy]).
+# `--workspace --all-targets` is load-bearing, not decoration: without
+# `--workspace` three crates (clean-autoform, clean-ck0, clean-reflect) are not
+# compiled at all, and without `--all-targets` the 348 test targets of the 19
+# non-default members are never linted. Measured 2026-08-12: 233 s from an empty
+# target dir. scripts/check_lint_coverage.py fails closed if either flag is
+# dropped here.
 clippy:
-    cargo clippy --locked --workspace -- -D warnings
+    cargo clippy --locked --workspace --all-targets -- -D warnings
+
+# Lint-coverage invariant (~0.1s): no tracked crate outside the workspace, and
+# no gate site that has quietly narrowed its selection.
+lint-coverage:
+    python3 scripts/check_lint_coverage.py
 
 # Apply rustfmt to the whole workspace.
 fmt:
@@ -151,14 +162,16 @@ update-ay:
 
 # ── Composite ──────────────────────────────────────────────────────────────
 
-# Quick local check (fmt → clippy → test-lib). The fail-closed soundness gate is `just gate`.
-ci: fmt-check clippy test-fast
+# Quick local check (fmt → lint-coverage → clippy → test-lib). The fail-closed
+# soundness gate is `just gate`.
+ci: fmt-check lint-coverage clippy test-fast
 
 # Local fail-closed soundness + quality gate (GitHub CI is dead). Run before pushing main.
 gate:
     scripts/local_gate.sh
 
-# Fast gate (skips the workspace cargo check); this is what the installed pre-push hook runs.
+# Fast gate (skips the ~4min workspace clippy and the heavy KV/kernel legs, but
+# keeps the 0.1s lint-coverage invariant); this is what the pre-push hook runs.
 gate-fast:
     scripts/local_gate.sh --fast
 

@@ -414,9 +414,19 @@ fn parse_unary(s: &str) -> Spec {
         return Spec::not(parse_unary(rest));
     }
     if let Some(rest) = s.strip_prefix('-') {
+        let operand = parse_unary(rest);
+        if let Spec::Int(value) = operand {
+            if let Some(negated) = value.checked_neg() {
+                return Spec::Int(negated);
+            }
+            return Spec::UnaryOp {
+                op: UnaryOp::Neg,
+                operand: Box::new(Spec::Int(value)),
+            };
+        }
         return Spec::UnaryOp {
             op: UnaryOp::Neg,
-            operand: Box::new(parse_unary(rest)),
+            operand: Box::new(operand),
         };
     }
     parse_primary(s)

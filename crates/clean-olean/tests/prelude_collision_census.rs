@@ -122,11 +122,38 @@ struct Totals {
     bare_spelled: usize,
 }
 
+/// One bare-spelled row in the per-family breakdown: the colliding name and
+/// the kind of the DISCARDED Lean declaration (`Theorem`/`Definition`/…) —
+/// i.e. what a fix must re-register in Lean's exact spelling.
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
+struct BareSpelledEntry {
+    name: String,
+    lean_kind: String,
+}
+
+/// All bare-spelled rows sharing one head namespace family.
+/// `count` always equals `entries.len()` (asserted in lane 1).
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
+struct FamilyBreakdown {
+    count: usize,
+    entries: Vec<BareSpelledEntry>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
 struct Census {
     generated_by: String,
     import_root: String,
     totals: Totals,
+    /// Per-head-namespace-family breakdown of the `bare_spelled` rows (family
+    /// = first `.`-component: `Nat.add_comm` → `Nat`, `List.Perm.mem_iff` →
+    /// `List`), so the roadmap's `Nat.*`/`Int.*` sub-counts are reproducible
+    /// from the artifact. Derived from `collisions` at regeneration time —
+    /// never hand-edited. `#[serde(default)]` so pre-breakdown artifacts still
+    /// PARSE (the ratchet checker must not hard-fail on old files), but lane 1
+    /// asserts consistency with the listed rows, which forces the field to be
+    /// present and correct in the checked-in artifact.
+    #[serde(default)]
+    bare_spelled_by_family: BTreeMap<String, FamilyBreakdown>,
     /// Every type-differing collision, both spellings printed. Type-EQUAL
     /// collisions are counted in `totals` but not listed: they are harmless
     /// (the discarded declaration says the same thing).
@@ -192,6 +219,33 @@ fn canonicalize_levels(ty: &Expr, level_params: &[Name]) -> Expr {
 /// twice; the printed form is the same one the `rw` diagnostic shows.
 fn uses_op_projection(printed: &str) -> bool {
     OP_PROJECTIONS.iter().any(|p| printed.contains(p))
+}
+
+/// Head namespace family of a colliding name: the first `.`-component
+/// (`Nat.add_comm` → `Nat`, `List.Perm.mem_iff` → `List`).
+fn head_family(name: &str) -> &str {
+    name.split('.').next().unwrap_or(name)
+}
+
+/// Group the bare-spelled collisions by head namespace family. Pure derivation
+/// from the rows — this is what makes the roadmap's `Nat.*`/`Int.*` sub-counts
+/// reproducible from the artifact alone.
+fn bare_spelled_breakdown(collisions: &[Collision]) -> BTreeMap<String, FamilyBreakdown> {
+    let mut families: BTreeMap<String, FamilyBreakdown> = BTreeMap::new();
+    for c in collisions.iter().filter(|c| c.bare_spelled) {
+        let fam = families
+            .entry(head_family(&c.name).to_owned())
+            .or_insert_with(|| FamilyBreakdown {
+                count: 0,
+                entries: Vec::new(),
+            });
+        fam.count += 1;
+        fam.entries.push(BareSpelledEntry {
+            name: c.name.clone(),
+            lean_kind: c.lean_kind.clone(),
+        });
+    }
+    families
 }
 
 /// Locate a Lean toolchain `lib/lean` directory, or `None` when this machine has
@@ -271,6 +325,7 @@ fn compute_census(search_paths: &[PathBuf]) -> Census {
             type_differing: collisions.len(),
             bare_spelled,
         },
+        bare_spelled_by_family: bare_spelled_breakdown(&collisions),
         collisions,
     }
 }
@@ -319,6 +374,28 @@ fn census_artifact_is_self_consistent_and_ratcheted() {
         .filter(|c| c.bare_spelled)
         .map(|c| c.name.as_str())
         .collect();
+
+    // The per-family breakdown must be exactly the derivation of the listed
+    // rows — the artifact carries it only so the sub-counts are readable and
+    // diffable; the rows stay the single source of truth.
+    let expected_breakdown = bare_spelled_breakdown(&census.collisions);
+    assert_eq!(
+        census.bare_spelled_by_family, expected_breakdown,
+        "{CENSUS_REL}: bare_spelled_by_family must be exactly the per-family \
+         derivation of the listed bare_spelled rows (family = head namespace, \
+         entries = name + discarded Lean kind). Regenerate the artifact; never \
+         hand-edit it."
+    );
+    let breakdown_total: usize = census
+        .bare_spelled_by_family
+        .values()
+        .map(|f| f.count)
+        .sum();
+    assert_eq!(
+        breakdown_total, census.totals.bare_spelled,
+        "{CENSUS_REL}: per-family counts must sum to totals.bare_spelled"
+    );
+
     let missing: Vec<&String> = ratchet
         .known_bare_spelled
         .iter()
@@ -406,6 +483,11 @@ fn census_matches_real_lean_olean() {
         "{CENSUS_REL} totals no longer match a live import — regenerate with \
          {UPDATE_ENV_VAR}=1"
     );
+    assert_eq!(
+        recorded.bare_spelled_by_family, fresh.bare_spelled_by_family,
+        "{CENSUS_REL} per-family breakdown no longer matches a live import — \
+         regenerate with {UPDATE_ENV_VAR}=1"
+    );
     let recorded_names: Vec<&str> = recorded
         .collisions
         .iter()
@@ -422,4 +504,60 @@ fn census_matches_real_lean_olean() {
         "{CENSUS_REL} recorded spellings no longer match a live import — regenerate with \
          {UPDATE_ENV_VAR}=1"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Breakdown derivation — pure-function regression (no toolchain)
+// ---------------------------------------------------------------------------
+
+/// `bare_spelled_breakdown` groups by the FIRST name component only, keeps row
+/// order (rows are name-sorted), records the discarded LEAN kind, and ignores
+/// rows that are type-differing but not bare-spelled.
+#[test]
+fn test_bare_spelled_breakdown_groups_by_head_namespace() {
+    let row = |name: &str, lean_kind: &str, bare: bool| Collision {
+        name: name.to_owned(),
+        prelude_kind: "Definition".to_owned(),
+        lean_kind: lean_kind.to_owned(),
+        prelude_type: "P".to_owned(),
+        lean_type: "L".to_owned(),
+        prelude_has_value: true,
+        bare_spelled: bare,
+    };
+    let rows = vec![
+        row("Int.add_comm", "Theorem", true),
+        row("List.Perm.mem_iff", "Theorem", true),
+        row("Nat.add_comm", "Theorem", true),
+        row("Nat.decLe", "Definition", true),
+        row("NotBare.thing", "Theorem", false),
+    ];
+    let breakdown = bare_spelled_breakdown(&rows);
+
+    let families: Vec<&str> = breakdown.keys().map(String::as_str).collect();
+    assert_eq!(
+        families,
+        vec!["Int", "List", "Nat"],
+        "families are the head components, sorted, non-bare rows excluded"
+    );
+    assert_eq!(breakdown["Nat"].count, 2, "Nat family counts both rows");
+    assert_eq!(
+        breakdown["Nat"].entries,
+        vec![
+            BareSpelledEntry {
+                name: "Nat.add_comm".to_owned(),
+                lean_kind: "Theorem".to_owned(),
+            },
+            BareSpelledEntry {
+                name: "Nat.decLe".to_owned(),
+                lean_kind: "Definition".to_owned(),
+            },
+        ],
+        "entries keep row order and record the DISCARDED Lean kind"
+    );
+    assert_eq!(
+        breakdown["List"].entries[0].name, "List.Perm.mem_iff",
+        "nested namespaces fold into the head family (List, not List.Perm)"
+    );
+    let total: usize = breakdown.values().map(|f| f.count).sum();
+    assert_eq!(total, 4, "family counts sum to the bare_spelled total");
 }

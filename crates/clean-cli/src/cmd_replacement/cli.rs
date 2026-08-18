@@ -28,6 +28,8 @@ pub(crate) enum ReplacementCommands {
     TrustCoreEvidence(TrustCoreEvidenceArgs),
     /// Summarize TrustBoundary TSV audit records.
     TrustBoundaryAudit(TrustBoundaryAuditArgs),
+    /// Emit the Rust-first tooling migration inventory and evidence artifact.
+    RustFirstTooling(RustFirstToolingEvidenceArgs),
 }
 
 /// Arguments accepted by `clean replacement status`.
@@ -180,6 +182,17 @@ pub(crate) struct TrustCoreEvidenceArgs {
     /// Deterministic timestamp to record in generated launch evidence.
     #[arg(long, default_value = "1970-01-01T00:00:00Z")]
     pub generated_at: String,
+}
+
+/// Arguments accepted by `clean replacement rust-first-tooling`.
+#[derive(Debug, Clone, Args)]
+pub(crate) struct RustFirstToolingEvidenceArgs {
+    /// Emit JSON instead of a compact human-readable inventory summary.
+    #[arg(long)]
+    pub json: bool,
+    /// Optional evidence JSON path to write after the fail-closed checks pass.
+    #[arg(long, value_name = "PATH")]
+    pub evidence: Option<PathBuf>,
 }
 
 /// Arguments accepted by `clean replacement trust-boundary-audit`.

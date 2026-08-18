@@ -54,9 +54,11 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -108,6 +110,14 @@ COMPOSITION_BLOCKS = ("inductive Step", "def Confl", "inductive Tm", "inductive 
 # Girard-inconsistent; 41 corpus files carry the note), which makes every
 # completeness/decidability theorem depending on it vacuous rather than merely
 # conditional. See HANDOFF_CORRECTION_2026-07-24.md.
+#
+# ONE STATUS PER NAME IS NOT ENOUGH, and pretending otherwise misreports the
+# corpus in BOTH directions. `sn` is false-under-`Type : Type` for the dependent
+# rungs, but the SIMPLY TYPED ones are a different calculus where it is true AND
+# PROVED. `PER_RUNG_DISCHARGE` records those exceptions so a rung that really has
+# been discharged stops being counted as open. It is reporting only: it never
+# changes a pass/fail verdict, and a name absent from it keeps its global status
+# for every rung.
 GLOBAL_ASSUMPTIONS = {
     "sn": "UNDISCHARGED_AND_FALSE_UNDER_TYPE_IN_TYPE",
     "decWH": "UNDISCHARGED",
@@ -118,6 +128,81 @@ GLOBAL_ASSUMPTIONS = {
     "whnf_pi": "UNDISCHARGED_ORACLE",
     "pinj": "UNDISCHARGED",
     "cr": "DISCHARGED_BY_BYTE_IDENTICAL_SIBLING",
+    # Found 2026-08-17, when `prop_defs` taught the scanner to see binders whose
+    # type is a bare rung-local `Prop`. All four were invisible before: nothing
+    # in `HYPOTHESIS_TYPE_HINTS` matches `WfEnv E`, `EnvAcyclic E`, `WCR` or
+    # `KComplete`, so a whole assumption could hide behind one capitalised name.
+    "wf": "UNDISCHARGED_SIDE_CONDITION",
+    "ac": "UNDISCHARGED_SIDE_CONDITION",
+    "wcr": "BY_DESIGN_STATEMENT_PREMISE",
+    "hcomp": "UNDISCHARGED",
+}
+
+# assumption name -> {rung: the discharge, in one line}. An entry here is a claim
+# that THIS rung's occurrence is proved, and it must name where.
+# A rung whose central relation turns out to be TRIVIAL. Nothing else in this gate
+# can see this: the relation is a `def`/`inductive`, not an axiom; the file has no
+# vacuity pattern, no sorry, and elaborates clean. But a theorem quantified over a
+# degenerate relation says nothing, so the corpus must not report such a rung as
+# healthy. Each entry names the MACHINE-CHECKED witness that proves the collapse.
+DEGENERATE_RELATIONS = {
+    "proof-irrelevance-r3":
+        "Conv is the TOTAL relation — `conv_total (Γ) (x y) : Conv Γ x y` is proved in "
+        "the rung itself, so `Conv Γ x y` holds for EVERY context and EVERY pair of "
+        "terms. Witness: `conv_srt_one_two : Conv [] (.srt 1) (.srt 2)`. Cause: the "
+        "TYPED `irrel` rule feeding the UNTYPED `appCong`/`beta` congruences, which "
+        "lifts one typed identification to arbitrary untyped terms. CONSEQUENCE: "
+        "`preservation_irrel` is quantified over a trivial conversion, so its subject-"
+        "reduction claim carries no content, and `pinj` is discharged only because "
+        "everything is. A type-indexed conversion `Γ ⊢ a ≡ b : T` is the standard repair "
+        "— DONE in `proof-irrelevance-r4`, which PROVES non-degeneracy "
+        "(conv_presupposition, not_conv_total) plus step-by-step regression against this "
+        "exact collapse (not_conv_any_of_proof, not_conv_total_srt0_cons). r3 is KEPT, "
+        "degenerate, as the machine-checked record of the defect.",
+}
+
+# An assumption can be open in two very different ways: nobody has tried, or the
+# cheap routes are PROVED not to work. Recording the second kind keeps the census
+# from flattening a measured wall into the same "UNDISCHARGED" as an untouched
+# row. Reporting only — like PER_RUNG_DISCHARGE, it never moves a verdict, and an
+# obstruction is NOT a discharge.
+OBSTRUCTIONS = {
+    ("pinj", "proof-irrelevance-r4"):
+        "OPEN, but the frontier has MOVED TWICE. Dead routes (machine-checked): "
+        "(1) confluence — `PiInjObstruction.conv_not_bconv`, with `irrel` Conv is not "
+        "contained in untyped β-conversion even between Π-types; (2) a closed-term PER "
+        "model — `model_pi_codomain_blind`, `Π (srt 0). B` gets ONE code for every B. "
+        "The named missing ingredient, REFLECTION, is now BUILT: `KRel.lean` is a "
+        "Kripke logical relation carrying syntactic ConvTy evidence, with escape, "
+        "reflection of neutrals, Π-shape transfer and PROVED non-degeneracy "
+        "(`not_kty_srt0_srt1`, `not_kty_srt0_pi`). `KFund.pi_injective : KComplete → "
+        "PiInj` is machine-checked, so PiInj is now reduced to ONE named hypothesis: "
+        "`KComplete`, the fundamental theorem of that relation. Separately, the "
+        "SORT-CONFUSION ROUTE TO A COUNTEREXAMPLE IS CLOSED UNCONDITIONALLY — "
+        "`SNCMain.no_sort_is_prop` proves no context (junk included) makes a sort a "
+        "proposition, so `irrel` can never fire at the top of a type conversion "
+        "anywhere. Remaining wall: `KComplete`'s Π case needs the fundamental theorem "
+        "relative to a PARALLEL substitution; `SNCSub.lean` now supplies that calculus.",
+}
+
+PER_RUNG_DISCHARGE = {
+    "pinj": {
+        "proof-irrelevance-r3":
+            "proof-irrelevance-r3.pi_injective — PROVED, but BY DEGENERACY: it is "
+            "`⟨conv_total .., conv_total ..⟩`. See DEGENERATE_RELATIONS; this is not a "
+            "healthy discharge and must not be read as one",
+    },
+    "decWH": {
+        "whnf-conversion":
+            "whnf-conversion.decWH_discharged — decWHConvOfSN from `sn` and `cr` alone, "
+            "axiom closure [propext]; typechecks AS the decWH parameter of decConv_whnf "
+            "and instConvDecidable_whnf with no coercion",
+    },
+    "sn": {
+        "whnf-conversion":
+            "stlc-sn.sn_of_typed_open (open-context SN); (Tm, Step, HasType, SN) "
+            "byte-identical to stlc-sn, so the proof transfers by the same route as `cr`",
+    },
 }
 
 DECL_START = re.compile(
@@ -198,7 +283,27 @@ def declaration_headers(code: str) -> list[str]:
     return headers
 
 
-def hypotheses_of(code: str) -> list[str]:
+def prop_defs(code: str) -> set[str]:
+    """Names a rung defines as a bare `Prop` — e.g. `def PiInj : Prop := ...`.
+
+    These are the sneakiest hypothesis types, because a binder `(hcomp : KComplete)`
+    carries no judgement name for `HYPOTHESIS_TYPE_HINTS` to match: the whole
+    assumption hides behind one capitalised identifier. `PiInj` was only caught
+    because it had been hard-coded into the hint list by hand; the next such
+    definition would have been invisible. Collecting them per rung generalises
+    that special case.
+    """
+    return set(
+        re.findall(
+            r"^\s*(?:private\s+|protected\s+)?(?:def|abbrev)\s+([A-Za-z_][A-Za-z0-9_']*)"
+            r"\s*(?:\{[^}]*\}|\([^)]*\)|\s)*:\s*Prop\b",
+            code,
+            re.M,
+        )
+    )
+
+
+def hypotheses_of(code: str, prop_names: frozenset[str] = frozenset()) -> list[str]:
     """Binder names in declaration *signatures* whose type denotes an assumption.
 
     Deliberately over-collects rather than under-collects: this is a ratchet, so
@@ -211,7 +316,11 @@ def hypotheses_of(code: str) -> list[str]:
             r"[({]\s*([A-Za-z_][A-Za-z0-9_']*)\s*:\s*([^)}]{0,400})[)}]", header
         ):
             name, ty = match.group(1), match.group(2)
-            if HYPOTHESIS_TYPE_HINTS.search(ty) or ty.lstrip().startswith("∀"):
+            if (
+                HYPOTHESIS_TYPE_HINTS.search(ty)
+                or ty.lstrip().startswith("∀")
+                or any(re.search(rf"\b{re.escape(p)}\b", ty) for p in prop_names)
+            ):
                 found.add(name)
     return sorted(found)
 
@@ -245,7 +354,7 @@ def elaborate(path: Path) -> tuple[bool, int, int, str]:
     return ok, errors, sorries, detail
 
 
-def scan(path: Path) -> dict:
+def scan(path: Path, prop_names: frozenset[str] = frozenset()) -> dict:
     """Static audit of one solution file (no Lean required)."""
     src = path.read_text(encoding="utf-8", errors="replace")
     code = strip_comments(src)
@@ -261,7 +370,7 @@ def scan(path: Path) -> dict:
         "theorems": len(re.findall(r"^\s*(?:private\s+|protected\s+)?(?:theorem|lemma)\b", code, re.M)),
         "banned": {k: v for k, v in banned.items() if v},
         "vacuity": {k: v for k, v in vacuity.items() if v},
-        "hypotheses": hypotheses_of(code),
+        "hypotheses": hypotheses_of(code, prop_names),
         "blocks": blocks,
     }
 
@@ -274,27 +383,160 @@ def rung_name(path: Path) -> str:
     return path.relative_to(CORPUS_DIR).parts[0]
 
 
+def order_rung_files(paths: list[Path]) -> tuple[list[Path], str]:
+    """Topologically order one rung's files by their INTRA-RUNG imports.
+
+    A rung became multi-file with `proof-irrelevance-r4`, whose model/obstruction
+    development spans eight modules. Import order matters twice over: `lean` must
+    see a dependency's `.olean` before the importer, and — more importantly — the
+    per-file scan below must run over EVERY file, not just the last one.
+    """
+    by_stem = {p.stem: p for p in paths}
+    if len(by_stem) != len(paths):
+        # Keying by stem is what `lean` itself does for imports, so a collision is
+        # not merely ambiguous here — it would drop a file from the ordering, which
+        # is the exact silent-coverage bug this function exists to end.
+        seen: set[str] = set()
+        dupes = sorted({p.stem for p in paths if p.stem in seen or seen.add(p.stem)})
+        return paths, f"duplicate module stem(s) in one rung: {dupes}"
+    deps: dict[str, set[str]] = {}
+    for stem, path in by_stem.items():
+        src = path.read_text(encoding="utf-8", errors="replace")
+        found = set(re.findall(r"^\s*import\s+([A-Za-z_][A-Za-z0-9_.]*)", src, re.M))
+        deps[stem] = {d for d in found if d in by_stem and d != stem}
+
+    ordered: list[Path] = []
+    done: set[str] = set()
+
+    def visit(stem: str, stack: tuple[str, ...]) -> str:
+        if stem in done:
+            return ""
+        if stem in stack:
+            return f"import cycle: {' -> '.join(stack + (stem,))}"
+        for dep in sorted(deps[stem]):
+            err = visit(dep, stack + (stem,))
+            if err:
+                return err
+        done.add(stem)
+        ordered.append(by_stem[stem])
+        return ""
+
+    for stem in sorted(by_stem):
+        err = visit(stem, ())
+        if err:
+            return paths, err
+    return ordered, ""
+
+
+def elaborate_rung(paths: list[Path]) -> tuple[bool, int, int, str]:
+    """Elaborate every file of one rung, sharing an `.olean` build directory.
+
+    Single-file rungs keep the exact original invocation, so the 79 rungs that
+    predate multi-file support are not perturbed.
+    """
+    if len(paths) == 1:
+        return elaborate(paths[0])
+
+    ordered, cycle = order_rung_files(paths)
+    if cycle:
+        return False, -1, -1, cycle
+
+    errors = sorries = 0
+    details: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="corpus-gate-") as build:
+        env = dict(os.environ, LEAN_PATH=build)
+        for path in ordered:
+            try:
+                proc = subprocess.run(
+                    ["elan", "run", TOOLCHAIN, "lean",
+                     "-o", str(Path(build) / f"{path.stem}.olean"), path.name],
+                    cwd=path.parent, capture_output=True, text=True, timeout=1800, env=env,
+                )
+            except FileNotFoundError:
+                return False, -1, -1, "elan not installed"
+            except subprocess.TimeoutExpired:
+                return False, -1, -1, f"timeout after 1800s on {path.name}"
+            output = proc.stdout + proc.stderr
+            errors += len(re.findall(r"^\S+\.lean:\d+:\d+: error", output, re.M))
+            sorries += len(re.findall(r"declaration uses [`']sorry[`']", output))
+            if proc.returncode != 0:
+                first = [ln for ln in output.splitlines() if ": error" in ln][:2]
+                details.append(f"{path.name}: rc={proc.returncode} " + " | ".join(first))
+                # A failed dependency makes every later file's result meaningless.
+                break
+    ok = not details and errors == 0 and sorries == 0
+    return ok, errors, sorries, " ;; ".join(details)
+
+
+def merge_rung_entries(entries: list[dict]) -> dict:
+    """Fold one rung's per-file scans into a single entry.
+
+    Assignment (`rungs[name] = entry`) silently dropped every file but the last
+    for a multi-file rung — banned constructs, vacuity sites and undischarged
+    hypotheses in the other files would have been invisible to the ratchet while
+    the gate still reported green.
+    """
+    merged: dict = {
+        "lines": sum(e["lines"] for e in entries),
+        "theorems": sum(e["theorems"] for e in entries),
+        "banned": {},
+        "vacuity": {},
+        "hypotheses": sorted({h for e in entries for h in e["hypotheses"]}),
+        "blocks": {},
+        "file": entries[0]["file"],
+        "files": [e["file"] for e in entries],
+    }
+    conflicts: list[str] = []
+    for entry in entries:
+        for key, count in entry["banned"].items():
+            merged["banned"][key] = merged["banned"].get(key, 0) + count
+        for key, count in entry["vacuity"].items():
+            merged["vacuity"][key] = merged["vacuity"].get(key, 0) + count
+        for header, digest in entry["blocks"].items():
+            if merged["blocks"].setdefault(header, digest) != digest:
+                conflicts.append(header)
+    if conflicts:
+        merged["block_conflicts"] = sorted(set(conflicts))
+    return merged
+
+
 def build_report(paths: list[Path], run_elab: bool, jobs: int) -> dict:
-    rungs: dict[str, dict] = {}
+    by_rung: dict[str, list[Path]] = {}
     for path in paths:
-        entry = scan(path)
-        entry["file"] = str(path.relative_to(REPO_ROOT))
-        rungs[rung_name(path)] = entry
+        by_rung.setdefault(rung_name(path), []).append(path)
+
+    rungs: dict[str, dict] = {}
+    for name, rung_paths in by_rung.items():
+        # A rung's `def X : Prop` may be declared in one file and used as a
+        # hypothesis in another, so collect them across the whole rung first.
+        prop_names = frozenset().union(
+            *(
+                prop_defs(strip_comments(p.read_text(encoding="utf-8", errors="replace")))
+                for p in rung_paths
+            )
+        )
+        entries = []
+        for path in rung_paths:
+            entry = scan(path, prop_names)
+            entry["file"] = str(path.relative_to(REPO_ROOT))
+            entries.append(entry)
+        rungs[name] = merge_rung_entries(entries)
 
     if run_elab:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-            futures = {pool.submit(elaborate, p): p for p in paths}
+            futures = {pool.submit(elaborate_rung, p): n for n, p in by_rung.items()}
             for done, fut in enumerate(concurrent.futures.as_completed(futures), 1):
-                path = futures[fut]
+                name = futures[fut]
                 ok, errors, sorries, detail = fut.result()
-                entry = rungs[rung_name(path)]
+                entry = rungs[name]
                 entry["elaborates"] = ok
                 entry["elab_errors"] = errors
                 entry["elab_sorries"] = sorries
                 if detail:
                     entry["elab_detail"] = detail
                 status = "ok" if ok else "FAIL"
-                print(f"  [{done:3d}/{len(paths)}] {status:4s} {rung_name(path)}", file=sys.stderr)
+                span = f" ({len(by_rung[name])} files)" if len(by_rung[name]) > 1 else ""
+                print(f"  [{done:3d}/{len(by_rung)}] {status:4s} {name}{span}", file=sys.stderr)
 
     composition: dict[str, dict[str, list[str]]] = {}
     for name, entry in rungs.items():
@@ -333,6 +575,12 @@ def check(report: dict, ratchet: dict, run_elab: bool) -> list[str]:
     for name, entry in sorted(report["rungs"].items()):
         if entry["banned"]:
             failures.append(f"{name}: BANNED CONSTRUCT in code: {entry['banned']}")
+        if entry.get("block_conflicts"):
+            failures.append(
+                f"{name}: files of one rung disagree on composition block(s) "
+                f"{entry['block_conflicts']}. A rung defines its calculus once; two "
+                "spellings inside one rung break the cross-rung byte-identity discharge."
+            )
         if run_elab and not entry.get("elaborates", True):
             failures.append(
                 f"{name}: does not elaborate under {TOOLCHAIN} "
@@ -437,7 +685,23 @@ def main() -> int:
     print(f"vacuity debt: {report['vacuity_debt']} (ratchet {ratchet.get('vacuity_debt', 0)})")
     print(f"\nload-bearing assumptions ({report['undischarged_assumption_count']} undischarged):")
     for name, info in sorted(report["global_assumptions"].items()):
-        print(f"  {name:14s} {info['status']:38s} {len(info['rungs'])} rungs")
+        done = sorted(set(PER_RUNG_DISCHARGE.get(name, {})) & set(info["rungs"]))
+        extra = f"  [{len(done)} discharged: {', '.join(done)}]" if done else ""
+        walled = sorted(r for (n, r) in OBSTRUCTIONS if n == name and r in info["rungs"])
+        if walled:
+            extra += f"  [obstruction proved: {', '.join(walled)}]"
+        print(f"  {name:14s} {info['status']:38s} {len(info['rungs'])} rungs{extra}")
+    if DEGENERATE_RELATIONS:
+        print(f"\nDEGENERATE RELATIONS ({len(DEGENERATE_RELATIONS)}) — a theorem over one of "
+              f"these says NOTHING:")
+        for rung, why in sorted(DEGENERATE_RELATIONS.items()):
+            print(f"  {rung}: {why[:96]}…")
+    live = {k: v for k, v in OBSTRUCTIONS.items() if k[1] in report["rungs"]}
+    if live:
+        print(f"\nPROVED OBSTRUCTIONS ({len(live)}) — open, but the cheap routes are ruled out "
+              f"(an obstruction is NOT a discharge):")
+        for (name, rung), why in sorted(live.items()):
+            print(f"  {name} @ {rung}: {why[:96]}…")
     if run_elab:
         bad = [n for n, e in report["rungs"].items() if not e.get("elaborates", True)]
         print(f"elaboration: {report['rung_count'] - len(bad)}/{report['rung_count']} clean")

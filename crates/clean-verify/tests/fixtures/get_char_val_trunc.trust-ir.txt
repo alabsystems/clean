@@ -1,0 +1,7 @@
+rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {
+    ; #producer: trust
+    ; #names: %1="n"
+bb0(%0: (), %1: u64):
+    %2 = trunc u64 %1 to u32  ; #loc: 347 120 60
+    ret %2  ; #loc: 347 120 68
+}

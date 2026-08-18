@@ -64,7 +64,7 @@ use clean_kernel::bitvec_compute::names as cnames;
 use clean_kernel::bitvec_compute::BvNames;
 use clean_kernel::bool_model::names as mnames;
 use clean_kernel::name::Name;
-use clean_kernel::resolution_check::{encode_lit_lit, names as rcnames};
+use clean_kernel::resolution_check::encode_lit_lit;
 use clean_kernel::resolution_soundness::names as rsnames;
 use clean_kernel::{BinderInfo, Environment, Expr, FVarId, Level, TypeChecker};
 

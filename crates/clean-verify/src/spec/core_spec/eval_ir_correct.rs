@@ -58,6 +58,20 @@
 //! semantics agree with the kernel function*. It is not by itself a statement
 //! about the shipped binary.
 //!
+//! **Sharpened 2026-08-12, because "not yet pinned" was too soft.** The compiler
+//! *has* been run on this body and what it emits is **not** this module: 10
+//! blocks against 7, a four-case switch with a reachable `IMax` default against
+//! five cases and an `unreachable` trap, `gep` at byte offsets 8/16 against
+//! `ExtractField`, `call` to `<LevelArc as Deref>::deref` against an inline
+//! `ICmp ne` + `Assert`, and two `bool` join-block parameters against per-arm
+//! `ret`s. The emission is recorded at
+//! `tests/fixtures/level_is_zero.trust-ir.txt` and the divergence is gated by
+//! `tests/crystal_a1_lineage.rs`. So the antecedent of A4's conditional is
+//! currently FALSE for the shipped body, and transcribing is blocked on a
+//! T-track build item (the deref's reachable closure is not bodyful). Quote A4
+//! as a theorem about `ir_lz_module`, never as one about `Level::is_zero`'s
+//! machine code.
+//!
 //! ## A5 — from agreement to mathematics
 //!
 //! `ir_lz_machine_sound` composes A4 with `level_is_zero_sound`: if the MACHINE
@@ -113,7 +127,7 @@ The heap is arbitrary and touched only through lookup equations, so unrelated ce
 \
 The assembly is short because the definitions line up. ir_init on this module is DEFINITIONALLY the activation's starting machine with no caller -- ir_lz_module declares no globals so ir_mem_concat is the identity, and the outermost frame has empty return destinations so its Return halts -- which collapses ir_ret_to to halted (ret v). ir_run_of_steps then converts the configuration statement into an outcome statement and ir_run_le_ret weakens the exact cost to the premise. \
 \
-SCOPE, which must travel with any statement of this result: ir_lz_module is HAND-AUTHORED, not emitted. This says that IF the compiler emits this module THEN its semantics agree with the kernel's Level::is_zero. Pinning the emitted artifact to it is job A0/A1 and is NOT done here, so this is not yet a statement about the shipped binary. DerivedProved, zero axiom_deps.")?;
+SCOPE, which must travel with any statement of this result: ir_lz_module is HAND-AUTHORED, and MEASURED 2026-08-12 to be structurally DIFFERENT from what the compiler emits for Level::is_zero -- 10 blocks vs 7, a four-case switch with a reachable IMax default vs five cases and an unreachable trap, gep at offsets 8/16 vs ExtractField, a call to LevelArc::deref vs an inline ICmp+Assert, two bool join-block parameters vs per-arm rets. So this says that IF the compiler emits this module THEN its semantics agree with the kernel's Level::is_zero, and today that antecedent is FALSE for the shipped body. Transcribing is blocked on a T-track build item: the deref's reachable closure is not bodyful. The emission is recorded at tests/fixtures/level_is_zero.trust-ir.txt and the divergence is gated by tests/crystal_a1_lineage.rs. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_SCALAR_BOOL, "ir_scalar_bool: read a Bool off a runtime value, false on the eleven non-Bool constructors. Part of getting the machine's ANSWER back out of its outcome so it can be fed to a theorem about Levels. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_VALS_HEAD_BOOL, "ir_vals_head_bool: the Bool in the first returned value. Level::is_zero returns exactly one value, so this is total where it matters and false elsewhere. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_OUTCOME_BOOL, "ir_outcome_bool: the Bool a successful outcome carries; false for every fault and for exhaustion. \

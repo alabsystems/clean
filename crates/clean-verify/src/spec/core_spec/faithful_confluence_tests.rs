@@ -6,7 +6,6 @@
 //! (#2859, real-env confluence discharge).
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec. `add_faithful_confluence` is in the
@@ -14,9 +13,7 @@ use crate::Specification;
 /// kernel-checks every registered `value_src`, so a successful build is proof that
 /// both faithful-confluence proof terms type-check.
 fn build_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// Both unconditional confluence corollaries are registered, DerivedProved, and

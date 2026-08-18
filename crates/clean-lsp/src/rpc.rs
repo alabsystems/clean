@@ -15,6 +15,7 @@
 //! Sources: Lean team, "Lean.Data.Lsp.Extra"
 //! <https://lean-lang.org/doc/api/Lean/Data/Lsp/Extra.html>
 
+use clean_elab::interactive_goals::{InteractiveGoals, InteractiveTermGoal};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -290,6 +291,8 @@ pub struct RpcSessionManager {
     sessions: DashMap<u64, RpcSession>,
     /// Registered widget instances and JavaScript sources
     widget_registry: WidgetRegistry,
+    /// Structured goal state served by the interactive-goal procedures
+    goal_registry: GoalRegistry,
     /// RPC procedure registry
     procedures: HashMap<String, RpcProcedure>,
 }
@@ -307,6 +310,84 @@ pub(crate) struct RpcCallContext<'a> {
     pub position: Position,
     /// Widget instances and JS modules visible to infoview calls
     pub widget_registry: &'a WidgetRegistry,
+    /// Structured tactic/term goal state visible to infoview calls
+    pub goal_registry: &'a GoalRegistry,
+}
+
+/// A structured tactic-goal payload anchored to a source range.
+#[derive(Debug, Clone)]
+pub(crate) struct PositionedInteractiveGoals {
+    pub(crate) range: Range,
+    pub(crate) goals: InteractiveGoals,
+}
+
+/// A structured expected-type (term goal) payload anchored to a source range.
+#[derive(Debug, Clone)]
+pub(crate) struct PositionedTermGoal {
+    pub(crate) range: Range,
+    pub(crate) goal: InteractiveTermGoal,
+}
+
+/// In-memory registry of structured goal state served by
+/// `Lean.Widget.getInteractiveGoals` / `getInteractiveTermGoal`.
+///
+/// The LSP backend refreshes these entries from its live tactic goal
+/// snapshots and hole contexts before each `$/lean/rpc/call`, mirroring the
+/// [`WidgetRegistry`] refresh pattern. Lookup is first-match over the stored
+/// order, so producers must push narrower (inner) entries before wider
+/// (enclosing) ones.
+#[derive(Debug, Default)]
+pub(crate) struct GoalRegistry {
+    goals_by_uri: DashMap<Url, Vec<PositionedInteractiveGoals>>,
+    term_goals_by_uri: DashMap<Url, Vec<PositionedTermGoal>>,
+}
+
+impl GoalRegistry {
+    fn replace_goals(&self, uri: Url, entries: Vec<PositionedInteractiveGoals>) {
+        if entries.is_empty() {
+            self.goals_by_uri.remove(&uri);
+        } else {
+            self.goals_by_uri.insert(uri, entries);
+        }
+    }
+
+    fn replace_term_goals(&self, uri: Url, entries: Vec<PositionedTermGoal>) {
+        if entries.is_empty() {
+            self.term_goals_by_uri.remove(&uri);
+        } else {
+            self.term_goals_by_uri.insert(uri, entries);
+        }
+    }
+
+    fn interactive_goals_at(&self, uri: &Url, position: Position) -> Option<InteractiveGoals> {
+        self.goals_by_uri.get(uri).and_then(|entries| {
+            entries
+                .iter()
+                .find(|entry| position_in_range(position, &entry.range))
+                .map(|entry| entry.goals.clone())
+        })
+    }
+
+    fn term_goal_at(&self, uri: &Url, position: Position) -> Option<InteractiveTermGoal> {
+        self.term_goals_by_uri.get(uri).and_then(|entries| {
+            entries
+                .iter()
+                .find(|entry| position_in_range(position, &entry.range))
+                .map(|entry| entry.goal.clone())
+        })
+    }
+}
+
+/// Resolve the position a goal RPC call refers to.
+///
+/// The Lean infoview repeats `{ textDocument, position }` inside the
+/// `$/lean/rpc/call` `params` payload; prefer that inner position when
+/// present and well-formed, otherwise fall back to the outer call position.
+fn goal_request_position(outer: Position, params: &Value) -> Position {
+    params
+        .get("position")
+        .and_then(|pos| serde_json::from_value::<Position>(pos.clone()).ok())
+        .unwrap_or(outer)
 }
 
 /// In-memory widget registry used by infoview RPC procedures.
@@ -422,6 +503,7 @@ impl RpcSessionManager {
             next_session: AtomicU64::new(1),
             sessions: DashMap::new(),
             widget_registry: WidgetRegistry::default(),
+            goal_registry: GoalRegistry::default(),
             procedures: HashMap::new(),
         };
         manager.register_default_procedures();
@@ -440,6 +522,26 @@ impl RpcSessionManager {
     /// Register JavaScript source for a widget module hash.
     pub(crate) fn register_widget_source(&self, hash: u64, source: WidgetSource) {
         self.widget_registry.register_source(hash, source);
+    }
+
+    /// Replace the structured interactive tactic goals for a document.
+    ///
+    /// The LSP backend uses this to refresh goal state from its live tactic
+    /// goal snapshots before serving `Lean.Widget.getInteractiveGoals`.
+    pub(crate) fn replace_interactive_goals(
+        &self,
+        uri: Url,
+        entries: Vec<PositionedInteractiveGoals>,
+    ) {
+        self.goal_registry.replace_goals(uri, entries);
+    }
+
+    /// Replace the structured term goals (expected types) for a document.
+    ///
+    /// Entries must be ordered narrowest-first: lookup is first-match, so an
+    /// inner hole goal must precede its enclosing declaration's goal.
+    pub(crate) fn replace_term_goals(&self, uri: Url, entries: Vec<PositionedTermGoal>) {
+        self.goal_registry.replace_term_goals(uri, entries);
     }
 
     /// Register default RPC procedures
@@ -466,6 +568,39 @@ impl RpcSessionManager {
                     .transpose()
                     .map_err(|e| RpcError::invalid_params(&e.to_string()))?
                     .ok_or_else(|| RpcError::widget_source_not_found(params.hash))
+            }),
+        );
+
+        // Lean.Widget.getInteractiveGoals - structured tactic goals at a
+        // position. Mirrors Lean 4: returns null when no tactic-goal state
+        // covers the requested position, and an InteractiveGoals payload
+        // (goals array with hypothesis bundles) when it does.
+        self.procedures.insert(
+            "Lean.Widget.getInteractiveGoals".to_string(),
+            Box::new(|ctx, params| {
+                let position = goal_request_position(ctx.position, &params);
+                ctx.goal_registry
+                    .interactive_goals_at(ctx.uri, position)
+                    .map_or(Ok(Value::Null), |goals| {
+                        serde_json::to_value(goals)
+                            .map_err(|e| RpcError::invalid_params(&e.to_string()))
+                    })
+            }),
+        );
+
+        // Lean.Widget.getInteractiveTermGoal - structured expected type at a
+        // position (hole-local goal or enclosing declaration type). Returns
+        // null when no term-goal state covers the requested position.
+        self.procedures.insert(
+            "Lean.Widget.getInteractiveTermGoal".to_string(),
+            Box::new(|ctx, params| {
+                let position = goal_request_position(ctx.position, &params);
+                ctx.goal_registry
+                    .term_goal_at(ctx.uri, position)
+                    .map_or(Ok(Value::Null), |goal| {
+                        serde_json::to_value(goal)
+                            .map_err(|e| RpcError::invalid_params(&e.to_string()))
+                    })
             }),
         );
     }
@@ -523,6 +658,7 @@ impl RpcSessionManager {
             uri: &session.uri,
             position: params.position,
             widget_registry: &self.widget_registry,
+            goal_registry: &self.goal_registry,
         };
 
         // Call procedure
@@ -965,6 +1101,286 @@ mod tests {
         assert_ne!(next, id, "released reference ids must not be reused");
         assert_eq!(store.get(id), None);
         assert_eq!(store.get(next), Some(serde_json::json!("w")));
+    }
+
+    #[test]
+    fn test_rpc_call_get_interactive_goals_registered_no_32601() {
+        let manager = RpcSessionManager::new();
+        let connected = manager
+            .connect(RpcConnectParams {
+                uri: Url::parse("file:///goals.lean").unwrap(),
+            })
+            .unwrap();
+
+        let result = manager.call(RpcCallParams {
+            text_document: TextDocumentIdentifier {
+                uri: Url::parse("file:///goals.lean").unwrap(),
+            },
+            position: Position {
+                line: 0,
+                character: 0,
+            },
+            session_id: connected.session_id,
+            method: "Lean.Widget.getInteractiveGoals".to_string(),
+            params: Value::Null,
+        });
+        let value = result.expect("getInteractiveGoals must be a registered procedure");
+        assert!(
+            value.is_null(),
+            "no goal state registered: response should be null, got {value}"
+        );
+    }
+
+    #[test]
+    fn test_rpc_call_get_interactive_goals_returns_structured_goals_in_range() {
+        let manager = RpcSessionManager::new();
+        let uri = Url::parse("file:///goals.lean").unwrap();
+        manager.replace_interactive_goals(
+            uri.clone(),
+            vec![PositionedInteractiveGoals {
+                range: Range {
+                    start: Position {
+                        line: 1,
+                        character: 2,
+                    },
+                    end: Position {
+                        line: 1,
+                        character: 9,
+                    },
+                },
+                goals: InteractiveGoals {
+                    goals: vec![
+                        clean_elab::interactive_goals::interactive_goal_from_rendered(
+                            "h : False\n\u{22a2} True",
+                        ),
+                    ],
+                },
+            }],
+        );
+        let connected = manager
+            .connect(RpcConnectParams { uri: uri.clone() })
+            .unwrap();
+
+        let value = manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                position: Position {
+                    line: 1,
+                    character: 4,
+                },
+                session_id: connected.session_id,
+                method: "Lean.Widget.getInteractiveGoals".to_string(),
+                params: Value::Null,
+            })
+            .expect("in-range call should return goal payload");
+        let goals: InteractiveGoals = serde_json::from_value(value).unwrap();
+        assert_eq!(goals.goals.len(), 1);
+        assert_eq!(goals.goals[0].type_, "True");
+        assert_eq!(goals.goals[0].hyps.len(), 1);
+        assert_eq!(goals.goals[0].hyps[0].names, ["h"]);
+        assert_eq!(goals.goals[0].hyps[0].type_, "False");
+
+        // Outside the snapshot range the endpoint stays fail-closed (null).
+        let outside = manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position {
+                    line: 0,
+                    character: 0,
+                },
+                session_id: connected.session_id,
+                method: "Lean.Widget.getInteractiveGoals".to_string(),
+                params: Value::Null,
+            })
+            .expect("out-of-range call should still succeed");
+        assert!(outside.is_null());
+    }
+
+    #[test]
+    fn test_rpc_call_get_interactive_goals_prefers_inner_params_position() {
+        let manager = RpcSessionManager::new();
+        let uri = Url::parse("file:///goals.lean").unwrap();
+        manager.replace_interactive_goals(
+            uri.clone(),
+            vec![PositionedInteractiveGoals {
+                range: Range {
+                    start: Position {
+                        line: 3,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: 3,
+                        character: 10,
+                    },
+                },
+                goals: InteractiveGoals {
+                    goals: vec![
+                        clean_elab::interactive_goals::interactive_goal_from_rendered(
+                            "\u{22a2} True",
+                        ),
+                    ],
+                },
+            }],
+        );
+        let connected = manager
+            .connect(RpcConnectParams { uri: uri.clone() })
+            .unwrap();
+
+        // Outer position misses the range; the Lean-infoview-style inner
+        // params position hits it and must win.
+        let value = manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position {
+                    line: 0,
+                    character: 0,
+                },
+                session_id: connected.session_id,
+                method: "Lean.Widget.getInteractiveGoals".to_string(),
+                params: serde_json::json!({
+                    "textDocument": {"uri": "file:///goals.lean"},
+                    "position": {"line": 3, "character": 5}
+                }),
+            })
+            .expect("call with inner params position should succeed");
+        let goals: InteractiveGoals = serde_json::from_value(value).unwrap();
+        assert_eq!(goals.goals.len(), 1);
+    }
+
+    #[test]
+    fn test_rpc_call_get_interactive_term_goal_returns_first_match() {
+        let manager = RpcSessionManager::new();
+        let uri = Url::parse("file:///term-goal.lean").unwrap();
+        manager.replace_term_goals(
+            uri.clone(),
+            vec![
+                // Narrow hole entry first: first-match lookup must return it.
+                PositionedTermGoal {
+                    range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 20,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 25,
+                        },
+                    },
+                    goal: InteractiveTermGoal {
+                        hyps: vec![clean_elab::interactive_goals::InteractiveHypothesisBundle {
+                            names: vec!["n".to_string()],
+                            type_: "Nat".to_string(),
+                            is_instance: false,
+                            is_inserted: false,
+                        }],
+                        type_: "P n".to_string(),
+                    },
+                },
+                PositionedTermGoal {
+                    range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 40,
+                        },
+                    },
+                    goal: InteractiveTermGoal {
+                        hyps: vec![],
+                        type_: "\u{2200} n, P n".to_string(),
+                    },
+                },
+            ],
+        );
+        let connected = manager
+            .connect(RpcConnectParams { uri: uri.clone() })
+            .unwrap();
+
+        let value = manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                position: Position {
+                    line: 0,
+                    character: 22,
+                },
+                session_id: connected.session_id,
+                method: "Lean.Widget.getInteractiveTermGoal".to_string(),
+                params: Value::Null,
+            })
+            .expect("getInteractiveTermGoal must be a registered procedure");
+        let goal: InteractiveTermGoal = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            goal.type_, "P n",
+            "inner (first) term-goal entry should win over the enclosing one"
+        );
+        assert_eq!(goal.hyps.len(), 1);
+
+        // A position covered only by the enclosing entry falls through to it.
+        let outer = manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position {
+                    line: 0,
+                    character: 2,
+                },
+                session_id: connected.session_id,
+                method: "Lean.Widget.getInteractiveTermGoal".to_string(),
+                params: Value::Null,
+            })
+            .expect("enclosing-range call should succeed");
+        let outer_goal: InteractiveTermGoal = serde_json::from_value(outer).unwrap();
+        assert_eq!(outer_goal.type_, "\u{2200} n, P n");
+    }
+
+    #[test]
+    fn test_replace_interactive_goals_empty_clears_state() {
+        let manager = RpcSessionManager::new();
+        let uri = Url::parse("file:///goals.lean").unwrap();
+        let entry = PositionedInteractiveGoals {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 5,
+                },
+            },
+            goals: InteractiveGoals {
+                goals: vec![
+                    clean_elab::interactive_goals::interactive_goal_from_rendered("\u{22a2} True"),
+                ],
+            },
+        };
+        manager.replace_interactive_goals(uri.clone(), vec![entry]);
+        assert!(manager
+            .goal_registry
+            .interactive_goals_at(
+                &uri,
+                Position {
+                    line: 0,
+                    character: 0
+                }
+            )
+            .is_some());
+
+        manager.replace_interactive_goals(uri.clone(), Vec::new());
+        assert!(
+            manager
+                .goal_registry
+                .interactive_goals_at(
+                    &uri,
+                    Position {
+                        line: 0,
+                        character: 0
+                    }
+                )
+                .is_none(),
+            "an empty replacement must clear stale goal state"
+        );
     }
 
     #[test]

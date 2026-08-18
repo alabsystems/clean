@@ -164,15 +164,10 @@ fn bvar_gen_proof() -> String {
 #[cfg(test)]
 mod tests {
     use crate::spec::types::ProofStatus;
-    use crate::test_utils::run_with_stack;
-    use crate::Specification;
 
     #[test]
     fn test_bvar_gen_is_derived_proved() {
-        let spec = run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        });
+        let spec = crate::test_utils::build_substitution_spec_with_stack();
 
         let bvar_gen = spec
             .definitions()

@@ -1,0 +1,99 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "measured": "2026-08-14",
+ "build": {
+  "clean_repo_HEAD": "a00e00d16",
+  "trust_repo_rev_of_sealed_compiler": "6b868c1b332ffe3f4dec2935e69f042d78d5d31b",
+  "trustc": "$HOME/trust/scratchpad/lane1chain/tc (SEALED snapshot, unique dylib leaf; `seal_driver.sh guard` PASS before the run)",
+  "trustc_dylib_sha256": "c999eaaf02d4e63d4555d7683477cb1f7dc1231466d3ad7a91ddae1482c414f8",
+  "trustc_rustc_main_sha256": "b8e388c396f60483dbd58c1032479d9b714fa288ffb03e95f0564acd8d2d74cc",
+  "compiler_identified_by_behaviour_not_stamp": "The sealed driver registers TEN -Ztrust-sat-perturb classes (enum-reshape enum-case-value enum-ctor enum-disc-index switch-map enum-payload marker-order marker-drop agg-field-order marker-arm) and emits under body_lineage.v2; build/<host>/stage1/bin/trustc registers six and knows none of the four marker-* / agg-field-order classes. `trustc -vV`'s date stamp is NOT a source identity, so the driver was identified by what it does, and SEALED before measuring because another lane replaces the shared live driver without warning.",
+  "command": "CARGO_TARGET_DIR=<tgt> RUSTC=<sealed tc> RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Ztrust-verify=off -Cdebuginfo=0' RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir>",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build - only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
+  "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED cfg-split body was compiled rather than its debug twin.",
+  "crate_totals": "bodies 13771 / lowered 9067 / spliced 7571 / derived-MIR agreed 1542 / mismatch 0 / markers_exact 1084 (27 NON-vacuous) / lineage rows 13143",
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 19
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "5b3c183c0a6b5d876961c152e5f5ab76de84e56a57c85dc6f81835c484e4ec42",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+  "trust_ir_bin_sha256": "029d2cd32fb2026844a7e1c8e50573ffc3eadd3e8cca712a5c5381e4c40f214d",
+  "note": "Three builds in three separate CARGO_TARGET_DIRs: the flip build, its repeat, and the negative control. All three emit a byte-identical coverage.json and trust-ir dump, so `lineage` is a measurement rather than one observation."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "event_for_this_body_present": false
+ },
+ "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+ "def_index": 35579,
+ "func_id": 7477,
+ "instr_count": 26,
+ "lowered": true,
+ "spliced": true,
+ "lineage": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "16 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "0 marker line(s) identical",
+  "markers_exact_is_vacuous_here": "VACUOUS: `0 marker line(s) identical` -- two EMPTY marker sequences compared. This body is in the 1057, with the first three chains and unlike the fourth, fifth and sixth. Stated rather than implied: what the marker channel contributed to this chain's certification is NOTHING. What did back it is the `agreed` verdict over SIXTEEN canonical lines (the longest canonical comparison of any chained body), unsupported [], zero calls, and a codegen flip whose lineage equals this row's."
+ },
+ "interpreter_differential": {
+  "verdict": "not-run",
+  "samples": 0,
+  "detail": "param 0 (ptr) is READ (dereferenced/used) \u2014 opaque sampling refused (coverage-only skip)"
+ },
+ "bodyful_reachable_closure": "PASS - the body makes NO calls (resolved 0, extern_decls 0, unresolved 0), so the reachable callee closure is the body itself and contains no declaration-only entry. This is the A0 criterion that FAILS for level::Level::is_zero, whose closure reaches Option::as_deref / Option::expect (6 resolved calls at this HEAD).",
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "ctfe": false,
+  "asserts": 0,
+  "flipped_so_far": 173,
+  "lineage": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+  "matches_artifact_lineage": true,
+  "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:35579 ~ clean_kernel[4676]::tc::expr_location::{impl#4}::clone), asserts=0, lineage=sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745, flipped_so_far=173",
+  "occurrences_of_this_did_in_flip_log": 1
+ },
+ "candidate_selection": {
+  "criteria": "derived-MIR agreed AND markers_exact AND unsupported [] AND spliced AND a codegen flip event whose lineage equals the coverage row's AND zero calls",
+  "bodies_satisfying_the_first_four": 1084,
+  "of_those_with_a_clean_kernel_codegen_flip_event": 177,
+  "of_those_with_zero_calls": 177,
+  "markers_exact_rows_total": 1084,
+  "markers_exact_rows_that_are_NON_vacuous": 27,
+  "why_non_vacuity_matters": "1057 of the 1084 markers_exact rows carry `0 marker line(s) identical`, i.e. markers_exact is a comparison of two EMPTY sequences - a true statement about nothing. A page that quotes 1084 as `markers agree` is quoting the vacuous majority.",
+  "measured_utc_date": "2026-08-14",
+  "measurement_provenance": "RE-DERIVED by this lane from a fresh whole-crate dump against a freshly sealed driver, not inherited from data/crystal_flip_census_lane2_2026-08-13.json. An independently written parser joined flip events to coverage rows by def_index WITHIN the compile.",
+  "disagreements_with_the_committed_census": [
+   "bodies 13771 here vs 13770 in data/crystal_flip_census_lane2_2026-08-13.json; lowered 9067 vs 9066; spliced 7571 vs 7570; lineage rows 13143 vs 13142; derived-MIR agreed 1542 vs 1541. clean-kernel gained ONE more body between c4e33541d and this HEAD. Every def_index this lane cares about is UNCHANGED from the lane-2 census, so the new body sits later in the index space.",
+   "markers_exact 1084 here vs 1082 in the lane-2 census, vacuous 1057 vs 1055 -- and the NON-VACUOUS count is still 27. This is the second independent confirmation of the drift CRYSTAL_STATUS 4c predicted: a markers_exact gain is not evidence of a fidelity gain.",
+   "loud fallbacks 19 here vs 17 in the lane-2 census.",
+   "COST LAW: the lane-2 record (CRYSTAL_STATUS 3c, eval_ir_bvar_range.rs, bundles.rs) reads its 0.021 / 0.431 / 6.586 s at W = 8 / 12 / 16 as a `2^W law`. Re-measured here at FIXED width with a varying dividend, the cost of ir_wrap w n is LINEAR IN n and INDEPENDENT of w: 1.322 / 2.644 / 5.399 s at w = 64 for n = 7000 / 14000 / 28000, and 1.356 s at w = 8 for n = 7000. The earlier points varied width and dividend together (its dividend was 2^W - 1 each time), so the x15.3 it saw is the x16 in the DIVIDEND. The ~5-day extrapolation it drew stands, at ~9.6 days by this law. Operationally the difference is total: `wide type => unaffordable` is false and would have refused is_valid_char, which is at width 64 and chains."
+  ],
+  "why_this_body": "The other body the 2026-08-12 candidate measurement refused for lack of an IRConst aggregate form, alongside mode::CleanMode::from_source_system; both emit `const enum.N { k }`. The third chain built that form, and this body was never re-attempted. It is the widest dispatch chained by explicit case count (ten cases plus a reachable default over eleven variants), the only chained body written by a DERIVE rather than by hand, the only one whose answer has its argument's own type, and the only one combining a `load` prologue with aggregate-constant arms."
+ },
+ "measurement_scope": "Every numeric and digest field on this page was measured on 2026-08-14 at the clean HEAD above against the SEALED stage1 driver above, whose `guard` returned PASS before the run. Nothing is carried forward from an earlier dated artifact; where this measurement disagrees with the committed census the disagreement is recorded in candidate_selection.disagreements_with_the_committed_census.",
+ "interpreter_differential_note": "not-run, and the recorded reason is specific rather than generic: `param 0 (ptr) is READ (dereferenced/used) - opaque sampling refused (coverage-only skip)`. The producer refuses to sample an opaque pointer it would have to dereference. That is a real limit of the interpreter differential on by-reference bodies, not a defect of this one.",
+ "derive_provenance": "The Rust source at crates/clean-kernel/src/tc/expr_location.rs:20 is `#[derive(Debug, Clone, PartialEq, Eq)]` on a fieldless 11-variant enum. No human wrote the body this chain is about; the thirteen-block CFG is what the derive expanded to and what the compiler shipped."
+}

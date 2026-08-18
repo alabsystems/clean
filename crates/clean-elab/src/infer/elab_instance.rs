@@ -321,6 +321,13 @@ impl<'a> ElabCtx<'a> {
             &inst_implicit_indices,
         );
 
+        self.ensure_no_residual_fvars(
+            "instance",
+            &instance_name.to_string(),
+            &final_ty,
+            Some(&final_val),
+        )?;
+
         // Register the instance
         self.instances.add_instance(
             instance_name.clone(),
@@ -410,6 +417,13 @@ impl<'a> ElabCtx<'a> {
             inst_implicit_indices,
         );
 
+        self.ensure_no_residual_fvars(
+            "instance",
+            &instance_name.to_string(),
+            &final_ty,
+            Some(&final_val),
+        )?;
+
         self.instances.add_instance(
             instance_name.clone(),
             class_name.clone(),
@@ -490,6 +504,13 @@ impl<'a> ElabCtx<'a> {
             binder_infos,
             inst_implicit_indices,
         );
+
+        self.ensure_no_residual_fvars(
+            "instance",
+            &instance_name.to_string(),
+            &final_ty,
+            Some(&final_val),
+        )?;
 
         // Register the instance.
         self.instances.add_instance(

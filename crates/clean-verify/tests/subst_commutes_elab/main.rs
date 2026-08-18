@@ -7,7 +7,6 @@
 
 use std::collections::HashSet;
 
-use clean_verify::test_utils::run_with_stack;
 use clean_verify::Specification;
 
 mod blocker_surface;
@@ -15,10 +14,7 @@ mod constructive_surface;
 mod type_surface;
 
 pub(crate) fn build_substitution_spec_with_stack() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec()
-            .expect("substitution/WHNF test spec should build")
-    })
+    clean_verify::test_utils::build_substitution_spec_with_stack()
 }
 
 pub(crate) fn assert_exact_axiom_deps(

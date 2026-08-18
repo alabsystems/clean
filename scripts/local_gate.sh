@@ -15,9 +15,17 @@
 #      (domain-axiom count monotonic-down toward the 3-axiom goal, fail-closed);
 #      prelude/.olean collision ratchet (prelude names that DISCARD Lean's
 #      declaration at import, monotonic-down, fail-closed)
+#   3b. Trust-core evidence staleness tripwire: recomputes the cmd_replacement
+#      module-tree digest + cmd_replacement.rs sha and fails when the checked-in
+#      launch-evidence artifacts pin different digests (prints
+#      TRUSTCORE_STALENESS=fresh|stale|skipped:<reason>)
 #   4. Paragon quality ratchet (shrink-only: file-size, unwrap/expect,
 #      bare-pub, dead-code suppressions — data/paragon_ratchet.json)
-#   5. (full mode) workspace check + NON-VACUOUS KernelVerified gate (re-stamps a
+#   4b. Lint coverage: no tracked crate outside [workspace] members, no gate
+#      site that dropped --workspace/--all-targets (scripts/check_lint_coverage.py)
+#   5. (full mode) workspace LINT (`cargo clippy --locked --workspace
+#      --all-targets -- -D warnings`; the former bare `cargo check` obeyed
+#      default-members and saw 8 of 27 crates) + NON-VACUOUS KernelVerified gate (re-stamps a
 #      pinned OOM-safe slice → KV ratchet + elision subset, scripts/kv_ratchet_gate.sh)
 #      + full clean-kernel --lib suite + trusted-kernel lint ratchet (dead_code/
 #      unused the workspace allow hides)
@@ -31,6 +39,15 @@ fail() { echo "LOCAL GATE: FAIL — $1" >&2; exit 1; }
 echo "== local gate: cross-repo dependency boundary =="
 python3 scripts/check_workspace_dependency_boundary.py \
   || fail "Clean must consume shared verification vocabulary through trust-ir-contract, never the Trust workspace"
+
+# Lint-coverage invariant (~0.1s, metadata only — safe in the --fast path). The
+# lint gate below is only worth its runtime if it still SELECTS everything: a
+# tracked crate outside [workspace] members is linted by no command at all, and
+# a gate site that drops --workspace/--all-targets re-opens the blind spot where
+# non-default members' test targets are never compiled.
+echo "== local gate: lint coverage (every tracked crate, every target) =="
+python3 scripts/check_lint_coverage.py \
+  || fail "lint coverage — a tracked crate escaped [workspace] members, or a gate site dropped --workspace/--all-targets (scripts/check_lint_coverage.py)"
 
 echo "== local gate: first-party Rust contains no ignored tests or doctests =="
 if ignore_hits="$(
@@ -101,6 +118,51 @@ echo "== local gate: silent-tactic ratchet =="
 python3 scripts/check_silent_tactic_ratchet.py \
   || fail "silent-tactic ratchet — a tactic now fails with NO diagnostic naming it, so the declaration degrades to an unattributable synthetic sorry and every UnknownTactic-keyed coverage script under-reports the gap; see data/silent_tactic_census.json"
 
+echo "== local gate: tactic family gates (G-AUTO, G-SIMP) =="
+# Executable family gates (docs/plans/TACTICS_TO_100_2026-07-29.md §7; teeth
+# record: scripts/tactic_parity/TEETH.md). Fixture/manifest integrity (probe
+# denominators pinned at 131/127, import-Init headers, no unlisted fixtures)
+# is enforced fail-closed on EVERY run — it needs no binary. The MEASURED
+# gates drive the prebuilt release binary over real `import Init` fixtures
+# (~2 min per fixture file, 13 files) and therefore run in full mode only;
+# they NEVER invoke cargo. Exit 2 = "no prebuilt binary": non-fatal by
+# design, with the SKIPPED verdict line printed by the gate itself.
+# Fail-closed (any other nonzero exit is a hard failure) when the binary
+# exists.
+python3 scripts/tactic_parity/family_gate.py --family g_auto --static \
+  || fail "G-AUTO fixture/manifest integrity (tests/fixtures/tactic_families/g_auto)"
+python3 scripts/tactic_parity/family_gate.py --family g_simp --static \
+  || fail "G-SIMP fixture/manifest integrity (tests/fixtures/tactic_families/g_simp)"
+if [[ $FAST -eq 1 ]]; then
+  echo "  G-AUTO=SKIPPED reason=fast-mode (measured gate runs in full mode, or directly: scripts/tactic_parity/g_auto.sh)"
+  echo "  G-SIMP=SKIPPED reason=fast-mode (measured gate runs in full mode, or directly: scripts/tactic_parity/g_simp.sh)"
+else
+  for fam_gate in g_auto g_simp; do
+    if scripts/tactic_parity/${fam_gate}.sh; then
+      :
+    else
+      fam_rc=$?
+      if [[ $fam_rc -eq 2 ]]; then
+        : # SKIPPED verdict line already printed by the gate (no prebuilt binary)
+      else
+        fail "tactic family gate ${fam_gate} — fail-closed measurement failure (scripts/tactic_parity/${fam_gate}.sh exit ${fam_rc}; see reports/tactic-families/${fam_gate}-latest.json and scripts/tactic_parity/TEETH.md)"
+      fi
+    fi
+  done
+fi
+
+# Trust-core evidence staleness tripwire. The three trust-core launch-evidence
+# artifacts pin the gate logic that minted them (cmd_replacement.rs sha +, for
+# kernel-soundness/deny-sorry, the sha256_repo_module_tree digest of every
+# non-test .rs under crates/clean-cli/src/cmd_replacement/), so ANY edit there
+# silently stales all three — the in-binary validators reject them at read time
+# but nothing at push time said so. The script recomputes the IDENTICAL digests
+# (byte-identity proven against the Rust-minted pin at 93670bb91) and fails
+# loudly on any mismatch. Prints TRUSTCORE_STALENESS=fresh|stale|skipped:<reason>.
+echo "== local gate: trust-core evidence staleness tripwire =="
+python3 scripts/check_trustcore_evidence_staleness.py \
+  || fail "trust-core evidence staleness — a cmd_replacement/ gate-logic edit outdated the pinned digests in reports/{kernel-soundness,deny-sorry,axiom-audit}-launch-evidence.json; regenerate with a HEAD-built clean binary (clean replacement trust-core-evidence --kernel-soundness / --deny-sorry, clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json) and commit the refreshed artifacts in the SAME change as the gate edit"
+
 echo "== local gate: paragon quality ratchet =="
 scripts/paragon_ratchet.sh || fail "paragon quality ratchet (see data/paragon_ratchet.json)"
 
@@ -113,8 +175,19 @@ python3 scripts/aristotle_corpus_gate.py --fast \
   || fail "Aristotle corpus gate — a banned construct in code, a new vacuous Classical.propDecidable inhabitant of a Decidable target, a rung that gained an undischarged hypothesis, or composition byte-identity drift (which silently breaks the cross-file confluence discharge); see data/aristotle_corpus_ratchet.json. Elaboration is checked separately by 'just corpus-gate-full'."
 
 if [[ $FAST -eq 0 ]]; then
-  echo "== local gate: workspace check =="
-  cargo check --locked -q || fail "workspace check"
+  # Workspace lint. This step used to be `cargo check --locked -q` under a
+  # "workspace check" label, which was a misnomer: bare `cargo check` obeys
+  # `default-members` (8 of 27 crates), so it compiled neither clean-autoform /
+  # clean-ck0 / clean-reflect nor ANY test target of the 19 non-default members
+  # — including crates/clean-verify/tests, where the crystal work lands.
+  # `--workspace --all-targets` under clippy strictly subsumes what it did:
+  # 27/27 crates, 521/521 targets, with the [workspace.lints.clippy] deny level
+  # applied. Measured 2026-08-12 on an 18-core box: 233 s from an empty target
+  # dir, 172 s on top of a warm default-members clippy. Default features only —
+  # feature-gated code still needs its own `-p <crate> --features` run.
+  echo "== local gate: workspace lint (27/27 crates, all targets) =="
+  cargo clippy --locked --workspace --all-targets -q -- -D warnings \
+    || fail "workspace clippy (--workspace --all-targets) — a warning or error outside the default-members inner loop"
 
   # Dependency trust-boundary gate (paragon axis 1: "every dependency verified,
   # continuously gated"). Runs the cargo-deny policy in deny.toml over the whole
@@ -233,6 +306,76 @@ else
   else
     fail "Trust stage1 discovery is invalid or ambiguous; set TRUST_STAGE1_BIN explicitly"
   fi
+fi
+
+# Trust-ir CODEGEN ratchet (opt-in): compile clean-kernel with trustc and the
+# codegen FLIP on, and assert the measured lowering/splicing/flip counts have
+# not regressed. This is a DIFFERENT mechanism from the soundness ratchet above
+# (`-Ztrust-verify`, the Level-0 verifier); it exercises the crystal's path,
+# THIR -> trust-ir -> derived-MIR differential -> codegen flip.
+#
+# OPT-IN because it is a non-incremental release compile of clean-kernel under a
+# compiler that lives outside this repo (~4 min), and because at 1.28% of `fn`
+# bodies flipping there is no case for putting it on every local run yet. It is
+# additive: nothing here relaxes an existing gate.
+#
+# The COMPILE stays opt-in, and that is a decision with a reason, not inertia:
+# it is a non-incremental release compile of clean-kernel under a compiler that
+# lives OUTSIDE this repo and moves on its own schedule. Making it mandatory
+# would block every clean-side push on trust-side drift — which is not
+# hypothetical, because `lowered`/`spliced` are red at HEAD today by established
+# COMPILER DRIFT (reports/trust-ir-ratchet-verdict-2026-08-13.md) with the
+# re-baseline deliberately left to the owner.
+#
+# What is NOT opt-in any more is the SIGNAL. The 2026-08-13 loss of 38 `agreed`
+# verdicts went unnoticed for two days because nothing anywhere printed how long
+# it had been since anyone measured. The staleness surface below costs no
+# compiler and ~0.1 s, and it puts that number in front of a human on EVERY gate
+# run, opted in or not.
+echo "== local gate: trust-ir axis comparator (no compiler; ~0.1s) =="
+python3 scripts/trust_ir_axes.py selftest \
+  || fail "trust-ir axis comparator selftest — the ratchet's own comparator is broken (scripts/trust_ir_axes.py)"
+TRUST_IR_AXES_VERDICT="$(
+  python3 - <<'PY'
+import datetime, json, subprocess, sys
+try:
+    doc = json.load(open("data/trust_ir_build_baseline.json"))
+except (OSError, ValueError) as exc:
+    print(f"trust-ir axes: NO BASELINE ({exc})")
+    sys.exit(0)
+gated = subprocess.run([sys.executable, "scripts/trust_ir_axes.py", "table"],
+                       capture_output=True, text=True).stdout.strip().splitlines()[-1]
+stamp = doc.get("updated_utc_date", "?")
+try:
+    # UTC on both sides: the baseline stamp is UTC, and comparing it to a LOCAL
+    # date reads "-1d old" for a baseline written minutes ago west of Greenwich.
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    age = max(0, (today - datetime.date.fromisoformat(stamp)).days)
+except ValueError:
+    age = None
+label = "STALE" if (age is None or age > 7) else "fresh"
+print(f"trust-ir axes: baseline {stamp} ({'?' if age is None else age}d old) — {label}; {gated}")
+PY
+)"
+echo "  ${TRUST_IR_AXES_VERDICT}"
+case "$TRUST_IR_AXES_VERDICT" in
+  *STALE*) echo "  ^ nobody has re-measured the trust-ir coverage axes in over a week."
+           echo "    Run: CLEAN_TRUST_IR_BUILD=1 scripts/local_gate.sh   (or scripts/trust_ir_build.sh)" ;;
+esac
+
+if [[ "${CLEAN_TRUST_IR_BUILD:-0}" == "1" ]]; then
+  echo "== local gate: trust-ir codegen ratchet =="
+  # `set -e` is on, so capture the status without letting a non-zero exit abort
+  # the gate before it can distinguish SKIP (2) from FAIL.
+  tib_rc=0
+  bash scripts/trust_ir_build.sh || tib_rc=$?
+  case "$tib_rc" in
+    0) ;;
+    2) echo "  SKIP: no local Trust stage1 toolchain" ;;
+    *) fail "trust-ir codegen ratchet (data/trust_ir_build_baseline.json)" ;;
+  esac
+else
+  echo "== local gate: trust-ir codegen ratchet (SKIP: set CLEAN_TRUST_IR_BUILD=1) =="
 fi
 
 # What the KV gates actually DID, not merely that they exited 0. Both have

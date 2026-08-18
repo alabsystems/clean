@@ -5,15 +5,12 @@
 //! Tests for the δ Huet strong-confluence tiling (#2859 Increment H++, Stage 4).
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec. `add_par_reduces_d_conf` is in the
 /// substitution bundle (`in_substitution: true` in `bundles.rs`).
 fn build_d_conf_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// `par_strong_join_d` inductive is registered with its recursor and two ctors.

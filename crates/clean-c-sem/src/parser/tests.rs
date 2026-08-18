@@ -748,19 +748,15 @@ mod acsl_spec_expr {
             Spec::Not(inner) => assert_eq!(*inner, Spec::Var("done".to_string())),
             other => panic!("expected Not, got {other:?}"),
         }
-        // x == -1: the '-' is unary negation, not a top-level subtraction.
+        // x == -1: the '-' is unary negation, not a top-level subtraction;
+        // literal negation is normalized to its signed integer value so the
+        // prover can reason about it arithmetically.
         match req("x == -1") {
             Spec::BinOp {
                 op: BinOp::Eq,
                 right,
                 ..
-            } => match *right {
-                Spec::UnaryOp {
-                    op: UnaryOp::Neg,
-                    operand,
-                } => assert_eq!(*operand, Spec::Int(1)),
-                other => panic!("expected unary Neg, got {other:?}"),
-            },
+            } => assert_eq!(*right, Spec::Int(-1)),
             other => panic!("expected Eq, got {other:?}"),
         }
     }

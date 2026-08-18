@@ -13,7 +13,9 @@ use std::ops::Deref;
 use clean_kernel::name::Name;
 use clean_kernel::Expr;
 
-use crate::tactic::discr_tree::{mk_path, query_path_is_too_generic, DiscrTree, IndexMode};
+use crate::tactic::discr_tree::{
+    mk_path, query_path_is_too_generic, DiscrKey, DiscrTree, IndexMode,
+};
 use crate::tactic::{Goal, ProofState};
 
 /// Result of a simplification step.
@@ -198,24 +200,62 @@ pub(crate) struct SimpLemmaSet {
     /// star-fallback semantics): a star-keyed lemma is in every candidate
     /// set, not only when the specific index comes up empty (B102).
     unindexed: Vec<usize>,
+    /// Head-constant fast path over `unindexed` (perf, 2026-08-11): the subset
+    /// of tree-REFUSED lemmas whose (whnf'd) LHS key path still starts with a
+    /// `Const` root, bucketed by that head name. A `Const`-rooted query only
+    /// linear-scans its own bucket plus `unindexed_headless`, mirroring the
+    /// root-key discipline the discrimination tree already applies to indexed
+    /// lemmas — so this is purely an indexing improvement, never a semantic
+    /// filter. `unindexed_by_head ∪ unindexed_headless == unindexed` exactly.
+    unindexed_by_head: HashMap<Name, Vec<usize>>,
+    /// The genuinely headless remainder of `unindexed`: explicitly
+    /// `SimpIndexMode::Unindexed` lemmas (whose key paths are known to
+    /// whnf-rot, B102 — they keep full always-offered semantics) and refused
+    /// lemmas whose key-path root is not a `Const` (Star/Other/…). Scanned at
+    /// EVERY query.
+    unindexed_headless: Vec<usize>,
 }
 
 impl SimpLemmaSet {
     pub(crate) fn with_goal(state: &ProofState, goal: &Goal, ordered: Vec<SimpLemma>) -> Self {
         let mut index = DiscrTree::default();
         let mut unindexed = Vec::new();
+        let mut unindexed_by_head: HashMap<Name, Vec<usize>> = HashMap::new();
+        let mut unindexed_headless = Vec::new();
 
+        // Kill-point tracer for index builds over huge imported registries:
+        // stderr is unbuffered, so on an OOM/SIGKILL the last line names the
+        // lemma whose `mk_path` WHNF was live when the process died.
+        let trace_index = std::env::var_os("CLEAN_SIMP_INDEX_TRACE").is_some();
         for (index_value, lemma) in ordered.iter().enumerate() {
-            if lemma.index_mode == SimpIndexMode::Unindexed
-                || !index.insert_if_specific(
-                    state,
-                    goal,
-                    &lemma.lhs,
-                    lemma.index_mode.into(),
-                    index_value,
-                )
-            {
+            if trace_index {
+                eprintln!("simp-index[{index_value}]: mk_path {}", lemma.name);
+            }
+            if lemma.index_mode == SimpIndexMode::Unindexed {
+                // B102: keying is known-unreliable for these patterns (their
+                // whnf'd root can differ from the head a matching goal subterm
+                // presents), so they keep full always-offered semantics and
+                // never enter a head bucket.
                 unindexed.push(index_value);
+                unindexed_headless.push(index_value);
+                continue;
+            }
+            let path = mk_path(state, goal, &lemma.lhs, lemma.index_mode.into());
+            if index.insert_path_if_specific(&path, index_value) {
+                continue;
+            }
+            unindexed.push(index_value);
+            // A refused-but-Const-rooted lemma (e.g. the `Eq ?a ?b ?c`
+            // trivially-generic shape) can only match a goal subterm whose own
+            // whnf'd root key is that same constant — exactly the discipline
+            // `get_match_by_path` applies to tree roots — so bucketing it by
+            // head keeps it precisely as reachable as tree insertion would.
+            match path.first() {
+                Some(DiscrKey::Const(name, _)) => unindexed_by_head
+                    .entry(name.clone())
+                    .or_default()
+                    .push(index_value),
+                _ => unindexed_headless.push(index_value),
             }
         }
 
@@ -223,6 +263,8 @@ impl SimpLemmaSet {
             ordered,
             index,
             unindexed,
+            unindexed_by_head,
+            unindexed_headless,
         }
     }
 
@@ -239,7 +281,39 @@ impl SimpLemmaSet {
             ordered,
             index: DiscrTree::default(),
             unindexed: Vec::new(),
+            unindexed_by_head: HashMap::new(),
+            unindexed_headless: Vec::new(),
         }
+    }
+
+    /// Compose a per-call set from a cached indexed BASE (builtins + registry,
+    /// discrimination tree already built) plus cheap per-call OVERLAY lemmas
+    /// (hypothesis rewrites, `simp [names]` extras, aesop norm-simp bundles).
+    ///
+    /// Overlay lemmas never enter the discrimination tree — no `mk_path`, no
+    /// per-node WHNF — they join the always-offered star pool instead, so
+    /// composing costs a structural clone of the base (`Expr`s are Arc-shared)
+    /// instead of a 10k-lemma re-index. Offering an overlay lemma at every
+    /// query is a superset of tree-indexed retrieval, so this can only widen
+    /// candidate sets, never lose a rewrite.
+    ///
+    /// Candidate ORDER is preserved: the star pool is offered after tree
+    /// matches (unchanged), and the historical global priority sort already
+    /// placed the overlay tiers (hypotheses 75, extras/aesop 50) after the
+    /// base tier (builtins/registry, 100+); the stable sort here reproduces
+    /// the same relative overlay order. The one delta: a hypothetical
+    /// `@[simp low]`-style registry lemma with priority below 75 now sorts
+    /// with the base (before the overlay) instead of interleaving after it.
+    pub(crate) fn base_with_overlay(base: &SimpLemmaSet, mut overlay: Vec<SimpLemma>) -> Self {
+        overlay.sort_by_key(|lemma| std::cmp::Reverse(lemma.priority));
+        let mut set = base.clone();
+        for lemma in overlay {
+            let index_value = set.ordered.len();
+            set.ordered.push(lemma);
+            set.unindexed.push(index_value);
+            set.unindexed_headless.push(index_value);
+        }
+        set
     }
 
     pub(crate) fn candidates<'a>(
@@ -290,11 +364,29 @@ impl SimpLemmaSet {
         // `Test.wrap _` node) must win over a star-keyed identity whose
         // ι-degenerate pattern (`Nat.add ?n 0` ⇒ bare `?n`) would otherwise
         // fire first and strip the node instead.
+        //
+        // Head-const fast path (perf, 2026-08-11): for a `Const`-rooted query
+        // only the matching head bucket plus the headless remainder is
+        // scanned. Any other root (FVar — which may encode an assignable
+        // metavariable — Lit, Arrow, Proj) conservatively keeps the historical
+        // full unindexed scan; Star/Other roots never reach here
+        // (`query_path_is_too_generic` already returned the full set).
         let matched_set: HashSet<usize> = matched_indices.iter().copied().collect();
-        let star_indices = self
-            .unindexed
-            .iter()
-            .copied()
+        let star_pool: Vec<usize> = match query_path.first() {
+            Some(DiscrKey::Const(head, _)) => {
+                let mut pool = self.unindexed_headless.clone();
+                if let Some(bucket) = self.unindexed_by_head.get(head) {
+                    pool.extend(bucket.iter().copied());
+                }
+                // Restore global priority order (`ordered` index order) across
+                // the two sources; buckets and headless are disjoint.
+                pool.sort_unstable();
+                pool
+            }
+            _ => self.unindexed.clone(),
+        };
+        let star_indices = star_pool
+            .into_iter()
             .filter(|index| !matched_set.contains(index));
 
         // Preserve the original lemma priority order within each tier without

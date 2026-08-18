@@ -1,0 +1,211 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "def_path": "mode::CleanMode::from_source_system",
+ "def_index": 17966,
+ "kind": "fn",
+ "func_id": 5244,
+ "instr_count": 27,
+ "lowered": true,
+ "symbolic": false,
+ "spliced": true,
+ "lineage": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "Recorded at top level so a FUTURE domain bump is visible by inspection of this file alone. Read it together with trustc.binary_sha256, never on its own: the superseded revision of this fixture already carried the string `trust_thir_lower.body_lineage.v2` while pinning a digest the v2 scheme does not produce, so the domain string by itself did not discriminate the two measurements.",
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "17 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "0 marker line(s) identical",
+  "markers_exact_is_vacuous_here": "VACUOUS HERE, and the fixture says so rather than letting the word carry weight it has not earned: `markers_detail` is \"0 marker line(s) identical\", i.e. there are ZERO marker lines on either side, so `markers_exact: true` is a comparison of two empty sequences. Measured at this HEAD: 1055 of the 1072 A0 candidates are in that same zero-marker position; only 17 have any marker lines at all. This is NOT the same predicate `level::Level::is_zero` fails \u2014 that body has real markers that genuinely differ (its `markers_detail` carries an actual diff), so it fails NON-vacuously. A gate reading `markers_exact` as evidence of marker agreement is reading a vacuous truth for almost every candidate. DISCHARGED (partially, and only in the direction that was in doubt) by markers_channel_witness.json, measured from THIS SAME coverage dump: the channel compares 8 real marker lines and agrees on `flat::types::FlatFlags::contains` (which flips), and reports FALSE on `level::Level::is_zero`, whose markers genuinely differ and which the -O gate therefore refuses. So a zero-marker reading here is a fact about THIS body, not an artefact of a dead instrument. It still does NOT mean this body's markers were checked and agree."
+ },
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "bodyful_reachable_closure": "PASS \u2014 the body makes NO calls (resolved 0, extern_decls 0, unresolved 0), so the reachable callee closure is the body itself and contains no declaration-only entry. This is the A0 criterion that FAILS for level::Level::is_zero, whose closure reaches Option::as_deref / Option::expect. Re-measured 2026-08-13: still 0/0/0, and is_zero still fails \u2014 at this HEAD its flip does not fire at all (markers_exact false).",
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "ctfe": false,
+  "asserts": 0,
+  "flipped_so_far": 38,
+  "lineage": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+  "matches_artifact_lineage": true,
+  "did_occurrences_in_flip_build_log": 1,
+  "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17966 ~ clean_kernel[348e]::mode::{impl#0}::from_source_system), asserts=0, lineage=sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135, flipped_so_far=42"
+ },
+ "flip_event_observability": {
+  "successful_flip_logs_at_INFO": true,
+  "invisible_by_default": "A SUCCESSFUL flip is logged at INFO, so it does not appear in a default build at all. The only trust-ir-flip lines a default build shows are the WARN `FALLBACK to built MIR` ones \u2014 i.e. the FAILURES. A build run without the log filter below therefore reports ZERO flip events even when every flip fired, which reads exactly like a regression and is not one.",
+  "required_env": "RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info",
+  "consequence_for_this_fixture": "Every flip count in this file, and the raw event above, come from a build run with that variable set \u2014 see build.command, which carries it verbatim."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "from_source_system_event_present": false,
+  "subject_defid_occurrences_in_negative_control_log": 0,
+  "coverage_json_byte_identical_to_flip_build": true
+ },
+ "supersedes": {
+  "superseded_lineage": "sha256:b2ff2df44c28af82a47aa9c195a5814fae76bd53d73725de16a11a5f43d4a848",
+  "superseded_measurement_date": "2026-08-12",
+  "cause": "trust commit a59c2960bc, \"fix(lineage): bind body digest to stable definition identity\" (2026-08-11 18:37), bound the per-body lineage digest to the body's stable DefPathHash and bumped the domain constant `trust_thir_lower.body_lineage.v1` -> `v2`, exactly as that constant's own doc requires.",
+  "what_it_is_not": "This was a DOCUMENTED, CORRECTLY-VERSIONED scheme change. It was not silent, it was not a bug, and it is NOT evidence that any compiled code changed: it moved 12,440 of 13,068 per-body digests (95%) while every emitted IR body stayed byte-identical. Every digest pinned before it is a v1 value describing a compiler that no longer exists.",
+  "why_the_gate_did_not_catch_it": "crystal_a1_lineage.rs (and this chain's from_source_system.rs) RECORD the digest; they do not recompute it. They cannot \u2014 re-deriving a body lineage digest requires running the trust compiler, which a `cargo test` in this repo does not do. So the two lineage assertions only gate this fixture's INTERNAL consistency: that `lineage` == `flip_event.lineage` and that both appear in `flip_event.raw`. A stale-but-self-consistent triple passes forever. The external anchor is the measurement date plus trustc.binary_sha256, which is why both are pinned here.",
+  "also_superseded": {
+   "coverage_json_sha256": "578c9e08a4a71364576716c05d8909dae0d23a5125a4992383de4ee6387c1c48",
+   "clean_kernel_trust_ir_bin_sha256": "05a70ce5d69f6ab06006acc360e959d1d730aeae8c259ea9027a505f604acb57",
+   "trustc_binary_sha256": "5cd23255ddd7b6bb0e3ba01d7cf883d4e87bfd6e232644f65cf676cb6735e711",
+   "trustc_version_string": "rustc 1.99.0-dev (94147b34f 2026-08-11) (trustc 0.1.0)",
+   "clean_repo_HEAD_at_measurement": "15380d93720ca751193a5413b2054452c78a7292",
+   "flip_events_total": 185,
+   "flip_events_codegen": 153,
+   "flip_events_ctfe": 32,
+   "flip_events_all_from_clean_kernel": true,
+   "crate_totals": "bodies 13769 / lowered 9068 / spliced 7572 / derived-MIR agreed 1172 / mismatch 5 / lineage rows 13141",
+   "candidate_set_size": 1058
+  },
+  "superseded_claims": [
+   "`clean_kernel_source_identical_to: fcecd8d7e\u2026, and the emitted module is bit-identical: clean_kernel.trust-ir.bin sha256 05a70ce5\u2026, the same value recorded in level_kind_ord.lineage.json` \u2014 the bin digest it cites is itself a superseded value (the module digest at this HEAD is 4e59acd2\u2026), and no source-identity diff was re-run for the 2026-08-13 measurement. Dropped rather than guessed at.",
+   "`this driver's librustc_driver carries trust_thir_lower.body_lineage.v2, and its sha256 is the same binary data/crystal_a0_a6_probe.json pinned` \u2014 data/crystal_a0_a6_probe.json still pins 5cd23255\u2026 / `94147b34f 2026-08-11`, which is NOT the binary that produced this measurement (8dae2b12\u2026 / `bd36c65a8 2026-08-12`). The cross-reference no longer holds; that probe file is itself due a re-pin.",
+   "`reproduced_by: three clean non-incremental release compiles \u2026 153 codegen + 32 CTFE events, 0 of which name a crate other than clean_kernel` \u2014 contradicted on both counts, see build.reproduced_by and the flip-event block."
+  ]
+ },
+ "carried_forward_from_prior_measurement": {
+  "date_of_those_values": "2026-08-12",
+  "why_this_block_exists": "The 2026-08-13 fact base does not re-measure every field this fixture carries. Silently mixing a fresh number and a stale one in the same document is the exact failure the re-pin exists to fix, so every field NOT taken from the fresh measurement is named here.",
+  "fields": {
+   "kind": "\"fn\" \u2014 a body-kind tag, not a quantity; unchanged by any of the above.",
+   "symbolic": "false \u2014 a coverage-row field with no counterpart in the fresh fact base. Carried, not re-measured.",
+   "deferred_to_seam": "false \u2014 a coverage-row field with no counterpart in the fresh fact base. Carried, but CORROBORATED by fresh data: the 2026-08-13 flip event fired with ctfe=false, i.e. at the codegen seam, which is inconsistent with this body having been deferred.",
+   "structural_new_ground": "All of it. Not in the fresh fact base \u2014 but not stale-by-neglect either: the sibling gate from_source_system_proved_module_matches_the_emitted_artifact re-parses fixtures/from_source_system.trust-ir.txt on EVERY run and asserts 14 blocks, 11 explicit non-contiguous switch cases, 12 aggregate-constant arms, 12 br edges and exactly one parameter-taking join block. Those numbers are checked, just not by the 2026-08-13 build.",
+   "link3_build_item": "All of it. Not in the fresh fact base. The constant shape it records is re-checked every run by that same gate's `= const enum.13 { 0 }` assertion on the raw fixture text.",
+   "candidate_selection.rank_and_width_ordering": "The rank-2 placement and the reason for it are the 2026-08-12 reading; only the candidate-set COUNTS were recounted at this HEAD."
+  },
+  "dropped_rather_than_guessed": {
+   "coverage_json_sha256": "No fresh counterpart. The 2026-08-12 value is recorded in supersedes.also_superseded and is NOT restated as if current.",
+   "build.CARGO_INCREMENTAL": "Subsumed by build.command, which is now pinned verbatim from the fresh measurement.",
+   "build.subject_unit_extra_flags": "Same \u2014 the fresh build.command carries the RUSTFLAGS verbatim, so a separately-maintained flag list can only drift out of agreement with it.",
+   "candidate_selection.single_block_share": "The 2026-08-12 reading was \"of the 153 codegen bodies, 138 are single-block\". Its denominator (153) is superseded by 167 and no fresh single-block recount exists, so the fraction is dropped outright rather than re-based by arithmetic."
+  }
+ },
+ "link3_build_item": {
+  "measured_utc_date": "2026-08-12",
+  "why_this_row_exists": "This body was measured NOT CHAINABLE on 2026-08-12 (data/crystal_width_candidates_2026-08-12.json, rank 2). The blocker was LINK 3 and nothing else: Clean's IRConst had seven constructors and no aggregate form, so ir_const_eval had no case for the construct every arm of this body emits. The standing rule is that a lowering gap is a BUILD ITEM, never a reason to retarget the proof, so the form was built.",
+  "constant_shape": "trust_ir::Constant::Aggregate([Constant::Int(k)])",
+  "text_form": "%3 = const enum.13 { 0 }",
+  "arity": 1,
+  "element_kind": "Int",
+  "nesting_depth": 1,
+  "distinct_discriminants_emitted": [
+   0,
+   1,
+   2,
+   4,
+   5
+  ],
+  "also_emitted_by": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone \u2014 `const enum.181 { k }`, the SAME shape (arity 1, Int element, depth 1), which is rank 3 of the candidate table and is unblocked by the same build item",
+  "irconst_constructors_before": 7,
+  "irconst_constructors_after": 10,
+  "how_it_was_built": "An INLINE element spine (aggv / vnil / vcons) inside IRConst itself, following the IRScalar precedent and for the same measured reason: a structural `agg : IRList IRConst -> IRConst` is a NESTED inductive and this elaborator does not register one (eval_ir_state.rs's module doc records the ProbeNested FAIL / ProbeSpine PASS pair). ir_const_value became an explicit IRConst.rec so the spine materializes recursively; ir_const_agg_eval is the typed evaluator and consults ir_ty_is_agg, so an aggregate constant at a scalar type is type_error not_agg; a bare vnil/vcons node is type_error not_agg as well.",
+  "measured_not_assumed": "The shapes above were read out of the emitted trust-ir text dump of clean-kernel (dump/clean_kernel.trust-ir.txt) for both bodies, not inferred from the Rust source.",
+  "freshness": "PRIOR measurement (2026-08-12), not re-taken on 2026-08-13. Unaffected by the lineage-domain bump, which changed digests only and left every emitted IR body byte-identical; and the shape assertion is re-run against the emitted text on every test run."
+ },
+ "structural_new_ground": {
+  "measured_utc_date": "2026-08-12",
+  "freshness": "PRIOR measurement, re-checked every test run against fixtures/from_source_system.trust-ir.txt \u2014 see carried_forward_from_prior_measurement.fields.structural_new_ground.",
+  "blocks": 14,
+  "explicit_switch_cases": 11,
+  "case_list": "NON-CONTIGUOUS \u2014 0..9 then 11; tag 10 (PVS) is the value the default edge carries",
+  "distinct_answers": 5,
+  "answer_map": "12 source systems onto 5 of the 6 CleanModes, many-to-one",
+  "argument_passing": "BY VALUE (bb0(%0: enum.175)) \u2014 no load, no heap in the theorem at all; the first chain in this program whose A2 relation mentions no memory",
+  "answer_kind": "an AGGREGATE \u2014 the join block parameter is enum.13 and the theorem's right-hand side is an IRScalar.aggv, not a scalar",
+  "vs_incumbents": "has_cubical_layer: 5 blocks / 2 cases / Bool answers / loaded &self. kind_ord: 7 blocks / 4 cases / u8 answers / loaded &self."
+ },
+ "build": {
+  "clean_repo_HEAD_at_measurement": "317117738",
+  "clean_repo_HEAD_note": "Recorded in the fact base in short form; copied verbatim rather than expanded.",
+  "trust_repo_HEAD": "110cc63792d7fcb9c3f568fa01ef998974231f05",
+  "command": "RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info CARGO_TARGET_DIR=<tgt> RUSTC=<stage1>/rustc RUSTFLAGS='-Ztrust-verify=off -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir> -Cdebuginfo=0' <stage1>/cargo build --locked --release -p clean-kernel",
+  "release_shape_proof_row_present": true,
+  "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED cfg-split body was compiled",
+  "crate_totals": "bodies 13770 / lowered 9066 / spliced 7570 / derived-MIR agreed 1541 / mismatch 0 / lineage rows 13142",
+  "crate_totals_delta": "derived-MIR agreed rose 1172 -> 1541 and MISMATCH fell 5 -> 0: clean-kernel now has ZERO derived-MIR mismatch bodies. bodies / lowered / spliced / lineage rows are unmoved.",
+  "flip_events_total": 4575,
+  "flip_events_total_scope": "ALL CRATES in the build, NOT clean_kernel. The superseded fixture's 185 was a clean-kernel figure that also happened to be the whole-build total; that is no longer true and the two must not be compared as like for like.",
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_codegen_ctfe_scope": "clean_kernel only \u2014 167 + 32 = 199 = flip_events_clean_kernel.",
+  "flip_events_all_from_clean_kernel": false,
+  "flip_events_top_other_crates": [
+   [
+    "zerocopy",
+    2586
+   ],
+   [
+    "num_traits",
+    300
+   ],
+   [
+    "syn",
+    294
+   ],
+   [
+    "crypto_common",
+    289
+   ],
+   [
+    "clean_kernel",
+    199
+   ],
+   [
+    "object",
+    171
+   ]
+  ],
+  "clean_kernel_trust_ir_bin_sha256": "b1359add7e9b1b8737ee3215cf7303dca8d0c97161b555b2472e7055f4485a04",
+  "reproduced_by": "Two clean release compiles of clean-kernel at this HEAD: the flip build and the -Ztrust-ir-flip=no negative control. Their coverage.json files are byte-identical, so the differential verdict and this body's lineage row are independent of the flip flag; the 199 clean_kernel flip events, and this body's event in particular, appear only in the flip build (0 occurrences of the DefId in the negative-control log). The superseded fixture's stronger claim \u2014 three compiles, and no flip event naming a crate other than clean_kernel \u2014 is NOT re-asserted; the second half of it is now measured false.",
+  "flip_events_total_KEY_COLLISION_WARNING": "KEY-NAME COLLISION \u2014 DO NOT re-baseline the ratchet from this value. `flip_events_total` here means ALL CRATES in the build graph (4520). `data/trust_ir_build_baseline.json` uses the SAME key name for a CLEAN-KERNEL-ONLY monotonic ratchet FLOOR, consumed by scripts/trust_ir_build.sh and scripts/local_gate.sh, whose harness attaches -Ztrust-ir-flip to the `--crate-name clean_kernel` unit alone. Copying 4520 into that file would wedge a gate that can only ratchet upward. The clean-kernel-scoped figure is `flip_events_clean_kernel` (199), and even that was measured under a GLOBAL RUSTFLAGS build, not the baseline harness, so it is not a drop-in either. The baseline is lagging BY DESIGN (a floor, not a status claim) and still passes at these numbers."
+ },
+ "trustc": {
+  "version_string": "rustc 1.99.0-dev (110cc6379 2026-08-13) (trustc 0.1.0)",
+  "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+  "binary_sha256": "ac41b080aaa22f2a96777836cf3874b9afde25d60be7679850e948a238cdae3a",
+  "lineage_domain": "trust_thir_lower.body_lineage.v2"
+ },
+ "candidate_selection": {
+  "why_this_body": "Rank 2 of the measured whole-crate candidate set (PRIOR ranking, 2026-08-12, at fcecd8d7e). It is the STRUCTURALLY WIDEST body of the set \u2014 14 blocks and 11 explicit switch cases against kind_ord's 7 and 4 \u2014 and was ranked below kind_ord only because it was not chainable at the time. The reason it was not chainable was a missing Clean-side construct, which is a build item; building it is what this chain is.",
+  "recount_at_this_head": {
+   "measured_utc_date": "2026-08-13",
+   "criteria": "derived-MIR agreed AND markers_exact AND unsupported [] AND spliced",
+   "bodies_satisfying": 1072,
+   "of_those_with_a_clean_kernel_flip_event": 199,
+   "of_those_with_zero_calls": 199,
+   "all_flipped_candidates_have_zero_calls": true,
+   "reading": "Every one of the 199 flipped candidates has a bodyful reachable closure, because every one of them has no callees at all."
+  },
+  "prior_recount": {
+   "measured_utc_date": "2026-08-12",
+   "bodies_satisfying": 1058,
+   "of_those_with_a_flip_event": 185,
+   "codegen": 153,
+   "ctfe": 32,
+   "note": "Superseded. Kept only so the movement 1058 -> 1072 and 185 -> 199 is legible; do not quote these as current."
+  },
+  "measured_utc_date": "2026-08-13"
+ },
+ "measured": "2026-08-13",
+ "supersedes_chain": [
+  {
+   "lineage": "sha256:f8bd7fb39af9fb5b6b5a9f13773a5cab9b9efd0ebf9e6ccadacb123ec9710744",
+   "measured": "2026-08-13",
+   "why": "superseded by the 2026-08-13 RECONCILIATION measurement: every chain fixture in this tree is now pinned on ONE compiler (trustc 110cc6379) with that compiler's identity recorded, after two sessions' fixtures were found to disagree because they were taken on different, partly unrecorded compilers."
+  }
+ ]
+}

@@ -1,0 +1,242 @@
+{
+ "schema": "crystal-cast-chain-v1",
+ "measured_utc_date": "2026-08-16",
+ "lane": "lane CAST",
+ "question": "Chain a CAST-carrying body end to end, all five links, and establish what EvalIR can express about casts - is there a cast case in the instruction evaluator at all, or is this a build item like the float arms were?",
+ "candidate": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+ "why_this_one_of_the_three": [
+  "It is the only TRUNC in the crate. Information is LOST: trunc u64 -> u32 is n mod 2^32, so distinct inputs collapse, and the refinement theorem has to be exact about which information survives. A zero extension is an injective embedding whose theorem says the value is unchanged, which is the least a cast can say.",
+  "The other two cast bodies are the SAME BODY TWICE - identical instruction sequence, instr count, canonical-line count, marker count and call counts, differing only in a struct id. Chaining one would be chaining one of a duplicated pair.",
+  "The producer's own interpreter differential RAN on it (agreed, 5 samples). Both zext bodies are `not-run` because their parameter is a by-value newtype struct, so this body carries strictly more producer-side evidence.",
+  "Its closure environment parameter has the UNIT type `()` rather than `ptr` - a signature shape no chained body has."
+ ],
+ "compiler": {
+  "sealed_snapshot": "$HOME/trust-lane8/.lane8/seal-lane8",
+  "trust_rev": "2d7e094f2224994b112e06fdab49123d469c6b43",
+  "dylib_sha256": "c8746c54263d3f8da7354cbd071467f268c54c428c071fe2bc9842a7624a30d2",
+  "rustc_main_sha256": "f76dafc1fae352268f01cdfdb2199108d5233506691c2c731c13f9febeed6f8e",
+  "verify_verdict": "OK",
+  "guard_verdict": "PASS (scripts/seal_driver.sh guard, --dyld stated, --snapshot-root the seal; run immediately BEFORE every one of the four builds and again inside the driver wrapper on every invocation)",
+  "selftest_verdict": "UNPROVEN by construction - the ten perturbation classes are the same list every driver in this range registers, exactly the case seal_driver.sh documents as undiscriminating",
+  "positive_identification": "BY OUTPUT, at the FIRST measured clean HEAD (e2e732f7a): this lane's coverage.json / trust-ir.txt / trust-ir.bin hashed to a59cc78f... / e02c3422... / 1b946a35..., byte for byte the three digests data/crystal_flip_census_lane8_2026-08-15.json records for its subject driver. Not by `trustc -vV`, whose stamp is pinned by the build script and is not a source identity, and not by seal_driver.sh selftest, which reports UNPROVEN here. The digests under `reproduction` are the SECOND HEAD's (6e56720c5), where clean-kernel itself moved."
+ },
+ "profile": {
+  "opt_level": 3,
+  "debug_assertions": "off, PINNED IN THE ARGV rather than inherited from the profile name",
+  "release_shape_proof": "the build's own profile assertion passed: `release-only inference spine present (6/6)`, one-sided proof that the subject is the DEPLOYED kernel and not its debug twin"
+ },
+ "reproduction": {
+  "clean_repo_HEAD": "6e56720c5",
+  "clean_non_incremental_builds": 3,
+  "plus_negative_control": true,
+  "sha256": {
+   "coverage.json": "e9e472eabd89cb933000a045e64268c1c3ddb097c7a2945b44d5b64a5fdb8d42",
+   "trust-ir.txt": "0e3b0e1ca27fad616ca7b48c1a996b4b5e0e40dd21a48b1aeb2095cb3a8f5e9d",
+   "trust-ir.bin": "7a787a14a7541092e898d01334a432ea65ff7d091a8ec8e121b8a6f3e590e3de"
+  },
+  "byte_identical_across_all_four": true,
+  "matches_lane8_census_coverage_digest": "at the FIRST measured HEAD (e2e732f7a), byte for byte. At 6e56720c5 clean-kernel gained three bodies, so the dump digests move with it - see measured_at_two_clean_HEADs.",
+  "negative_control_flag": "-Ztrust-ir-flip=no",
+  "negative_control_flip_events": 0,
+  "negative_control_coverage_json_identical": true
+ },
+ "crate_totals_reproduced": {
+  "bodies": 13774,
+  "lowered": 9067,
+  "spliced": 7571,
+  "derived_mir_agreed": 1543,
+  "derived_mir_mismatch": 0,
+  "markers_exact_rows": 1085,
+  "markers_exact_rows_non_vacuous": 27,
+  "lineage_rows": 13146,
+  "flip_events": 210,
+  "flip_events_codegen": 178,
+  "flip_events_ctfe": 32,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_naming_another_crate": 0,
+  "note": "At the FIRST measured HEAD (e2e732f7a) every field was the 2026-08-15 lane-8 census exactly, and the trust-ir dump was byte-identical to it - clean-kernel had not moved. origin/main then advanced to 6e56720c5, which DOES touch clean-kernel (env/decl_add, inductive_builder, registration, types): +3 bodies, +1 agreed, +1 markers_exact row, +1 codegen flip. The figures above are the SECOND HEAD, which is the tree this work is committed onto."
+ },
+ "codegen_flips": 178,
+ "operator_census_over_every_codegen_flip": {
+  "const": 116,
+  "extractfield": 37,
+  "insertfield": 22,
+  "load": 15,
+  "icmp": 11,
+  "zext": 2,
+  "trunc": 1,
+  "and": 1,
+  "or": 1,
+  "fadd": 1,
+  "fsub": 1,
+  "fmul": 1,
+  "fdiv": 1,
+  "re_derived_by_this_lane": true,
+  "note": "Recomputed from this lane's own dump with a parser written for this job, and it reproduces the float lane's census exactly. The first parse of the build log was WRONG in a way worth recording: matching every line containing a DefId picked up 411 `FALLBACK to built MIR` lines as well, giving 581 codegen flips of which 364 named hashbrown/core/alloc and 159 had a lineage mismatch. A flip event is `compiled from trust-ir` carrying BOTH a lineage digest and a flipped_so_far counter; restricting to that gave 177 codegen + 32 CTFE, 0 foreign, 0 mismatches at the first HEAD and 178 + 32 at the second. The per-operator counts are IDENTICAL at both."
+ },
+ "the_three_cast_candidates_all_re_derived": {
+  "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}": {
+   "def_index": 14930,
+   "func_id": 4302,
+   "instr_count": 2,
+   "cast": "trunc u64 %1 to u32",
+   "emitted": "bb0(%0: (), %1: u64): %2 = trunc u64 %1 to u32 / ret %2",
+   "lowered": true,
+   "spliced": true,
+   "symbolic": false,
+   "unsupported": [],
+   "derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   },
+   "interpreter": {
+    "verdict": "agreed",
+    "samples": 5,
+    "detail": "THIR-trust-ir == MIR-trust-ir on 5 sampled input(s) (differential interpretation; 1 proven-never-read opaque param(s) as placeholders)"
+   },
+   "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
+   "deferred_to_seam": false,
+   "lineage": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+   "flip_event": {"fired": true, "seam": "codegen", "asserts": 0, "flipped_so_far": 196, "lineage_equals_coverage_row": true},
+   "CHOSEN": true
+  },
+  "cert::builder::state::NodeId::index": {
+   "def_index": 1787,
+   "func_id": 593,
+   "instr_count": 3,
+   "cast": "zext u32 %1 to usize",
+   "emitted": "bb0(%0: struct.317): %1 = extractfield u32 %0, 0 / %2 = zext u32 %1 to usize / ret %2",
+   "lowered": true,
+   "spliced": true,
+   "symbolic": false,
+   "unsupported": [],
+   "derived_mir": {
+    "verdict": "agreed",
+    "detail": "4 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   },
+   "interpreter": {
+    "verdict": "not-run",
+    "samples": 0,
+    "detail": "non-scalar parameter type is non-interpretable (coverage-only skip)"
+   },
+   "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
+   "deferred_to_seam": false,
+   "lineage": "sha256:8a8aa6ba1b9903461934d613a555b7155ca39eea75edeed80c2f6db79a475dec",
+   "flip_event": {"fired": true, "seam": "codegen", "asserts": 0, "flipped_so_far": 62, "lineage_equals_coverage_row": true},
+   "CHOSEN": false
+  },
+  "env::persistent_ext::ExtensionIdx::index": {
+   "def_index": 13453,
+   "func_id": 4024,
+   "instr_count": 3,
+   "cast": "zext u32 %1 to usize",
+   "emitted": "bb0(%0: struct.848): %1 = extractfield u32 %0, 0 / %2 = zext u32 %1 to usize / ret %2",
+   "lowered": true,
+   "spliced": true,
+   "symbolic": false,
+   "unsupported": [],
+   "derived_mir": {
+    "verdict": "agreed",
+    "detail": "4 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   },
+   "interpreter": {
+    "verdict": "not-run",
+    "samples": 0,
+    "detail": "non-scalar parameter type is non-interpretable (coverage-only skip)"
+   },
+   "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
+   "deferred_to_seam": false,
+   "lineage": "sha256:b4dfec7cb414f992f0e53bbdd7520dfb5761b0c9c122d0b88bc7d96c5a8d8a9c",
+   "flip_event": {"fired": true, "seam": "codegen", "asserts": 0, "flipped_so_far": 50, "lineage_equals_coverage_row": true},
+   "CHOSEN": false
+  },
+  "the_two_zext_bodies_are_the_same_body_twice": true,
+  "measured_at_two_clean_HEADs": "All three rows were re-derived at e2e732f7a and again at 6e56720c5. What moved: def_index (14920->14930, 13443->13453; NodeId::index stayed 1787) and flipped_so_far (195->196, 49->50, 61->62). What did NOT move, for any of the three: the emitted body text byte for byte, the derived-MIR verdict / detail / marker count, the interpreter verdict and sample count, the call counts, and THE LINEAGE DIGEST. That sharpens rather than contradicts the standing rule that a lineage digest is a per-BUILD artifact identity: it moves when the crate DISAMBIGUATOR moves, and clean_kernel[4676] did not move across this change."
+ },
+ "IS_A_CAST_EXPRESSIBLE_IN_EVALIR": {
+  "answer": "YES, EXACTLY, AND IT ALREADY WAS. No build item was needed on the semantics side - which is the OPPOSITE of the float lane's finding and is why the question had to be asked rather than assumed.",
+  "what_already_existed": [
+   "IRInst.cast : IRCastOp -> IRTy -> IRTy -> Nat -> IRInst (spec/core_spec/eval_ir_syntax.rs)",
+   "IRCastOp with 17/17 of trust_ir::CastOp in declaration order (same file)",
+   "ir_cast_eval dispatching all seventeen arms (spec/core_spec/eval_ir_ops.rs::add_eval_ir_cast)",
+   "the exact typed evaluators ir_trunc_eval / ir_zext_eval / ir_sext_eval, plus ir_ptrtoint_eval / ir_ptrcast_eval / ir_reifyfn_eval",
+   "the machine's own case: `IRInst.cast op sr ds a => ir_bind_result s rs (ir_cast_eval op sr ds (ir_getd s a))` (spec/core_spec/eval_ir_machine.rs)",
+   "four pre-existing kernel-executed cast witnesses (ir_exact_trunc_low_bit, ir_exact_zext_canonicalizes, ir_exact_sext_negative, ir_inttoptr_fails_closed)"
+  ],
+  "what_WAS_the_build_item": "THE CFG GATE. Before this chain a cast was in NO lane of tests/crystal_a1_lineage/emitted_cfg.rs, so a body whose entire content is `trunc` + `ret` parsed to an ENTIRELY EMPTY Cfg on both sides - and two empty CFGs compare equal. Every assertion the gate had would have passed against a transcription with no cast at all. The `casts` and `cast_tys` lanes are this lane's build item, and they are the same class of hole the eighth chain found with binop_tys and rets.",
+  "both_widths_are_semantic_and_the_float_lane_hole_was_checked_for": {
+   "destination": "ir_trunc_int returns ir_wrap dw x, so trunc u64 -> u32 and trunc u64 -> u8 are different functions of the same operand. Registered as ir_gc_dest_width_is_semantic, for every n.",
+   "source": "the guard is ir_nat_leb dw sw, so trunc u8 -> u32 is ir_width_fault where trunc u64 -> u32 is a value. The source width decides FAULT versus VALUE and is NOT implied by the operand - the half with no analogue in binop_tys, because a binop has one type and a cast has two. Registered as ir_gc_source_width_is_semantic, for every scalar.",
+   "opcode": "zext requires sw <= dw, so zext u64 -> u32 at this chain's own widths is ir_width_fault where its trunc answers. Registered as ir_gc_opcode_is_semantic, for every scalar.",
+   "usize": "left UNRESOLVED (`?usize`) rather than decided at an assumed width, and assert_lanes refuses an unresolved cast type on EITHER side. The two unchained zext bodies emit it, so a later lane fails closed there until someone decides."
+  },
+  "exactness": "TOTAL, unlike the float lane. ir_wrap dw x is the canonical low-dw residue with no rounding, no saturation and no tagged refusal, so this chain's A4 concludes IROutcome.ret and reuses the existing ret-only fuel monotonicity (ir_run_le_ret) rather than needing a new one.",
+  "refused_and_why": {
+   "unconditional periodicity": "ir_wrap 32 (n + 2^32) = ir_wrap 32 n for EVERY n is NOT proved. It needs ir_nat_rem periodicity, which nobody has earned, and buying it with the kernel-native Nat.div/Nat.mod would add ACCELERATED CONSTANTS whose declared bodies the kernel never consults - speed bought with trust, refused by the float lane on exactly this ground for finite-plus-finite. What IS proved generally is the conditional form: equal low words give equal outcomes (ir_gc_high_word_is_discarded). The collapse itself is EXECUTED at 7 and 2^32 + 7.",
+   "bitcast / transmute / inttoptr": "still the tagged unmodelled width_bounded outcome. No body in clean-kernel flips one, so a semantics for them would be modelling with no artifact to be about."
+  },
+  "accelerated_constants_added": 0,
+  "new_trust_added": "none - ir_wrap, ir_nat_rem, ir_nat_leb and ir_ty_int_width were already relied on by the integer arithmetic lane"
+ },
+ "the_five_links": {
+  "1_source_to_trust_ir": "HOLDS - lowered, spliced, 2 instrs, unsupported [], derived-MIR agreed over 5 canonical lines, markers_exact TRUE over 2 REAL marker lines, and the producer's own interpreter differential agreed on 5 sampled inputs. Emitted IR recorded verbatim at crates/clean-verify/tests/fixtures/get_char_val_trunc.trust-ir.txt.",
+  "2a_proved_equals_emitted": "HOLDS (structural) - crates/clean-verify/tests/crystal_a1_lineage/get_char_val_trunc.rs, over two NEW instruction lanes (`casts`, `cast_tys`) plus every pre-existing one, with the emptiness of all thirteen other lanes pinned as the coverage denominator.",
+  "2b_differential_and_flip": "HOLDS - codegen flip fired, DefId(0:14930), asserts=0, flipped_so_far=196; negative control -Ztrust-ir-flip=no gives 0 flip events crate-wide and no event for this body.",
+  "2c_artifact_identity": "HOLDS - flip-event lineage == coverage-row lineage (sha256:607c1d96...), reproduced by three clean non-incremental builds plus the negative control, all four byte-identical.",
+  "bodyful_closure": "HOLDS - 0 resolved / 0 extern / 0 unresolved calls, deferred_to_seam false.",
+  "3_trust_ir_to_CIC": "HOLDS, with NO build item - ir_cast_eval's trunc arm and the machine's IRInst.cast case already existed and are exact. This is the first chain to reach the CAST lane of the evaluator.",
+  "4_refinement": "ir_gc_correct (A4) for every u64 bit pattern, every representing value, every closure environment, every heap and every fuel >= 2; ir_gc_machine_sound (A5 inversion); ir_gc_high_word_is_discarded (A5 reaching the ARGUMENTS - equal low words give equal outcomes); ir_gc_never_faults. Plus five general cast-semantics theorems and eleven kernel-executed witnesses.",
+  "5_kernel_checked": "census 11, vacuity firewall green with nothing blessed, premise_witness_gate green - see gates_at_this_head."
+ },
+ "gates_at_this_head": {
+  "runs": "THREE times - when the chain landed, again after the file split, and again on the exact committed tree; all three green. The times below are the THIRD run's, five binaries in parallel on a box carrying other lanes (the first two measured 242.33 / 241.58 / 241.93 / 242.55 / 2.80 s and 345.49 / 346.23 / 346.19 / 347.31 / 1.37 s).",
+  "axiom_ratchet": "ok. 3 passed; 0 failed; 0 ignored (251.02 s)",
+  "vacuity_firewall": "ok. 4 passed; 0 failed; 0 ignored (251.06 s)",
+  "premise_witness_gate": "ok. 1 passed; 0 failed; 0 ignored (250.70 s)",
+  "proof_status_invariants": "ok. 4 passed; 0 failed; 0 ignored (251.76 s)",
+  "eval_ir": "ok. 8 passed; 0 failed; 0 ignored (1.20 s)",
+  "crystal_a1_lineage": "ok. 44 passed; 0 failed; 0 ignored",
+  "cargo_fmt_check": "rc=0",
+  "cargo_clippy_p_clean_verify_all_targets_D_warnings": "rc=0",
+  "census": 11,
+  "vacuity_firewall_detail": "48 relations audited, every one 0 strict / 0 premise-only, nothing EXCLUDED. EncodesU64Val (the premise this chain reuses) visits 19 names.",
+  "paragon_ratchet": {
+   "verdict": "this lane's delta is ZERO; the red is PRE-EXISTING and is NOT re-baselined",
+   "pristine_origin_main": "files_over_500 baseline 1410, measured 1414 (clean-verify 221 -> 225) at BOTH e2e732f7a and 6e56720c5 - measured on pristine origin/main itself, so the ratchet is already RED before this lane touches anything",
+   "with_this_lane": "1414, clean-verify 225 - IDENTICAL to pristine HEAD",
+   "how": "the two files this lane would have taken over 500 were split at the commit that creates them: the ninth chain's evidence gates into get_char_val_trunc_evidence.rs (324 + 235), and the FIRST chain's two gates out of crystal_a1_lineage.rs into crystal_a1_lineage/has_cubical_layer.rs - the per-chain file every other chain already had, and the reason the root file sat at 497 with nowhere to go",
+   "why_not_update": "`--update` on a red this lane did not cause is raising a limit to make something pass"
+  },
+  "ratchets_untouched": ["data/premise_witness_ratchet.json", "data/clean_verify_axiom_ratchet.json", "data/paragon_ratchet.json"],
+  "declarations_registered": 27,
+  "note": "All 27 declarations of eval_ir_trunc.rs elaborate and kernel-check inside the full Specification::new(), which is what makes links 3, 4 and 5 hold rather than merely be written down."
+ },
+ "perturbations": {
+  "script": "scripts/crystal_perturb_get_char_val_trunc.sh",
+  "cases": 48,
+  "expected_outcomes": 97,
+  "unexpected": 0,
+  "required_by_the_brief_and_present": [
+   "fixture DELETED (P21) - fails CLOSED",
+   "fixture EMPTIED (P22)",
+   "evidence file DELETED (P23) and EMPTIED (P24)",
+   "markers_detail ZEROED (P25)",
+   "the cast width changed on the SOURCE side alone: spec P3, artifact P15",
+   "the cast width changed on the DESTINATION side alone: spec P4/P5, artifact P16",
+   "zext <-> trunc swapped: spec P1, artifact P14 (and sext, spec P2)"
+  ],
+  "cases_that_would_have_passed_before_the_cast_lanes": ["P12 (the cast deleted from the proved module)", "P13 (the cast deleted from the artifact)"],
+  "the_two_width_drifts_are_distinguishable_from_each_other": "asserted in get_char_val_trunc_the_new_lanes_catch_what_every_old_lane_misses, so the lane carries BOTH widths rather than one conflated token",
+  "guard_selftest": "G0 - the eighth chain's battery found a defect IN ITSELF (an ambiguous revert anchor let 32 cases run against a mutated tree) and made a failed substitution fatal. This battery PROVES that fix rather than inheriting it on trust: G0 runs `sub` in a subshell against an anchor matching three declaration lines, requires the abort, then re-runs the gates to confirm the tree was left untouched.",
+  "defect_this_battery_found_in_its_own_gate": "one evidence assertion used contains(\"usize\"), and the mutation that replaced the whole claim with `nothing.` left a later mention of usize in the sentence, so the case ran green. The assertion is now a prefix test and the case fails. Second consecutive battery to catch its own chain's weakness."
+ },
+ "spec_module": "crates/clean-verify/src/spec/core_spec/eval_ir_trunc.rs",
+ "new_relations_registered": 0,
+ "new_relations_note": "This chain registers NO new inductive relation: it reuses EncodesU64Val, registered by the sixth chain and already on the vacuity firewall's EXPLICIT required-names list and already carrying a premise witness. The firewall's required list, the premise ratchet and the axiom census are therefore all unchanged, which is the honest reason none of them moved rather than an omission."
+}

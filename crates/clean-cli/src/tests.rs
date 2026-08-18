@@ -351,6 +351,25 @@ fn cli_parse_check_max_cache_entries_zero_means_unbounded() {
 }
 
 #[test]
+fn cli_parse_check_parse_only_flag() {
+    use clap::Parser;
+    let cli = Cli::try_parse_from(["clean", "check", "--parse-only", "test.lean"]).unwrap();
+    match cli.command {
+        Commands::Check(CheckArgs { parse_only, .. }) => {
+            assert!(parse_only, "--parse-only must set the parse_only field");
+        }
+        _ => panic!("Expected Check command"),
+    }
+    let cli = Cli::try_parse_from(["clean", "check", "test.lean"]).unwrap();
+    match cli.command {
+        Commands::Check(CheckArgs { parse_only, .. }) => {
+            assert!(!parse_only, "parse_only must default to false");
+        }
+        _ => panic!("Expected Check command"),
+    }
+}
+
+#[test]
 fn cli_parse_lake_run() {
     use clap::Parser;
     let cli = Cli::try_parse_from([
@@ -454,6 +473,36 @@ fn cli_parse_lake_env_with_command_args() {
                 assert!(verbose);
             }
             _ => panic!("Expected Lake env command"),
+        },
+        _ => panic!("Expected Lake command"),
+    }
+}
+
+#[test]
+fn cli_parse_lake_serve_collects_forwarded_editor_args() {
+    use clap::Parser;
+
+    // Bare form: what a user types by hand.
+    let cli = Cli::try_parse_from(["clean", "lake", "serve"]).unwrap();
+    match cli.command {
+        Commands::Lake(clean_lake::cli::LakeArgs { command, dir }) => {
+            assert!(dir.is_none(), "no --dir flag should mean None");
+            match command {
+                LakeCommands::Serve { args } => {
+                    assert!(args.is_empty(), "bare serve should forward no args");
+                }
+                _ => panic!("Expected Lake serve command"),
+            }
+        }
+        _ => panic!("Expected Lake command"),
+    }
+
+    // Editor form: the VS Code Lean 4 extension launches `lake serve -- ...`.
+    let cli = Cli::try_parse_from(["clean", "lake", "serve", "--", "--editor-flag"]).unwrap();
+    match cli.command {
+        Commands::Lake(clean_lake::cli::LakeArgs { command, .. }) => match command {
+            LakeCommands::Serve { args } => assert_eq!(args, ["--editor-flag"]),
+            _ => panic!("Expected Lake serve command"),
         },
         _ => panic!("Expected Lake command"),
     }
@@ -1489,6 +1538,37 @@ fn cli_parse_lake_dir_with_subcommand_options() {
                 _ => panic!("Expected Build command"),
             }
         }
+        _ => panic!("Expected Lake command"),
+    }
+}
+
+/// `clean lake build --permissive-imports` must bind the opt-out flag, and the
+/// bare verb must default to fail-closed import loading (flag false).
+#[test]
+fn cli_parse_lake_build_permissive_imports_flag() {
+    use clap::Parser;
+    let cli = Cli::try_parse_from(["clean", "lake", "build", "--permissive-imports"]).unwrap();
+    match cli.command {
+        Commands::Lake(clean_lake::cli::LakeArgs { command, .. }) => match command {
+            LakeCommands::Build {
+                permissive_imports, ..
+            } => assert!(permissive_imports, "--permissive-imports should bind true"),
+            _ => panic!("Expected Build command"),
+        },
+        _ => panic!("Expected Lake command"),
+    }
+
+    let cli = Cli::try_parse_from(["clean", "lake", "build"]).unwrap();
+    match cli.command {
+        Commands::Lake(clean_lake::cli::LakeArgs { command, .. }) => match command {
+            LakeCommands::Build {
+                permissive_imports, ..
+            } => assert!(
+                !permissive_imports,
+                "default must be fail-closed import loading"
+            ),
+            _ => panic!("Expected Build command"),
+        },
         _ => panic!("Expected Lake command"),
     }
 }

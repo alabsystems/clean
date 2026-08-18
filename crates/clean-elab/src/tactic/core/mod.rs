@@ -23,6 +23,7 @@ mod type_check;
 
 #[cfg(test)]
 pub(crate) use self::close_fvars::close_fvars;
+pub(crate) use self::type_check::set_speculative_tc_budget;
 pub(crate) use conv_focus_tree::{ConvFocus, ConvNav};
 pub(crate) use conv_witness::ConvFocusWitness;
 pub use error::{RewriteCandidate, TacticError, TacticResult};

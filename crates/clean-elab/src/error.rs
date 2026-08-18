@@ -26,6 +26,22 @@ pub enum ElabError {
     /// Type mismatch between expected and actual types.
     #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch { expected: String, actual: String },
+    /// A finalized declaration still contains unresolved variables — either
+    /// metavariable-tagged FVars (an implicit argument no unification could
+    /// ever constrain: phantom section binders, an untyped alias desugar, a
+    /// failed instance synthesis fallback) or a genuine local FVar that
+    /// escaped abstraction (e.g. a dropped section variable). Fail-closed
+    /// here: without this guard both classes reach the kernel and die as an
+    /// opaque "contains free variables".
+    #[error("{decl_kind} {name}: elaboration left unresolved variables ({detail})")]
+    ResidualFreeVariables {
+        /// Declaration kind ("def", "theorem", "instance").
+        decl_kind: String,
+        /// Declaration name as registered.
+        name: String,
+        /// Classified id list: which are unsolved metas vs escaped locals.
+        detail: String,
+    },
     /// Reference to an identifier that is not in scope.
     #[error("Unknown identifier: {0}")]
     UnknownIdent(String),

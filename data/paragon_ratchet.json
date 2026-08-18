@@ -9,10 +9,10 @@
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)"
   },
   "totals": {
-    "files_over_500": 1406,
-    "unwrap_expect_production": 1225,
-    "bare_pub_non_lib": 13611,
-    "allow_dead_code_sites": 58
+    "files_over_500": 1416,
+    "unwrap_expect_production": 1228,
+    "bare_pub_non_lib": 13636,
+    "allow_dead_code_sites": 57
   },
   "crates": {
     "clean": {
@@ -52,7 +52,7 @@
       "allow_dead_code_sites": 0
     },
     "clean-cli": {
-      "files_over_500": 42,
+      "files_over_500": 43,
       "unwrap_expect_production": 24,
       "bare_pub_non_lib": 7,
       "allow_dead_code_sites": 0
@@ -70,10 +70,10 @@
       "allow_dead_code_sites": 0
     },
     "clean-elab": {
-      "files_over_500": 375,
-      "unwrap_expect_production": 259,
-      "bare_pub_non_lib": 1435,
-      "allow_dead_code_sites": 8
+      "files_over_500": 373,
+      "unwrap_expect_production": 261,
+      "bare_pub_non_lib": 1447,
+      "allow_dead_code_sites": 7
     },
     "clean-features": {
       "files_over_500": 0,
@@ -90,19 +90,19 @@
     "clean-kernel": {
       "files_over_500": 129,
       "unwrap_expect_production": 158,
-      "bare_pub_non_lib": 1228,
+      "bare_pub_non_lib": 1229,
       "allow_dead_code_sites": 0
     },
     "clean-lake": {
       "files_over_500": 7,
       "unwrap_expect_production": 5,
-      "bare_pub_non_lib": 118,
+      "bare_pub_non_lib": 125,
       "allow_dead_code_sites": 0
     },
     "clean-lsp": {
       "files_over_500": 11,
       "unwrap_expect_production": 0,
-      "bare_pub_non_lib": 62,
+      "bare_pub_non_lib": 68,
       "allow_dead_code_sites": 0
     },
     "clean-macro": {
@@ -130,13 +130,13 @@
       "allow_dead_code_sites": 0
     },
     "clean-olean": {
-      "files_over_500": 32,
+      "files_over_500": 34,
       "unwrap_expect_production": 47,
-      "bare_pub_non_lib": 340,
+      "bare_pub_non_lib": 342,
       "allow_dead_code_sites": 0
     },
     "clean-parser": {
-      "files_over_500": 30,
+      "files_over_500": 31,
       "unwrap_expect_production": 217,
       "bare_pub_non_lib": 119,
       "allow_dead_code_sites": 0
@@ -162,7 +162,7 @@
     "clean-server": {
       "files_over_500": 23,
       "unwrap_expect_production": 4,
-      "bare_pub_non_lib": 440,
+      "bare_pub_non_lib": 435,
       "allow_dead_code_sites": 0
     },
     "clean-sys": {
@@ -178,9 +178,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-verify": {
-      "files_over_500": 219,
-      "unwrap_expect_production": 72,
-      "bare_pub_non_lib": 2316,
+      "files_over_500": 227,
+      "unwrap_expect_production": 73,
+      "bare_pub_non_lib": 2318,
       "allow_dead_code_sites": 50
     }
   },
@@ -191,7 +191,7 @@
     },
     {
       "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
-      "lines": 11979
+      "lines": 12558
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
@@ -203,7 +203,7 @@
     },
     {
       "path": "crates/clean-lsp/src/backend/tests.rs",
-      "lines": 7538
+      "lines": 7832
     },
     {
       "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
@@ -223,7 +223,7 @@
     },
     {
       "path": "crates/clean-kernel/src/bitvec_coercion.rs",
-      "lines": 6222
+      "lines": 6279
     },
     {
       "path": "crates/clean-mathverse/src/hol/isabelle_pure_translate/def_axioms/conj_bundle.rs",
@@ -251,7 +251,7 @@
     },
     {
       "path": "crates/clean-elab/src/codata_cmd.rs",
-      "lines": 5287
+      "lines": 5334
     },
     {
       "path": "crates/clean-kernel/src/tc/reduction/kan.rs",
@@ -267,5 +267,5 @@
     }
   ],
   "generated_by": "scripts/paragon_ratchet.sh --update",
-  "last_updated": "2026-08-10"
+  "last_updated": "2026-08-17"
 }

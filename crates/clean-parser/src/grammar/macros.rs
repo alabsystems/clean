@@ -201,8 +201,10 @@ impl Parser {
 
         // Register fixed-arity operators (infixl/infixr/prefix/postfix) so that
         // later expressions in the same file can use the declared symbol. The
-        // general `notation` mixfix form is not registered here.
-        self.register_custom_operator(kind, precedence, &pattern, &expansion);
+        // general `notation` mixfix form is not registered here. `scoped`
+        // notation is tagged with its declaring namespace and consulted only
+        // while that namespace is active (current / ancestor / opened).
+        self.register_custom_operator(kind, precedence, &pattern, &expansion, scope);
 
         Ok(SurfaceDecl::Notation {
             span: start_span,

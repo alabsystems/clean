@@ -1,0 +1,503 @@
+{
+ "schema": "clean.crystal.flip_census.lane8.v1",
+ "measured_utc_date": "2026-08-15",
+ "lane": "lane 8 (did the marker programme buy width?)",
+ "question": "Re-measure clean-kernel at HEAD with a compiler built from CURRENT trust main (2d7e094f22, carrying the merged round-8 marker law 20a9c93318) and state plainly whether eight rounds of marker-fidelity work moved any body into the chainable set.",
+ "design": {
+  "why_an_A_B": "Every previous census compared numbers taken at DIFFERENT clean HEADs with DIFFERENT compilers, so a null could not be distinguished from two cancelling deltas. This lane compiles the SAME clean HEAD twice, changing only the compiler.",
+  "clean_commit": "1ec739677",
+  "subject_driver": "trust 2d7e094f2224994b112e06fdab49123d469c6b43 (current origin/main; contains mf-round-8 merge 20a9c93318)",
+  "control_driver": "trust 6b868c1b332ffe3f4dec2935e69f042d78d5d31b \u2014 the driver the 2026-08-14 lane-1 census actually ran on; rounds 5-8 are NOT ancestors of it",
+  "control_is_provably_the_census_compiler": "the control compile reproduces data/crystal_flip_census_lane1_2026-08-14.json's recorded coverage.json / trust-ir.txt / trust-ir.bin sha256 BYTE FOR BYTE"
+ },
+ "compiler": {
+  "subject": {
+   "built_from": "$HOME/trust-lane8 (git worktree at 2d7e094f22, submodules materialised at the pins that revision records; never x.py; lane-owned CARGO_TARGET_DIR)",
+   "seal": "$HOME/trust-lane8/.lane8/seal-lane8",
+   "guard_verdict": "PASS (scripts/seal_driver.sh guard, run BEFORE the measurement)",
+   "verify_verdict": "OK",
+   "dylib_sha256": "c8746c54263d3f8da7354cbd071467f268c54c428c071fe2bc9842a7624a30d2",
+   "rustc_main_sha256": "f76dafc1fae352268f01cdfdb2199108d5233506691c2c731c13f9febeed6f8e",
+   "to_mir_blob": "74b9c47253a6e470d1d9bc3bb6f0189695ef54f0",
+   "mir_differential_blob": "461ab7afcca265c0c11988e619831e19555aa321",
+   "flip_registry_blob": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9"
+  },
+  "control": {
+   "seal": "$HOME/trust/scratchpad/lane1chain",
+   "dylib_sha256": "c999eaaf02d4e63d4555d7683477cb1f7dc1231466d3ad7a91ddae1482c414f8"
+  },
+  "perturbation_classes_registered": {
+   "subject": 10,
+   "control": 10,
+   "note": "IDENTICAL, so seal_driver.sh selftest reports UNPROVEN \u2014 the class list (rustc_driver_impl/src/lib.rs) is byte-identical across the range and cannot discriminate. A POSITIVE behavioural discriminator was measured instead."
+  },
+  "positive_identification": {
+   "method": "compile crates/trust-thir-lower/probes/mfr8_repr.rs (a file that exists only at trust main) with BOTH drivers and diff the coverage rows",
+   "bodies": 41,
+   "rows_differing": 2,
+   "witnesses": {
+    "w31_borrow_transparent": {
+     "subject": "markers_exact true, '2 marker line(s) identical'",
+     "control": "markers_exact false, \"built `mk b0.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`\""
+    },
+    "w33_borrow_align": {
+     "subject": "markers_exact true, '2 marker line(s) identical'",
+     "control": "markers_exact false, same divergence"
+    }
+   },
+   "verdict": "the two drivers ARE different binaries and the difference IS in the marker channel, in the improving direction \u2014 on PROBES."
+  }
+ },
+ "profile": {
+  "opt_level": 3,
+  "argv": "RUSTFLAGS='-Ztrust-verify=off -Cdebuginfo=0 -Cdebug-assertions=off' cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-ir-flip=yes -Ztrust-dump=ir:<dump>",
+  "release_shape_proof": "scripts/trust_ir_build.sh reports 'release-only inference spine present (6/6)' on the same compiler \u2014 one-sided proof the subject is the DEPLOYED kernel"
+ },
+ "totals_subject": {
+  "bodies": 13771,
+  "lowered": 9067,
+  "spliced": 7571,
+  "agreed": 1542,
+  "mismatch": 0,
+  "lineage_rows": 13143,
+  "markers_exact": 1084,
+  "markers_exact_vacuous": 1057,
+  "markers_exact_non_vacuous": 27,
+  "chainable": 1082,
+  "chainable_non_vacuous": 27,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 19,
+  "wall2_rows": 458,
+  "wall2_def_paths": 329,
+  "wall2_bodyful": 24
+ },
+ "totals_control": {
+  "bodies": 13771,
+  "lowered": 9067,
+  "spliced": 7571,
+  "agreed": 1542,
+  "mismatch": 0,
+  "lineage_rows": 13143,
+  "markers_exact": 1084,
+  "markers_exact_vacuous": 1057,
+  "markers_exact_non_vacuous": 27,
+  "chainable": 1082,
+  "chainable_non_vacuous": 27,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 19,
+  "wall2_rows": 458,
+  "wall2_def_paths": 329,
+  "wall2_bodyful": 24
+ },
+ "totals_delta_every_field": 0,
+ "populations_are_SET_identical_not_merely_equinumerous": {
+  "codegen_flips": 177,
+  "ctfe_flips": 32,
+  "markers_exact_def_paths": 919,
+  "markers_exact_non_vacuous": 27,
+  "wall2_bodyful": 24,
+  "agreed_def_paths": 1248
+ },
+ "row_level_diff_subject_vs_control": {
+  "rows_compared": 13771,
+  "rows_whose_derived_mir_channel_differs": 0,
+  "rows_whose_lineage_differs": 13143,
+  "rows_whose_interpreter_differential_differs": 53,
+  "rows_whose_seam_differs": 10,
+  "interpreter_agreed_verdicts_LOST": 36,
+  "seam_agreed_verdicts_LOST": 2,
+  "lost_reason": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference)",
+  "lost_bodies": [
+   "cert::bundle::MAX_BUNDLE_ENV_BYTES",
+   "cert::bundle::MAX_BUNDLE_NAME_BYTES",
+   "cert::compression::dict::CertDictionary::DEFAULT_SIZE",
+   "cert::compression::limits::MAX_COMPRESSED_ARCHIVE_BYTES",
+   "cert::compression::limits::MAX_DECOMPRESSED_CERT_BYTES",
+   "cert::compression::limits::MAX_DICTIONARY_BYTES",
+   "cert::compression::limits::MAX_STREAM_CERT_BYTES",
+   "cert::compression::limits::MAX_STREAM_UNCOMPRESSED_BYTES",
+   "cert::compression::limits::MAX_UNCOMPRESSED_ARCHIVE_BYTES",
+   "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#0}",
+   "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#1}",
+   "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#2}",
+   "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#3}",
+   "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#4}",
+   "cert::compression::streaming::StreamingCertReader::<R>::new::MAX_HEADER_BYTES",
+   "cert::types::recursive_drop_needs_segment::DROP_RED_ZONE",
+   "env::ext_instance::PRIORITY_BYTES",
+   "env::native_reducers_arith::UINT32_MOD",
+   "env::native_reducers_beq_shortcircuit::get_int_val::{closure#0}",
+   "env::native_reducers_bitvec::width_mask",
+   "env::native_reducers_decidable_ext::get_int_val::{closure#0}",
+   "env::native_reducers_int::int_from_neg_magnitude::TWO_POW_127",
+   "env::native_reducers_sint::INT16_MODULUS",
+   "env::native_reducers_sint::INT32_MODULUS",
+   "env::native_reducers_sint::INT8_MODULUS",
+   "env::native_reducers_uint::UINT16_MODULUS",
+   "env::native_reducers_uint::UINT32_MODULUS",
+   "env::native_reducers_uint::UINT8_MODULUS",
+   "expr::MIN_STACK_RED_ZONE",
+   "expr::STACK_GROWTH_SIZE",
+   "expr::types::FVarId::SENTINEL_RANGE_START",
+   "micro::types::micro_recursive_drop_needs_segment::DROP_RED_ZONE",
+   "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "tc::reduction::int::RAT_BLOWUP_LIT_THRESHOLD",
+   "tc::reduction::nat::<impl tc::TypeChecker<'env>>::native_nat_binop_grind_stuck::NATIVE_NAT_GRIND_STUCK_THRESHOLD",
+   "tc::reduction::nat::<impl tc::TypeChecker<'env>>::native_nat_grind_recursor_stuck::NATIVE_NAT_GRIND_STUCK_THRESHOLD"
+  ],
+  "seam_lost_bodies": [
+   "<expr::types::BinderData as std::default::Default>::default",
+   "env::origin::OriginTrust::needs_recheck"
+  ],
+  "attribution": "the gate that emits that message (crates/trust-thir-lower/src/differential.rs, incl. classify_undefs_traced) is BYTE-IDENTICAL across 6b868c1b33..2d7e094f22 \u2014 `git diff` over it is empty. So the oracle MODULE changed, not the gate. The credible producer in range is crates/trust-ir-bridge/src/lower.rs (+1607 lines). CONFOUND, stated: the two drivers also differ in two first-party submodule pins (first-party/clean, first-party/trust-cg), so this loss is attributable to the RANGE, not specifically to the marker rounds.",
+  "lost_bodies_that_flip": 21
+ },
+ "verdict": {
+  "did_the_marker_programme_buy_width": "NO. Zero bodies moved. On clean-kernel at the deployed profile the derived-MIR channel \u2014 the channel markers_exact lives in \u2014 is BIT-IDENTICAL on all 13,771 rows between the pre-round-5 driver and current trust main. Not one verdict, markers_exact, markers_detail or canonical detail string changed.",
+  "markers_exact": "1,084 -> 1,084 (1,057 vacuous / 27 non-vacuous, unchanged and SET-identical)",
+  "flips": "177 codegen + 32 CTFE -> 177 + 32, the SAME 209 bodies",
+  "residual_wall_2": "458 rows / 329 def_paths / 24 bodyful -> unchanged; the drift from the 459/330/26 on record is CLEAN moving (c4e33541d -> 1ec739677), not the compiler \u2014 the control run measures 458/329/24 too",
+  "gep_call_panic_loop_recursion": "gep 0, call 0, panic arm (assert) 0, loop (CFG cycle) 0, self-recursion 0 across all 177 codegen flips. Independently re-derived here with a Tarjan SCC cycle test rather than a text-order back-edge heuristic.",
+  "computing_flips": "14 of 177 (6 icmp, 6 arithmetic, 3 cast, 2 condbr) \u2014 the same 14",
+  "newly_chainable": "NONE. The chainable set is set-identical to the control, so no body became chainable through this work. Per the lane's own rule, no eighth chain was manufactured.",
+  "unchained_non_vacuous_rows": 24,
+  "chains_that_are_non_vacuous": [
+   "flat::types::FlatFlags::contains",
+   "expr::bvar_in_range",
+   "env::native_reducers_char::is_valid_char"
+  ]
+ },
+ "constructs": {
+  "codegen": {
+   "n": 177,
+   "absent_from_ir_dump": 0,
+   "computes": 14,
+   "counts": {
+    "switch": 18,
+    "has_cast": 3,
+    "has_icmp": 6,
+    "has_condbr": 2,
+    "has_arith": 6
+   },
+   "carriers": {
+    "switch": [
+     "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+     "cert::bundle::trust_from_certification_audit::{closure#0}",
+     "cert::bundle::trust_min::{closure#0}",
+     "env::ai_proof_search::constant_kind_rank",
+     "env::origin::OriginTrust::is_unpinned",
+     "env::proof_search::constant_kind_rank",
+     "env::registration::<impl env::Environment>::extend_constants_checked::is_tolerable",
+     "env::types::Reducibility::is_regular",
+     "env::types::Reducibility::kind_rank",
+     "expr::types::Multiplicity::allows_many",
+     "expr::types::Multiplicity::allows_zero",
+     "flat::convert::binder_info_to_u8",
+     "level::Level::kind_ord",
+     "micro::types::MicroLevel::kind_ord",
+     "micro::types::MicroLevel::structural_cmp::{closure#0}",
+     "mode::CleanMode::from_source_system",
+     "mode::CleanMode::has_cubical_layer",
+     "tc::reduction::cofib::CofibAtom::value"
+    ]
+   }
+  },
+  "ctfe": {
+   "n": 32,
+   "absent_from_ir_dump": 32,
+   "computes": 0,
+   "counts": {},
+   "carriers": {}
+  }
+ },
+ "named_walls_unchanged": {
+  "env::native_reducers_bool_ext::nat_gcd": {
+   "def_index": 15033,
+   "verdict": "agreed",
+   "detail": "9 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "marker channel(built): storage marker in unwalked block 8 (cleanup/dead code)",
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": false,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 12,
+   "flipped": false,
+   "constructs": {
+    "icmp": 2,
+    "condbr": 1,
+    "assert": 1,
+    "arith": 1,
+    "blocks": 6,
+    "cycle": 1
+   }
+  },
+  "env::native_reducers_sint::to_signed": {
+   "def_index": 15642,
+   "verdict": "agreed",
+   "detail": "13 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`",
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": false,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 38,
+   "flipped": false,
+   "constructs": {
+    "icmp": 4,
+    "condbr": 2,
+    "cast": 5,
+    "select": 2,
+    "assert": 4,
+    "arith": 3,
+    "blocks": 7
+   }
+  },
+  "env::native_reducers_bitvec::to_signed": {
+   "def_index": 14983,
+   "verdict": "agreed",
+   "detail": "13 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`",
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": false,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 37,
+   "flipped": false,
+   "constructs": {
+    "icmp": 4,
+    "condbr": 2,
+    "select": 2,
+    "assert": 4,
+    "cast": 5,
+    "arith": 2,
+    "blocks": 7
+   }
+  },
+  "tc::heartbeat_profiler::types::clamp_u32": {
+   "def_index": 19494,
+   "verdict": "agreed",
+   "detail": "6 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": false,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 9,
+   "flipped": false,
+   "constructs": {
+    "cast": 2,
+    "icmp": 1,
+    "condbr": 1,
+    "blocks": 4
+   }
+  },
+  "level::Level::is_zero": {
+   "def_index": 17078,
+   "verdict": "agreed",
+   "detail": "18 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b8.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"clean_kernel::level::LevelArc\", fields: [(\"0\", Adt { name: \"core::option::Option\", fields: [(\"__tag\", Int { width: 64, signed: true }), (\"__v1_0\", Datatype { name: \"alloc::syn` vs derived `<end>`",
+   "calls": {
+    "resolved": 6,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": true,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 28,
+   "flipped": false,
+   "constructs": {
+    "load": 1,
+    "extractfield": 1,
+    "switch": 1,
+    "gep": 3,
+    "call": 6,
+    "condbr": 1,
+    "blocks": 10
+   }
+  },
+  "env::types::Reducibility::height": {
+   "def_index": 13402,
+   "verdict": "agreed",
+   "detail": "6 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`",
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": false,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 10,
+   "flipped": false,
+   "constructs": {
+    "load": 2,
+    "extractfield": 1,
+    "switch": 1,
+    "gep": 1,
+    "blocks": 4
+   }
+  },
+  "env::types::SimpPriority::value": {
+   "def_index": 13411,
+   "verdict": "agreed",
+   "detail": "7 canonical line(s) identical",
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b4.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`",
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "deferred_to_seam": false,
+   "spliced": true,
+   "unsupported": [],
+   "instr_count": 10,
+   "flipped": false,
+   "constructs": {
+    "load": 2,
+    "extractfield": 1,
+    "switch": 1,
+    "gep": 1,
+    "blocks": 4
+   }
+  }
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "sha256": {
+   "s1": {
+    "coverage.json": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+    "trust-ir.txt": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+    "trust-ir.bin": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f"
+   },
+   "s2": {
+    "coverage.json": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+    "trust-ir.txt": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+    "trust-ir.bin": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f"
+   },
+   "s3": {
+    "coverage.json": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+    "trust-ir.txt": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+    "trust-ir.bin": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f"
+   }
+  },
+  "byte_identical_across_all_three": true,
+  "negative_control_flag": "-Ztrust-ir-flip=no",
+  "negative_control_flip_events": 0,
+  "negative_control_coverage_json_identical": true,
+  "committed_driver_cross_check": {
+   "command": "TRUSTC=<sealed lane8 tc> scripts/trust_ir_build.sh --print-only",
+   "bodies": 13771,
+   "lowered": 9067,
+   "spliced": 7571,
+   "agreed": 1542,
+   "mismatch": 0,
+   "lineage_rows": "13143/13771",
+   "flips": "209 (177 codegen + 32 CTFE)",
+   "non_clean_kernel_events": 0,
+   "profile_assertion": "release-only inference spine present (6/6)",
+   "negative_control": "0 flip events"
+  }
+ },
+ "chains_added_by_this_lane": [],
+ "why_no_chain": "Instruction 5 of the lane brief: if nothing is newly chainable, do not manufacture a chain. Measured: nothing is. The 20 unchained non-vacuous rows were all equally chainable at the previous compiler; none carries a call, a gep, a panic arm, a loop or recursion. An eighth chain over one of them would be a fact about the 2026-08-13 waves, not about the eight rounds this lane was asked to price.",
+ "o0_arm": {
+  "spelling": "-C opt-level=0 -C debug-assertions=off (both words; see the -O0 argv defect note)",
+  "why": "at -O0 emit_lifetime_markers() is false, so the markers_exact gate is NOT consulted. The seventh review found 21 shipped clean-kernel bodies flipping there with a marker sequence that was not built's; round 8's law exists to close exactly that.",
+  "control": {
+   "codegen": 191,
+   "ctfe": 42,
+   "loud_fallbacks": 453
+  },
+  "subject": {
+   "codegen": 191,
+   "ctfe": 42,
+   "loud_fallbacks": 453
+  },
+  "sets_identical": true,
+  "o3_minus_o0_codegen": 0,
+  "coverage_json_identical_to_the_same_driver_at_O3": true,
+  "consequence": "derived_mir is bit-identical at BOTH optimisation levels, so the marker sequences round 8's law produces on clean-kernel are the same sequences the pre-round-5 law produced \u2014 including for those 21 bodies. Either they were already right, or the round-8 fix does not reach them."
+ },
+ "unclaimed_ground_recorded_not_chained": {
+  "cast": [
+   "cert::builder::state::NodeId::index",
+   "env::persistent_ext::ExtensionIdx::index",
+   "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}"
+  ],
+  "float_arith": [
+   "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "env::native_reducers_float::reduce_float_div::{closure#0}"
+  ],
+  "note": "No existing chain covers a cast or float arithmetic. Chaining one needs an IRInst cast/float lane in emitted_cfg.rs plus a matching evaluator \u2014 a build item. NOT a marker-programme result: all seven were equally chainable before rounds 5-8."
+ },
+ "gates_at_this_head": {
+  "crystal_a1_lineage": "ok. 26 passed; 0 failed; 0 ignored",
+  "axiom_ratchet": "ok. 3 passed; 0 failed; 0 ignored (1820.40 s)",
+  "vacuity_firewall": "ok. 4 passed; 0 failed; 0 ignored (1877.25 s; re-run with full output, 1639.33 s)",
+  "premise_witness_gate": "ok. 1 passed; 0 failed; 0 ignored (1624.56 s)",
+  "proof_status_invariants": "ok. 4 passed; 0 failed; 0 ignored (1609.06 s)",
+  "cargo_fmt_check": "rc=0",
+  "cargo_clippy_all_targets_D_warnings": "rc=0",
+  "census": 11,
+  "ratchets_untouched": [
+   "data/clean_verify_axiom_ratchet.json",
+   "data/premise_witness_ratchet.json"
+  ],
+  "firewall": {
+   "relations_audited": 46,
+   "plus": "the micro_* band header check",
+   "findings": "0 strict / 0 premise-only on every relation; the only findings are the five PINNED KernelInferAccepts arms (const/has_type STRICT d0, lam/Typing STRICT d2, pi/Typing STRICT d2, const/Typing PREMISE-ONLY d3, app/Typing PREMISE-ONLY d3)",
+   "explicit_required_names_present": {
+    "SourceSystemR": 0,
+    "FlatFlagsR": 3,
+    "ExprPathStepR": 0,
+    "EncodesU64Val": 19,
+    "EncodesExprPathStep": 61,
+    "EncodesFlatFlags": 21,
+    "EncodesU32Val": 19,
+    "EncodesLevelArc": 53,
+    "EncodesCleanMode": 52,
+    "EncodesSourceSystemVal": 47,
+    "EncodesLevelKindCell": 52,
+    "EncodesLiveLevelRef": 59,
+    "KernelInfers": 411
+   },
+   "nothing_excluded": true
+  }
+ }
+}

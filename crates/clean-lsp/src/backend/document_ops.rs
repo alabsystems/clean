@@ -9,10 +9,16 @@ use super::warnings::{
     collect_deprecated_names, detect_deprecated_usage, detect_duplicate_binders,
     detect_sorry_warnings, detect_unused_variables, merge_registration_sorry_warning,
 };
-use super::{CleanBackend, DefinitionInfo, TacticGoalSnapshot, TacticSnapshotBridgeGap};
+use super::{
+    byte_offset_to_position, CleanBackend, DefinitionInfo, TacticGoalSnapshot,
+    TacticSnapshotBridgeGap,
+};
 use crate::document::{
     CommandKind, ElaboratedDecl, ElaboratedDocument, IncrementalState, IncrementalStats,
     ParseError, ParsedCommand, ParsedDocument, TypeError,
+};
+use crate::file_progress::{
+    LeanFileProgress, LeanFileProgressParams, LeanFileProgressProcessingInfo,
 };
 use clean_parser::{SurfaceBinder, SurfaceDecl, SurfaceExpr, SurfaceTactic};
 use std::collections::HashMap;
@@ -373,10 +379,24 @@ impl CleanBackend {
             let text = doc.text();
             let prev_state = std::mem::take(&mut doc.incremental_state);
 
-            let (elaborated, new_state) = self.elaborate_text_incremental(&text, prev_state).await;
+            let file_path = uri.to_file_path().ok();
+            let version = doc.version;
+            let (elaborated, new_state, import_env) = self
+                .elaborate_text_incremental(uri, version, &text, prev_state, file_path.as_deref())
+                .await;
 
-            let env = self.env.read().await.clone();
-            let snapshots = Self::tactic_goal_snapshots_from_text(&doc, &text, &env);
+            // Tactic snapshots run against the same base the declarations
+            // elaborated against: the shared import closure when the file has
+            // an import header, the (near-empty) server environment otherwise.
+            let shared_env;
+            let env: &clean_kernel::Environment = match &import_env {
+                Some(imported) => imported,
+                None => {
+                    shared_env = self.env.read().await.clone();
+                    &shared_env
+                }
+            };
+            let snapshots = Self::tactic_goal_snapshots_from_text(&doc, &text, env);
             doc.elaborated = Some(elaborated);
             doc.incremental_state = new_state;
 
@@ -494,6 +514,14 @@ impl CleanBackend {
             env,
         )
         .ok()?;
+        // A run that admitted goals via `sorry` has no authoritative
+        // post-tactic state: rendering its "no goals" at the tactic span
+        // would display an admitted proof as solved. Return None so the
+        // caller falls back to the pre-tactic target snapshot — Lean's
+        // infoview shows the admitted goal at a `sorry`, not "No goals".
+        if proof_state.trust_ledger().sorry_count > 0 {
+            return None;
+        }
         Some(TacticGoalSnapshot {
             range: bridge.post_tactic_range,
             goals: snapshot_run.snapshot.rendered_targets,
@@ -570,11 +598,31 @@ impl CleanBackend {
     /// The incremental cache is intentionally bypassed in this path because the
     /// cache cannot replay registration side effects. A later issue can add
     /// replayable caching if profiling shows this path is hot.
+    ///
+    /// When the file has an `import` header, the header is resolved as a unit
+    /// through the process-wide import-closure cache (see
+    /// [`super::imports::shared_import_closure`]) and the returned
+    /// `Option<Arc<Environment>>` carries the loaded base environment so the
+    /// caller can reuse it (e.g. for tactic snapshots). `file_path` is the
+    /// document's on-disk location, used to derive project-local `.olean`
+    /// search paths; `None` for non-`file:` documents.
+    ///
+    /// Emits per-declaration `$/lean/fileProgress` shrink notifications: before
+    /// each declaration after the first, the still-processing range is reduced
+    /// to start at that declaration (the leading whole-file notification comes
+    /// from [`CleanBackend::check_document`]).
     async fn elaborate_text_incremental(
         &self,
+        uri: &Url,
+        version: i32,
         text: &str,
         _prev_state: IncrementalState,
-    ) -> (ElaboratedDocument, IncrementalState) {
+        file_path: Option<&std::path::Path>,
+    ) -> (
+        ElaboratedDocument,
+        IncrementalState,
+        Option<std::sync::Arc<clean_kernel::Environment>>,
+    ) {
         let Ok(decls) = clean_parser::parse_file_with_tactics(text, &self.tactic_patterns) else {
             return (
                 ElaboratedDocument {
@@ -585,6 +633,7 @@ impl CleanBackend {
                     widget_modules: vec![],
                 },
                 IncrementalState::default(),
+                None,
             );
         };
 
@@ -603,14 +652,82 @@ impl CleanBackend {
         };
         let deprecated_names = collect_deprecated_names(&decls);
 
-        // Clone the shared environment into a per-document scratch copy so we
-        // can mutate it for registration without affecting the global server
-        // state.
-        let mut scratch_env = self.env.read().await.clone();
+        // Resolve the file's import header ONCE through the process-wide
+        // closure cache (prelude base + shared `.olean` loader) so every
+        // document sharing a header shares one loaded environment and a
+        // keystroke never re-reads the `.olean` graph. On load failure a
+        // single "imports unavailable" diagnostic replaces the flood of
+        // per-declaration unknown-constant errors that elaborating against a
+        // bare environment would produce.
+        let import_paths = super::imports::import_paths_of_decls(&decls);
+        let mut import_env: Option<std::sync::Arc<clean_kernel::Environment>> = None;
+        if !import_paths.is_empty() {
+            match super::imports::shared_import_closure(&import_paths, file_path) {
+                Ok(env) => import_env = Some(env),
+                Err(reason) => {
+                    let (start, end) = decls
+                        .iter()
+                        .find(|decl| matches!(decl, SurfaceDecl::Import { .. }))
+                        .map(Self::get_decl_span)
+                        .unwrap_or((0, 0));
+                    errors.push(TypeError {
+                        start,
+                        end,
+                        message: format!("imports unavailable: {reason}"),
+                        related: Vec::new(),
+                    });
+                }
+            }
+        } else {
+            // Import-free documents still get the PRELUDE floor (an empty
+            // import set through the same process-wide cache), matching how a
+            // real Lean editor session always sees the prelude — `def f : Nat
+            // → Nat` in a scratch file must resolve `Nat`. Init-and-beyond
+            // names correctly stay unknown until imported. If prelude
+            // initialization itself fails we fall back to the bare server
+            // env rather than erroring the document.
+            if let Ok(env) = super::imports::shared_import_closure(&[], None) {
+                import_env = Some(env);
+            }
+        }
 
-        for decl in &decls {
+        // Clone the base environment into a per-document scratch copy so we
+        // can mutate it for registration without affecting the global server
+        // state (or the shared import closure).
+        let mut scratch_env = match &import_env {
+            Some(env) => (**env).clone(),
+            None => self.env.read().await.clone(),
+        };
+
+        let end_of_file = byte_offset_to_position(text, text.len());
+
+        for (decl_index, decl) in decls.iter().enumerate() {
+            // Import declarations were handled above as one header unit (or
+            // reported once as unavailable); skip them here so the
+            // per-declaration path neither re-loads the closure on every
+            // keystroke nor duplicates failure noise.
+            if matches!(decl, SurfaceDecl::Import { .. }) {
+                continue;
+            }
             let (_kind, name, span) = Self::classify_decl(decl);
             let decl_name = name.as_deref().unwrap_or("<anonymous>");
+
+            // fileProgress shrink: everything before this declaration is done;
+            // the remainder of the file (this declaration onward) is still
+            // being processed. The first declaration needs no extra event —
+            // `check_document` already announced the whole file as processing.
+            if decl_index > 0 {
+                let processing_start = byte_offset_to_position(text, span.0);
+                self.send_file_progress(
+                    uri,
+                    version,
+                    vec![LeanFileProgressProcessingInfo::processing(Range::new(
+                        processing_start,
+                        end_of_file,
+                    ))],
+                )
+                .await;
+            }
 
             // Surface-level warnings (unused vars, literal sorry, deprecation)
             let mut cmd_warnings = Vec::new();
@@ -709,6 +826,7 @@ impl CleanBackend {
                 widget_modules,
             },
             new_state,
+            import_env,
         )
     }
 
@@ -808,7 +926,15 @@ impl CleanBackend {
         }
     }
 
-    /// Extract elaboration info from an ElabResult
+    /// Extract elaboration info from an ElabResult.
+    ///
+    /// `type_str` is rendered with the kernel pretty-printer (`Display for
+    /// Expr`), the same form used for hole goals, so every editor surface fed
+    /// from it (hover, completion detail, signature help, code lenses,
+    /// `plainTermGoal`) shows Lean syntax (`Nat -> Nat`), never Rust `Debug`
+    /// structure (`Pi(.., Const(..), ..)`). Signature help extracts parameter
+    /// domains from this form via `signature_arrow_parameter_domains`; the
+    /// `Pi(`-shaped Debug parser remains only as a fallback.
     fn extract_elab_info(
         result: &clean_elab::ElabResult,
         decl: &SurfaceDecl,
@@ -826,7 +952,7 @@ impl CleanBackend {
             | ElabResult::Structure { name, ty, .. }
             | ElabResult::Instance { name, ty, .. } => Some(ElaboratedDecl {
                 name: name.to_string(),
-                type_str: format!("{ty:?}"),
+                type_str: format!("{ty}"),
                 start,
                 end,
             }),
@@ -853,10 +979,62 @@ impl CleanBackend {
         }
     }
 
-    /// Check a document (parse + elaborate + publish diagnostics)
+    /// Send a `$/lean/fileProgress` notification for `uri` at `version`.
+    ///
+    /// A non-empty `processing` vector announces ranges still being
+    /// elaborated; an empty vector is the terminal "file fully processed"
+    /// notification. Mirrors Lean's `LeanFileProgressParams` wire shape.
+    pub(crate) async fn send_file_progress(
+        &self,
+        uri: &Url,
+        version: i32,
+        processing: Vec<LeanFileProgressProcessingInfo>,
+    ) {
+        self.client
+            .send_notification::<LeanFileProgress>(LeanFileProgressParams {
+                text_document: VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version,
+                },
+                processing,
+            })
+            .await;
+    }
+
+    /// Check a document (parse + elaborate + publish diagnostics).
+    ///
+    /// Emits Lean4-compatible `$/lean/fileProgress` notifications around
+    /// elaboration: a leading notification whose processing range covers the
+    /// not-yet-elaborated file, per-declaration shrink notifications from
+    /// `elaborate_text_incremental`, and a terminal notification with empty
+    /// ranges once processing is done — the signal the Lean 4 VS Code
+    /// extension uses to drive its progress bar and refresh the infoview.
+    /// Diagnostics are published only after the terminal notification, so
+    /// clients never observe diagnostics for a file still marked processing.
     pub(crate) async fn check_document(&self, uri: &Url) {
         self.parse_document(uri).await;
-        self.elaborate_document(uri).await;
+
+        let progress_target = self.documents.get(uri).map(|doc| {
+            let text_len = doc.text().len();
+            (
+                doc.version,
+                Range::new(Position::new(0, 0), doc.offset_to_position(text_len)),
+            )
+        });
+
+        if let Some((version, full_range)) = progress_target {
+            self.send_file_progress(
+                uri,
+                version,
+                vec![LeanFileProgressProcessingInfo::processing(full_range)],
+            )
+            .await;
+            self.elaborate_document(uri).await;
+            self.send_file_progress(uri, version, Vec::new()).await;
+        } else {
+            self.elaborate_document(uri).await;
+        }
+
         self.publish_diagnostics(uri).await;
     }
 }

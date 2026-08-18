@@ -67,7 +67,7 @@ pub(crate) fn collect_simp_lemmas(state: &ProofState, config: &SimpConfig) -> Si
 }
 
 /// Collect user-specified extra lemmas (by name).
-fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpLemma> {
+pub(super) fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpLemma> {
     let mut lemmas = Vec::new();
     for lemma_name in &config.extra_lemmas {
         if let Some(local_lemma) = collect_local_extra_lemma(state, lemma_name) {
@@ -316,7 +316,7 @@ pub(crate) fn mk_local_proof_template(mut proof: Expr, binder_count: u32) -> Exp
 ///   applied to its binder arguments, so the rewrite carries a real proof term.
 /// ENSURES: Only equality-shaped hypotheses are included; non-equality hypotheses
 ///   are silently skipped.
-fn collect_hypothesis_lemmas(state: &ProofState) -> Vec<SimpLemma> {
+pub(super) fn collect_hypothesis_lemmas(state: &ProofState) -> Vec<SimpLemma> {
     let Some(goal) = state.current_goal() else {
         return Vec::new();
     };

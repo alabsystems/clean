@@ -41,6 +41,8 @@ mod tests_instance_ext_import;
 mod tests_instance_priority_adopt;
 #[cfg(test)]
 mod tests_membership_carrier_import;
+#[cfg(test)]
+mod tests_simp_ext_import;
 
 use crate::module::ParsedModule;
 use hashbrown::HashMap;
@@ -309,10 +311,13 @@ pub struct LoadSummary {
     /// summary by `load_module_with_deps_bounded_shared`.
     pub added_names: Vec<clean_kernel::name::Name>,
     /// Persistent-extension entries a typed decoder recognized but could not
-    /// decode for this module (see `ParsedExtension::undecoded_entries`).
-    /// Such entries degrade to the pre-decoder behavior (absent from the
-    /// restored state, never guessed at); a non-zero count here is the loud
-    /// signal that extension state was lost.
+    /// decode for this module (see `ParsedExtension::undecoded_entries`),
+    /// PLUS decoded `Lean.Meta.simpExtension` entries whose origin constant
+    /// is absent from the environment at restore time (skipped at import) —
+    /// such a lemma has no kernel-checked statement to rewrite with, so it is
+    /// not registered. Both classes degrade to the pre-decoder behavior
+    /// (absent from the restored state, never guessed at); a non-zero count
+    /// here is the loud signal that extension state was lost.
     pub extension_undecoded_entries: usize,
     /// Human-readable descriptions of `Lean.classExtension` entries whose
     /// decoded `outParams` DISAGREE with a class already registered under the

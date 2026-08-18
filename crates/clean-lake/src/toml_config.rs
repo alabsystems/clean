@@ -17,7 +17,7 @@
 //! own "decode what you recognize" behavior so a newer `lakefile.toml` still
 //! loads its recognized fields rather than failing wholesale.
 
-use crate::config::{Dependency, LakeConfig, LeanExe, LeanLib, PackageConfig};
+use crate::config::{Dependency, LakeConfig, LakefileParseMode, LeanExe, LeanLib, PackageConfig};
 use crate::error::{LakeError, LakeResult};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -238,6 +238,7 @@ impl RawTomlLakefile {
             tests: Vec::new(),
             scripts: Vec::new(),
             default_targets: self.default_targets,
+            diagnostics: Vec::new(),
         }
     }
 }
@@ -263,13 +264,21 @@ impl LakeConfig {
     /// `lakefile.toml` over `lakefile.lean` when both are present (Lake itself
     /// disallows both, so the preference only matters for malformed projects).
     pub fn load_from_dir(dir: &Path) -> LakeResult<Self> {
+        Self::load_from_dir_with_mode(dir, LakefileParseMode::Lenient)
+    }
+
+    /// Like [`Self::load_from_dir`], with an explicit `lakefile.lean` parse
+    /// mode. The TOML decoder is deliberately lenient about unknown keys
+    /// (mirroring Lake itself), so the mode only affects the `lakefile.lean`
+    /// fallback path.
+    pub fn load_from_dir_with_mode(dir: &Path, mode: LakefileParseMode) -> LakeResult<Self> {
         let toml_path = dir.join("lakefile.toml");
         if toml_path.is_file() {
             return Self::load_toml(&toml_path);
         }
         let lean_path = dir.join("lakefile.lean");
         if lean_path.is_file() {
-            return Self::load(&lean_path);
+            return Self::load_with_mode(&lean_path, mode);
         }
         Err(LakeError::LakefileNotFound(dir.to_path_buf()))
     }

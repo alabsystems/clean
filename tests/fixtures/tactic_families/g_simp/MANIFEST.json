@@ -1,0 +1,106 @@
+{
+  "family": "g_simp",
+  "gate": "G-SIMP",
+  "plan": "docs/plans/TACTICS_TO_100_2026-07-29.md",
+  "plan_section": "§3 simp family; gate defined in §7",
+  "plan_family_total": 127,
+  "comparison_basis": "family-count-level vs the 2026-07-29 measurement (127 simp-family probe declarations over four import-Init runs), NOT probe-identical: the original probe fixtures lived in a dead session scratchpad (plan appendix) and were reconstructed here from the plan's §3 family descriptions.",
+  "notes": [
+    "Allocation over the §3 simp-family token list (simp, simp only, simp at h, simp_all, simpa, dsimp, norm_num, push_cast, field_simp): bare simp 30, simp only 25 (15 monomorphic + 10 universe-polymorphic RC-E rows), simp at 12 + simp_all 10, simpa 10 + dsimp 10, norm_num 10 + push_cast 5 + field_simp 5, in-file @[simp] attribute rows 10.",
+    "norm_num appears in BOTH the simp family and the automation family in the plan's §3 table; both fixture sets keep it, and comparison stays family-count-level.",
+    "Every fixture file MUST start with a real `import Init` header; the gate script refuses builtin-prelude runs and each file carries a term-mode environment canary that fails under stub-prelude fallback.",
+    "The `required` arrays are intentionally empty at introduction: no row may be declared must-pass without a recorded HEAD run. Promote measured-stable rows (designated candidates: p_simp_core_01, p_simp_only_01, and whichever of p_simp_only_16..25 the first HEAD run measures as passing — the RC-E/u_simp teeth rows) after the first green measurement, in the same commit that records the baseline."
+  ],
+  "files": [
+    {
+      "file": "simp_core.lean",
+      "label": "bare simp",
+      "canary": "canary_env_g_simp_core",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_simp_core_01", "p_simp_core_02", "p_simp_core_03", "p_simp_core_04",
+        "p_simp_core_05", "p_simp_core_06", "p_simp_core_07", "p_simp_core_08",
+        "p_simp_core_09", "p_simp_core_10", "p_simp_core_11", "p_simp_core_12",
+        "p_simp_core_13", "p_simp_core_14", "p_simp_core_15", "p_simp_core_16",
+        "p_simp_core_17", "p_simp_core_18", "p_simp_core_19", "p_simp_core_20",
+        "p_simp_core_21", "p_simp_core_22", "p_simp_core_23", "p_simp_core_24",
+        "p_simp_core_25", "p_simp_core_26", "p_simp_core_27", "p_simp_core_28",
+        "p_simp_core_29", "p_simp_core_30"
+      ]
+    },
+    {
+      "file": "simp_only.lean",
+      "label": "simp only [imported lemma] (mono + poly)",
+      "canary": "canary_env_g_simp_only",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_simp_only_01", "p_simp_only_02", "p_simp_only_03", "p_simp_only_04",
+        "p_simp_only_05", "p_simp_only_06", "p_simp_only_07", "p_simp_only_08",
+        "p_simp_only_09", "p_simp_only_10", "p_simp_only_11", "p_simp_only_12",
+        "p_simp_only_13", "p_simp_only_14", "p_simp_only_15", "p_simp_only_16",
+        "p_simp_only_17", "p_simp_only_18", "p_simp_only_19", "p_simp_only_20",
+        "p_simp_only_21", "p_simp_only_22", "p_simp_only_23", "p_simp_only_24",
+        "p_simp_only_25"
+      ]
+    },
+    {
+      "file": "simp_at.lean",
+      "label": "simp at h/* + simp_all",
+      "canary": "canary_env_g_simp_at",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_simp_at_01", "p_simp_at_02", "p_simp_at_03", "p_simp_at_04",
+        "p_simp_at_05", "p_simp_at_06", "p_simp_at_07", "p_simp_at_08",
+        "p_simp_at_09", "p_simp_at_10", "p_simp_at_11", "p_simp_at_12",
+        "p_simp_all_01", "p_simp_all_02", "p_simp_all_03", "p_simp_all_04",
+        "p_simp_all_05", "p_simp_all_06", "p_simp_all_07", "p_simp_all_08",
+        "p_simp_all_09", "p_simp_all_10"
+      ]
+    },
+    {
+      "file": "simpa_dsimp.lean",
+      "label": "simpa + dsimp",
+      "canary": "canary_env_g_simp_simpa_dsimp",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_simpa_01", "p_simpa_02", "p_simpa_03", "p_simpa_04", "p_simpa_05",
+        "p_simpa_06", "p_simpa_07", "p_simpa_08", "p_simpa_09", "p_simpa_10",
+        "p_dsimp_01", "p_dsimp_02", "p_dsimp_03", "p_dsimp_04", "p_dsimp_05",
+        "p_dsimp_06", "p_dsimp_07", "p_dsimp_08", "p_dsimp_09", "p_dsimp_10"
+      ]
+    },
+    {
+      "file": "norm_casts.lean",
+      "label": "norm_num + push_cast + field_simp",
+      "canary": "canary_env_g_simp_norm_casts",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_simp_norm_num_01", "p_simp_norm_num_02", "p_simp_norm_num_03",
+        "p_simp_norm_num_04", "p_simp_norm_num_05", "p_simp_norm_num_06",
+        "p_simp_norm_num_07", "p_simp_norm_num_08", "p_simp_norm_num_09",
+        "p_simp_norm_num_10",
+        "p_simp_push_cast_01", "p_simp_push_cast_02", "p_simp_push_cast_03",
+        "p_simp_push_cast_04", "p_simp_push_cast_05",
+        "p_simp_field_simp_01", "p_simp_field_simp_02", "p_simp_field_simp_03",
+        "p_simp_field_simp_04", "p_simp_field_simp_05"
+      ]
+    },
+    {
+      "file": "local_simp_attrs.lean",
+      "label": "in-file @[simp] attributes (incl. conditional RC-J rows)",
+      "canary": "canary_env_g_simp_local_attrs",
+      "helpers": ["lsf", "lsf_eq", "ls_cond", "ls_plain"],
+      "required": [],
+      "probes": [
+        "p_simp_local_01", "p_simp_local_02", "p_simp_local_03", "p_simp_local_04",
+        "p_simp_local_05", "p_simp_local_06", "p_simp_local_07", "p_simp_local_08",
+        "p_simp_local_09", "p_simp_local_10"
+      ]
+    }
+  ]
+}

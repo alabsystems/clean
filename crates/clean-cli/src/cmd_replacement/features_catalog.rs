@@ -330,3 +330,46 @@ legacy Markdown report shape without `scripts/trust_boundary_audit.py`.",
         alternative_forms: &[],
         feature_gate: None,
 };
+
+pub(crate) const FEATURE_REPLACEMENT_RUST_FIRST_TOOLING: FeatureDescriptor = FeatureDescriptor {
+    path: &["replacement", "rust-first-tooling"],
+    summary: "Emit the Rust-first tooling migration inventory and evidence artifact (Experimental)",
+    description: "\
+Experimental Rust-owned emitter for the rust-first-tooling replacement row. The \
+command serializes the same Python-tool migration inventory that backs \
+`clean replacement status` (per-lane owner, status, planned Rust surface, and \
+removal condition) together with build provenance (`generated_at_commit`). \
+`--evidence` writes `reports/rust-first-tooling.json` and is guarded twice: the \
+write refuses a binary that is not built at HEAD, and it refuses to mint \
+evidence while any replacement-critical lane is not Rust-owned or demoted. The \
+artifact records computed state only — it never claims replacement launch \
+readiness.",
+    category: Category::Dev,
+    stability: Stability::Experimental,
+    examples: &[
+        Example {
+            cmd: "clean replacement rust-first-tooling --json",
+            what: "print the Rust-first tooling migration inventory as JSON",
+        },
+        Example {
+            cmd: "clean replacement rust-first-tooling --evidence reports/rust-first-tooling.json --json",
+            what: "write the rust-first-tooling row evidence artifact from a HEAD-built binary",
+        },
+    ],
+    see_also: &["replacement status", "replacement trust-core-evidence"],
+    references: &[
+        Reference {
+            kind: RefKind::Issue,
+            label: "Migrate replacement-critical Python tests and tooling #3706",
+            target: "#3706",
+        },
+        Reference {
+            kind: RefKind::Doc,
+            label: "Lean4 replacement source audit",
+            target: "docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md",
+        },
+    ],
+    domain_root: Some("replacement"),
+    alternative_forms: &[],
+    feature_gate: None,
+};

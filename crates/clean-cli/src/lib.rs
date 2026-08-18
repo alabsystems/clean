@@ -276,14 +276,20 @@ fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Resul
         .name("clean-check".to_string())
         .stack_size(CHECK_THREAD_STACK_SIZE)
         .spawn(move || {
-            cmd_core::check_file_with_json_with_imports(
-                &args.file,
-                args.verbose,
-                args.allow_sorry,
-                args.prelude,
-                args.json,
-                args.imports_prefer_olean,
-            )
+            if args.parse_only {
+                // Parse-only sweep mode: classify per-declaration parse
+                // outcomes without elaborating or kernel-checking anything.
+                cmd_core::parse_only_check(&args.file, args.json)
+            } else {
+                cmd_core::check_file_with_json_with_imports(
+                    &args.file,
+                    args.verbose,
+                    args.allow_sorry,
+                    args.prelude,
+                    args.json,
+                    args.imports_prefer_olean,
+                )
+            }
         })
         .map_err(|e| anyhow::anyhow!("failed to spawn clean-check worker thread: {e}"))?;
     handle
@@ -296,11 +302,17 @@ pub async fn run() -> anyhow::Result<()> {
     // LSP clients frame JSON-RPC on stdio and some (notably tower-lsp's own
     // tests, plus generic LSP extensions) treat any tracing chatter on stderr
     // as a protocol violation or noisy startup warning. Skip the
-    // tracing-subscriber init for `lsp` so the server starts silently; all
-    // other commands opt back in, with diagnostics on stderr so `--json`
-    // stdout remains machine-readable.
+    // tracing-subscriber init for `lsp` — and for `lake serve`, which runs
+    // the same stdio server behind the Lake-compatible editor entry point —
+    // so the server starts silently; all other commands opt back in, with
+    // diagnostics on stderr so `--json` stdout remains machine-readable.
     let cli = Cli::parse();
-    if !matches!(cli.command, Commands::Lsp(_)) {
+    let serves_lsp_on_stdio = matches!(cli.command, Commands::Lsp(_))
+        || matches!(
+            &cli.command,
+            Commands::Lake(args) if matches!(args.command, cli_args::LakeCommands::Serve { .. })
+        );
+    if !serves_lsp_on_stdio {
         tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
             .init();
@@ -319,6 +331,14 @@ pub async fn run() -> anyhow::Result<()> {
             .await
         }
         Commands::Lsp(args) => cmd_lsp::handle_lsp_command(args).await,
+        // `lake serve` is the Lake-compatible editor entry point: it runs the
+        // same async stdio LSP server as `clean lsp`, so it is dispatched
+        // here rather than through the synchronous Lake handler (whose
+        // `Serve` arm is a fail-closed guard).
+        Commands::Lake(clean_lake::cli::LakeArgs {
+            dir,
+            command: cli_args::LakeCommands::Serve { args },
+        }) => cmd_lake::lake_serve(dir, &args).await,
         other => dispatch_sync(other),
     }
 }

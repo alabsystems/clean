@@ -38,7 +38,7 @@ mod readers;
 mod tests;
 
 pub use analysis::{ArrayAnalysis, ElementInfo, RootAnalysis};
-pub(crate) use extensions::{LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION};
+pub(crate) use extensions::{LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION, LEAN_SIMP_EXTENSION};
 
 use crate::expr::ParsedExpr;
 
@@ -491,6 +491,60 @@ pub struct ParsedClassEntry {
     pub out_level_params: Vec<u64>,
 }
 
+/// The kind of a decoded `Lean.Meta.simpExtension` entry (`SimpEntry`,
+/// `Lean/Meta/Tactic/Simp/SimpTheorems.lean:449-453`).
+///
+/// # Forward Compatibility
+///
+/// Marked `#[non_exhaustive]` to allow future Lean 4 `SimpEntry`
+/// constructors without breaking downstream code. Always include a wildcard
+/// arm in match expressions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ParsedSimpEntryKind {
+    /// `SimpEntry.thm` (tag 0) — a rewrite theorem tagged `@[simp]`.
+    Theorem,
+    /// `SimpEntry.toUnfold` (tag 1) — a definition `simp` unfolds
+    /// (reducible functions / projections tagged `@[simp]`).
+    ToUnfold,
+    /// `SimpEntry.toUnfoldThms` (tag 2) — a definition unfolded via its
+    /// equation lemmas (only the definition name is retained; the equation
+    /// lemma names are reconstructible from the environment).
+    ToUnfoldThms,
+}
+
+/// A decoded `Lean.Meta.simpExtension` entry: one `@[simp]` registration
+/// persisted by a real Lean 4 `.olean`.
+///
+/// Lean serializes `ScopedEnvExtension.Entry SimpEntry` per entry; a `thm`
+/// entry wraps a `SimpTheorem` (`Lean/Meta/Tactic/Simp/SimpTheorems.lean:143-165`).
+/// Of `SimpTheorem`'s fields this preserves what the import bridge needs to
+/// restore the simp registry faithfully: the origin declaration name, the
+/// priority, and the `post` flag. The `keys` (DiscrTree), `levelParams`, and
+/// `proof : Expr` fields are intentionally not retained: Clean's simp engine
+/// reconstructs each rewrite from the imported constant's own kernel-checked
+/// statement (`collect_registry_lemmas`), never from serialized bytes, so a
+/// lemma whose constant is absent from the environment is simply not usable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedSimpEntry {
+    /// Declaration name of the simp lemma / unfold target
+    /// (`SimpTheorem.origin`'s `.decl` name, or the `toUnfold`/`toUnfoldThms`
+    /// declaration name).
+    pub lemma_name: String,
+    /// Rewrite priority (`SimpTheorem.priority`; Lean default is 1000).
+    /// `toUnfold`/`toUnfoldThms` entries carry no persisted priority and
+    /// report the default 1000.
+    pub priority: u64,
+    /// `SimpTheorem.post` — `true` for post-order rewriting (the default);
+    /// `false` for `@[simp↓]` pre-order lemmas. `true` for unfold entries.
+    pub post: bool,
+    /// Which `SimpEntry` constructor the entry used.
+    pub kind: ParsedSimpEntryKind,
+    /// Namespace of a `scoped` registration
+    /// (`ScopedEnvExtension.Entry.scoped`'s namespace); `None` for global.
+    pub scope_ns: Option<String>,
+}
+
 /// A single environment extension entry with opaque data.
 ///
 /// Most entries are named (Name × DataValue) pairs, but extension entry arrays
@@ -498,7 +552,7 @@ pub struct ParsedClassEntry {
 /// The `RawScalar` variant preserves these for roundtrip fidelity.
 /// Extensions with a known Lean 4 entry layout are decoded into typed
 /// variants (`Instance` for `Lean.Meta.instanceExtension`, `Class` for
-/// `Lean.classExtension`).
+/// `Lean.classExtension`, `Simp` for `Lean.Meta.simpExtension`).
 #[derive(Debug, Clone)]
 pub enum ParsedExtensionEntry {
     /// Standard named entry: (Name × DataValue) pair.
@@ -515,6 +569,8 @@ pub enum ParsedExtensionEntry {
     Instance(ParsedInstanceEntry),
     /// Decoded type-class declaration from `Lean.classExtension`.
     Class(ParsedClassEntry),
+    /// Decoded `@[simp]` registration from `Lean.Meta.simpExtension`.
+    Simp(ParsedSimpEntry),
 }
 
 /// Extension entries for a single persistent environment extension.

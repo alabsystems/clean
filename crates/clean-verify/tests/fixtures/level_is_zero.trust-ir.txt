@@ -1,0 +1,42 @@
+rustcc fn @level::Level::is_zero(functy.0) {
+    ; #producer: trust
+    ; #names: %0="self"
+bb0(%0: ptr):
+    %3 = load enum.2, ptr %0  ; #loc: 389 525 8
+    %4 = extractfield u8 %3, 0  ; #loc: 389 525 8
+    switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 389 525 8
+bb1:
+    %5 = const bool true  ; #loc: 389 526 27
+    br bb6(%5)  ; #loc: 389 525 8
+bb2:
+    %6 = const bool false  ; #loc: 389 527 48
+    br bb6(%6)  ; #loc: 389 525 8
+bb3:
+    %7 = const bool false  ; #loc: 389 527 48
+    br bb6(%7)  ; #loc: 389 525 8
+bb4:
+    %8 = const i64 8  ; #loc: 389 525 8
+    %9 = gep inbounds i8, ptr %0, %8  ; #loc: 389 525 8
+    %10 = const i64 16  ; #loc: 389 525 8
+    %11 = gep inbounds i8, ptr %0, %10  ; #loc: 389 525 8
+    %12 = call @func.4914(%9)  ; #loc: 389 528 34
+    %13 = call @func.4925(%12)  ; #loc: 389 528 37
+    condbr %13, bb7, bb8  ; #loc: 389 528 34
+bb5:
+    %14 = const i64 16  ; #loc: 389 525 8
+    %15 = gep inbounds i8, ptr %0, %14  ; #loc: 389 525 8
+    %16 = call @func.4914(%15)  ; #loc: 389 529 34
+    %17 = call @func.4925(%16)  ; #loc: 389 529 37
+    br bb6(%17)  ; #loc: 389 525 8
+bb6(%1: bool):
+    ret %1  ; #loc: 389 531 5
+bb7:
+    %18 = call @func.4914(%11)  ; #loc: 389 528 50
+    %19 = call @func.4925(%18)  ; #loc: 389 528 53
+    br bb9(%19)  ; #loc: 389 528 34
+bb8:
+    %20 = const bool false  ; #loc: 389 528 34
+    br bb9(%20)  ; #loc: 389 528 34
+bb9(%2: bool):
+    br bb6(%2)  ; #loc: 389 525 8
+}

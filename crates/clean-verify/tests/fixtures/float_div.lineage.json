@@ -1,0 +1,120 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "measured": "2026-08-15",
+ "build": {
+  "clean_repo_HEAD": "71e1ce8be",
+  "trust_repo_rev_of_sealed_compiler": "2d7e094f2224994b112e06fdab49123d469c6b43",
+  "trustc": "$HOME/trust-lane8/.lane8/seal-lane8/tc (SEALED snapshot, unique dylib leaf; `seal_driver.sh guard` PASS immediately before the run, `verify` OK)",
+  "trustc_dylib_sha256": "c8746c54263d3f8da7354cbd071467f268c54c428c071fe2bc9842a7624a30d2",
+  "trustc_rustc_main_sha256": "f76dafc1fae352268f01cdfdb2199108d5233506691c2c731c13f9febeed6f8e",
+  "compiler_identified_by_behaviour_not_stamp": "The sealed driver was NOT identified by `trustc -vV`'s date stamp. Its two binaries hash bit-for-bit to the pair the 2026-08-15 lane-8 census records for its subject driver (data/crystal_flip_census_lane8_2026-08-15.json), and this lane reproduced that census's coverage.json BYTE FOR BYTE (sha256:a59cc78f...), which is positive identification by output rather than by label. `seal_driver.sh verify` OK and `guard` PASS were both taken before measuring, because another lane replaces the shared live driver without warning.",
+  "command": "CARGO_TARGET_DIR=<tgt> RUSTC=<sealed tc> RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Ztrust-verify=off -Cdebuginfo=0' RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir>",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build - only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
+  "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED cfg-split body was compiled rather than its debug twin.",
+  "crate_totals": "bodies 13771 / lowered 9067 / spliced 7571 / derived-MIR agreed 1542 / mismatch 0 / markers_exact 1084 (27 NON-vacuous) / lineage rows 13143",
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 19
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+  "trust_ir_bin_sha256": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f",
+  "note": "Four builds in four separate CARGO_TARGET_DIRs: three flip builds and the negative control. All four emit a byte-identical coverage.json and trust-ir dump, so `lineage` is a measurement rather than one observation. The coverage.json digest is ALSO byte-identical to the one the 2026-08-15 lane-8 census records, which is what identifies the compiler positively."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "event_for_this_body_present": false
+ },
+ "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+ "def_index": 15288,
+ "func_id": 4415,
+ "instr_count": 2,
+ "lowered": true,
+ "spliced": true,
+ "symbolic": false,
+ "lineage": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "6 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "4 marker line(s) identical"
+ },
+ "interpreter_differential": {
+  "verdict": "agreed",
+  "samples": 64,
+  "detail": "THIR-trust-ir == MIR-trust-ir on 64 sampled input(s) (differential interpretation; 1 proven-never-read opaque param(s) as placeholders)"
+ },
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "asserts": 0,
+  "flipped_so_far": 209,
+  "lineage": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+  "matches_artifact_lineage": true,
+  "raw": " INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15288 ~ clean_kernel[4676]::env::native_reducers_float::reduce_float_div::{closure#0}), asserts=0, lineage=sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238, flipped_so_far=209"
+ },
+ "candidate_selection": {
+  "source": "data/crystal_flip_census_lane8_2026-08-15.json -> unclaimed_ground_recorded_not_chained.float_arith",
+  "re_derived_by_this_lane": true,
+  "markers_exact_rows_total": 1084,
+  "markers_exact_rows_that_are_NON_vacuous": 27,
+  "note": "The lane-8 census recorded four float-arithmetic closures as unclaimed ground. All four were re-derived here from this lane's own whole-crate dump rather than inherited, and all four are structurally identical: lowered, spliced, 2 instrs, unsupported [], agreed over 6 canonical lines, markers_exact true over 4 REAL marker lines, interpreter agreed on 64 samples, 0 calls, and a codegen flip whose lineage equals its coverage row's. `fdiv` was chosen on SEMANTIC content, not on structure - see the module doc."
+ },
+ "the_other_three_float_closures": {
+  "env::native_reducers_float::reduce_float_add::{closure#0}": {
+   "def_index": 15282,
+   "lineage": "sha256:21501d78053d7cc053554ffa9aa1d83770c3610fccf394aed4da3caffb2b5421",
+   "flipped_so_far": 206
+  },
+  "env::native_reducers_float::reduce_float_sub::{closure#0}": {
+   "def_index": 15284,
+   "lineage": "sha256:b0d6fcaf121ac2459eaf02f220648452fc67068e7e8dac3cc103544682181d7f",
+   "flipped_so_far": 207
+  },
+  "env::native_reducers_float::reduce_float_mul::{closure#0}": {
+   "def_index": 15286,
+   "lineage": "sha256:f36d43f7059eaf1e333aad3a426f0511caf654eaa019c2e1884d106898371287",
+   "flipped_so_far": 208
+  },
+  "note": "Each is `lowered`, `spliced`, 2 instrs, `unsupported: []`, `agreed` over 6 canonical lines, `markers_exact` true over 4 marker lines, interpreter `agreed` on 64 samples, 0 calls, `deferred_to_seam` false, and each flips at the codegen seam with a lineage equal to its coverage row's. They are chainable on identical terms; the EvalIR value domain this lane built already computes all four operators, so only the module transcription and the theorem are missing for them."
+ },
+ "float_closures_that_are_NOT_chainable": {
+  "env::native_reducers_float::reduce_float_neg::{closure#0}": "derived_mir unsupported: `shim: UnOp(FNeg) on F64`",
+  "env::native_reducers_float::reduce_float_beq::{closure#0}": "derived_mir unsupported: `shim: Inst::FCmp`",
+  "env::native_reducers_float::reduce_float_blt::{closure#0}": "derived_mir unsupported: `shim: Inst::FCmp`",
+  "env::native_reducers_float::reduce_float_ble::{closure#0}": "derived_mir unsupported: `shim: Inst::FCmp`",
+  "note": "Measured, not assumed. This is why the EvalIR float domain models the four BINARY ARITHMETIC operators and leaves FCmp and the unary float operators at their tagged unmodelled verdict: there is no flipping artifact for them to be a theorem about."
+ },
+ "float_semantics_wall": {
+  "question": "Is IEEE 754 binary64 arithmetic expressible in EvalIR?",
+  "answer": "PARTLY, and the boundary is measured rather than chosen for convenience.",
+  "modelled": "Every result IEEE 754 fixes from the operands' CLASSIFICATION alone: infinities, signed zeros, and (for addition) the exact-zero sum x + (-x).",
+  "refused_and_why": {
+   "NaN result": "The payload of a quiet NaN is implementation-defined (IEEE 754-2019 6.2.3 says `should`), so no bit pattern is determined. This is a wall in the STANDARD, not in the substrate.",
+   "finite (+,-,*,/) finite": "Needs round-to-nearest-even over a 53-bit significand. Not affordable: aligning and renormalising significands walks values of magnitude 2^53, and every ir_nat_* is a unary Nat.rec walk. Buying it with the kernel-native Nat.div/Nat.mod/Nat.beq would add ACCELERATED CONSTANTS whose declared bodies the kernel never consults - i.e. speed bought with trust - which eval_ir_state already refuses for ir_nat_rem.",
+   "any width but 64": "binary32/binary16 have different exponent fields and different boundary constants. Refused rather than silently decided at the wrong format."
+  },
+  "what_made_the_classification_affordable": "ir_nat_ltb_sub (one native BigNat Nat.sub plus one iota step, PROVED equal to ir_nat_ltb by ir_nat_ltb_sub_eq) instead of ir_nat_ltb, whose paired unary walk would peel 9.2e18 Nat.rec layers to decide the sign of an infinity. Measured: every classified witness in this chain decides in 0.02-0.05 s.",
+  "accelerated_constants_added": 0,
+  "new_trust_added": "none - Nat.add and Nat.sub were already relied on by ir_nat_pow2 and ir_nat_rem"
+ }
+}

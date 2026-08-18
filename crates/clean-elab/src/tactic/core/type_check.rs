@@ -16,6 +16,35 @@ use clean_kernel::name::Name;
 use clean_kernel::{
     BinderInfo, EqProofBuilder, Expr, ExprKind, FVarId, LocalContext, TypeChecker, WhnfWithProof,
 };
+use std::cell::Cell;
+
+thread_local! {
+    /// Ambient heartbeat budget for SPECULATIVE tactic attempts (0 = none).
+    ///
+    /// Set by [`crate::tactic::combinator::try_tactic_preserving_state`]
+    /// around each attempt and consumed by [`ProofState::with_tc`], so every
+    /// kernel reduction a speculative closer performs (grind's closer fan,
+    /// tauto's inner rfl/trivial/assumption, nn_verify strategy table, …)
+    /// runs bounded. Thread-local by the same argument as the simp set cache:
+    /// tactic execution of one declaration is single-threaded, and a
+    /// thread-local imposes no `Send`/`Sync` bounds. Measured motivation
+    /// (2026-08-13): full-delta WHNF of fixed-width-integer machinery
+    /// (`Int16.*` under `import Init`) grows the working term without
+    /// converging — an UNBUDGETED speculative attempt takes the whole process
+    /// to 20+ GB (the G-AUTO closure_search / Mathlib xor_def OOM wall).
+    static SPECULATIVE_TC_BUDGET: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Read the ambient speculative-attempt budget (0 = none active).
+pub(crate) fn speculative_tc_budget() -> u32 {
+    SPECULATIVE_TC_BUDGET.with(Cell::get)
+}
+
+/// Set the ambient speculative-attempt budget, returning the previous value
+/// (restore it when the attempt scope ends — attempts nest).
+pub(crate) fn set_speculative_tc_budget(budget: u32) -> u32 {
+    SPECULATIVE_TC_BUDGET.with(|cell| cell.replace(budget))
+}
 
 impl ProofState {
     /// Build a kernel LocalContext from a goal's local context.
@@ -157,6 +186,16 @@ impl ProofState {
     /// state when the goal hasn't changed since the last call. The cache is
     /// keyed by `goal.meta_id`; switching goals invalidates all caches.
     ///
+    /// When a speculative-attempt heartbeat budget is active (see
+    /// [`set_speculative_tc_budget`]), the checker runs under that budget:
+    /// WHNF soundly returns less-reduced terms on exhaustion and the
+    /// `Result`-returning entry points fail with `HeartbeatExceeded`, so a
+    /// pathological reduction fails the ATTEMPT instead of OOMing the
+    /// process. Exhaustion can only reject — never accept — so the budget is
+    /// fail-closed for soundness; the caches of an exhausted run are
+    /// discarded so partially reduced entries never leak into unbudgeted
+    /// reductions.
+    ///
     /// REQUIRES: `goal` belongs to this proof state's current meta/environment context.
     /// ENSURES: `f` observes a `TypeChecker` built from `goal`'s instantiated local context.
     /// ENSURES: Cached checker state is reused only when the cache key matches `goal.meta_id`.
@@ -166,14 +205,26 @@ impl ProofState {
     fn with_tc<R>(&self, goal: &Goal, f: impl FnOnce(&TypeChecker<'_>) -> R) -> R {
         let ctx = self.build_local_ctx(goal);
         let cached = self.tc_cache.lock().expect("tc_cache poisoned").take();
-        let tc = match cached {
+        let mut tc = match cached {
             Some((mid, caches)) if mid == goal.meta_id => {
                 TypeChecker::with_context_and_caches(&self.env, ctx, caches)
             }
             _ => TypeChecker::with_context(&self.env, ctx),
         };
+        let budget = speculative_tc_budget();
+        if budget != 0 {
+            tc.set_heartbeat_limit(budget);
+        }
         let result = f(&tc);
-        *self.tc_cache.lock().expect("tc_cache poisoned") = Some((goal.meta_id, tc.take_caches()));
+        if budget != 0 && tc.heartbeat_spent() {
+            // Exhausted attempt: drop the caches on the floor.
+            if std::env::var_os("CLEAN_GRIND_TRACE").is_some() {
+                eprintln!("spec-budget: attempt exhausted {budget} ticks");
+            }
+        } else {
+            *self.tc_cache.lock().expect("tc_cache poisoned") =
+                Some((goal.meta_id, tc.take_caches()));
+        }
         result
     }
 
@@ -404,6 +455,71 @@ impl ProofState {
         self.with_tc(goal, |tc| tc.whnf(&self.metas.instantiate(expr)))
     }
 
+    /// WHNF for discrimination-tree index-key construction: full kernel
+    /// reduction under a hard per-call heartbeat budget.
+    ///
+    /// `push_expr` runs one WHNF at every expression node of every lemma LHS
+    /// in the registry, so a single lemma whose statement full-delta-reduces
+    /// pathologically kills the whole process: measured 2026-08-13, indexing
+    /// `Int16.and_eq_neg_one_iff` from a real `import Init` (its LHS's
+    /// `(-1 : Int16)` unfolds through the Neg/OfNat instance chain into
+    /// Fin/Nat arithmetic whose `WellFounded.fix`/`Nat.le` towers never
+    /// converge) allocated 21 GB before SIGKILL — the G-AUTO logic.lean /
+    /// closure_search.lean and Mathlib `xor_def` OOM wall.
+    ///
+    /// On budget exhaustion the kernel's `whnf_impl` soundly returns its input
+    /// unreduced, so the bomb degrades to a less-specific index key instead of
+    /// an OOM; every reduction that terminates within budget keeps byte-
+    /// identical keys. The checker caches of an exhausted run are DISCARDED
+    /// rather than stored back, so partially reduced entries can never leak
+    /// into the unbudgeted tactic-path cache pool.
+    pub(crate) fn whnf_indexing(&self, goal: &Goal, expr: &Expr) -> Expr {
+        /// Real-reduction ticks per index-key WHNF call. Legitimate lemma-LHS
+        /// reductions measure in the hundreds of ticks per call (the worst
+        /// recorded legitimate class, `Init.Data.Char.Ordinal` carrier proofs,
+        /// is ~6K real reductions for a whole DECLARATION). The bomb class
+        /// grows the working term geometrically per reduction step, so the
+        /// tick budget bounds allocation only weakly: 1M ticks let the Int16
+        /// bomb allocate ~10 GB before exhaustion (measured 2026-08-13), then
+        /// spend a minute freeing it. 10K holds the same bomb to megabytes
+        /// and sub-second bail while staying an order of magnitude above any
+        /// legitimate single-call reduction.
+        const INDEXING_WHNF_BUDGET: u32 = 10_000;
+
+        let instantiated = self.metas.instantiate(expr);
+        let ctx = self.build_local_ctx(goal);
+        let cached = self.tc_cache.lock().expect("tc_cache poisoned").take();
+        let mut tc = match cached {
+            Some((mid, caches)) if mid == goal.meta_id => {
+                TypeChecker::with_context_and_caches(&self.env, ctx, caches)
+            }
+            _ => TypeChecker::with_context(&self.env, ctx),
+        };
+        tc.set_heartbeat_limit(INDEXING_WHNF_BUDGET);
+        // Reducible transparency is the class killer (and the Lean-parity
+        // choice — Lean's DiscrTree keys via reducibility-restricted whnfDT):
+        // the bomb requires delta-unfolding semireducible definitions
+        // (`Int16.neg`, `OfNat` instance chains) to expose a recursor whose
+        // major-premise normalization then grows the term geometrically —
+        // tick budgets cannot bound that (measured: GBs allocated within tens
+        // of ticks), but keeping those heads folded means the recursor never
+        // appears. The heartbeat budget stays as the backstop for statements
+        // that spell a recursor application literally.
+        let result =
+            tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Reducible);
+        if tc.heartbeat_spent() {
+            // Same tracer switch as the per-lemma index trace: on a kill or a
+            // slow build, stderr names every budget-exhausted reduction.
+            if std::env::var_os("CLEAN_SIMP_INDEX_TRACE").is_some() {
+                eprintln!("simp-index: whnf budget exhausted (returning unreduced)");
+            }
+        } else {
+            *self.tc_cache.lock().expect("tc_cache poisoned") =
+                Some((goal.meta_id, tc.take_caches()));
+        }
+        result
+    }
+
     /// Normalize `expr` toward a spine normal form: weak-head reduce, then
     /// recursively normalize the function and argument of each application.
     ///
@@ -626,5 +742,52 @@ impl ProofState {
         })?;
 
         Ok(cert)
+    }
+}
+
+#[cfg(test)]
+mod whnf_indexing_tests {
+    use clean_kernel::env::Environment;
+    use clean_kernel::name::Name;
+    use clean_kernel::{BinderInfo, Expr};
+
+    use crate::tactic::core::ProofState;
+
+    fn beta_redex_state() -> (ProofState, Expr, Expr) {
+        let mut env = Environment::new();
+        env.init_nat().expect("init_nat");
+        env.init_true_false().expect("init_true_false");
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let true_ = Expr::const_(Name::from_string("True"), vec![]);
+        let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+        // `(fun _ : Nat => True) Nat.zero` — reduces (well within budget) to `True`.
+        let redex = Expr::app(Expr::lam(BinderInfo::Default, nat, true_.clone()), zero);
+        (ProofState::new(env, true_.clone()), redex, true_)
+    }
+
+    #[test]
+    fn test_whnf_indexing_terminating_reduction_matches_unbudgeted_whnf() {
+        let (state, redex, _) = beta_redex_state();
+        let goal = state.current_goal().expect("fresh state has a goal");
+        assert_eq!(
+            state.whnf_indexing(goal, &redex),
+            state.whnf(goal, &redex),
+            "budgeted indexing WHNF must be byte-identical to unbudgeted WHNF \
+             whenever reduction terminates within budget (index-key stability)"
+        );
+    }
+
+    #[test]
+    fn test_whnf_indexing_leaves_tactic_whnf_fully_reducing() {
+        // A budgeted indexing call must never leave the shared checker caches
+        // in a state where the ordinary tactic-path WHNF stops early.
+        let (state, redex, true_) = beta_redex_state();
+        let goal = state.current_goal().expect("fresh state has a goal");
+        let _ = state.whnf_indexing(goal, &redex);
+        assert_eq!(
+            state.whnf(goal, &redex),
+            true_,
+            "tactic-path WHNF must still fully reduce after an indexing call"
+        );
     }
 }

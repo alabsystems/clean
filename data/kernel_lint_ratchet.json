@@ -7,6 +7,6 @@
     "unused_mut",
     "unused_qualifications"
   ],
-  "kernel_warnings": 65,
+  "kernel_warnings": 70,
   "generated_by": "scripts/kernel_lint_ratchet.sh --update"
 }

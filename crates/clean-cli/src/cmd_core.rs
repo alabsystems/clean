@@ -133,6 +133,195 @@ pub(crate) fn check_file_with_json_with_imports(
     )
 }
 
+/// Schema tag for the `clean check --parse-only --json` report.
+const PARSE_ONLY_REPORT_SCHEMA_VERSION: &str = "Clean-parse-only-report-v1";
+
+/// Cap on the `first_errors` list carried by a parse-only report.
+const PARSE_ONLY_MAX_FIRST_ERRORS: usize = 10;
+
+/// Per-file outcome of a parse-only sweep (`clean check --parse-only`).
+///
+/// MEASUREMENT INTEGRITY (parser pillar, Mathlib parse-rate brick,
+/// `docs/plans/ROADMAP_LEAN4_FULL_REPLACEMENT_2026-08-10.md`): a `RawDecl`
+/// placeholder is the parser's error-recovery artifact, not a parsed
+/// declaration — it always counts as a failure here, never as a parse. A
+/// hard error means the file-level parser aborted entirely (e.g. the typed
+/// `UniverseOffsetTooLarge` rejection, which deliberately skips `RawDecl`
+/// recovery), so no per-declaration counts exist for the file.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct ParseOnlyCounts {
+    /// Leaf declarations seen (namespace/section/mutual bodies flattened).
+    pub(crate) decls: usize,
+    /// Leaves that parsed to a real surface declaration.
+    pub(crate) parse_ok: usize,
+    /// Leaves that are `RawDecl` recovery placeholders (parse failures).
+    pub(crate) rawdecl_recovered: usize,
+    /// 1 when the file-level parse aborted with a hard `ParseError`.
+    pub(crate) hard_error: usize,
+    /// Parser recovery diagnostics observed (e.g. a tactic-block grammar
+    /// failure degraded to a synthetic sorry). These do not subtract from
+    /// `parse_ok` — the surrounding declaration still parsed structurally —
+    /// but they are honest parser completeness debt, reported separately and
+    /// surfaced in `first_errors`.
+    pub(crate) recovery_diagnostics: usize,
+    /// First error signatures, capped at [`PARSE_ONLY_MAX_FIRST_ERRORS`].
+    pub(crate) first_errors: Vec<String>,
+}
+
+/// Append an error signature unless the cap is already reached.
+fn push_parse_only_error(first_errors: &mut Vec<String>, message: String) {
+    if first_errors.len() < PARSE_ONLY_MAX_FIRST_ERRORS {
+        first_errors.push(message);
+    }
+}
+
+/// Count leaf parse outcomes for one surface declaration.
+///
+/// `Namespace` / `Section` / `Mutual` bodies (and the single-declaration
+/// bodies of `open ... in` / `set_option ... in`) are flattened so each inner
+/// declaration is classified individually — mirroring how the elaborating
+/// check path counts leaf declarations rather than top-level blocks. A
+/// recovered `RawDecl` nested inside a namespace therefore still counts as a
+/// failure instead of vanishing into a "parsed" container.
+fn count_parse_only_leaves(decl: &SurfaceDecl, counts: &mut ParseOnlyCounts) {
+    match decl {
+        SurfaceDecl::Namespace { decls, .. }
+        | SurfaceDecl::Section { decls, .. }
+        | SurfaceDecl::Mutual { decls, .. } => {
+            for inner in decls {
+                count_parse_only_leaves(inner, counts);
+            }
+        }
+        SurfaceDecl::Open {
+            body: Some(inner), ..
+        }
+        | SurfaceDecl::SetOption {
+            body: Some(inner), ..
+        } => {
+            count_parse_only_leaves(inner, counts);
+        }
+        SurfaceDecl::RawDecl { content, .. } => {
+            counts.decls += 1;
+            counts.rawdecl_recovered += 1;
+            // Signature: the recovered region's leading tokens, whitespace
+            // normalized and truncated, so a sweep can aggregate repeats.
+            let sig: String = content
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(80)
+                .collect();
+            push_parse_only_error(&mut counts.first_errors, format!("rawdecl: {sig}"));
+        }
+        _ => {
+            counts.decls += 1;
+            counts.parse_ok += 1;
+        }
+    }
+}
+
+/// Parse `content` with the same tactic-aware file parser the elaborating
+/// check path uses, and classify every leaf declaration WITHOUT elaborating.
+pub(crate) fn parse_only_counts(content: &str) -> ParseOnlyCounts {
+    let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+    let mut counts = ParseOnlyCounts::default();
+    match clean_parser::parse_file_with_tactics_diagnostics(content, &patterns) {
+        Ok(report) => {
+            for decl in &report.decls {
+                count_parse_only_leaves(decl, &mut counts);
+            }
+            for diag in &report.diagnostics {
+                counts.recovery_diagnostics += 1;
+                let named = match &diag.tactic {
+                    Some(tac) => format!("tactic `{tac}`"),
+                    None => format!("construct `{}`", diag.construct),
+                };
+                push_parse_only_error(
+                    &mut counts.first_errors,
+                    format!(
+                        "recovery[{}]: {named} at line {}: {}",
+                        diag.code, diag.recovery_start.line, diag.message
+                    ),
+                );
+            }
+        }
+        Err(err) => {
+            counts.hard_error = 1;
+            push_parse_only_error(&mut counts.first_errors, format!("hard error: {err}"));
+        }
+    }
+    counts
+}
+
+/// JSON payload for `clean check --parse-only --json`.
+#[derive(Debug, Serialize)]
+struct ParseOnlyReport {
+    schema_version: &'static str,
+    command: &'static str,
+    file: String,
+    decls: usize,
+    parse_ok: usize,
+    rawdecl_recovered: usize,
+    hard_error: usize,
+    recovery_diagnostics: usize,
+    first_errors: Vec<String>,
+}
+
+/// `clean check --parse-only`: parse the file, count per-declaration parse
+/// outcomes, and report them WITHOUT elaborating or kernel-checking anything.
+///
+/// This is the measurement command behind `scripts/parser_mathlib_sweep.sh`
+/// (the parser pillar's Mathlib parse-rate artifact). It never registers a
+/// declaration, never runs a tactic, and never mints any verification
+/// verdict — it is a parser coverage meter only. The JSON report (when
+/// requested) is always printed before the failure exit, so sweep tooling can
+/// consume it regardless of exit status.
+pub(crate) fn parse_only_check(path: &Path, json: bool) -> anyhow::Result<()> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", path.display()))?;
+    let counts = parse_only_counts(&content);
+    let failed = counts.rawdecl_recovered + counts.hard_error;
+
+    if json {
+        let report = ParseOnlyReport {
+            schema_version: PARSE_ONLY_REPORT_SCHEMA_VERSION,
+            command: "clean check --parse-only",
+            file: path.display().to_string(),
+            decls: counts.decls,
+            parse_ok: counts.parse_ok,
+            rawdecl_recovered: counts.rawdecl_recovered,
+            hard_error: counts.hard_error,
+            recovery_diagnostics: counts.recovery_diagnostics,
+            first_errors: counts.first_errors,
+        };
+        writeln!(
+            std::io::stdout(),
+            "{}",
+            serde_json::to_string_pretty(&report)?
+        )?;
+    } else {
+        let mut out = std::io::stdout();
+        let _ = writeln!(
+            out,
+            "Parsed {} declarations: {} ok, {} RawDecl-recovered, {} hard error, {} recovery diagnostics",
+            counts.decls,
+            counts.parse_ok,
+            counts.rawdecl_recovered,
+            counts.hard_error,
+            counts.recovery_diagnostics
+        );
+        for err in &counts.first_errors {
+            let _ = writeln!(out, "  {err}");
+        }
+    }
+
+    if failed > 0 {
+        anyhow::bail!("parse-only check: {failed} declaration(s) failed to parse");
+    }
+    Ok(())
+}
+
 /// Recursion state shared across all files (cache + cycle detection).
 #[derive(Default)]
 struct ImportCheckState {
@@ -393,10 +582,24 @@ fn check_file_body(
                 }
             }
             Err(e) => {
+                // Carry the failing declaration's name and start line in the
+                // diagnostic so downstream verdict consumers (the tactic-family
+                // gates' fail-closed attribution) can attribute the failure
+                // positionally instead of falling back to a whole-word name
+                // scan — which a goal dump mentioning an unrelated declaration
+                // (e.g. a helper's constant inside an unsolved-goal print)
+                // poisons into a false failure on a passing decl.
+                let named = surface_decl_name(decl)
+                    .map(|name| format!("{name}: "))
+                    .unwrap_or_default();
+                let position = surface_decl_span(decl)
+                    .and_then(|span| source_span(&content, span))
+                    .map(|span| format!(" at line {}", span.line))
+                    .unwrap_or_default();
                 let diagnostic = if is_entry_file {
-                    format!("elaboration error: {e:?}")
+                    format!("{named}elaboration error{position}: {e:?}")
                 } else {
-                    format!("[{module}] elaboration error: {e:?}")
+                    format!("[{module}] {named}elaboration error{position}: {e:?}")
                 };
                 outcome
                     .structured_failures
@@ -1442,9 +1645,98 @@ pub(crate) fn resolve_project_dir(dir: Option<PathBuf>) -> anyhow::Result<PathBu
 
 #[cfg(test)]
 mod tests {
-    use super::typecheck_elab_result;
+    use super::{parse_only_counts, typecheck_elab_result};
     use clean_elab::ElabResult;
     use clean_kernel::{Environment, Expr, Name};
+
+    /// Parse-only counting: a file with two good decls and one malformed decl
+    /// classifies the malformed region as a `RawDecl` recovery failure, never
+    /// as a parse (soundness of the parse-rate measurement).
+    #[test]
+    fn test_parse_only_counts_good_and_rawdecl_recovered() {
+        // Same shape as the parser's own recovery fixture
+        // (`test_file_error_recovery_skips_malformed_decls`).
+        let counts = parse_only_counts("def foo := 1\ndef ??? := !!!\ndef bar := 2\n");
+        assert_eq!(counts.hard_error, 0, "recovered file must not hard-error");
+        assert!(
+            counts.rawdecl_recovered >= 1,
+            "malformed decl must surface as a RawDecl failure, got {counts:?}"
+        );
+        assert!(
+            counts.parse_ok >= 2,
+            "both valid defs must count as parsed, got {counts:?}"
+        );
+        assert_eq!(
+            counts.decls,
+            counts.parse_ok + counts.rawdecl_recovered,
+            "every counted leaf is either a parse or a RawDecl failure: {counts:?}"
+        );
+        assert!(
+            counts
+                .first_errors
+                .iter()
+                .any(|e| e.starts_with("rawdecl: ")),
+            "RawDecl failures must contribute an error signature, got {:?}",
+            counts.first_errors
+        );
+    }
+
+    /// Parse-only counting: a typed `UniverseOffsetTooLarge` rejection skips
+    /// `RawDecl` recovery and aborts the whole file — reported as a hard
+    /// error with zero per-declaration counts.
+    #[test]
+    fn test_parse_only_counts_hard_error_aborts_file() {
+        let counts = parse_only_counts("def x : Sort (u + 9999) := x\n");
+        assert_eq!(
+            counts.hard_error, 1,
+            "expected a hard error, got {counts:?}"
+        );
+        assert_eq!(counts.decls, 0, "hard error yields no decl counts");
+        assert_eq!(counts.parse_ok, 0, "hard error yields no parses");
+        assert!(
+            counts
+                .first_errors
+                .iter()
+                .any(|e| e.starts_with("hard error: ")),
+            "hard error must contribute an error signature, got {:?}",
+            counts.first_errors
+        );
+    }
+
+    /// Parse-only counting flattens namespaces: a `RawDecl` recovered inside
+    /// a namespace still counts as a failure, and the good sibling as a parse.
+    #[test]
+    fn test_parse_only_counts_flattens_namespace_leaves() {
+        // Same fixture as the parser's own in-namespace recovery test
+        // (`test_namespace_body_error_recovery_keeps_following_decl_scoped`):
+        // the RawDecl lands INSIDE the Namespace node, never at top level.
+        let counts = parse_only_counts("namespace Foo\n  def bad := \n  def good := 1\nend Foo\n");
+        assert_eq!(counts.hard_error, 0, "recovered file must not hard-error");
+        assert!(
+            counts.rawdecl_recovered >= 1,
+            "in-namespace RawDecl must count as a failure, got {counts:?}"
+        );
+        assert!(
+            counts.parse_ok >= 1,
+            "the good sibling must count as parsed, got {counts:?}"
+        );
+    }
+
+    /// A fully valid file counts every declaration as parse-OK with no
+    /// failures and no error signatures.
+    #[test]
+    fn test_parse_only_counts_all_valid_file() {
+        let counts = parse_only_counts("def a := 1\ndef b := 2\naxiom c : Type\n");
+        assert_eq!(counts.decls, 3, "expected 3 leaves, got {counts:?}");
+        assert_eq!(counts.parse_ok, 3, "all decls must parse, got {counts:?}");
+        assert_eq!(counts.rawdecl_recovered, 0, "no RawDecl expected");
+        assert_eq!(counts.hard_error, 0, "no hard error expected");
+        assert!(
+            counts.first_errors.is_empty(),
+            "no error signatures expected, got {:?}",
+            counts.first_errors
+        );
+    }
 
     #[test]
     fn typecheck_elab_result_rejects_non_prop_theorem() {

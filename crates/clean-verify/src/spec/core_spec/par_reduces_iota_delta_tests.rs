@@ -7,13 +7,10 @@
 //! are registered, kernel-checked, DerivedProved, and carry zero axiom_deps.
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 fn build_iota_delta_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The list no-confusion + δ*-list-trans bricks are DerivedProved with zero axiom deps.

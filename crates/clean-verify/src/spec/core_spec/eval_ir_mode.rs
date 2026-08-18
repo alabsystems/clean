@@ -32,8 +32,28 @@
 //! ## What is proved
 //!
 //! Proved: for EVERY `CleanMode`, every heap representing it, every fuel at or
-//! above 6, the machine returns exactly `clean_mode_has_cubical m`; and the
+//! above 6, the machine returns exactly `clean_mode_has_cubical m` (A4,
+//! `ir_h2_correct`); if the machine ANSWERS true then the mode really does carry
+//! the cubical layer (A5, `ir_h2_machine_sound`); and on any represented mode it
+//! never faults, never traps and never exhausts fuel (`ir_h2_never_faults`). The
 //! module is executed by the kernel on four of the six tags as witnesses.
+//!
+//! ## A5 was deleted once — 2026-08-12 note
+//!
+//! `ir_hcl_machine_sound` landed in `08d4c6cb1` and was removed by `9c37f0ef0`
+//! when this module was re-authored from measured output. Nothing replaced it,
+//! so for two days the chain stopped at the equality theorem while the design
+//! docs described a six-rung A0–A6 and `bundles.rs` still explained the stage
+//! ordering by "its A5-analogue consumes `ir_outcome_bool`" — a dependency that
+//! no longer existed. It is restored above, renamed to the `ir_h2_` family and
+//! re-typed against the transcribed module. `test_a5_is_present_and_composes`
+//! below is what makes a silent re-deletion fail rather than pass.
+//!
+//! A5 here is an INVERSION (machine answer → reflected predicate), not the
+//! denotational step `ir_lz_machine_sound` takes: that one composes with
+//! `level_is_zero_sound` to reach `level_eval`, and this spec has no comparable
+//! semantics of `CleanMode` to compose with. Said plainly so the two are not
+//! quoted as equals.
 //!
 //! A0/A1/A6 are recorded for the shipped kernel body: the differential agrees,
 //! the module is structurally checked against the recorded emitted trust-ir,
@@ -103,6 +123,12 @@ const SRC_IR_H2_EXACT: &str = "def ir_h2_exact (mem : IRList IRMemSlot) (a : Nat
 
 const SRC_IR_H2_CORRECT: &str = "def ir_h2_correct (mem : IRList IRMemSlot) (fuel : Nat) (na : Nat) (r : IRScalar) (m : CleanModeR) (henc : EncodesCleanMode mem r m) : Le ir_d6 fuel -> Eq IROutcome (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) := EncodesCleanMode.rec mem (fun (s0 : IRScalar) (m0 : CleanModeR) (_ : EncodesCleanMode mem s0 m0) => Le ir_d6 fuel -> Eq IROutcome (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 s0) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m0))))) (fun (a : Nat) (m0 : CleanModeR) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var (clean_mode_tag m0) ir_sp0) Bool.true))) (hle : Le ir_d6 fuel) => ir_run_le_ret ir_h2_module ir_d6 fuel hle (IRConfig.running (ir_h2_mach0 mem a na)) (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m0))) (ir_h2_exact mem a na m0 h)) r m henc";
 
+const SRC_IR_H2_MACHINE_SOUND: &str = "def ir_h2_machine_sound (mem : IRList IRMemSlot) (fuel : Nat) (na : Nat) (r : IRScalar) (m : CleanModeR) (henc : EncodesCleanMode mem r m) (hle : Le ir_d6 fuel) (hret : Eq IROutcome (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))) : Eq Bool (clean_mode_has_cubical m) Bool.true := Eq.cong IROutcome Bool ir_outcome_bool (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) (Eq.trans IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) (Eq.symm IROutcome (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) (ir_h2_correct mem fuel na r m henc hle)) hret)";
+
+const SRC_IR_H2_MACHINE_SOUND_WITNESS: &str = "def ir_h2_machine_sound_witness : Eq Bool (clean_mode_has_cubical CleanModeR.directed) Bool.true := ir_h2_machine_sound (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d6 ir_d1 (IRScalar.ptr_ ir_d0) CleanModeR.directed (EncodesCleanMode.mk (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d0 CleanModeR.directed (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d3 ir_sp0) Bool.true)))) (Le.refl ir_d6) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))))";
+
+const SRC_IR_H2_NEVER_FAULTS: &str = "def ir_h2_never_faults (mem : IRList IRMemSlot) (fuel : Nat) (na : Nat) (r : IRScalar) (m : CleanModeR) (henc : EncodesCleanMode mem r m) (hle : Le ir_d6 fuel) : Eq Bool (ir_outcome_is_ret (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na)) Bool.true := Eq.cong IROutcome Bool ir_outcome_is_ret (ir_eval fuel ir_h2_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical m)))) (ir_h2_correct mem fuel na r m henc hle)";
+
 const SRC_IR_H2_CORRECT_WITNESS: &str = "def ir_h2_correct_witness : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical CleanModeR.directed)))) := ir_h2_correct (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d6 ir_d1 (IRScalar.ptr_ ir_d0) CleanModeR.directed (EncodesCleanMode.mk (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d0 CleanModeR.directed (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d3 ir_sp0) Bool.true)))) (Le.refl ir_d6)";
 
 impl Specification {
@@ -132,6 +158,17 @@ Unlike its predecessor this is a statement about the module the compiler ACTUALL
 \
 A1 is pinned by tests/crystal_a1_lineage.rs: the registered CFG is checked against the recorded emitted trust-ir, and the artifact lineage must equal the A6 flip-event lineage. The test does not recompute trust's digest. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_H2_CORRECT_WITNESS, "ir_h2_correct_witness: not vacuous, and the witness RUNS THE MACHINE at Directed -- the tag whose arm is the second true block. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_H2_MACHINE_SOUND, "ir_h2_machine_sound: *** A5 FOR THIS CHAIN. *** If the MACHINE answers true, the mode really does carry the cubical layer -- it is Cubical or Directed. \
+\
+RESTORED 2026-08-12. This declaration landed in 08d4c6cb1 as ir_hcl_machine_sound and was DELETED by 9c37f0ef0 when the module was re-authored from measured output; nothing replaced it, so the chain that is supposed to close stopped at the equality theorem while the design docs went on describing a six-rung A0..A6. Here it is again, re-typed against the transcribed module (fuel ir_d6, not ir_d5) and renamed to the ir_h2_ family. \
+\
+STATED SCOPE, which must travel with it. This is an INVERSION -- from an observation about the running machine back to the reflected predicate -- and NOT the denotational step its counterpart ir_lz_machine_sound takes. That one composes with level_is_zero_sound to conclude a fact about level_eval under every assignment; there is no comparable semantics of CleanMode in this spec to compose with, so the honest conclusion here is the reflected predicate itself. Deeper would require a mode semantics that does not exist yet. \
+\
+The composition is an equality argument, not three injectivity lemmas: apply ir_outcome_bool to both sides with Eq.cong and let the kernel compute, since ir_outcome_bool (ret [bool b]) reduces to b. That is why this stage must run AFTER add_eval_ir_correct, which registers it. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_H2_MACHINE_SOUND_WITNESS, "ir_h2_machine_sound_witness: A5 is not vacuous, and the witness RUNS THE MACHINE. Instantiated at the one-cell heap encoding Directed -- the 2LTT bridge, and the arm most easily lost to a misrouted Switch -- with every premise discharged concretely: the representation by EncodesCleanMode.mk, the fuel bound by Le.refl at exactly 6, and the observation by Eq.refl, which the kernel discharges by executing the body. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_H2_NEVER_FAULTS, "ir_h2_never_faults: *** NO UB, NO PANIC, NO EXHAUSTION -- on any represented mode. *** A corollary of ir_h2_correct, and the analogue of ir_lz_never_faults for this chain. IROutcome separates success from ub, type_error, unmodelled, stuck and fuel_out, so proving the outcome is a ret rules out all five at once. \
+\
+Concretely for the emitted body: the default edge is taken on four of the six tags and is a real answer rather than a trap, no load faults bad_addr or null_deref, and 6 steps always suffice. All of it is earned by EncodesCleanMode's premise -- one live cell whose payload is the tag -- rather than assumed. DerivedProved, zero axiom_deps.")?;
         Ok(())
     }
 }
@@ -196,6 +233,41 @@ mod tests {
         assert!(!SRC_IR_H2_CORRECT.contains("ir_cell"));
     }
 
+    /// A5 exists, composes with A4 through `ir_outcome_bool`, and is witnessed.
+    ///
+    /// It was deleted once, silently, during a re-authoring. Nothing failed:
+    /// the axiom ratchet does not notice a MISSING theorem and the vacuity
+    /// firewall audits relations, not definitions. This test is the thing that
+    /// notices.
+    #[test]
+    fn test_a5_is_present_and_composes() {
+        assert!(SRC_IR_H2_MACHINE_SOUND.contains("def ir_h2_machine_sound"));
+        // The hypothesis is an observation about the MACHINE…
+        assert!(SRC_IR_H2_MACHINE_SOUND.contains("ir_eval fuel ir_h2_module"));
+        // …and the conclusion is about the reflected predicate.
+        assert!(SRC_IR_H2_MACHINE_SOUND.contains(": Eq Bool (clean_mode_has_cubical m) Bool.true"));
+        // It must go through A4, not restate it.
+        assert!(SRC_IR_H2_MACHINE_SOUND.contains("ir_h2_correct mem fuel na r m henc hle"));
+        // The projection that makes this an equality argument rather than an
+        // inversion through three injectivity lemmas — and the reason this
+        // stage must be registered after `add_eval_ir_correct`.
+        assert!(SRC_IR_H2_MACHINE_SOUND.contains("ir_outcome_bool"));
+        assert!(SRC_IR_H2_NEVER_FAULTS.contains("ir_outcome_is_ret"));
+        // Non-vacuity: every premise discharged concretely at Directed.
+        assert!(SRC_IR_H2_MACHINE_SOUND_WITNESS.contains("CleanModeR.directed"));
+        assert!(SRC_IR_H2_MACHINE_SOUND_WITNESS.contains("Le.refl ir_d6"));
+        assert!(SRC_IR_H2_MACHINE_SOUND_WITNESS.contains("EncodesCleanMode.mk"));
+    }
+
+    /// A5's fuel bound must match the transcribed module's cost. The deleted
+    /// version said `ir_d5`, for the module that had one fewer step.
+    #[test]
+    fn test_a5_fuel_bound_matches_the_transcribed_module() {
+        assert!(SRC_IR_H2_MACHINE_SOUND.contains("Le ir_d6 fuel"));
+        assert!(SRC_IR_H2_NEVER_FAULTS.contains("Le ir_d6 fuel"));
+        assert!(SRC_IR_H2_CORRECT.contains("Le ir_d6 fuel"));
+    }
+
     #[test]
     fn test_sources_balanced_ascii() {
         for src in [
@@ -204,6 +276,9 @@ mod tests {
             SRC_IR_H2_MODULE,
             SRC_IR_H2_EXACT,
             SRC_IR_H2_CORRECT,
+            SRC_IR_H2_MACHINE_SOUND,
+            SRC_IR_H2_MACHINE_SOUND_WITNESS,
+            SRC_IR_H2_NEVER_FAULTS,
         ] {
             assert!(src.is_ascii());
             assert_eq!(src.matches('(').count(), src.matches(')').count());

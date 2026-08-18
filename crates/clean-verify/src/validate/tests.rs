@@ -10,7 +10,7 @@ fn test_cross_validator() {
     // Run entirely on large stack — run_validation() calls elaborate() which
     // recurses deeply for complex proof terms.
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let validator = CrossValidator::new(&spec);
         let summary = validator.run_validation();
 
@@ -146,7 +146,7 @@ fn test_micro_checker_detects_type_disagreement() {
 #[test]
 fn test_cross_validator_cert_path_matches_impl() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let validator = CrossValidator::new(&spec);
         let summary = validator.run_validation();
 

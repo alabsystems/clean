@@ -1,0 +1,47 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+#
+# Kernel performance eval — canonical input for benchmark publication.
+#
+# This file is the metadata side of the kernel benchmark lane. It is one of
+# the CANONICAL_BENCHMARK_INPUTS sha-pinned by the publication pipeline
+# (crates/clean-cli/src/cmd_bench.rs, scripts/check_benchmark_publication.py):
+# publication refuses to mint while this file is missing or uncommitted, so
+# the suite definition below cannot drift silently between published runs.
+# It declares WHAT the kernel lane measures; it carries no results. Numbers
+# live only in reports/benchmarks/publication/<run-id>/ artifacts produced by
+# scripts/run_public_benchmarks.sh — never in this file, never in prose
+# (docs/BENCHMARKS.md freshness rule).
+id: kernel-perf
+version: 1
+description: >-
+  Criterion benchmark suites for the trusted kernel: type-check/infer
+  micro-benchmarks (kernel_bench) and certificate-macro expansion
+  (cert_macro_bench). Publication metadata pins this file alongside the bench
+  sources so the measured suite definition is part of the artifact's identity.
+owner: Andrew Yates <andrewyates.name@gmail.com>
+suites:
+  - name: kernel_bench
+    crate: clean-kernel
+    bench_target: crates/clean-kernel/benches/kernel_bench.rs
+    harness: criterion
+    run_artifacts:
+      stdout: raw/kernel_bench.stdout.txt
+      stderr_log: logs/kernel_bench.stderr.log
+      criterion_dir: raw/criterion/kernel_bench
+  - name: cert_macro_bench
+    crate: clean-kernel
+    bench_target: crates/clean-kernel/benches/cert_macro_bench.rs
+    harness: criterion
+    run_artifacts:
+      stdout: raw/cert_macro_bench.stdout.txt
+      stderr_log: logs/cert_macro_bench.stderr.log
+      criterion_dir: raw/criterion/cert_macro_bench
+publication_contract:
+  runner: scripts/run_public_benchmarks.sh
+  checker: scripts/check_benchmark_publication.py
+  pointer: reports/benchmarks/publication/current.json
+  freshness_days_default: 14
+  claims_policy: >-
+    No performance number sourced from these suites may be quoted as current
+    outside a publication run inside the freshness window. Historical numbers
+    must carry their run date.

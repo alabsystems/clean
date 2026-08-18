@@ -217,6 +217,14 @@ pub(crate) struct KernelSoundnessLaneExpectation {
 pub(crate) struct DenySorryLaneExpectation {
     pub(crate) id: &'static str,
     pub(crate) expected_tests: Option<u32>,
+    /// Argv the generator executes to decide this lane's verdict.
+    ///
+    /// `None` marks a lane that is executed in-process (the sorry-bypass lint
+    /// and the unchecked-decl ratchet closure), so there is no subprocess to
+    /// spawn. Every other lane MUST carry a command: a lane with no way to be
+    /// executed can only ever be self-declared, which is precisely what this
+    /// artifact must not do.
+    pub(crate) command: Option<&'static [&'static str]>,
 }
 
 #[derive(Debug, Clone, Copy)]

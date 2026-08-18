@@ -1145,7 +1145,7 @@ mod tests {
     #[test]
     fn test_kexpr_battery_covers_every_live_constructor() {
         crate::test_utils::run_with_stack(|| {
-            let spec = Specification::new().expect("spec builds");
+            let spec = crate::test_utils::build_spec_with_stack();
             let resolved = resolve_battery(&spec)
                 .unwrap_or_else(|errors| panic!("battery must resolve: {errors:?}"));
             let kexpr_terms = resolved.get("KExpr").expect("KExpr battery should exist");
@@ -1586,7 +1586,7 @@ mod tests {
     #[test]
     fn test_as_eq_recognizes_eq_headed_body() {
         crate::test_utils::run_with_stack(|| {
-            let spec = Specification::new().expect("spec builds");
+            let spec = crate::test_utils::build_spec_with_stack();
             // An Eq-headed closed statement.
             let eq = spec
                 .elaborate_source(
@@ -1615,7 +1615,7 @@ mod tests {
     #[test]
     fn test_true_single_step_beta_survives() {
         crate::test_utils::run_with_stack(|| {
-            let spec = Specification::new().expect("spec builds");
+            let spec = crate::test_utils::build_spec_with_stack();
             let outcome = check_statement_for_definitional_disagreement(
                 &spec,
                 "true_single_step_beta",
@@ -1639,7 +1639,7 @@ mod tests {
     #[test]
     fn test_live_gate_passes_and_reports_coverage() {
         crate::test_utils::run_with_stack(|| {
-            let spec = Specification::new().expect("spec builds");
+            let spec = crate::test_utils::build_spec_with_stack();
             let report = run_gate(&spec);
             eprintln!("{}", report.report());
             assert!(
@@ -1666,7 +1666,7 @@ mod tests {
     #[test]
     fn test_full_gate_exercises_a_spec_owned_candidate() {
         crate::test_utils::run_with_stack(|| {
-            let mut spec = Specification::new().expect("spec builds");
+            let mut spec = crate::test_utils::build_spec_with_stack();
             let name = "GateFixture.syntheticRefl";
             spec.add_definition(SpecDefinition {
                 name: name.to_string(),

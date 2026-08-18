@@ -366,7 +366,9 @@ fn search_all_theorems(
 /// Load all mathverse shards into a kernel `Environment`.
 ///
 /// Reads each shard, reconstructs declarations via topological ordering,
-/// and adds them to a shared environment using `add_decl_structural`.
+/// and adds them to a shared environment through the trusted import-boundary
+/// bulk hook (`TrustedEnvExt::extend_constants_structural`); every constant
+/// is stamped `StructuralOnly`, never `KernelVerified`.
 fn load_env_from_shards(mathverse_files: &[PathBuf]) -> clean_kernel::Environment {
     use clean_mathverse::shard::ShardReader;
 
@@ -398,7 +400,8 @@ fn add_shard_to_env(
     env: &mut clean_kernel::Environment,
     reader: &clean_mathverse::shard::ShardReader,
 ) {
-    use clean_kernel::{Declaration, Name};
+    use clean_kernel::env::{ConstantInfo, ConstantKind, Reducibility, TrustedEnvExt};
+    use clean_kernel::Name;
     use clean_mathverse::shard_reconstruct::reconstruct_from_shard;
     use clean_mathverse::types::NO_VALUE;
     use clean_mathverse::verify::incremental::build_dependency_graph;
@@ -452,11 +455,22 @@ fn add_shard_to_env(
         })
         .collect();
 
+    let mut batch: Vec<ConstantInfo> = Vec::new();
     for name in &order {
         let Some(&idx) = name_to_idx.get(name.as_str()) else {
             continue;
         };
         let constant = &reader.constants[idx];
+
+        let n = Name::from_string(name);
+        // extend_constants_structural does not duplicate-check (a same-name
+        // insert would overwrite); pre-filter names already registered so the
+        // first shard providing a constant wins, matching the DuplicateName
+        // skip of the retired per-decl add_decl_structural path. Names within
+        // one batch are unique (topological order visits each name once).
+        if env.get_const(&n).is_some() {
+            continue;
+        }
 
         let Ok(type_expr) = reconstruct_from_shard(
             &reader.exprs,
@@ -479,46 +493,56 @@ fn add_shard_to_env(
             None
         };
 
-        let n = Name::from_string(name);
         let decl_kind = clean_mathverse::types::DeclKind::try_from(constant.decl_kind)
             .unwrap_or(clean_mathverse::types::DeclKind::Theorem);
 
-        let decl = match decl_kind {
-            clean_mathverse::types::DeclKind::Theorem => Declaration::Theorem {
-                name: n,
-                level_params: Vec::new(),
-                type_: type_expr,
-                value: value.unwrap_or_else(clean_kernel::Expr::prop),
-            },
-            clean_mathverse::types::DeclKind::Axiom => Declaration::Axiom {
-                name: n,
-                level_params: Vec::new(),
-                type_: type_expr,
-            },
-            clean_mathverse::types::DeclKind::Opaque => Declaration::Opaque {
-                name: n,
-                level_params: Vec::new(),
-                type_: type_expr,
-                value: value.unwrap_or_else(clean_kernel::Expr::prop),
-            },
-            clean_mathverse::types::DeclKind::Definition => Declaration::Definition {
-                name: n,
-                level_params: Vec::new(),
-                type_: type_expr,
-                value: value.unwrap_or_else(clean_kernel::Expr::prop),
-                is_reducible: false,
-            },
+        let (kind, reducibility, value) = match decl_kind {
+            clean_mathverse::types::DeclKind::Theorem => (
+                ConstantKind::Theorem,
+                Reducibility::Opaque,
+                Some(value.unwrap_or_else(clean_kernel::Expr::prop)),
+            ),
+            clean_mathverse::types::DeclKind::Axiom => {
+                (ConstantKind::Axiom, Reducibility::Regular(0), None)
+            }
+            clean_mathverse::types::DeclKind::Opaque => (
+                ConstantKind::Opaque,
+                Reducibility::Opaque,
+                Some(value.unwrap_or_else(clean_kernel::Expr::prop)),
+            ),
+            // Height 0 instead of the kernel-computed unfold height: the
+            // height only orders delta-unfolding heuristics, and this audit
+            // env already erases level params / substitutes placeholder
+            // values, so definition heights carry no signal here.
+            clean_mathverse::types::DeclKind::Definition => (
+                ConstantKind::Definition,
+                Reducibility::Regular(0),
+                Some(value.unwrap_or_else(clean_kernel::Expr::prop)),
+            ),
             // Inductive-family and quotient types: add as axioms since the
             // environment doesn't have the full inductive machinery.
-            _ => Declaration::Axiom {
-                name: n,
-                level_params: Vec::new(),
-                type_: type_expr,
-            },
+            _ => (ConstantKind::Axiom, Reducibility::Regular(0), None),
         };
 
-        // SOUNDNESS: Audit uses add_decl_structural because we are loading
-        // pre-verified shard data for analysis, not for proof production.
-        let _ = env.add_decl_structural(decl);
+        batch.push(ConstantInfo::new_with_reducibility(
+            n,
+            Vec::new(),
+            type_expr,
+            value,
+            reducibility,
+            kind,
+        ));
     }
+
+    // SOUNDNESS: import-boundary structural registration, ratcheted in
+    // data/unchecked_decl_ratchet.json (extend_constants block). This builds a
+    // READ-ONLY audit/proof-search environment from pre-verified shard data:
+    // it mints no KernelVerified verdict, is never re-exported, and never
+    // enters the kernel TCB. extend_constants_structural runs the same O(1)
+    // structural checks (no metavars/fvars, level-param scope) the retired
+    // per-decl add_decl_structural path ran and stamps every constant
+    // StructuralOnly; per-constant rejections are dropped best-effort exactly
+    // like the old ignored per-decl errors. A wrong shard byte can at worst
+    // produce a wrong audit finding, never a false trust verdict.
+    let _ = env.extend_constants_structural(batch.into_iter());
 }

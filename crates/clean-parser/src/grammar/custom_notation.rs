@@ -41,7 +41,8 @@
 use super::Parser;
 use crate::lexer::{Lexer, TokenKind};
 use crate::surface::{
-    NotationItem, NotationKind, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr,
+    DeclScope, NotationItem, NotationKind, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo,
+    SurfaceExpr,
 };
 use crate::ParseError;
 
@@ -242,6 +243,12 @@ pub(super) struct CustomOperator {
     /// The expansion head: the term to the right of `=>`. Applied positionally
     /// to the operands.
     pub(super) expansion: SurfaceExpr,
+    /// For `scoped` notation: the FULL declaring namespace path. The operator
+    /// is consulted only while that namespace is active — the current
+    /// namespace (or an ancestor of it) or one activated by `open` /
+    /// `open scoped`. `None` for plain and `local` notation (always active,
+    /// preserving the pre-existing `local` behavior).
+    pub(super) scope_ns: Option<String>,
 }
 
 /// One element of a registered closed mixfix `notation` pattern.
@@ -272,6 +279,9 @@ pub(super) struct CustomMixfix {
     /// variables in pattern order, beta-reduced against the parsed operands by
     /// the shared application machinery.
     pub(super) expansion: SurfaceExpr,
+    /// For `scoped` notation: the FULL declaring namespace path (see
+    /// [`CustomOperator::scope_ns`]). `None` = always active.
+    pub(super) scope_ns: Option<String>,
 }
 
 impl Parser {
@@ -286,7 +296,20 @@ impl Parser {
         precedence: Option<u32>,
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
+        scope: DeclScope,
     ) {
+        // `scoped` notation registers against its declaring namespace and is
+        // consulted only while that namespace is active. At root there is no
+        // namespace to register against — skip parse-time registration; the
+        // elaborator rejects the declaration loudly (Lean: "scoped attributes
+        // must be used inside namespaces"), so nothing is silently dropped.
+        let scope_ns = match scope {
+            DeclScope::Scoped => match self.notation_ns_stack.last() {
+                Some(current) => Some(current.clone()),
+                None => return,
+            },
+            DeclScope::Default | DeclScope::Local => None,
+        };
         // `infixl`/`infixr`/`prefix`/`postfix` name no operands in their pattern
         // (the operands are implicit) and their expansion is a bare head applied
         // positionally. The general `notation` command instead NAMES its operands
@@ -306,7 +329,7 @@ impl Parser {
                 // Not a simple fixed-arity shape — try the closed multi-hole
                 // mixfix form (`"⟪" a ", " b "⟫"`); anything else stays
                 // parse-only.
-                self.register_custom_mixfix(precedence, pattern, expansion);
+                self.register_custom_mixfix(precedence, pattern, expansion, scope_ns);
                 return;
             };
             let binders: Vec<SurfaceBinder> = vars
@@ -357,6 +380,7 @@ impl Parser {
             kind: effective_kind,
             precedence: precedence.unwrap_or(65),
             expansion: effective_expansion,
+            scope_ns,
         });
     }
 
@@ -368,6 +392,7 @@ impl Parser {
         precedence: Option<u32>,
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
+        scope_ns: Option<String>,
     ) {
         if pattern.len() < 3
             || !matches!(pattern.first(), Some(NotationItem::Literal(_)))
@@ -428,6 +453,7 @@ impl Parser {
             items,
             precedence: precedence.unwrap_or(1024),
             expansion: lam,
+            scope_ns,
         });
     }
 
@@ -782,14 +808,89 @@ impl Parser {
         Ok(())
     }
 
+    /// Whether a registered notation's scope tag is active at the cursor:
+    /// unscoped notation always is; `scoped` notation only while its
+    /// declaring namespace is the current namespace, a dot-prefix ancestor of
+    /// it, or activated by a parse-time `open` / `open scoped`.
+    pub(super) fn custom_scope_active(&self, scope_ns: Option<&str>) -> bool {
+        let Some(ns) = scope_ns else {
+            return true;
+        };
+        if let Some(current) = self.notation_ns_stack.last() {
+            if current == ns
+                || (current.len() > ns.len()
+                    && current.starts_with(ns)
+                    && current.as_bytes()[ns.len()] == b'.')
+            {
+                return true;
+            }
+        }
+        self.open_scoped_notation_ns.iter().any(|a| a == ns)
+    }
+
+    /// Enter a `namespace` block for scoped-notation tracking: push the full
+    /// dotted path and remember the activation mark that
+    /// [`Parser::exit_notation_namespace`] truncates back to.
+    pub(super) fn enter_notation_namespace(&mut self, name: &str) -> usize {
+        let full = match self.notation_ns_stack.last() {
+            Some(parent) => format!("{parent}.{name}"),
+            None => name.to_owned(),
+        };
+        self.notation_ns_stack.push(full);
+        self.open_scoped_notation_ns.len()
+    }
+
+    /// Leave a `namespace` block: pop the path and drop `open` activations
+    /// made inside the block.
+    pub(super) fn exit_notation_namespace(&mut self, open_mark: usize) {
+        self.notation_ns_stack.pop();
+        self.open_scoped_notation_ns.truncate(open_mark);
+    }
+
+    /// Activate a namespace path for scoped custom notation (parse-time
+    /// `open X` / `open scoped X`). Candidates are the path as written plus
+    /// each enclosing-namespace qualification, mirroring Lean's
+    /// `resolveNamespace` candidate set; activating a namespace with no
+    /// scoped notation is a no-op.
+    pub(super) fn activate_open_scoped_notation_path(&mut self, path: &[String]) {
+        if path.is_empty() {
+            return;
+        }
+        let joined = path.join(".");
+        // Each stack entry is already a full cumulative path, so the stack IS
+        // the prefix set to qualify against.
+        let qualified: Vec<String> = self
+            .notation_ns_stack
+            .iter()
+            .map(|prefix| format!("{prefix}.{joined}"))
+            .collect();
+        self.open_scoped_notation_ns.push(joined);
+        self.open_scoped_notation_ns.extend(qualified);
+    }
+
+    /// The current length of the parse-time scoped-notation activation list,
+    /// used by `open … in` to bound its activations to the body.
+    pub(super) fn open_scoped_notation_mark(&self) -> usize {
+        self.open_scoped_notation_ns.len()
+    }
+
+    /// Truncate the activation list back to a saved mark (end of an
+    /// `open … in` body).
+    pub(super) fn truncate_open_scoped_notation(&mut self, mark: usize) {
+        self.open_scoped_notation_ns.truncate(mark);
+    }
+
     /// Return the registered mixfix whose LEADING literal matches the tokens at
     /// the cursor, if any (longest leading literal wins).
     fn match_custom_mixfix(&self) -> Option<CustomMixfix> {
         self.custom_mixfixes
             .iter()
-            .filter(|mf| match mf.items.first() {
-                Some(MixfixItem::Literal(toks)) => self.tokens_match_at_cursor(toks),
-                _ => false,
+            .filter(|mf| {
+                self.custom_scope_active(mf.scope_ns.as_deref())
+                    && match mf.items.first() {
+                        Some(MixfixItem::Literal(toks)) => self.tokens_match_at_cursor(toks),
+                        _ => false,
+                    }
             })
             .max_by_key(|mf| match mf.items.first() {
                 Some(MixfixItem::Literal(toks)) => toks.len(),
@@ -845,7 +946,11 @@ impl Parser {
     fn match_custom_operator(&self, kind: NotationKind) -> Option<CustomOperator> {
         self.custom_operators
             .iter()
-            .filter(|op| op.kind == kind && self.tokens_match_at_cursor(&op.symbol_tokens))
+            .filter(|op| {
+                op.kind == kind
+                    && self.custom_scope_active(op.scope_ns.as_deref())
+                    && self.tokens_match_at_cursor(&op.symbol_tokens)
+            })
             .max_by_key(|op| op.symbol_tokens.len())
             .cloned()
     }
@@ -881,12 +986,14 @@ impl Parser {
                     | NotationKind::Infixr
                     | NotationKind::Infix
                     | NotationKind::Postfix
-            ) && self.tokens_match_at_offset(&op.symbol_tokens, offset)
+            ) && self.custom_scope_active(op.scope_ns.as_deref())
+                && self.tokens_match_at_offset(&op.symbol_tokens, offset)
         }) || self.custom_mixfixes.iter().any(|mf| {
-            mf.items.iter().skip(1).any(|item| {
-                matches!(item, MixfixItem::Literal(toks)
-                    if self.tokens_match_at_offset(toks, offset))
-            })
+            self.custom_scope_active(mf.scope_ns.as_deref())
+                && mf.items.iter().skip(1).any(|item| {
+                    matches!(item, MixfixItem::Literal(toks)
+                        if self.tokens_match_at_offset(toks, offset))
+                })
         })
     }
 

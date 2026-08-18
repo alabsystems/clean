@@ -17,6 +17,7 @@ use super::{ExprInternCache, ImportError, LoadSummary, OleanImportPolicy, Skippe
 use crate::module::{
     ConstantKind, DefinitionSafety, ParsedExtension, ParsedExtensionEntry,
     ParsedExtensionEntryData, ParsedModule, LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION,
+    LEAN_SIMP_EXTENSION,
 };
 use crate::payload::CleanPayload;
 use clean_kernel::env::{
@@ -513,6 +514,89 @@ fn register_real_instance_entries(env: &mut Environment, extensions: &[ParsedExt
             value: None,
         });
     }
+}
+
+/// Lean 4's default simp-lemma priority (`SimpTheorem.priority`'s default,
+/// `eval_prio default` = 1000) — the numeric value [`SimpPriority::Default`]
+/// also denotes, so decoded default-priority entries map onto the canonical
+/// variant instead of a `Custom(1000)` twin.
+const LEAN_DEFAULT_SIMP_PRIORITY: u64 = 1000;
+
+/// Register the DECODED real-Lean `@[simp]` entries of a module into the
+/// kernel simp-lemma registry (RC-B / T10: the typed `simpExtension` decoder).
+///
+/// Real Lean `.olean`s persist each `@[simp]` registration in
+/// `Lean.Meta.simpExtension` as a `ScopedEnvExtension.Entry SimpEntry` object.
+/// Before the typed decoder, every one of those entries was silently dropped
+/// at parse (the layout does not match the generic `(Name × DataValue)` pair
+/// heuristic), so bare `simp` under real imports saw only the hand-written
+/// builtin rules — ~0.4% of upstream's `@[simp]` set. The binary reader now
+/// decodes them into [`ParsedExtensionEntry::Simp`] (origin name, priority,
+/// post flag); this bridge registers each one through
+/// [`Environment::register_simp_lemma`], which is exactly the registry the
+/// simp tactic's `collect_registry_lemmas` reads.
+///
+/// Faithfulness rules (never fabricate, degrade loud):
+/// - registration is BY NAME ONLY: the rewrite's statement is reconstructed at
+///   simp-collection time from the imported constant's own kernel-checked
+///   type (`clean_elab::tactic::simp::lemmas::collect_registry_lemmas`), never
+///   from serialized bytes — so an entry whose constant is absent from the
+///   environment (skipped at import) is NOT registered and is counted in the
+///   returned unresolved tally, which the caller folds into
+///   `LoadSummary::extension_undecoded_entries`;
+/// - `thm`, `toUnfold`, and `toUnfoldThms` entries all register their
+///   declaration name: Clean's unified registry model already routes
+///   `Definition`-kind names to delta-unfolding
+///   (`seed_unfold_defs_from_simp_defs`) and equality/iff-typed names to
+///   rewriting, mirroring Lean's thm/toUnfold split;
+/// - `scoped` entries are registered like global ones (Clean has no
+///   namespace-activation notion; the status-quo over-approximation used for
+///   instances — `scope_ns` stays on the parsed entry for a future increment);
+/// - names already registered (an earlier module, a repeated/overlapping
+///   load, or a prelude twin) are skipped — idempotent, first-writer-wins.
+///
+/// SOUNDNESS: simp registrations are elaboration metadata — they steer which
+/// rewrites `simp` attempts; every rewrite proof is built from the registered
+/// constant fetched from the environment and every closed goal is re-checked
+/// by the kernel (`close_goal`). A wrong or extra entry can only cost
+/// completeness/parity, never admit a false proof.
+fn register_real_simp_entries(env: &mut Environment, extensions: &[ParsedExtension]) -> usize {
+    // Collect (name, priority) pairs first so nothing borrows `extensions`
+    // while `env` is mutated.
+    let decoded: Vec<(Name, u64)> = extensions
+        .iter()
+        .filter(|ext| ext.extension_name == LEAN_SIMP_EXTENSION)
+        .flat_map(|ext| ext.entries.iter())
+        .filter_map(|entry| match entry {
+            ParsedExtensionEntry::Simp(simp) => {
+                Some((Name::interned(&simp.lemma_name), simp.priority))
+            }
+            _ => None,
+        })
+        .collect();
+
+    let mut unresolved = 0usize;
+    for (name, priority) in decoded {
+        // Already registered — by an earlier module or a repeated/overlapping
+        // load (base + companion parts re-list the same entries). Idempotent.
+        if env.is_simp_lemma(&name) {
+            continue;
+        }
+        // SOUNDNESS: a simp lemma is only usable if its statement comes from
+        // the kernel-checked imported constant. A name with no environment
+        // constant (skipped at import) is counted loudly, never registered.
+        if env.get_const(&name).is_none() {
+            unresolved += 1;
+            continue;
+        }
+        let priority = if priority == LEAN_DEFAULT_SIMP_PRIORITY {
+            SimpPriority::Default
+        } else {
+            SimpPriority::Custom(u32::try_from(priority).unwrap_or(u32::MAX))
+        };
+        env.register_simp_lemma(name, priority);
+    }
+    unresolved
 }
 
 /// Register the DECODED real-Lean type-class declarations of a module into the
@@ -1573,6 +1657,10 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         // run when the policy requests it (see
         // `OleanImportPolicy::defer_global_instance_backfill`).
         register_instances_from_extension(env, !policy.defer_global_instance_backfill());
+        // Register the DECODED real-Lean `@[simp]` entries
+        // (`Lean.Meta.simpExtension`) into the kernel simp registry, counting
+        // origins whose constant is absent LOUDLY in the summary (RC-B/T10).
+        summary.extension_undecoded_entries += register_real_simp_entries(env, &module.entries);
         // Re-register imported `@[simp]` lemmas into the kernel registry so the
         // simp tactic can use them (#simp-import).
         register_simp_lemmas_from_extension(env);
@@ -1854,6 +1942,10 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         // run when the policy requests it (see
         // `OleanImportPolicy::defer_global_instance_backfill`).
         register_instances_from_extension(env, !policy.defer_global_instance_backfill());
+        // Register the DECODED real-Lean `@[simp]` entries
+        // (`Lean.Meta.simpExtension`) into the kernel simp registry, counting
+        // origins whose constant is absent LOUDLY in the summary (RC-B/T10).
+        summary.extension_undecoded_entries += register_real_simp_entries(env, &module.entries);
         // Re-register imported `@[simp]` lemmas into the kernel registry so the
         // simp tactic can use them (#simp-import).
         register_simp_lemmas_from_extension(env);

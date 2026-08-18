@@ -8,6 +8,7 @@
 //! of expressions using rewrite lemmas, beta/eta reduction, and other normalizations.
 
 mod all;
+mod cache;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
 #[cfg(test)]
@@ -38,8 +39,15 @@ pub use squeeze::{SqueezeSimpConfig, SqueezeSimpResult};
 pub use types::{SimpConfig, SimpIndexMode, SimpLemma};
 
 // Re-export pub(crate) items used by other tactic modules
+#[cfg(test)]
+pub(crate) use cache::cacheable_rebuild_count;
+pub(crate) use cache::collect_simp_lemmas_cached;
 pub(crate) use expr::{make_eq_expr, simp_expr};
-pub(crate) use lemmas::{collect_named_eq_lemmas, collect_simp_lemmas, resolve_unfold_defs};
+// The uncached builder stays available to tests as the goal-independent
+// reference implementation; production entrypoints go through the cache.
+#[cfg(test)]
+pub(crate) use lemmas::collect_simp_lemmas;
+pub(crate) use lemmas::{collect_named_eq_lemmas, resolve_unfold_defs};
 pub(crate) use proof::{
     mk_congr, mk_congr_arg, mk_congr_fun, mk_eq_refl_expr, mk_eq_symm_expr, mk_eq_trans_expr,
     mk_funext,
@@ -108,13 +116,33 @@ pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
     let mut steps = 0;
     let mut made_progress = false;
 
-    // Collect simp lemmas from environment
-    let simp_lemmas = collect_simp_lemmas(state, &config);
+    // Collect simp lemmas from environment (per-env cached: repeated simp
+    // calls against an unchanged environment reuse the built set + index).
+    let simp_lemmas = collect_simp_lemmas_cached(state, &config);
+
+    // Growth budget: a rewrite/unfold interplay that GROWS the target every
+    // pass (e.g. mutually-referencing unfold defs layering per iteration)
+    // would otherwise run all `max_steps` passes over an exponentially
+    // growing term — first observed as a stack overflow / memory abort under
+    // real `import Init` once the typed simpExtension decoder made ~10k
+    // entries live. Whatever partial normal form exists when the budget
+    // trips is still sound: the accumulated proof kernel-checks or the
+    // caller reports no-progress.
+    let growth_budget = expr_node_count_capped(&current_target, usize::MAX)
+        .saturating_mul(32)
+        .max(4096);
 
     // Main simplification loop — accumulate proof via Eq.trans chaining
     let mut accumulated_proof: Option<Expr> = None;
     while steps < config.max_steps {
         let step_result = simp_expr(state, &goal, &current_target, &simp_lemmas, &config);
+
+        if step_result.expr != current_target
+            && expr_node_count_capped(&step_result.expr, growth_budget) >= growth_budget
+        {
+            // The step would blow the size budget: stop with what we have.
+            break;
+        }
 
         if step_result.expr != current_target {
             // Chain proofs: accumulated proves (original = current_target),
@@ -163,6 +191,11 @@ pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
                     ) {
                         if new_lhs == current_lhs {
                             continue;
+                        }
+                        if expr_node_count_capped(&new_lhs, growth_budget) >= growth_budget {
+                            // Same growth budget as the main loop: a lemma
+                            // that balloons the LHS ends the search honestly.
+                            break 'trans;
                         }
 
                         // Build target-level congruence:
@@ -453,7 +486,7 @@ pub(crate) fn simp_at_with_config(
 ) -> TacticResult {
     seed_unfold_defs_from_extras(state, &mut config);
     lemmas::seed_unfold_defs_from_simp_defs(state, &mut config);
-    let simp_lemmas = collect_simp_lemmas(state, &config);
+    let simp_lemmas = collect_simp_lemmas_cached(state, &config);
     simp_at_with_lemmas(state, hyp_name, &config, &simp_lemmas)
 }
 
@@ -621,4 +654,38 @@ pub(crate) fn is_trivial_equality(expr: &Expr) -> bool {
     } else {
         false
     }
+}
+
+/// Iterative node count with an early-exit cap (never recurses — it guards
+/// paths whose whole failure mode is stack exhaustion). Returns
+/// `min(actual_count, cap)`.
+pub(crate) fn expr_node_count_capped(e: &Expr, cap: usize) -> usize {
+    let mut count = 0usize;
+    let mut work: Vec<&Expr> = vec![e];
+    while let Some(cur) = work.pop() {
+        count += 1;
+        if count >= cap {
+            return cap;
+        }
+        match cur.kind() {
+            ExprKind::App(f, a) => {
+                work.push(f);
+                work.push(a);
+            }
+            ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
+                work.push(t);
+                work.push(b);
+            }
+            ExprKind::Let(_, t, v, b, _) => {
+                work.push(t);
+                work.push(v);
+                work.push(b);
+            }
+            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) => {
+                work.push(inner);
+            }
+            _ => {}
+        }
+    }
+    count
 }

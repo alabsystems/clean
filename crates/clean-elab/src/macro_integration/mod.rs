@@ -65,6 +65,25 @@ use clean_parser::{
     SurfaceFieldAssign, SurfaceLit, SurfaceMatchArm, SurfacePattern, UniverseExpr,
 };
 
+/// A `scoped notation` held against its declaring namespace (Lean attrKind
+/// `scoped`, `Lean/Elab/Notation.lean`): it joins the LIVE expansion registry
+/// only while that namespace is active — the current namespace (or an
+/// ancestor of it) or explicitly activated by `open Ns` / `open scoped Ns`.
+#[derive(Clone)]
+struct ScopedNotation {
+    /// Full declaring namespace path (e.g. `"Foo.Bar"`). Never empty: a
+    /// root-level `scoped notation` is rejected at the declaration site.
+    namespace: String,
+    /// The lowered macro definition, built eagerly at declaration time so a
+    /// registration error surfaces at the declaration (fail closed) rather
+    /// than at some later activation.
+    def: MacroDef,
+    /// For nullary literal notation (`scoped notation "x" => e`): the bare
+    /// identifier alias, gated exactly like `simple_notations` but only while
+    /// the declaring namespace is active.
+    simple_alias: Option<(String, SurfaceExpr)>,
+}
+
 /// Macro expansion context for elaboration
 #[derive(Clone)]
 pub struct MacroCtx {
@@ -78,6 +97,22 @@ pub struct MacroCtx {
     last_stats: Option<clean_macro::expand::ExpansionStats>,
     /// File-scoped aliases for nullary notation parsed as bare identifiers.
     simple_notations: HashMap<String, SurfaceExpr>,
+    /// `scoped notation` declarations, tagged with their declaring namespace.
+    /// Kept OUT of `registry`; active ones are merged into
+    /// `effective_registry` on every activation-state change.
+    scoped_notations: Vec<ScopedNotation>,
+    /// Activation frames for `open Ns` / `open scoped Ns`. One frame per
+    /// namespace / section / `open … in` scope; the root frame (index 0,
+    /// always present) holds file-level activations.
+    scoped_activation_frames: Vec<Vec<String>>,
+    /// The current namespace path (empty at root). The current namespace and
+    /// every dot-prefix of it activate their scoped notations implicitly,
+    /// mirroring Lean's `activeScopes` (currNamespace + its prefixes).
+    current_namespace: String,
+    /// Cache: `registry` plus the currently-active scoped notations. `None`
+    /// when no scoped notation is active (the common case), so `expand` pays
+    /// nothing for files without scoped notation.
+    effective_registry: Option<MacroRegistry>,
 }
 
 impl Default for MacroCtx {
@@ -89,13 +124,7 @@ impl Default for MacroCtx {
 impl MacroCtx {
     /// Create a new macro context with built-in macros
     pub fn new() -> Self {
-        Self {
-            registry: builtin_registry(),
-            categories: SyntaxCategoryRegistry::new(),
-            hygienic: true,
-            last_stats: None,
-            simple_notations: HashMap::new(),
-        }
+        Self::with_registry(builtin_registry())
     }
 
     /// Create with a custom registry
@@ -106,6 +135,10 @@ impl MacroCtx {
             hygienic: true,
             last_stats: None,
             simple_notations: HashMap::new(),
+            scoped_notations: Vec::new(),
+            scoped_activation_frames: vec![Vec::new()],
+            current_namespace: String::new(),
+            effective_registry: None,
         }
     }
 
@@ -131,17 +164,119 @@ impl MacroCtx {
 
     /// Expand macros in syntax
     pub fn expand(&mut self, syntax: Syntax) -> MacroResult<Syntax> {
+        // Active scoped notations expand through the merged effective
+        // registry; without any, the base registry is used unchanged.
+        let registry = self.effective_registry.as_ref().unwrap_or(&self.registry);
         if self.hygienic {
-            let mut expander = HygienicExpander::new(&self.registry);
+            let mut expander = HygienicExpander::new(registry);
             let result = expander.expand(syntax)?;
             self.last_stats = Some(expander.stats().clone());
             Ok(result)
         } else {
-            let mut expander = MacroExpander::new(&self.registry);
+            let mut expander = MacroExpander::new(registry);
             let result = expander.expand(syntax)?;
             self.last_stats = Some(expander.stats().clone());
             Ok(result)
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Scoped-notation gating (Lean attrKind `scoped`)
+    // -----------------------------------------------------------------------
+
+    /// Set the current namespace path (empty at root). The current namespace
+    /// and its dot-prefixes implicitly activate their scoped notations.
+    pub fn set_current_namespace(&mut self, namespace: &str) {
+        if self.current_namespace != namespace {
+            self.current_namespace = namespace.to_owned();
+            self.rebuild_effective_registry();
+        }
+    }
+
+    /// Push a new activation frame (namespace / section / `open … in` scope).
+    pub fn push_scoped_activation_frame(&mut self) {
+        self.scoped_activation_frames.push(Vec::new());
+    }
+
+    /// Pop the innermost activation frame, deactivating the `open` /
+    /// `open scoped` activations made inside it. The root frame is never
+    /// popped — an unbalanced pop clears it instead of underflowing.
+    pub fn pop_scoped_activation_frame(&mut self) {
+        if self.scoped_activation_frames.len() > 1 {
+            self.scoped_activation_frames.pop();
+        } else if let Some(root) = self.scoped_activation_frames.last_mut() {
+            root.clear();
+        }
+        self.rebuild_effective_registry();
+    }
+
+    /// Activate a namespace's scoped notations in the innermost frame
+    /// (`open Ns` / `open scoped Ns`). Activating a namespace that declared
+    /// no scoped notation is a harmless no-op, matching Lean's tolerant
+    /// `open scoped` of an arbitrary namespace.
+    pub fn activate_scoped_namespace(&mut self, namespace: &str) {
+        if namespace.is_empty() {
+            return;
+        }
+        if let Some(frame) = self.scoped_activation_frames.last_mut() {
+            frame.push(namespace.to_owned());
+        }
+        self.rebuild_effective_registry();
+    }
+
+    /// Whether `namespace`'s scoped notations are active: it is the current
+    /// namespace, a dot-prefix of it, or explicitly activated by an `open`.
+    fn scoped_namespace_active(&self, namespace: &str) -> bool {
+        let current = self.current_namespace.as_str();
+        if current == namespace
+            || (current.len() > namespace.len()
+                && current.starts_with(namespace)
+                && current.as_bytes()[namespace.len()] == b'.')
+        {
+            return true;
+        }
+        self.scoped_activation_frames
+            .iter()
+            .flatten()
+            .any(|active| active == namespace)
+    }
+
+    /// Rebuild the effective registry from the base registry plus the
+    /// currently-active scoped notations. Called on every change to the base
+    /// registry, the scoped-notation set, or the activation state.
+    fn rebuild_effective_registry(&mut self) {
+        let mut active_defs: Vec<MacroDef> = Vec::new();
+        for scoped in &self.scoped_notations {
+            if self.scoped_namespace_active(&scoped.namespace) {
+                active_defs.push(scoped.def.clone());
+            }
+        }
+        if active_defs.is_empty() {
+            self.effective_registry = None;
+            return;
+        }
+        let mut registry = self.registry.clone();
+        for def in active_defs {
+            registry.register(def);
+        }
+        self.effective_registry = Some(registry);
+    }
+
+    /// Look up a nullary-notation alias for a bare identifier: the file-scoped
+    /// table first, then ACTIVE scoped-notation aliases.
+    fn lookup_simple_notation(&self, name: &str) -> Option<&SurfaceExpr> {
+        if let Some(expansion) = self.simple_notations.get(name) {
+            return Some(expansion);
+        }
+        self.scoped_notations.iter().find_map(|scoped| {
+            scoped
+                .simple_alias
+                .as_ref()
+                .filter(|(literal, _)| {
+                    literal.as_str() == name && self.scoped_namespace_active(&scoped.namespace)
+                })
+                .map(|(_, expansion)| expansion)
+        })
     }
 
     /// Register a `macro_rules` declaration into the registry.
@@ -187,6 +322,7 @@ impl MacroCtx {
             self.registry.register(def);
         }
 
+        self.rebuild_effective_registry();
         Ok(())
     }
 
@@ -232,17 +368,19 @@ impl MacroCtx {
         }
         self.registry.register(def);
 
+        self.rebuild_effective_registry();
         Ok(())
     }
 
-    /// Register a `notation` declaration (infixl, infixr, prefix, postfix, or notation).
-    pub fn register_notation(
-        &mut self,
+    /// Lower a `notation` declaration into its macro definition plus (for the
+    /// nullary literal form) the bare-identifier alias. Shared by the global
+    /// and scoped registration paths so both fail closed at the declaration.
+    fn build_notation_def(
         kind: NotationKind,
         precedence: Option<u32>,
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
-    ) -> Result<(), MacroRegistrationError> {
+    ) -> Result<(MacroDef, Option<(String, SurfaceExpr)>), MacroRegistrationError> {
         let expansion_quote = surface_expr_to_syntax_quote(expansion)?;
 
         // Build pattern syntax from notation items
@@ -267,15 +405,57 @@ impl MacroCtx {
         if let Some(prec) = precedence {
             def = def.with_priority(prec as i32);
         }
-        self.registry.register(def);
 
-        if matches!(kind, NotationKind::Notation) && var_names.is_empty() {
-            if let [NotationItem::Literal(literal)] = pattern {
-                self.simple_notations
-                    .insert(literal.trim().to_owned(), expansion.clone());
+        let simple_alias = if matches!(kind, NotationKind::Notation) && var_names.is_empty() {
+            match pattern {
+                [NotationItem::Literal(literal)] => {
+                    Some((literal.trim().to_owned(), expansion.clone()))
+                }
+                _ => None,
             }
-        }
+        } else {
+            None
+        };
 
+        Ok((def, simple_alias))
+    }
+
+    /// Register a `notation` declaration (infixl, infixr, prefix, postfix, or notation).
+    pub fn register_notation(
+        &mut self,
+        kind: NotationKind,
+        precedence: Option<u32>,
+        pattern: &[NotationItem],
+        expansion: &SurfaceExpr,
+    ) -> Result<(), MacroRegistrationError> {
+        let (def, simple_alias) = Self::build_notation_def(kind, precedence, pattern, expansion)?;
+        self.registry.register(def);
+        if let Some((literal, alias_expansion)) = simple_alias {
+            self.simple_notations.insert(literal, alias_expansion);
+        }
+        self.rebuild_effective_registry();
+        Ok(())
+    }
+
+    /// Register a `scoped notation` against its declaring namespace. The
+    /// definition is lowered eagerly (fail closed at the declaration) but
+    /// only joins the live registry while `namespace` is active — the current
+    /// namespace, an ancestor of it, or activated by `open` / `open scoped`.
+    pub fn register_scoped_notation(
+        &mut self,
+        namespace: &str,
+        kind: NotationKind,
+        precedence: Option<u32>,
+        pattern: &[NotationItem],
+        expansion: &SurfaceExpr,
+    ) -> Result<(), MacroRegistrationError> {
+        let (def, simple_alias) = Self::build_notation_def(kind, precedence, pattern, expansion)?;
+        self.scoped_notations.push(ScopedNotation {
+            namespace: namespace.to_owned(),
+            def,
+            simple_alias,
+        });
+        self.rebuild_effective_registry();
         Ok(())
     }
 
@@ -312,6 +492,7 @@ impl MacroCtx {
                 .unwrap_or_else(SyntaxKind::app_kind);
             let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion_quote);
             self.registry.register(def);
+            self.rebuild_effective_registry();
             return Ok(());
         }
 
@@ -324,6 +505,7 @@ impl MacroCtx {
         let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion_quote);
         self.registry.register(def);
 
+        self.rebuild_effective_registry();
         Ok(())
     }
 }
@@ -466,8 +648,7 @@ pub fn expand_surface_macros(
 fn expand_simple_notation_aliases(ctx: &MacroCtx, expr: &SurfaceExpr) -> SurfaceExpr {
     match expr {
         SurfaceExpr::Ident(_, name) => ctx
-            .simple_notations
-            .get(name)
+            .lookup_simple_notation(name)
             .cloned()
             .unwrap_or_else(|| expr.clone()),
         SurfaceExpr::App(span, func, args) => SurfaceExpr::App(

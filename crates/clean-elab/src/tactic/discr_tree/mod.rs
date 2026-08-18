@@ -10,8 +10,6 @@ mod trie;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-pub(crate) use key::DiscrKey;
-pub(crate) use key::IndexMode;
+pub(crate) use key::{DiscrKey, IndexMode};
 pub(crate) use path::{mk_path, query_path_is_too_generic};
 pub(crate) use query::DiscrTree;

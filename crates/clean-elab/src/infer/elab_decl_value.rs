@@ -1186,6 +1186,180 @@ fn collect_def_level_params(expr: &Expr, params: &mut Vec<Name>) {
 }
 
 impl ElabCtx<'_> {
+    /// Lean parity for `def f := e` (no ascribed type): residual UNASSIGNED
+    /// metavariables are generalized into fresh leading implicit binders —
+    /// exactly how Lean gives `def comp := Function.comp` (and every
+    /// `alias`-desugared def, e.g. `alias ⟨And.rotate, _⟩ := and_rotate`) its
+    /// signature via abstractMVars. Ascribed defs and theorems keep the
+    /// strict fail-closed guard; user-written `_` holes (span-carrying metas)
+    /// are excluded — those belong to the hole-feedback contract.
+    ///
+    /// Binding order: dependency-first (a meta mentioned in another meta's
+    /// TYPE binds further out), then first occurrence in (ty, val). The
+    /// innermost binder is abstracted first, so outer metas still present as
+    /// tagged FVars inside inner binder types are de Bruijn-adjusted by
+    /// `abstract_fvar` when their own turn comes.
+    fn generalize_residual_metas(&self, ty: Expr, val: Expr) -> (Expr, Expr) {
+        use crate::unify::MetaState;
+
+        fn collect_meta_fvars(e: &Expr, out: &mut Vec<FVarId>) {
+            use clean_kernel::expr::visitor::ExprVisitor;
+            struct C<'v>(&'v mut Vec<FVarId>);
+            impl ExprVisitor for C<'_> {
+                type Result = ();
+                fn combine(&self, _a: (), _b: ()) {}
+                fn visit_fvar(&mut self, id: FVarId) {
+                    if MetaState::from_fvar(id).is_some() && !self.0.contains(&id) {
+                        self.0.push(id);
+                    }
+                }
+            }
+            if e.has_fvar_quick() {
+                C(out).visit_expr(e);
+            }
+        }
+
+        // Occurrence-ordered residual metas over (ty, val), holes excluded.
+        let mut occurrence: Vec<FVarId> = Vec::new();
+        collect_meta_fvars(&ty, &mut occurrence);
+        collect_meta_fvars(&val, &mut occurrence);
+        occurrence.retain(|fv| {
+            MetaState::from_fvar(*fv)
+                .and_then(|mid| self.metas.get(mid))
+                .is_some_and(|meta| meta.span.is_none())
+        });
+        if occurrence.is_empty() {
+            return (ty, val);
+        }
+
+        // Dependency expansion + ordering: a meta appearing in another meta's
+        // type must bind further out. Bounded passes (the sets are tiny).
+        let meta_ty = |fv: FVarId| -> Option<Expr> {
+            let mid = MetaState::from_fvar(fv)?;
+            let m = self.metas.get(mid)?;
+            Some(
+                self.metas
+                    .instantiate_levels(&self.metas.instantiate(&m.ty)),
+            )
+        };
+        let mut ordered = occurrence;
+        for _ in 0..16 {
+            let mut changed = false;
+            let mut i = 0;
+            while i < ordered.len() {
+                let Some(mty) = meta_ty(ordered[i]) else {
+                    i += 1;
+                    continue;
+                };
+                let mut deps = Vec::new();
+                collect_meta_fvars(&mty, &mut deps);
+                for dep in deps {
+                    let dep_pos = ordered.iter().position(|x| *x == dep);
+                    match dep_pos {
+                        Some(p) if p > i => {
+                            ordered.remove(p);
+                            ordered.insert(i, dep);
+                            changed = true;
+                        }
+                        Some(_) => {}
+                        None => {
+                            // A dep only reachable through a type: include it
+                            // (holes stay excluded — a hole dep leaves this
+                            // meta for the guard, which is the honest outcome).
+                            let is_hole = MetaState::from_fvar(dep)
+                                .and_then(|mid| self.metas.get(mid))
+                                .is_none_or(|meta| meta.span.is_some());
+                            if !is_hole {
+                                ordered.insert(i, dep);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                i += 1;
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        // Abstract innermost-first (reverse of the outermost-first `ordered`).
+        let mut ty_acc = ty;
+        let mut val_acc = val;
+        for fv in ordered.iter().rev() {
+            let Some(mty) = meta_ty(*fv) else { continue };
+            let ty_body = ty_acc.abstract_fvar(*fv);
+            let val_body = val_acc.abstract_fvar(*fv);
+            ty_acc = Expr::pi(clean_kernel::BinderInfo::Implicit, mty.clone(), ty_body);
+            val_acc = Expr::lam(clean_kernel::BinderInfo::Implicit, mty, val_body);
+        }
+        (ty_acc, val_acc)
+    }
+
+    /// Fail-closed residual guard for finalized declarations.
+    ///
+    /// This elaborator encodes unassigned metavariables as FVars with bit 63
+    /// set (`MetaState` meta-tag), so the kernel's "contains free variables"
+    /// rejection conflates two distinct completeness failures. Catch both
+    /// here, classified: meta-tagged ids are implicit arguments nothing could
+    /// ever constrain (phantom section binders, an untyped alias desugar, a
+    /// failed instance-synthesis fallback); low ids are genuine locals that
+    /// escaped abstraction (e.g. a dropped section variable). Zero soundness
+    /// effect — every declaration this rejects, the kernel already rejects —
+    /// but the error becomes typed, named, and actionable.
+    pub(super) fn ensure_no_residual_fvars(
+        &self,
+        decl_kind: &str,
+        name: &str,
+        ty: &Expr,
+        val: Option<&Expr>,
+    ) -> Result<(), ElabError> {
+        const META_TAG: u64 = 1u64 << 63;
+        let mut exprs: Vec<&Expr> = vec![ty];
+        if let Some(v) = val {
+            exprs.push(v);
+        }
+        let ids = clean_kernel::env::collect_fvar_ids_for_diagnostics(&exprs);
+        if ids.is_empty() {
+            return Ok(());
+        }
+        // User-written `_` holes are metas that carry a source span; they are
+        // EXPECTED to survive finalization — the hole machinery reports their
+        // goal as agent feedback and registration handles them downstream.
+        // The guard is for metas nothing will ever report or resolve.
+        let hole_ids: std::collections::HashSet<u64> = self
+            .metas
+            .iter()
+            .filter_map(|(id, meta)| meta.span.map(|_| id.as_u64()))
+            .collect();
+        let metas: Vec<u64> = ids
+            .iter()
+            .filter(|id| **id & META_TAG != 0)
+            .map(|id| *id & !META_TAG)
+            .filter(|raw| !hole_ids.contains(raw))
+            .collect();
+        let locals: Vec<u64> = ids
+            .iter()
+            .filter(|id| **id & META_TAG == 0)
+            .copied()
+            .collect();
+        if metas.is_empty() && locals.is_empty() {
+            return Ok(());
+        }
+        let mut parts = Vec::new();
+        if !metas.is_empty() {
+            parts.push(format!("unsolved metavariables ?{metas:?}"));
+        }
+        if !locals.is_empty() {
+            parts.push(format!("escaped local fvars {locals:?}"));
+        }
+        Err(ElabError::ResidualFreeVariables {
+            decl_kind: decl_kind.to_owned(),
+            name: name.to_owned(),
+            detail: parts.join("; "),
+        })
+    }
+
     /// U2 rung 4 — the `levelMVarToParam` analog, run once at declaration
     /// close. Splits the surviving universe params into the DECLARED (rigid)
     /// head and the FRESH (auto-generalized) tail, orders the tail by first
@@ -1205,6 +1379,20 @@ impl ElabCtx<'_> {
         // the union-find, so a rename applied to un-canonicalized exprs would
         // be clobbered when a resurrected mint-name flows back. After this,
         // whatever params remain are genuinely unsolved.
+        // U2: DRAIN THE DEFERRED LEVEL QUEUE FIRST, and fail closed.
+        //
+        // The solver defers undetermined level equations (some side still
+        // mentions a solvable parameter) instead of failing them, so a later
+        // assignment can settle them. This is the boundary where "later" runs
+        // out. Anything still unsolved here was ACCEPTED BY THE SOLVER AND
+        // NEVER DISCHARGED, which is exactly the hole postponement would
+        // otherwise open — so it is an error, not a warning.
+        //
+        // Drained BEFORE canonicalization on purpose: draining can assign
+        // parameters, and canonicalize must see those assignments.
+        if let Err(msg) = self.metas.drain_postponed_levels() {
+            return Err(ElabError::Unsupported { feature: msg });
+        }
         let ty = self.metas.canonicalize_levels_in_expr(&ty);
         let val = self.metas.canonicalize_levels_in_expr(&val);
         let mut used = Vec::new();
@@ -1766,8 +1954,19 @@ impl<'a> ElabCtx<'a> {
         // but they remain in `universe_params`. This causes level count
         // mismatches when the definition is later unfolded.
         // Same pattern as #3390 fix for structures (see elab_structure.rs).
+        // Lean parity: a def with NO ascribed type generalizes residual
+        // unassigned metas into implicit binders (abstractMVars) — the alias
+        // desugar and `def f := Function.comp`-style definitions depend on it.
+        let (ty_expr, val_expr) = if ty.is_none() {
+            self.generalize_residual_metas(ty_expr, val_expr)
+        } else {
+            (ty_expr, val_expr)
+        };
+
         let (surviving_universe_params, ty_expr, val_expr) =
             self.finalize_level_params(ty_expr, val_expr)?;
+
+        self.ensure_no_residual_fvars("def", name, &ty_expr, Some(&val_expr))?;
 
         Ok(ElabResult::Definition {
             name: decl_name,
@@ -1846,6 +2045,8 @@ impl<'a> ElabCtx<'a> {
             let (surviving_universe_params, ty_expr, proof_expr) =
                 self.finalize_level_params(ty_expr, proof_expr)?;
 
+            self.ensure_no_residual_fvars("theorem", name, &ty_expr, Some(&proof_expr))?;
+
             return Ok(ElabResult::Theorem {
                 name: decl_name,
                 universe_params: surviving_universe_params,
@@ -1886,6 +2087,8 @@ impl<'a> ElabCtx<'a> {
         // Filter to surviving params only (#3396, same as Definition).
         let (surviving_universe_params, ty_expr, proof_expr) =
             self.finalize_level_params(ty_expr, proof_expr)?;
+
+        self.ensure_no_residual_fvars("theorem", name, &ty_expr, Some(&proof_expr))?;
 
         Ok(ElabResult::Theorem {
             name: decl_name,

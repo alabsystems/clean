@@ -10,6 +10,8 @@ mod verification;
 
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod tier_one_refusal_contract;
 
 use super::{AyBackendConfig, AyError, AyLogic};
 use ay::executor::Executor;
@@ -149,7 +151,27 @@ pub enum AyProofResult {
     Sat,
     /// The constraints are unsatisfiable, with optional Alethe proof
     Unsat {
-        /// The Alethe proof (if proof production was enabled)
+        /// The Alethe proof.
+        ///
+        /// `None` means NO CERTIFICATE — either proof production was off, or
+        /// ay refused to render one against the authored premise scope. It is
+        /// never an `(error ...)` s-expression masquerading as a document: a
+        /// refusal is reported as absence, so no consumer can forward one
+        /// downstream as if it were a proof. The UNSAT VERDICT is unaffected —
+        /// it was decided before any certificate was rendered — and `verified`
+        /// still reports what the tier's own checker concluded.
+        ///
+        /// `Some(..)` means A CERTIFICATE WAS RENDERED, not that it is
+        /// hole-free: every fold-to-false shape measured here renders with
+        /// `:rule hole` steps. Consumers that need a complete derivation must
+        /// check the steps, not the `Option`.
+        ///
+        /// The rendering comes from ay's authored surface spelling (the
+        /// accessor supplies `proof_export_term_overrides()`), so a premise
+        /// prints as the author wrote it — `(< 0 y)` renders `(> y 0)`. That
+        /// is the spelling the checker's own problem file contains. It does
+        /// NOT widen the premise set: membership is exact `TermId` identity
+        /// and never consults overrides.
         proof: Option<String>,
         /// Whether the proof was verified (tier 1+)
         verified: bool,

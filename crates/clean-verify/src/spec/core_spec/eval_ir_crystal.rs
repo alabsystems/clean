@@ -33,40 +33,64 @@
 //!
 //! ## What this module is NOT, stated plainly
 //!
-//! `M_level_is_zero` here is **hand-authored**, not emitted. It cannot be
-//! emitted today: the measured Phase-A probe finding is that `Level::is_zero`
-//! does not lower at all — `register_enum`'s scalar-only field wall rejects
-//! `Ty(enum-def)` on `Level` (job T1, the 64k-reject binding constraint), and
-//! even past that the shared-ref payload-enum `Load` comparator fail-closes
-//! (job T2). So there is no A0 artifact to transcribe yet.
+//! `M_level_is_zero` here is **hand-authored**, not emitted, and it is
+//! **structurally different from what the compiler emits**. A theorem about
+//! this module is therefore not yet a theorem about the shipped body — the same
+//! gap [`super::eval_ir_mode`] closed for `has_cubical_layer` by transcribing.
 //!
-//! What that means for the crystal's five links: this module supplies the
-//! **semantics** link (A3) and demonstrates that the semantics is adequate for
-//! the target's shape. It does **not** supply the artifact link (A1) or the
-//! representation link (A2). When T1/T2 land and A0 emits the real body, this
-//! literal is replaced by the transcribed artifact and these seven witnesses
-//! become the differential that says the transcription is faithful — which is
-//! more use than they would have been written later.
+//! ### CORRECTED 2026-08-12 — the old reason given here was false
 //!
-//! The shape below is the expected lowering, and the two places it may differ
-//! from what A0 actually emits are named so the comparison is cheap:
+//! Until this commit these paragraphs said the body "does not lower at all",
+//! because `register_enum`'s scalar-only field wall rejects `Ty(enum-def)` on
+//! `Level`. That was true when written and has been false since 2026-08-10. The
+//! measured release row (`data/crystal_a0_a6_probe.json`, clean `bba1239ea`,
+//! stage1 trustc `94147b34f`, `-C opt-level=3`) is:
 //!
-//! 1. **The `LevelArc` null check.** `LevelArc` is
-//!    `pub struct LevelArc(Option<Arc<Level>>)` (`level/mod.rs:38`) whose
-//!    `Deref` does `self.0.as_deref().expect("live LevelArc must contain a
-//!    level")` — it *panics on `None`*. `Arc` is non-null, so
-//!    `Option<Arc<Level>>` is niche-encoded as a nullable pointer, which is why
-//!    a dead arc is `nullptr_` here and a live one is `ptr_`. This module
-//!    lowers the `expect` to `ICmp ne` + `Assert`; a real emission may instead
-//!    emit `CondBr` to a panic block. Both reach the panic on `None`, which is
-//!    the property `ir_is_zero_dead_arc_panics` pins.
-//! 2. **Discriminant read.** An enum is an ordinary aggregate value whose
-//!    payload spine holds the discriminant at slot 0 and the selected variant's
-//!    fields at slots 1.. — the convention fixed in [`super::eval_ir_state`],
-//!    which is the trust-ir producer's own, so `ExtractField 0` reads the tag
-//!    with no special case anywhere in the semantics. A real emission may read
-//!    the tag with a `Load` of a discriminant place instead of an
-//!    `ExtractField`.
+//! ```text
+//! def_path                   level::Level::is_zero
+//! def_index / func_id        17075 / 4924
+//! lowered / spliced          true / true
+//! instr_count                28
+//! unsupported                []
+//! derived_mir.verdict        agreed  ("18 canonical line(s) identical")
+//! derived_mir.markers_exact  FALSE
+//! lineage                    sha256:da22664d…ce3a
+//! flip event                 NONE (DefId(0:17075) occurs 0 times in the log)
+//! ```
+//!
+//! So an A0 artifact *does* exist to transcribe. The reason this module is
+//! still hand-authored is a different, measured one, recorded verbatim in
+//! `tests/fixtures/level_is_zero.trust-ir.txt` and pinned by
+//! `tests/crystal_a1_lineage.rs`:
+//!
+//! 1. **The emitted body calls out of the fragment.** Both recursive arms go
+//!    through `call @func.4913` = `<LevelArc as Deref>::deref`, which is itself
+//!    `derived_mir: unsupported` ("shim: `Call` (callee return outside the
+//!    fragment: `Option<&Level>`)") and whose own callees — `Option::as_deref`
+//!    and `Option::expect`, func ids 8368 / 7674 — are **declaration-only** in
+//!    the assembled module, with no body to transcribe at all. That is exactly
+//!    the A0 criterion *bodyful reachable closure*, and it is recorded FAIL.
+//!    A transcription is therefore blocked on a T-track build item (widen the
+//!    fragment so the `Option`-returning deref closure lowers with a body), not
+//!    on anything authorable here.
+//! 2. **The emitted control flow is not this one.** Measured: 10 blocks;
+//!    `switch %4 [0: bb1  1: bb2  4: bb3  2: bb4  default: bb5]` — four explicit
+//!    cases plus a **default edge that carries the `IMax` arm**, not an
+//!    `unreachable` trap; `gep inbounds i8, ptr %0, 8/16` for the two `LevelArc`
+//!    fields rather than `ExtractField`; and two join blocks taking `bool`
+//!    block parameters (`bb6(%1: bool)`, `bb9(%2: bool)`) instead of a `ret` in
+//!    each arm. This module has 7 blocks, five explicit switch cases, an
+//!    `unreachable` default, `ExtractField` payload reads, an inline
+//!    `ICmp ne` + `Assert` standing in for the deref, and per-arm `ret`s.
+//!
+//! What that leaves standing, unchanged: this module supplies the **semantics**
+//! link (A3) and demonstrates the semantics is adequate for the target's shape,
+//! and `ir_lz_correct`/`ir_lz_machine_sound` are real theorems *about this
+//! module*. It does **not** supply the artifact link (A1) for `Level::is_zero`.
+//! When the deref closure becomes bodyful, this literal is replaced by the
+//! transcribed artifact, the cost/activation lemmas are re-derived over the
+//! emitted CFG, and these seven witnesses become the differential that says the
+//! transcription is faithful.
 
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
@@ -241,6 +265,33 @@ impl Specification {
              fields — the trust-ir producer's tag-at-field-0 convention \
              (`interpret.rs:1628-1684`), so `ExtractField 0` reads the tag and \
              `ExtractField (succ j)` reads payload field j with no special case in the semantics.",
+        )?;
+
+        // The CONSTANT-side counterparts. `trust_ir::Constant::Aggregate` is an
+        // element list, and `IRConst` carries it as an inline spine for the same
+        // nested-inductive reason `IRScalar` does, so these mirror
+        // ir_sp0/ir_sp1/ir_sp2/ir_var one for one.
+        self.add_recursive_def(
+            "def ir_cs0 : IRConst := IRConst.vnil",
+            "Empty constant element spine: `Constant::Aggregate(vec![])`.",
+        )?;
+        self.add_recursive_def(
+            "def ir_cs1 (a : IRConst) : IRConst := IRConst.vcons a ir_cs0",
+            "One-element constant spine.",
+        )?;
+        self.add_recursive_def(
+            "def ir_cs2 (a : IRConst) (b : IRConst) : IRConst := IRConst.vcons a (ir_cs1 b)",
+            "Two-element constant spine.",
+        )?;
+        self.add_recursive_def(
+            "def ir_cvar (tag : Nat) : IRConst := IRConst.aggv (ir_cs1 (IRConst.int_ tag))",
+            "Build a FIELDLESS enum CONSTANT: `const enum.N { tag }`. MEASURED shape — this is \
+             exactly what `mode::CleanMode::from_source_system` (`const enum.13 { k }`) and \
+             `<tc::ExprPathStep as Clone>::clone` (`const enum.181 { k }`) emit at every arm: \
+             `Constant::Aggregate([Constant::Int(k)])`, arity one, element kind Int, nesting \
+             depth one. `ir_const_value (ir_cvar k)` is definitionally `ir_var k ir_sp0`, so a \
+             materialized enum constant and a loaded enum value are the SAME value and \
+             ExtractField reads both the same way.",
         )?;
 
         Ok(())
@@ -497,6 +548,126 @@ impl Specification {
              Bool — it stops with ub assert_failed. This is why the crystal's theorem must carry a \
              liveness premise: `is_zero` is not panic-free at the IR level, and a theorem stated \
              without EncodesLiveLevelArc would be false, not merely weak.",
+        )?;
+
+        self.add_eval_ir_const_witnesses()
+    }
+
+    /// Kernel-executed witnesses for the constant evaluator.
+    ///
+    /// Two jobs, and both are load-bearing. First, the AGGREGATE form added for
+    /// `mode::CleanMode::from_source_system` has a real evaluation case, and
+    /// these run it: at an aggregate type it materializes the value, at a
+    /// scalar type it fails closed, and a bare element-spine node fails closed.
+    /// Second — and this is the regression guard — the SEVEN pre-existing
+    /// constructors keep their exact meaning after `ir_const_value` was
+    /// re-authored from a `match` into an `IRConst.rec`. Every one of them is
+    /// pinned here by `Eq.refl`, so a mis-ordered recursor minor cannot pass.
+    fn add_eval_ir_const_witnesses(&mut self) -> Result<(), SpecError> {
+        self.add_recursive_def(
+            "def ir_const_value_int_unchanged (n : Nat) : Eq IRScalar (ir_const_value (IRConst.int_ n)) (IRScalar.int_ n) := Eq.refl IRScalar (IRScalar.int_ n)",
+            "REGRESSION PIN: the int_ arm of ir_const_value, for every n. DerivedProved, zero \
+             axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_bool_unchanged (b : Bool) : Eq IRScalar (ir_const_value (IRConst.bool_ b)) (IRScalar.bool_ b) := Eq.refl IRScalar (IRScalar.bool_ b)",
+            "REGRESSION PIN: the bool_ arm, for every b.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_unit_unchanged : Eq IRScalar (ir_const_value IRConst.unit_) IRScalar.unit_ := Eq.refl IRScalar IRScalar.unit_",
+            "REGRESSION PIN: the unit_ arm.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_null_unchanged : Eq IRScalar (ir_const_value IRConst.null_) IRScalar.nullptr_ := Eq.refl IRScalar IRScalar.nullptr_",
+            "REGRESSION PIN: the null_ arm — note the constructor names differ on the two sides \
+             (IRConst.null_ vs IRScalar.nullptr_), which is exactly the pairing a mis-ordered \
+             recursor would break.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_undef_unchanged : Eq IRScalar (ir_const_value IRConst.undef_) IRScalar.undef_ := Eq.refl IRScalar IRScalar.undef_",
+            "REGRESSION PIN: the undef_ arm.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_float_unchanged (n : Nat) : Eq IRScalar (ir_const_value (IRConst.float_ n)) (IRScalar.float_ n) := Eq.refl IRScalar (IRScalar.float_ n)",
+            "REGRESSION PIN: the float_ arm, for every bit pattern.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_func_unchanged (f : Nat) : Eq IRScalar (ir_const_value (IRConst.func_ f)) (IRScalar.fnptr_ f) := Eq.refl IRScalar (IRScalar.fnptr_ f)",
+            "REGRESSION PIN: the func_ arm, for every function id.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_int_still_wraps : Eq IRStepResult (ir_const_eval ir_u2 (IRConst.int_ 7)) (IRStepResult.value (IRScalar.int_ 3)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
+            "REGRESSION PIN, the typed lane: an integer constant is still canonicalized modulo \
+             2^w — 7 at width 2 is 3. This is the arm the kind_ord chain's answers travel \
+             through, kept exact across the aggregate extension.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_int_rejects_agg_ty : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (IRConst.int_ ir_d1)) (IRStepResult.fault (IROutcome.type_error IRFault.not_int)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_int))",
+            "REGRESSION PIN, the other direction: a SCALAR constant at an aggregate type is still \
+             type_error not_int. The two typed lanes reject each other's types, so neither the \
+             new form nor the old one can be smuggled through the wrong one.",
+        )?;
+
+        self.add_recursive_def(
+            "def ir_const_value_agg_is_ir_var (k : Nat) : Eq IRScalar (ir_const_value (ir_cvar k)) (ir_var k ir_sp0) := Eq.refl IRScalar (ir_var k ir_sp0)",
+            "THE AGGREGATE MATERIALIZATION, for every tag: `const enum.N { k }` denotes exactly \
+             the value a LOADED fieldless enum with discriminant k denotes. That is what makes \
+             the new constant form interoperate with the tag-at-slot-0 convention rather than \
+             sit beside it — ExtractField, the representation relations and the switch all see \
+             one value shape. DerivedProved, zero axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_agg_at_enum (k : Nat) : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (ir_cvar k)) (IRStepResult.value (ir_var k ir_sp0)) := Eq.refl IRStepResult (IRStepResult.value (ir_var k ir_sp0))",
+            "THE NEW EVALUATION CASE, executed: at an enum type an aggregate constant evaluates \
+             to the aggregate value, for every tag. Not a stub and not a fallthrough — the \
+             kernel computes it.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_agg_at_struct : Eq IRStepResult (ir_const_eval (IRTy.struct_ ir_d2) (ir_cvar ir_d1)) (IRStepResult.value (ir_var ir_d1 ir_sp0)) := Eq.refl IRStepResult (IRStepResult.value (ir_var ir_d1 ir_sp0))",
+            "The aggregate lane is not enum-only: struct, tuple and array types accept an \
+             aggregate constant too, which is what ir_ty_is_agg says.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_agg_at_scalar_fails_closed : Eq IRStepResult (ir_const_eval ir_tU8 (ir_cvar ir_d1)) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
+            "FAIL-CLOSED: an aggregate constant at a scalar type is a type error, not a silently \
+             accepted value. The IRTy on Inst::Const is semantic input here exactly as it is for \
+             integer constants.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_bare_spine_fails_closed : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) IRConst.vnil) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
+            "FAIL-CLOSED on the inline spine's junk inhabitants: a BARE vnil is an element-list \
+             node, not a constant of any type. The price of the inline spine, paid explicitly \
+             rather than left representable and unexamined.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_bare_cons_fails_closed : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (ir_cs1 (IRConst.int_ ir_d1))) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
+            "FAIL-CLOSED: the same for a bare vcons node.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_agg_nonspine_has_no_fields : Eq IRStepResult (ir_ef_at (ir_const_value (IRConst.aggv (IRConst.int_ ir_d3))) ir_d0) (IRStepResult.fault (IROutcome.type_error IRFault.bad_field)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.bad_field))",
+            "The remaining junk inhabitant, run: an aggregate whose element list is not a spine \
+             (`aggv (int_ 3)`) materializes to a value with zero fields, so ExtractField on it \
+             is bad_field. Same fail-closed reading IRScalar's module doc records for its own \
+             non-spine payloads, now reachable from the CONSTANT side too.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_agg_empty : Eq IRScalar (ir_const_value (IRConst.aggv ir_cs0)) (IRScalar.aggv IRScalar.vnil) := Eq.refl IRScalar (IRScalar.aggv IRScalar.vnil)",
+            "`Constant::Aggregate(vec![])` — the zero-element aggregate — materializes to the \
+             empty aggregate value.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_agg_two_elements : Eq IRScalar (ir_const_value (IRConst.aggv (ir_cs2 (IRConst.int_ ir_d7) (IRConst.bool_ Bool.true)))) (IRScalar.aggv (ir_sp2 (IRScalar.int_ ir_d7) (IRScalar.bool_ Bool.true))) := Eq.refl IRScalar (IRScalar.aggv (ir_sp2 (IRScalar.int_ ir_d7) (IRScalar.bool_ Bool.true)))",
+            "The spine is materialized RECURSIVELY and heterogeneously: a two-element aggregate \
+             with an integer and a boolean element becomes the corresponding two-element value \
+             spine. The emitted fragment only ever needs arity one, so this is the case that \
+             shows the recursion is real rather than a one-element special case.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_agg_nested : Eq IRScalar (ir_const_value (IRConst.aggv (ir_cs1 (IRConst.aggv (ir_cs1 (IRConst.int_ ir_d2)))))) (IRScalar.aggv (ir_sp1 (IRScalar.aggv (ir_sp1 (IRScalar.int_ ir_d2))))) := Eq.refl IRScalar (IRScalar.aggv (ir_sp1 (IRScalar.aggv (ir_sp1 (IRScalar.int_ ir_d2)))))",
+            "NESTING DEPTH TWO. Measured, no body in clean-kernel's flippable set emits a nested \
+             aggregate constant — depth is one everywhere — so this witness is deliberately \
+             beyond the emitted fragment: the semantics is defined by structural recursion, not \
+             by the shape that happened to be needed, and the kernel executes it to prove so.",
         )?;
 
         Ok(())

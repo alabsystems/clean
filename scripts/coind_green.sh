@@ -6,8 +6,8 @@
 # designs/2026-07-29-rocq-features-into-clean.md). Four checks, all fail-closed:
 #
 #   1. `clean check --prelude builtin` accepts proof/Coind.lean
-#      (exactly 34 declarations, 0 failed, 0 sorry).
-#   2. `clean export-cert` exports exactly the 19 theorems with
+#      (exactly 43 declarations, 0 failed, 0 sorry).
+#   2. `clean export-cert` exports exactly the 26 theorems with
 #      all_axiom_closures_foundational_only = true and empty
 #      non-foundational/trust-marker lists per declaration.
 #   3. `clean kernel cert verify` independently replays the .cleancert bundle
@@ -64,7 +64,7 @@ def need(cond, msg):
     if not cond:
         raise SystemExit(f"[coind-green] FAIL: {msg}: {j}")
 need(j["status"] == "pass", "check status")
-need(j["success_count"] == 34 and j["failed_count"] == 0, "expected exactly 34/34 declarations")
+need(j["success_count"] == 43 and j["failed_count"] == 0, "expected exactly 43/43 declarations")
 need(j["trust_summary"]["sorry_axioms"] == 0, "sorry leaked")
 PY
 
@@ -81,7 +81,7 @@ need(j["all_axiom_closures_foundational_only"] is True, "non-foundational axiom 
 bad = [d for d in j["per_decl_axiom_closure"]
        if d["non_foundational_axioms"] or d["trust_markers"]]
 need(not bad, f"non-empty closures: {bad}")
-need(j["exported"] == 19, f"expected exactly 19 theorems, got {j['exported']}")
+need(j["exported"] == 26, f"expected exactly 26 theorems, got {j['exported']}")
 for name in ("map_iterate", "paco_acc", "gfpRel_fold", "bisim_pointwise", "bisim_of_pointwise"):
     need(name in j["exported_theorems"], f"required theorem missing: {name}")
 PY

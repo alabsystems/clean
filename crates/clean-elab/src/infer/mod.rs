@@ -61,7 +61,7 @@ mod elab_tactic;
 mod elab_tactic_compound;
 mod elab_types;
 mod elab_variable;
-mod elaborate_decl;
+pub(crate) mod elaborate_decl;
 mod equation_dep_family;
 mod instance;
 mod meta_builtin;

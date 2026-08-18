@@ -723,6 +723,9 @@ impl<'a> ElabCtx<'a> {
         then_br: &SurfaceExpr,
         else_br: &SurfaceExpr,
     ) -> Result<Expr, ElabError> {
+        if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
+            eprintln!("dite-builder: entered witness={witness_name}");
+        }
         // if h : p then t else e
         // Desugars to: dite p (fun h : p => t) (fun h : ¬p => e)
         //
@@ -759,7 +762,17 @@ impl<'a> ElabCtx<'a> {
 
         // Create the then branch: (fun h : p => t), body checked against α.
         let then_fvar = self.push_local(witness_name.to_string(), prop_expr.clone());
-        let then_expr = self.elaborate_with_expected_type(then_br, branch_expected.clone())?;
+        let then_result = self.elaborate_with_expected_type(then_br, branch_expected.clone());
+        if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
+            eprintln!("dite-then: ok={}", then_result.is_ok());
+        }
+        let then_expr = match then_result {
+            Ok(e) => e,
+            Err(err) => {
+                self.pop_local();
+                return Err(err);
+            }
+        };
         self.pop_local();
 
         // `α` is the shared result type of BOTH branches: the known expected
@@ -801,7 +814,17 @@ impl<'a> ElabCtx<'a> {
             Expr::const_(Name::from_string("False"), vec![]),
         );
         let else_fvar = self.push_local(witness_name.to_string(), not_prop.clone());
-        let else_expr = self.elaborate_with_expected_type(else_br, Some(alpha.clone()))?;
+        let else_result = self.elaborate_with_expected_type(else_br, Some(alpha.clone()));
+        if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
+            eprintln!("dite-else: ok={} alpha={alpha:?}", else_result.is_ok());
+        }
+        let else_expr = match else_result {
+            Ok(e) => e,
+            Err(err) => {
+                self.pop_local();
+                return Err(err);
+            }
+        };
         self.pop_local();
         // SOUNDNESS: as with the then-branch, instantiate assigned
         // metavars/levels in the else body before abstracting its fvar so no
@@ -1388,8 +1411,23 @@ impl<'a> ElabCtx<'a> {
                 // This matches Lean 4's auto-bound implicit universe behavior:
                 // `class Foo (X : Type u)` without explicit `universe u` declaration
                 // will implicitly declare `u` as a universe parameter.
+                //
+                // RIGID, like a declared one. An auto-bound universe NAME is a
+                // genuine parameter of the declaration; Lean does not
+                // distinguish `def f (α : Type u)` from
+                // `universe u; def f (α : Type u)`. Registering it only in
+                // `universe_params` and not in the rigid set left it ASSIGNABLE,
+                // so `add_level_constraint`'s rigid refusal never fired for it
+                // and `def badAuto : Sort u := Nat` silently solved `u := 1` and
+                // registered monomorphic with empty `level_params` — while the
+                // declared twin `def bad.{u} : Sort u := Nat` was correctly
+                // rejected. Measured 2026-08-14; probes p29/p30.
+                //
+                // Level holes (`Type _`) are NOT affected: they return above via
+                // `fresh_universe_param` and must stay solvable.
                 if !self.universe_params.contains(name) {
                     self.universe_params.push(name.clone());
+                    self.metas.add_rigid_level_param(Name::from_string(name));
                 }
                 Ok(Level::param(Name::from_string(name)))
             }

@@ -1,0 +1,163 @@
+{
+ "schema": "clean.crystal.flip_census.lane1.v1",
+ "measured_utc_date": "2026-08-14",
+ "lane": "lane 1 (chain the two remaining candidates)",
+ "note": "Candidate set RE-DERIVED from a fresh whole-crate dump against a FRESHLY SEALED driver, not inherited from data/crystal_flip_census_lane2_2026-08-13.json. Independent driver + parser; flip events joined to coverage rows by def_index WITHIN the compile. Where this disagrees with the committed census, the measurement wins and the disagreement is stated.",
+ "clean_commit": "a00e00d16",
+ "compiler": {
+  "sealed_snapshot": "$HOME/trust/scratchpad/lane1chain",
+  "guard_verdict": "PASS (scripts/seal_driver.sh guard, run BEFORE the measurement)",
+  "trust_rev": "6b868c1b332ffe3f4dec2935e69f042d78d5d31b",
+  "dylib_sha256": "c999eaaf02d4e63d4555d7683477cb1f7dc1231466d3ad7a91ddae1482c414f8",
+  "rustc_main_sha256": "b8e388c396f60483dbd58c1032479d9b714fa288ffb03e95f0564acd8d2d74cc",
+  "perturbation_classes_registered": [
+   "enum-reshape",
+   "enum-case-value",
+   "enum-ctor",
+   "enum-disc-index",
+   "switch-map",
+   "enum-payload",
+   "marker-order",
+   "marker-drop",
+   "agg-field-order",
+   "marker-arm"
+  ],
+  "lineage_domain": "trust_thir_lower.body_lineage.v2",
+  "identified_by_behaviour_not_stamp": true
+ },
+ "profile": {
+  "argv": "CARGO_TARGET_DIR=<tgt> RUSTC=<sealed tc> RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Ztrust-verify=off -Cdebuginfo=0' RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir>",
+  "opt_level": 3,
+  "release_shape_proof_row_present": true
+ },
+ "totals": {
+  "bodies": 13771,
+  "lowered": 9067,
+  "spliced": 7571,
+  "agreed": 1542,
+  "mismatch": 0,
+  "markers_exact": 1084,
+  "markers_exact_non_vacuous": 27,
+  "lineage_rows": 13143,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 19
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "5b3c183c0a6b5d876961c152e5f5ab76de84e56a57c85dc6f81835c484e4ec42",
+  "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+  "trust_ir_bin_sha256": "029d2cd32fb2026844a7e1c8e50573ffc3eadd3e8cca712a5c5381e4c40f214d",
+  "byte_identical_across_all_three": true,
+  "negative_control_flag": "-Ztrust-ir-flip=no",
+  "negative_control_flip_events": 0
+ },
+ "chained_by_this_lane": [
+  "env::native_reducers_char::is_valid_char",
+  "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone"
+ ],
+ "candidates_re_derived": [
+  {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "def_index": 15081,
+   "blocks": 7,
+   "instr_lines": 15,
+   "coverage_instr_count": 15,
+   "icmp": 3,
+   "condbr": 2,
+   "switch_cases": 0,
+   "load": 0,
+   "extractfield": 0,
+   "agg_consts": 0,
+   "gep": 0,
+   "call": 0,
+   "asserts": 0,
+   "derived_mir_detail": "8 canonical line(s) identical",
+   "markers_detail": "12 marker line(s) identical",
+   "markers_non_vacuous": true,
+   "interpreter": "agreed",
+   "interpreter_samples": 5,
+   "deferred_to_seam": false,
+   "lineage": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+   "flip": "codegen",
+   "flip_lineage_equals_coverage_row": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "def_index": 35579,
+   "blocks": 13,
+   "instr_lines": 26,
+   "coverage_instr_count": 26,
+   "icmp": 0,
+   "condbr": 0,
+   "switch_cases": 10,
+   "load": 1,
+   "extractfield": 1,
+   "agg_consts": 11,
+   "gep": 0,
+   "call": 0,
+   "asserts": 0,
+   "derived_mir_detail": "16 canonical line(s) identical",
+   "markers_detail": "0 marker line(s) identical",
+   "markers_non_vacuous": false,
+   "interpreter": "not-run",
+   "interpreter_samples": 0,
+   "deferred_to_seam": false,
+   "lineage": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+   "flip": "codegen",
+   "flip_lineage_equals_coverage_row": true
+  }
+ ],
+ "residue_cost_law": {
+  "corrects": "The `2^W law` recorded 2026-08-13 in docs/CRYSTAL_STATUS.md 3c, crates/clean-verify/src/spec/core_spec/eval_ir_bvar_range.rs and bundles.rs.",
+  "claim": "ir_wrap w n costs O(n) in the DIVIDEND and is INDEPENDENT of the width w.",
+  "measurements_seconds": {
+   "w64_n3": 0.01,
+   "w64_n7000": 1.322,
+   "w64_n14000": 2.644,
+   "w64_n28000": 5.399,
+   "w8_n7000": 1.356,
+   "w32_n55296": 11.123,
+   "w64_n55296": 10.909
+  },
+  "method": "One `Eq Nat (ir_wrap w n) n` declaration each in tests/evalir_scratchpad.rs, per-declaration wall clock, one spec build.",
+  "why_the_earlier_reading_was_wrong": "Its three points were taken at W = 8/12/16 with the dividend 2^W - 1, i.e. 255 / 4095 / 65535, so width and dividend moved together and the x15.3 it attributed to four bits of WIDTH is the x16 in the DIVIDEND.",
+  "the_extrapolation_still_stands": "ir_wrap ir_d32 4294967295 lands at ~9.6 days by this law (4.29e9 x 1.93e-4 s), the same order the earlier ~5-day figure gave, for a different reason.",
+  "operational_consequence": "`wide type => unaffordable` is FALSE and would have refused env::native_reducers_char::is_valid_char, which is at width 64 and chains. `large CONSTANT => unaffordable` is true."
+ },
+ "witness_costs_seconds": {
+  "vc_ir_eval_at_65": 24.4,
+  "vc_ir_eval_at_0": 36.8,
+  "vc_ir_eval_at_55296": 73.8,
+  "vc_decide_c1_at_0": 21.1,
+  "vc_decide_c2_at_0": 22.5,
+  "vc_decide_c3_at_0": 439.8,
+  "vc_split1": 23.8,
+  "vc_exact": 11.7,
+  "ep_exact": 2.8,
+  "ep_arm_witnesses_each": "0.10 - 0.39"
+ },
+ "disagreements_with_the_committed_census": [
+  "bodies 13771 vs 13770; lowered 9067 vs 9066; spliced 7571 vs 7570; lineage rows 13143 vs 13142; derived-MIR agreed 1542 vs 1541. clean-kernel gained ONE more body between c4e33541d and this HEAD.",
+  "def_index is UNCHANGED for every body either census names (kind_ord 17084, has_cubical_layer 17971, from_source_system 17966, is_zero 17078, contains 16836, bvar_in_range 16566), so the new body sits later in the index space than all of them.",
+  "markers_exact 1084 vs 1082 and vacuous 1057 vs 1055, with the NON-VACUOUS count still 27. Second independent confirmation of the drift docs/CRYSTAL_STATUS.md 4c named: a markers_exact gain is not a fidelity gain.",
+  "loud fallbacks 19 vs 17.",
+  "THE COST LAW, superseded: see residue_cost_law. This is the disagreement that changes what is chainable rather than what is counted.",
+  "The lane-2 census lists is_valid_char under computing_bodies with instr_lines 13; an independently written text-dump parser here counts the same coverage_instr_count 15 and agrees on blocks 7 / icmp 3 / condbr 2 / markers 12 / interpreter agreed on 5 samples. Different line denominators, not a disagreement about the body.",
+  "<tc::ExprPathStep as Clone>::clone appears in NO committed census as a candidate row. Measured here: 13 blocks, 10 explicit switch cases plus a reachable default, 11 aggregate constants, 1 load, 1 extractfield, 0 calls, agreed over 16 canonical lines, markers_exact TRUE but VACUOUS (0 marker lines), interpreter not-run (`param 0 (ptr) is READ - opaque sampling refused`), codegen flip fired with lineage equal to the coverage row's. The task brief's `13 blocks, 10 cases` is CONFIRMED."
+ ],
+ "designated_target_did_not_move": {
+  "def_path": "level::Level::is_zero",
+  "def_index": 17078,
+  "verdict": "agreed",
+  "markers_exact": false,
+  "calls": 6,
+  "deferred_to_seam": true,
+  "flip_event": null,
+  "fallback_event": null,
+  "note": "Re-measured in the same compile. No flip event and no fallback event at -O3: still SILENT."
+ }
+}

@@ -55,6 +55,10 @@ pub enum LakeCommands {
         /// Number of parallel jobs (0 = auto)
         #[arg(short, long, default_value = "0")]
         jobs: usize,
+        /// Warn and continue when a stdlib/local-dep .olean import fails to
+        /// load, instead of failing the module build (fail-closed default)
+        #[arg(long)]
+        permissive_imports: bool,
     },
     /// Create a new project
     New {
@@ -149,6 +153,14 @@ pub enum LakeCommands {
         #[arg(short, long, default_value = "0")]
         jobs: usize,
     },
+    /// Start the Clean language server over stdio for this project
+    /// (Lake-compatible editor entry point: editors launch `lake serve --`)
+    Serve {
+        /// Arguments forwarded by the editor after `--` (accepted for Lake
+        /// CLI compatibility; the transport is always stdio)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Script commands
     #[command(subcommand)]
     Script(ScriptCommands),
@@ -229,6 +241,18 @@ pub enum LakeCommands {
         /// Emit JSON instead of the human-readable report.
         #[arg(long)]
         json: bool,
+    },
+    /// Run the governed Lake replacement smoke: init/build/test the `clean lake
+    /// init` template project in a throwaway temp directory, entirely through
+    /// clean-owned in-process handlers (never Lean4), and write the JSON
+    /// evidence artifact the lake-workflow replacement row names.
+    Smoke {
+        /// Path to write the JSON evidence artifact.
+        #[arg(long, default_value = "reports/lake-replacement-smoke.json")]
+        report: PathBuf,
+        /// Show verbose output
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Report a constant's Cake profile: semantic identity (defeq + rewrite digests),
     /// proof goodness (G mass + F bedrock-distance floor), and complexity. Loads the
@@ -396,6 +420,28 @@ mod tests {
                 assert_eq!(jobs, 0);
             }
             other => panic!("expected lake test, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lake_serve_parses_bare_and_with_forwarded_editor_args() {
+        let cli =
+            LakeTestCli::try_parse_from(["clean lake", "serve"]).expect("parse bare lake serve");
+        match cli.lake.command {
+            LakeCommands::Serve { args } => {
+                assert!(args.is_empty(), "bare serve should forward no args");
+            }
+            other => panic!("expected lake serve, got {other:?}"),
+        }
+
+        // The VS Code Lean 4 extension launches `lake serve -- <args>`; the
+        // `--` escape and any flag-like args must be collected, not parsed
+        // as clean flags.
+        let cli = LakeTestCli::try_parse_from(["clean lake", "serve", "--", "--editor-flag"])
+            .expect("parse lake serve with forwarded flag-like args");
+        match cli.lake.command {
+            LakeCommands::Serve { args } => assert_eq!(args, ["--editor-flag"]),
+            other => panic!("expected lake serve, got {other:?}"),
         }
     }
 

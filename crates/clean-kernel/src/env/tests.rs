@@ -9065,7 +9065,7 @@ fn test_add_decl_rejects_fvar_in_type() {
 
     let err = result.expect_err("FVar in type must be rejected");
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { ref name } if name.to_string() == "bad_fvar_type"),
+        matches!(err, EnvError::ContainsFreeVar { ref name, .. } if name.to_string() == "bad_fvar_type"),
         "expected ContainsFreeVar('bad_fvar_type'), got {err:?}"
     );
 }
@@ -9087,7 +9087,7 @@ fn test_add_decl_rejects_fvar_in_value() {
 
     let err = result.expect_err("FVar in value must be rejected");
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { ref name } if name.to_string() == "bad_fvar_value"),
+        matches!(err, EnvError::ContainsFreeVar { ref name, .. } if name.to_string() == "bad_fvar_value"),
         "expected ContainsFreeVar('bad_fvar_value'), got {err:?}"
     );
 }

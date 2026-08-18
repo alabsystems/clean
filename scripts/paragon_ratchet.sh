@@ -331,24 +331,40 @@ for k, cur in totals.items():
     if delta > 0:
         failed = True
         base_crates = baseline.get("crates", {})
+        # Interleave correctly with the stdout lines above. A caller that merges
+        # both streams into one log (the suite runner does) otherwise sees every
+        # stderr line FIRST -- stderr is unbuffered, stdout block-buffers into a
+        # file -- so the per-crate attribution floats away from the metric it
+        # attributes.
+        sys.stdout.flush()
         for crate in sorted(set(crates) | set(base_crates)):
             b = base_crates.get(crate, {}).get(k, 0)
             c = crates.get(crate, {}).get(k, 0)
             if c > b:
                 print(f"        {crate}: {b} -> {c}", file=sys.stderr)
+        sys.stderr.flush()
 
 if failed:
+    sys.stdout.flush()
     print(
         "paragon ratchet: FAIL — quality debt increased (shrink-only). "
         "Fix the regression; if a total legitimately went DOWN elsewhere, "
         "refresh with scripts/paragon_ratchet.sh --update.",
         file=sys.stderr,
     )
+    sys.stderr.flush()
+    # THE VERDICT IS THE LAST LINE ON STDOUT, on the failing path too. The suite
+    # runner's `summarize_output` records the last non-blank line of the merged
+    # log as a row's DETAIL, and with the verdict on stderr only, a RED
+    # `gate::paragon` row read `OK allow_dead_code_sites: ... (+0)` -- the exit
+    # code was right and the one line a human scans said the opposite. The
+    # detail stays on stderr; only the verdict is repeated here.
+    print("paragon ratchet: FAIL — quality debt increased (shrink-only); detail above", flush=True)
     sys.exit(1)
 
 improved = any(totals[k] < base_totals.get(k, 0) for k in totals)
 if improved:
-    print("paragon ratchet: PASS (improved — consider scripts/paragon_ratchet.sh --update to lock it in)")
+    print("paragon ratchet: PASS (improved — consider scripts/paragon_ratchet.sh --update to lock it in)", flush=True)
 else:
-    print("paragon ratchet: PASS")
+    print("paragon ratchet: PASS", flush=True)
 EOF

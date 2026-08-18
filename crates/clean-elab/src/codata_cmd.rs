@@ -34,8 +34,26 @@
 //! **Envelope (loud rejects, extend-don't-descope):** one or more
 //! non-recursive observation fields followed by exactly one recursive
 //! field (last) at the same instantiation — multi-observation labels are
-//! right-nested `PProd`s with projection-chain accessors; branching
-//! (multiple recursive fields) is a named build item. Simple explicit
+//! right-nested `PProd`s with projection-chain accessors.
+//!
+//! CORRECTED 2026-08-14: this used to say "branching (multiple recursive
+//! fields) is a named build item", i.e. unsupported. MEASURED FALSE — a
+//! two-recursive-field codata elaborates and COMPUTES:
+//!
+//! ```lean
+//! codata BTree2 : Type where
+//!   label : Nat
+//!   left  : BTree2
+//!   right : BTree2
+//! codef mkT2 (n : Nat) : BTree2 where
+//!   label := n
+//!   left  := mkT2 (n + 1)
+//!   right := mkT2 (n + 2)
+//! theorem t2 : BTree2.label (mkT2 5) = 5 := rfl   -- passes
+//! ```
+//!
+//! A doc that understates the envelope is not harmless: it sends the next
+//! author to build something that already works. Simple explicit
 //! `(x : T)` parameters; no universe parameters (U2 lane); no `deriving`
 //! (BEq/DecidableEq/Repr on M-encoded codata must reject loudly per the
 //! design); no modifiers.

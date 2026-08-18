@@ -44,6 +44,10 @@ pub(crate) fn contains_fvar(e: &Expr, target: FVarId) -> bool {
     e.abstract_fvar(target) != *e
 }
 
+// Since the proved call-site rewrite landed (WF phase 1), the plain
+// `f ↦ rec` substitution survives only as a unit-tested reference shape;
+// production traffic goes through `call_sites::transform_rec_calls_proved`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn replace_rec_calls(body: &Expr, func_fvar: FVarId, rec_fvar: FVarId) -> Expr {
     struct RecCallReplacer {
         func_fvar: FVarId,

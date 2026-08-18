@@ -376,6 +376,14 @@ impl FileContext {
         &self.macro_ctx
     }
 
+    /// Mutable access to the persisted macro context, for the driver's
+    /// namespace/section arms to push/pop scoped-notation activation frames
+    /// around a block's inner declarations (an `open scoped` inside the block
+    /// must not stay active past its `end`).
+    pub(crate) fn macro_ctx_mut(&mut self) -> &mut MacroCtx {
+        &mut self.macro_ctx
+    }
+
     /// Read the persisted tactic registry without moving it out. See
     /// [`FileContext::macro_ctx`].
     pub(crate) fn tactic_registry(&self) -> Option<&TacticRegistry> {

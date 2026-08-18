@@ -630,6 +630,7 @@ mod seq_focus;
 mod simp;
 mod simp_local_context;
 mod simp_multi_binder_proof;
+mod simp_perf_cache;
 mod simp_proof_carry;
 mod simp_unfold_defs;
 mod simp_universe_levels;

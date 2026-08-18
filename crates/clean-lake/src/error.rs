@@ -62,6 +62,10 @@ pub enum LakeError {
     #[error("circular dependency detected: {0}")]
     CircularDependency(String),
 
+    /// Transitive dependency resolution exceeded the maximum depth
+    #[error("dependency resolution exceeded maximum depth {limit} at '{name}' (runaway or malformed transitive requires)")]
+    DependencyDepthExceeded { name: String, limit: usize },
+
     /// Elaboration error
     #[error("elaboration error: {0}")]
     Elaboration(String),
@@ -93,4 +97,12 @@ pub enum LakeError {
     /// A variable reference was not closed (e.g. `$(FOO`)
     #[error("unterminated variable reference in lakefile value: {value}")]
     UnterminatedVariable { value: String },
+
+    /// Strict-mode lakefile.lean parsing rejected unrecognized top-level
+    /// constructs (the lenient default records them as diagnostics instead)
+    #[error(
+        "lakefile.lean contains {count} unrecognized top-level construct(s) \
+         the declarative parser cannot model (strict mode): {summary}"
+    )]
+    UnrecognizedConstructs { count: usize, summary: String },
 }

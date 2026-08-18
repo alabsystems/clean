@@ -1,0 +1,114 @@
+{
+  "family": "g_auto",
+  "gate": "G-AUTO",
+  "plan": "docs/plans/TACTICS_TO_100_2026-07-29.md",
+  "plan_section": "§3 automation & decision procedures; gate defined in §7",
+  "plan_family_total": 131,
+  "comparison_basis": "family-count-level vs the 2026-07-29 measurement (131 automation probes), NOT probe-identical: the original probe fixtures lived in a dead session scratchpad (plan appendix) and were reconstructed here from the plan's §3 family descriptions.",
+  "notes": [
+    "The plan's §3 sub-suite denominators (grind 16, decide 10, aesop 19, omega 20, norm_num 15, tauto 16, linarith 12, ring 4, positivity 6, gcongr 4, cc 2, search 10) sum to 134 while the §3 headline says 131 probes; the §1 'honest gaps' note records the family was delivered truncated. This manifest pins the family at the 131 headline by allocating: decide 8 + native_decide 2, norm_num 15, omega 20, linarith 10 + nlinarith 2, ring 4 + positivity 6 + gcongr 4, aesop 18 + tauto 16, grind 14 + cc 2 + search 10.",
+    "Every fixture file MUST start with a real `import Init` header; the gate script refuses builtin-prelude runs and each file carries a term-mode environment canary that fails under stub-prelude fallback.",
+    "The `required` arrays are intentionally empty at introduction: no row may be declared must-pass without a recorded HEAD run. Promote measured-stable rows (designated candidates: p_auto_norm_num_01/05/06, the RC-A teeth rows) after the first green measurement, in the same commit that records the baseline."
+  ],
+  "files": [
+    {
+      "file": "decide.lean",
+      "label": "decide+native_decide",
+      "canary": "canary_env_g_auto_decide",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_auto_decide_01", "p_auto_decide_02", "p_auto_decide_03", "p_auto_decide_04",
+        "p_auto_decide_05", "p_auto_decide_06", "p_auto_decide_07", "p_auto_decide_08",
+        "p_auto_native_01", "p_auto_native_02"
+      ]
+    },
+    {
+      "file": "norm_num.lean",
+      "label": "norm_num",
+      "canary": "canary_env_g_auto_norm_num",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_auto_norm_num_01", "p_auto_norm_num_02", "p_auto_norm_num_03", "p_auto_norm_num_04",
+        "p_auto_norm_num_05", "p_auto_norm_num_06", "p_auto_norm_num_07", "p_auto_norm_num_08",
+        "p_auto_norm_num_09", "p_auto_norm_num_10", "p_auto_norm_num_11", "p_auto_norm_num_12",
+        "p_auto_norm_num_13", "p_auto_norm_num_14", "p_auto_norm_num_15"
+      ]
+    },
+    {
+      "file": "omega.lean",
+      "label": "omega",
+      "canary": "canary_env_g_auto_omega",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_auto_omega_01", "p_auto_omega_02", "p_auto_omega_03", "p_auto_omega_04",
+        "p_auto_omega_05", "p_auto_omega_06", "p_auto_omega_07", "p_auto_omega_08",
+        "p_auto_omega_09", "p_auto_omega_10", "p_auto_omega_11", "p_auto_omega_12",
+        "p_auto_omega_13", "p_auto_omega_14", "p_auto_omega_15", "p_auto_omega_16",
+        "p_auto_omega_17", "p_auto_omega_18", "p_auto_omega_19", "p_auto_omega_20"
+      ]
+    },
+    {
+      "file": "linear.lean",
+      "label": "linarith+nlinarith",
+      "canary": "canary_env_g_auto_linear",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_auto_linarith_01", "p_auto_linarith_02", "p_auto_linarith_03", "p_auto_linarith_04",
+        "p_auto_linarith_05", "p_auto_linarith_06", "p_auto_linarith_07", "p_auto_linarith_08",
+        "p_auto_linarith_09", "p_auto_linarith_10", "p_auto_nlinarith_01", "p_auto_nlinarith_02"
+      ]
+    },
+    {
+      "file": "ring_positivity.lean",
+      "label": "ring+positivity+gcongr",
+      "canary": "canary_env_g_auto_ring_positivity",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_auto_ring_01", "p_auto_ring_02", "p_auto_ring_03", "p_auto_ring_04",
+        "p_auto_positivity_01", "p_auto_positivity_02", "p_auto_positivity_03",
+        "p_auto_positivity_04", "p_auto_positivity_05", "p_auto_positivity_06",
+        "p_auto_gcongr_01", "p_auto_gcongr_02", "p_auto_gcongr_03", "p_auto_gcongr_04"
+      ]
+    },
+    {
+      "file": "logic.lean",
+      "label": "aesop+tauto",
+      "canary": "canary_env_g_auto_logic",
+      "helpers": [],
+      "required": [],
+      "probes": [
+        "p_auto_aesop_01", "p_auto_aesop_02", "p_auto_aesop_03", "p_auto_aesop_04",
+        "p_auto_aesop_05", "p_auto_aesop_06", "p_auto_aesop_07", "p_auto_aesop_08",
+        "p_auto_aesop_09", "p_auto_aesop_10", "p_auto_aesop_11", "p_auto_aesop_12",
+        "p_auto_aesop_13", "p_auto_aesop_14", "p_auto_aesop_15", "p_auto_aesop_16",
+        "p_auto_aesop_17", "p_auto_aesop_18",
+        "p_auto_tauto_01", "p_auto_tauto_02", "p_auto_tauto_03", "p_auto_tauto_04",
+        "p_auto_tauto_05", "p_auto_tauto_06", "p_auto_tauto_07", "p_auto_tauto_08",
+        "p_auto_tauto_09", "p_auto_tauto_10", "p_auto_tauto_11", "p_auto_tauto_12",
+        "p_auto_tauto_13", "p_auto_tauto_14", "p_auto_tauto_15", "p_auto_tauto_16"
+      ]
+    },
+    {
+      "file": "closure_search.lean",
+      "label": "grind+cc+search",
+      "canary": "canary_env_g_auto_closure_search",
+      "helpers": ["gsDouble"],
+      "required": [],
+      "probes": [
+        "p_auto_grind_01", "p_auto_grind_02", "p_auto_grind_03", "p_auto_grind_04",
+        "p_auto_grind_05", "p_auto_grind_06", "p_auto_grind_07", "p_auto_grind_08",
+        "p_auto_grind_09", "p_auto_grind_10", "p_auto_grind_11", "p_auto_grind_12",
+        "p_auto_grind_13", "p_auto_grind_14",
+        "p_auto_cc_01", "p_auto_cc_02",
+        "p_auto_search_01", "p_auto_search_02", "p_auto_search_03", "p_auto_search_04",
+        "p_auto_search_05", "p_auto_search_06", "p_auto_search_07", "p_auto_search_08",
+        "p_auto_search_09", "p_auto_search_10"
+      ]
+    }
+  ]
+}

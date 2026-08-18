@@ -4,7 +4,6 @@
 use clean_kernel::TypeChecker;
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::spec::Specification;
 use crate::test_utils::{build_spec_with_stack, run_with_stack};
 
 /// The three additive lemmas of the weakening pillar must be genuine
@@ -99,7 +98,7 @@ fn test_weakening_typing_signatures() {
 #[test]
 fn test_weakening_typing_applies_to_concrete_sort_derivation() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let proof = spec
             .elaborate_source(
                 "fun (hf : RedEnvFaithful the_red_env) (amount : Nat) => \
@@ -121,7 +120,7 @@ fn test_weakening_typing_applies_to_concrete_sort_derivation() {
 #[test]
 fn test_weakening_typing_gen_applies_at_abstract_cutoff() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let proof = spec
             .elaborate_source(
                 "fun (hf : RedEnvFaithful the_red_env) (amount : Nat) (c : Nat) => \

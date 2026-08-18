@@ -45,10 +45,11 @@ mod subst;
 #[cfg(test)]
 mod tests;
 
-use crate::expr::{BinOp, CExpr, Initializer};
+use crate::expr::{BinOp, CExpr, Designator, Initializer, SizeOfArg, UnaryOp};
 use crate::spec::{FuncSpec, Location, LoopSpec, Spec};
-use crate::stmt::{CStmt, CaseLabel, FuncDef};
-use std::collections::HashMap;
+use crate::stmt::{CStmt, CaseLabel, FuncDef, StorageClass, VarDecl};
+use crate::types::{CType, Signedness};
+use std::collections::{HashMap, HashSet};
 
 // Re-export from submodules
 #[cfg(test)]
@@ -110,6 +111,12 @@ pub struct ModifiedLocation {
     pub source_line: Option<usize>,
 }
 
+/// Base name for the rigid logic variable that snapshots a loop variant's value
+/// at the loop head. Deliberately NOT a valid C identifier, so no program
+/// variable can collide with it (and thereby be captured by) the substitution
+/// pass that computes the variant's post-body value.
+pub(crate) const SNAPSHOT_BASE: &str = "\\loop_variant_at_head";
+
 /// Verification condition generator
 pub struct VCGen {
     /// Generated VCs
@@ -120,6 +127,23 @@ pub struct VCGen {
     pub(crate) func_specs: HashMap<String, FuncSpec>,
     /// Counter for generating fresh variable names
     pub(crate) fresh_counter: usize,
+    /// Unambiguous parameter/local types in the function currently being
+    /// verified. Compound assignment needs the declared lvalue type: C applies
+    /// the usual conversions to the operands and then converts the result back
+    /// to this type before the store.
+    variable_types: HashMap<String, CType>,
+    /// Names declared more than once anywhere in the function. This WP is not
+    /// scope-indexed, so using one textual name for two C objects must fail
+    /// closed in the compound-assignment lane rather than choosing a type from
+    /// the wrong scope.
+    ambiguous_variables: HashSet<String>,
+    /// Scalar objects whose address is taken in the current function. A write
+    /// through an alias is outside the substitution model used by this WP.
+    address_taken: HashSet<String>,
+    /// Return type of the function currently being verified. Kept so the
+    /// return expression's assignment conversion is represented before
+    /// substituting `\result`.
+    function_return_type: Option<CType>,
 }
 
 impl Default for VCGen {
@@ -135,12 +159,264 @@ impl VCGen {
             path_condition: Vec::new(),
             func_specs: HashMap::new(),
             fresh_counter: 0,
+            variable_types: HashMap::new(),
+            ambiguous_variables: HashSet::new(),
+            address_taken: HashSet::new(),
+            function_return_type: None,
         }
     }
 
     /// Register a function's specification
     pub fn register_func_spec(&mut self, name: &str, spec: FuncSpec) {
         self.func_specs.insert(name.to_string(), spec);
+    }
+
+    /// Build the deliberately narrow object model used by compound-assignment
+    /// WP. The general C memory model is not represented by syntactic
+    /// substitution, so only an unambiguous, non-aliased scalar object can be
+    /// updated this way.
+    fn prepare_function_objects(&mut self, func: &FuncDef) {
+        self.variable_types.clear();
+        self.ambiguous_variables.clear();
+        self.address_taken.clear();
+        self.function_return_type = Some(func.return_type.clone());
+
+        let mut declarations: Vec<(String, CType)> = func
+            .params
+            .iter()
+            .map(|param| (param.name.clone(), param.ty.clone()))
+            .collect();
+        Self::collect_declared_types(&func.body, &mut declarations);
+        for (name, ty) in declarations {
+            if self.variable_types.contains_key(&name) {
+                self.variable_types.remove(&name);
+                self.ambiguous_variables.insert(name);
+            } else if !self.ambiguous_variables.contains(&name) {
+                self.variable_types.insert(name, ty);
+            }
+        }
+        Self::collect_address_taken_stmt(&func.body, &mut self.address_taken);
+    }
+
+    fn collect_declared_types(stmt: &CStmt, out: &mut Vec<(String, CType)>) {
+        match stmt {
+            CStmt::Decl(decl) => out.push((decl.name.clone(), decl.ty.clone())),
+            CStmt::DeclList(decls) => out.extend(
+                decls
+                    .iter()
+                    .map(|decl| (decl.name.clone(), decl.ty.clone())),
+            ),
+            CStmt::Block(stmts) => {
+                for stmt in stmts {
+                    Self::collect_declared_types(stmt, out);
+                }
+            }
+            CStmt::If {
+                then_stmt,
+                else_stmt,
+                ..
+            } => {
+                Self::collect_declared_types(then_stmt, out);
+                if let Some(stmt) = else_stmt {
+                    Self::collect_declared_types(stmt, out);
+                }
+            }
+            CStmt::Switch { body, .. }
+            | CStmt::While { body, .. }
+            | CStmt::DoWhile { body, .. }
+            | CStmt::Case { stmt: body, .. }
+            | CStmt::Label { stmt: body, .. } => Self::collect_declared_types(body, out),
+            CStmt::For { init, body, .. } => {
+                if let Some(init) = init {
+                    Self::collect_declared_types(init, out);
+                }
+                Self::collect_declared_types(body, out);
+            }
+            // A nested function owns a different object namespace. Its control
+            // flow is unsupported elsewhere and must not make an outer scalar
+            // appear typed or aliased.
+            CStmt::FuncDef(_)
+            | CStmt::Empty
+            | CStmt::Expr(_)
+            | CStmt::Break
+            | CStmt::Continue
+            | CStmt::Return(_)
+            | CStmt::Goto(_)
+            | CStmt::Asm(_)
+            | CStmt::Assert(_)
+            | CStmt::Assume(_)
+            | CStmt::StaticAssert { .. } => {}
+        }
+    }
+
+    fn collect_address_taken_stmt(stmt: &CStmt, out: &mut HashSet<String>) {
+        match stmt {
+            CStmt::Expr(expr) | CStmt::Return(Some(expr)) => {
+                Self::collect_address_taken_expr(expr, out);
+            }
+            CStmt::Decl(decl) => {
+                if let Some(init) = &decl.init {
+                    Self::collect_address_taken_initializer(init, out);
+                }
+            }
+            CStmt::DeclList(decls) => {
+                for decl in decls {
+                    if let Some(init) = &decl.init {
+                        Self::collect_address_taken_initializer(init, out);
+                    }
+                }
+            }
+            CStmt::Block(stmts) => {
+                for stmt in stmts {
+                    Self::collect_address_taken_stmt(stmt, out);
+                }
+            }
+            CStmt::If {
+                cond,
+                then_stmt,
+                else_stmt,
+            } => {
+                Self::collect_address_taken_expr(cond, out);
+                Self::collect_address_taken_stmt(then_stmt, out);
+                if let Some(stmt) = else_stmt {
+                    Self::collect_address_taken_stmt(stmt, out);
+                }
+            }
+            CStmt::Switch { cond, body }
+            | CStmt::While { cond, body }
+            | CStmt::DoWhile { body, cond } => {
+                Self::collect_address_taken_expr(cond, out);
+                Self::collect_address_taken_stmt(body, out);
+            }
+            CStmt::For {
+                init,
+                cond,
+                update,
+                body,
+            } => {
+                if let Some(init) = init {
+                    Self::collect_address_taken_stmt(init, out);
+                }
+                if let Some(cond) = cond {
+                    Self::collect_address_taken_expr(cond, out);
+                }
+                if let Some(update) = update {
+                    Self::collect_address_taken_expr(update, out);
+                }
+                Self::collect_address_taken_stmt(body, out);
+            }
+            CStmt::Case { stmt, .. } | CStmt::Label { stmt, .. } => {
+                Self::collect_address_taken_stmt(stmt, out);
+            }
+            CStmt::StaticAssert { cond, .. } => Self::collect_address_taken_expr(cond, out),
+            CStmt::FuncDef(_)
+            | CStmt::Empty
+            | CStmt::Break
+            | CStmt::Continue
+            | CStmt::Return(None)
+            | CStmt::Goto(_)
+            | CStmt::Asm(_)
+            | CStmt::Assert(_)
+            | CStmt::Assume(_) => {}
+        }
+    }
+
+    fn collect_address_taken_initializer(init: &Initializer, out: &mut HashSet<String>) {
+        match init {
+            Initializer::Expr(expr) => Self::collect_address_taken_expr(expr, out),
+            Initializer::Designated { designator, init } => {
+                Self::collect_address_taken_designator(designator, out);
+                Self::collect_address_taken_initializer(init, out);
+            }
+            Initializer::List(items) => {
+                for item in items {
+                    Self::collect_address_taken_initializer(item, out);
+                }
+            }
+        }
+    }
+
+    fn collect_address_taken_designator(designator: &Designator, out: &mut HashSet<String>) {
+        match designator {
+            Designator::Field(_) => {}
+            Designator::Index(index) => Self::collect_address_taken_expr(index, out),
+            Designator::Chain(parts) => {
+                for part in parts {
+                    Self::collect_address_taken_designator(part, out);
+                }
+            }
+        }
+    }
+
+    fn collect_address_taken_expr(expr: &CExpr, out: &mut HashSet<String>) {
+        match expr {
+            CExpr::UnaryOp {
+                op: UnaryOp::AddrOf,
+                operand,
+            } => {
+                if let CExpr::Var(name) = operand.as_ref() {
+                    out.insert(name.clone());
+                }
+                Self::collect_address_taken_expr(operand, out);
+            }
+            CExpr::UnaryOp { operand, .. } | CExpr::Cast { expr: operand, .. } => {
+                Self::collect_address_taken_expr(operand, out);
+            }
+            CExpr::BinOp { left, right, .. } => {
+                Self::collect_address_taken_expr(left, out);
+                Self::collect_address_taken_expr(right, out);
+            }
+            CExpr::Conditional {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                Self::collect_address_taken_expr(cond, out);
+                Self::collect_address_taken_expr(then_expr, out);
+                Self::collect_address_taken_expr(else_expr, out);
+            }
+            CExpr::Call { func, args } => {
+                Self::collect_address_taken_expr(func, out);
+                for arg in args {
+                    Self::collect_address_taken_expr(arg, out);
+                }
+            }
+            CExpr::Index { array, index } => {
+                Self::collect_address_taken_expr(array, out);
+                Self::collect_address_taken_expr(index, out);
+            }
+            CExpr::Member { object, .. } => Self::collect_address_taken_expr(object, out),
+            CExpr::Arrow { pointer, .. } => Self::collect_address_taken_expr(pointer, out),
+            CExpr::CompoundLiteral { init, .. } => {
+                for item in init {
+                    Self::collect_address_taken_initializer(item, out);
+                }
+            }
+            CExpr::Generic {
+                control,
+                associations,
+            } => {
+                Self::collect_address_taken_expr(control, out);
+                for (_, result) in associations {
+                    Self::collect_address_taken_expr(result, out);
+                }
+            }
+            CExpr::StmtExpr(stmts) => {
+                for stmt in stmts {
+                    Self::collect_address_taken_stmt(stmt, out);
+                }
+            }
+            // `sizeof(expr)` does not evaluate its operand, so an `&x` under
+            // sizeof does not make x aliased at run time.
+            CExpr::SizeOf(SizeOfArg::Type(_) | SizeOfArg::Expr(_))
+            | CExpr::IntLit(_)
+            | CExpr::UIntLit(_)
+            | CExpr::FloatLit(_)
+            | CExpr::CharLit(_)
+            | CExpr::StringLit(_)
+            | CExpr::Var(_)
+            | CExpr::AlignOf(_) => {}
+        }
     }
 
     /// Generate a fresh variable name
@@ -173,6 +449,56 @@ impl VCGen {
         });
     }
 
+    /// Close the loop-variant snapshot variable in every VC emitted by the
+    /// extra `wp_stmt` pass that computes the variant's post-body value.
+    ///
+    /// That pass (see `wp_while`) re-walks the loop body with `variant <
+    /// snapshot` as the postcondition, so it re-emits obligations. Each one is
+    /// either:
+    ///
+    /// * a byte-identical copy of an obligation the invariant-preservation pass
+    ///   over the same body already emitted (side conditions — UB, memory
+    ///   safety, assertions — do not depend on the postcondition): dropped, it
+    ///   carries no new information; or
+    /// * a genuinely new obligation mentioning `snapshot` — e.g. a nested
+    ///   loop's `inner_I ∧ ¬inner_cond → variant < snapshot` exit link. Here
+    ///   `snapshot` is a rigid unknown: it denotes the outer loop head's
+    ///   variant value, and the state this obligation is stated in is NOT that
+    ///   state, so the defining equation may not be substituted in. It is
+    ///   universally quantified instead, which is sound and fails closed (the
+    ///   obligation is discharged only if the inner invariant genuinely carries
+    ///   the information).
+    ///
+    /// SOUNDNESS: never substitute the variant expression for `snapshot` in
+    /// these — the program variables it mentions have moved on.
+    fn close_snapshot_vcs(&mut self, mark: usize, snapshot: &str) {
+        for i in (mark..self.vcs.len()).rev() {
+            let is_duplicate = self.vcs[..mark].iter().any(|prev| {
+                prev.kind == self.vcs[i].kind
+                    && prev.description == self.vcs[i].description
+                    && prev.obligation == self.vcs[i].obligation
+            });
+            if is_duplicate {
+                self.vcs.remove(i);
+            } else if self.spec_mentions_var(&self.vcs[i].obligation, snapshot) {
+                let obligation = std::mem::replace(&mut self.vcs[i].obligation, Spec::True);
+                self.vcs[i].obligation = Spec::forall(snapshot, CType::int(), obligation);
+            }
+        }
+    }
+
+    /// Does `var` occur free in `spec`?
+    ///
+    /// Decided through `subst_var` itself, with two distinct sentinels: the
+    /// smart constructors it rebuilds through (`Spec::and`, `Spec::or`) may
+    /// normalize, but they normalize both results identically, so the two
+    /// substitutions differ exactly when a free occurrence was replaced. This
+    /// also inherits `subst_var`'s shadowing rules for free.
+    fn spec_mentions_var(&self, spec: &Spec, var: &str) -> bool {
+        self.subst_var(spec, var, &Spec::Int(i64::MIN))
+            != self.subst_var(spec, var, &Spec::Int(i64::MAX))
+    }
+
     /// Emit an `Unsupported` obligation for a construct the verifier cannot
     /// reason about soundly. Reported as `Unknown`, this forces the enclosing
     /// function to be NOT verified (fail-closed) rather than silently skipping
@@ -193,6 +519,15 @@ impl VCGen {
     pub fn gen_function(&mut self, func: &FuncDef, spec: &FuncSpec) -> Vec<VC> {
         self.vcs.clear();
         self.path_condition.clear();
+        self.prepare_function_objects(func);
+
+        // `terminates P` is an authority-bearing total-correctness claim, not
+        // an assumption.  Until termination evidence is linked into this WP,
+        // accepting the parsed clause would silently prove only partial
+        // correctness.  Keep the syntax but fail closed per use.
+        if spec.terminates.is_some() {
+            self.add_unsupported("terminates clause: termination proof is not linked");
+        }
 
         // Start with precondition as assumption
         for req in &spec.requires {
@@ -261,12 +596,42 @@ impl VCGen {
             }
 
             CStmt::Decl(decl) => {
-                // wp(T x = e, Q) = Q[e/x] if initialized, otherwise Q
+                // wp(T x = e, Q) = Q[(T)e/x] for the bounded scalar lane.
                 if let Some(Initializer::Expr(init)) = &decl.init {
                     // SOUNDNESS (hole 1): the initializer is evaluated, so emit
                     // its UB obligations (e.g. `int x = a/b;` needs `b != 0`).
                     self.check_expr_ub(init);
-                    self.substitute(postcond, &decl.name, init)
+                    if init.has_side_effects() {
+                        self.add_unsupported(
+                            "side effect in declaration initializer: state sequencing not modeled",
+                        );
+                        return postcond.clone();
+                    }
+                    if let Some(value) = self.initializer_value(decl, init) {
+                        self.substitute(postcond, &decl.name, &value)
+                    } else {
+                        postcond.clone()
+                    }
+                } else if decl.init.is_some() {
+                    self.add_unsupported(
+                        "aggregate/designated declaration initializer: state update not modeled",
+                    );
+                    postcond.clone()
+                } else if matches!(decl.storage, StorageClass::Auto | StorageClass::Register) {
+                    // Reading an indeterminate automatic object is UB.  This WP
+                    // does not yet track definite initialization, so it cannot
+                    // distinguish a later initialized read from an unsafe one.
+                    self.add_unsupported(
+                        "uninitialized automatic object: definite initialization not tracked",
+                    );
+                    postcond.clone()
+                } else if matches!(
+                    decl.storage,
+                    StorageClass::Static | StorageClass::ThreadLocal
+                ) && decl.ty.is_integer()
+                {
+                    // Static/thread-local integer objects are zero-initialized.
+                    self.substitute(postcond, &decl.name, &CExpr::int(0))
                 } else {
                     postcond.clone()
                 }
@@ -290,6 +655,10 @@ impl VCGen {
                 // SOUNDNESS (hole 1): the condition is evaluated, so emit its UB
                 // obligations (e.g. `if (a/b)` needs `b != 0`).
                 self.check_expr_ub(cond);
+                self.reject_unmodeled_effects(
+                    cond,
+                    "side effect in if condition: conditional state update not modeled",
+                );
                 let cond_spec = self.expr_to_spec(cond);
                 let wp_then = self.wp_stmt(then_stmt, postcond, loop_spec);
 
@@ -346,7 +715,12 @@ impl VCGen {
                     // so emit its UB obligations even in `ensures`-only
                     // functions (e.g. `return a/b;` needs `b != 0`).
                     self.check_expr_ub(e);
-                    self.substitute_result(postcond, e)
+                    self.reject_unmodeled_effects(
+                        e,
+                        "side effect in return expression: state update not modeled",
+                    );
+                    let value = self.return_value(e).unwrap_or_else(|| e.clone());
+                    self.substitute_result(postcond, &value)
                 } else {
                     postcond.clone()
                 }
@@ -363,6 +737,15 @@ impl VCGen {
                 // Continue jumps to loop condition check
                 // Need loop invariant
                 if let Some(ls) = loop_spec {
+                    if ls.variant.is_some() {
+                        // The existing variant pass computes wp(body, V<V0),
+                        // but `continue` jumps to the condition/update edge.
+                        // Until that edge is explicit, it cannot retain total-
+                        // correctness authority.
+                        self.add_unsupported(
+                            "continue with loop variant: backedge identity not modeled",
+                        );
+                    }
                     if ls.invariant.is_empty() {
                         Spec::True
                     } else {
@@ -389,6 +772,10 @@ impl VCGen {
                 // SOUNDNESS (hole 1): the switch controlling expression is
                 // evaluated, so emit its UB obligations.
                 self.check_expr_ub(cond);
+                self.reject_unmodeled_effects(
+                    cond,
+                    "side effect in switch condition: state update not modeled",
+                );
                 let cond_spec = self.expr_to_spec(cond);
 
                 // Extract cases from switch body
@@ -485,7 +872,27 @@ impl VCGen {
                     if let Some(Initializer::Expr(init)) = &decl.init {
                         // SOUNDNESS (hole 1): each initializer is evaluated.
                         self.check_expr_ub(init);
-                        q = self.substitute(&q, &decl.name, init);
+                        if init.has_side_effects() {
+                            self.add_unsupported(
+                                "side effect in declaration initializer: state sequencing not modeled",
+                            );
+                        } else if let Some(value) = self.initializer_value(decl, init) {
+                            q = self.substitute(&q, &decl.name, &value);
+                        }
+                    } else if decl.init.is_some() {
+                        self.add_unsupported(
+                            "aggregate/designated declaration initializer: state update not modeled",
+                        );
+                    } else if matches!(decl.storage, StorageClass::Auto | StorageClass::Register) {
+                        self.add_unsupported(
+                            "uninitialized automatic object: definite initialization not tracked",
+                        );
+                    } else if matches!(
+                        decl.storage,
+                        StorageClass::Static | StorageClass::ThreadLocal
+                    ) && decl.ty.is_integer()
+                    {
+                        q = self.substitute(&q, &decl.name, &CExpr::int(0));
                     }
                 }
                 q
@@ -529,6 +936,10 @@ impl VCGen {
         // SOUNDNESS (hole 1): the loop condition is evaluated on every
         // iteration test, so emit its UB obligations (e.g. `while (1/0)`).
         self.check_expr_ub(cond);
+        self.reject_unmodeled_effects(
+            cond,
+            "side effect in loop condition: backedge state update not modeled",
+        );
         let cond_spec = self.expr_to_spec(cond);
 
         // If we have a loop specification, use it
@@ -569,20 +980,47 @@ impl VCGen {
 
             // 4. If there's a variant, it decreases and stays non-negative
             if let Some(variant) = &ls.variant {
-                let variant_var = self.fresh_var("variant");
-                let old_variant = Spec::Let {
-                    var: variant_var.clone(),
-                    value: Box::new(variant.clone()),
-                    body: Box::new(Spec::True),
-                };
+                // SOUNDNESS: the decrease obligation must compare the variant's
+                // value AFTER the body against its value BEFORE the body. This
+                // WP calculus threads state by substituting into the
+                // postcondition, so the post-body value is obtained by running
+                // `wp_stmt` over the body with `variant < snapshot` as the
+                // postcondition: the body's assignments rewrite the LEFT
+                // operand (the variant) while `snapshot` — a rigid logic
+                // variable no C statement can assign to — is left alone.
+                //
+                // The snapshot name is deliberately NOT a valid C identifier so
+                // that no program variable can ever collide with (and thereby
+                // capture) it during that substitution pass.
+                //
+                // Previously this compared the variant against a variable that
+                // was never bound to anything (the binding `Spec::Let` was
+                // built and then discarded), so the obligation said nothing
+                // about termination.
+                let snapshot = self.fresh_var(SNAPSHOT_BASE);
+                let mark = self.vcs.len();
+                let wp_decrease = self.wp_stmt(
+                    body,
+                    &Spec::lt(variant.clone(), Spec::var(&snapshot)),
+                    Some(ls),
+                );
+                self.close_snapshot_vcs(mark, &snapshot);
 
-                // Variant decreases
+                // At the loop head the snapshot *is* the variant expression, so
+                // the binder is eliminated by substitution
+                // (`\let x = e; P` ≡ `P[e/x]`). This keeps the obligation
+                // quantifier-free, and — unlike a `Spec::Let`, which the
+                // translation layer maps to an opaque `Spec.unsupported.Let`
+                // constant — leaves it in a shape the prover can discharge.
+                let decrease = self.subst_var(&wp_decrease, &snapshot, variant);
+
+                // Variant decreases: I ∧ cond → wp(body, variant < variant@head)
                 self.add_vc(
                     VCKind::LoopVariantDecreases,
                     "Loop variant decreases",
                     Spec::implies(
                         Spec::and(vec![invariant.clone(), cond_spec.clone()]),
-                        Spec::lt(variant.clone(), Spec::var(&variant_var)),
+                        decrease,
                     ),
                     None,
                 );
@@ -597,8 +1035,6 @@ impl VCGen {
                     ),
                     None,
                 );
-
-                let _ = old_variant; // Suppress unused warning
             }
 
             // WP of loop is the invariant (caller must establish it)
@@ -705,6 +1141,488 @@ impl VCGen {
         }
     }
 
+    fn compound_base_op(op: BinOp) -> Option<BinOp> {
+        match op {
+            BinOp::AddAssign => Some(BinOp::Add),
+            BinOp::SubAssign => Some(BinOp::Sub),
+            BinOp::MulAssign => Some(BinOp::Mul),
+            BinOp::DivAssign => Some(BinOp::Div),
+            BinOp::ModAssign => Some(BinOp::Mod),
+            BinOp::BitAndAssign => Some(BinOp::BitAnd),
+            BinOp::BitOrAssign => Some(BinOp::BitOr),
+            BinOp::BitXorAssign => Some(BinOp::BitXor),
+            BinOp::ShlAssign => Some(BinOp::Shl),
+            BinOp::ShrAssign => Some(BinOp::Shr),
+            _ => None,
+        }
+    }
+
+    fn type_is_volatile(ty: &CType) -> bool {
+        match ty {
+            CType::Qualified {
+                ty, is_volatile, ..
+            } => *is_volatile || Self::type_is_volatile(ty),
+            _ => false,
+        }
+    }
+
+    fn cast_for_conversion(expr: CExpr, from: &CType, to: &CType) -> CExpr {
+        if from.is_compatible(to) {
+            expr
+        } else {
+            CExpr::cast(to.unqualified().clone(), expr)
+        }
+    }
+
+    fn reject_unmodeled_effects(&mut self, expr: &CExpr, description: &str) {
+        if expr.has_side_effects() {
+            self.add_unsupported(description);
+        }
+    }
+
+    /// Apply the scalar initialization conversion represented by this WP.
+    /// Aggregate, pointer/floating, volatile, alias-reading, and untyped cases
+    /// are deliberately outside the authority lane and emit Unsupported.
+    fn initializer_value(&mut self, decl: &VarDecl, init: &CExpr) -> Option<CExpr> {
+        if matches!(decl.storage, StorageClass::Auto | StorageClass::Register)
+            && Self::expr_reads_object(init, &decl.name)
+        {
+            // The declarator's scope already includes its initializer, so
+            // `int x = x;` reads the new indeterminate x (and a same-name
+            // shadow cannot be resolved by this non-scope-indexed WP).
+            self.add_unsupported(
+                "self-referential automatic initializer: object identity/initialization not modeled",
+            );
+            return None;
+        }
+        if Self::type_is_volatile(&decl.ty) || !decl.ty.is_integer() {
+            self.add_unsupported(
+                "declaration initializer outside the bounded integer-scalar WP lane",
+            );
+            return None;
+        }
+        if !self.compound_rhs_is_stable(init) {
+            self.add_unsupported(
+                "declaration initializer reads aliased, volatile, or unmodelled state",
+            );
+            return None;
+        }
+        let Some(source_ty) = self.wp_expr_type(init) else {
+            self.add_unsupported("declaration initializer type could not be established");
+            return None;
+        };
+        if !source_ty.is_integer() {
+            self.add_unsupported(
+                "declaration initializer outside the bounded integer-scalar WP lane",
+            );
+            return None;
+        }
+        Some(Self::cast_for_conversion(
+            init.clone(),
+            &source_ty,
+            &decl.ty,
+        ))
+    }
+
+    fn expr_reads_object(expr: &CExpr, object: &str) -> bool {
+        match expr {
+            CExpr::Var(name) => name == object,
+            CExpr::UnaryOp {
+                op: UnaryOp::AddrOf,
+                operand,
+            } if matches!(operand.as_ref(), CExpr::Var(_)) => false,
+            CExpr::UnaryOp { operand, .. } | CExpr::Cast { expr: operand, .. } => {
+                Self::expr_reads_object(operand, object)
+            }
+            CExpr::BinOp { left, right, .. } => {
+                Self::expr_reads_object(left, object) || Self::expr_reads_object(right, object)
+            }
+            CExpr::Conditional {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                Self::expr_reads_object(cond, object)
+                    || Self::expr_reads_object(then_expr, object)
+                    || Self::expr_reads_object(else_expr, object)
+            }
+            CExpr::Call { func, args } => {
+                Self::expr_reads_object(func, object)
+                    || args.iter().any(|arg| Self::expr_reads_object(arg, object))
+            }
+            CExpr::Index { array, index } => {
+                Self::expr_reads_object(array, object) || Self::expr_reads_object(index, object)
+            }
+            CExpr::Member { object: base, .. } => Self::expr_reads_object(base, object),
+            CExpr::Arrow { pointer, .. } => Self::expr_reads_object(pointer, object),
+            CExpr::CompoundLiteral { init, .. } => init
+                .iter()
+                .any(|item| Self::initializer_reads_object(item, object)),
+            CExpr::Generic { associations, .. } => associations
+                .iter()
+                .any(|(_, selected)| Self::expr_reads_object(selected, object)),
+            CExpr::StmtExpr(_) => true,
+            // sizeof(expr) does not evaluate its operand.
+            CExpr::SizeOf(_)
+            | CExpr::IntLit(_)
+            | CExpr::UIntLit(_)
+            | CExpr::FloatLit(_)
+            | CExpr::CharLit(_)
+            | CExpr::StringLit(_)
+            | CExpr::AlignOf(_) => false,
+        }
+    }
+
+    fn initializer_reads_object(init: &Initializer, object: &str) -> bool {
+        match init {
+            Initializer::Expr(expr) => Self::expr_reads_object(expr, object),
+            Initializer::Designated { designator, init } => {
+                Self::designator_reads_object(designator, object)
+                    || Self::initializer_reads_object(init, object)
+            }
+            Initializer::List(items) => items
+                .iter()
+                .any(|item| Self::initializer_reads_object(item, object)),
+        }
+    }
+
+    fn designator_reads_object(designator: &Designator, object: &str) -> bool {
+        match designator {
+            Designator::Field(_) => false,
+            Designator::Index(index) => Self::expr_reads_object(index, object),
+            Designator::Chain(parts) => parts
+                .iter()
+                .any(|part| Self::designator_reads_object(part, object)),
+        }
+    }
+
+    /// Materialize the function return assignment conversion where the static
+    /// types are known.  Side effects are rejected by the caller; an unknown or
+    /// incompatible conversion also loses authority rather than reusing an
+    /// entry-state expression as though no conversion occurred.
+    fn return_value(&mut self, expr: &CExpr) -> Option<CExpr> {
+        let Some(target_ty) = self.function_return_type.clone() else {
+            self.add_unsupported("function return type is unavailable to WP");
+            return None;
+        };
+        let Some(source_ty) = self.wp_expr_type(expr) else {
+            self.add_unsupported("return expression type could not be established");
+            return None;
+        };
+        if source_ty.is_integer() && target_ty.is_integer() {
+            return Some(Self::cast_for_conversion(
+                expr.clone(),
+                &source_ty,
+                &target_ty,
+            ));
+        }
+        if source_ty.is_compatible(&target_ty) {
+            Some(expr.clone())
+        } else {
+            self.add_unsupported("return assignment conversion is not modeled by WP");
+            None
+        }
+    }
+
+    /// Infer just enough static type information for the certified
+    /// compound-assignment lane. Returning `None` is intentional: the caller
+    /// emits `Unsupported` and therefore cannot grant proof authority.
+    fn wp_expr_type(&self, expr: &CExpr) -> Option<CType> {
+        match expr {
+            CExpr::IntLit(value) if i32::try_from(*value).is_ok() => Some(CType::int()),
+            CExpr::UIntLit(value) if u32::try_from(*value).is_ok() => Some(CType::uint()),
+            CExpr::FloatLit(_) => Some(CType::Float(crate::types::FloatKind::Double)),
+            // C character constants have type int (C11 6.4.4.4p10).
+            CExpr::CharLit(_) => Some(CType::int()),
+            CExpr::StringLit(_) => Some(CType::ptr(CType::char())),
+            CExpr::Var(name) => {
+                if self.ambiguous_variables.contains(name) {
+                    None
+                } else {
+                    self.variable_types.get(name).cloned()
+                }
+            }
+            CExpr::BinOp { op, left, right } => {
+                let left_ty = self.wp_expr_type(left)?;
+                if op.is_assignment() {
+                    return Some(left_ty);
+                }
+                if op.is_comparison() || op.is_logical() {
+                    return Some(CType::int());
+                }
+                let right_ty = self.wp_expr_type(right)?;
+                if op.is_shift() {
+                    if left_ty.is_integer() && right_ty.is_integer() {
+                        Some(left_ty.integer_promotion())
+                    } else {
+                        None
+                    }
+                } else if left_ty.is_arithmetic() && right_ty.is_arithmetic() {
+                    Some(left_ty.usual_arithmetic_conversion(&right_ty))
+                } else {
+                    None
+                }
+            }
+            CExpr::UnaryOp { op, operand } => {
+                let operand_ty = self.wp_expr_type(operand)?;
+                match op {
+                    UnaryOp::Deref => operand_ty.pointee().cloned(),
+                    UnaryOp::AddrOf => Some(CType::ptr(operand_ty)),
+                    UnaryOp::LogNot => Some(CType::int()),
+                    UnaryOp::Neg | UnaryOp::Pos | UnaryOp::BitNot => operand_ty
+                        .is_integer()
+                        .then(|| operand_ty.integer_promotion()),
+                    UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
+                        Some(operand_ty)
+                    }
+                }
+            }
+            CExpr::Conditional {
+                then_expr,
+                else_expr,
+                ..
+            } => {
+                let then_ty = self.wp_expr_type(then_expr)?;
+                let else_ty = self.wp_expr_type(else_expr)?;
+                if then_ty.is_arithmetic() && else_ty.is_arithmetic() {
+                    Some(then_ty.usual_arithmetic_conversion(&else_ty))
+                } else if then_ty.is_compatible(&else_ty) {
+                    Some(then_ty)
+                } else {
+                    None
+                }
+            }
+            CExpr::Cast { ty, expr } => {
+                let source_ty = self.wp_expr_type(expr)?;
+                (ty.is_integer() && source_ty.is_integer()).then(|| ty.clone())
+            }
+            CExpr::CompoundLiteral { ty, .. } => Some(ty.clone()),
+            CExpr::SizeOf(_) | CExpr::AlignOf(_) => Some(CType::size_t()),
+            CExpr::Index { array, .. } => {
+                let array_ty = self.wp_expr_type(array)?;
+                array_ty.element().or_else(|| array_ty.pointee()).cloned()
+            }
+            CExpr::Member { object, field } => self
+                .wp_expr_type(object)?
+                .get_field(field)
+                .map(|(_, info)| info.ty.clone()),
+            CExpr::Arrow { pointer, field } => self
+                .wp_expr_type(pointer)?
+                .pointee()?
+                .get_field(field)
+                .map(|(_, info)| info.ty.clone()),
+            CExpr::Call { .. }
+            | CExpr::Generic { .. }
+            | CExpr::StmtExpr(_)
+            | CExpr::IntLit(_)
+            | CExpr::UIntLit(_) => None,
+        }
+    }
+
+    /// The RHS value must be represented by stable scalar symbols in this WP.
+    /// Reading through an alias, from a volatile object, or from an object whose
+    /// scope identity is ambiguous would let an earlier unmodelled store change
+    /// the value while the formula continued to use the entry-state symbol.
+    fn compound_rhs_is_stable(&self, expr: &CExpr) -> bool {
+        match expr {
+            CExpr::IntLit(_)
+            | CExpr::UIntLit(_)
+            | CExpr::FloatLit(_)
+            | CExpr::CharLit(_)
+            | CExpr::StringLit(_)
+            | CExpr::SizeOf(_)
+            | CExpr::AlignOf(_) => true,
+            CExpr::Var(name) => {
+                !self.ambiguous_variables.contains(name)
+                    && !self.address_taken.contains(name)
+                    && self
+                        .variable_types
+                        .get(name)
+                        .is_some_and(|ty| !Self::type_is_volatile(ty) && ty.is_integer())
+            }
+            CExpr::BinOp { op, left, right } => {
+                !op.is_assignment()
+                    && self.compound_rhs_is_stable(left)
+                    && self.compound_rhs_is_stable(right)
+            }
+            CExpr::UnaryOp { op, operand } => {
+                !matches!(
+                    op,
+                    UnaryOp::Deref
+                        | UnaryOp::AddrOf
+                        | UnaryOp::PreInc
+                        | UnaryOp::PreDec
+                        | UnaryOp::PostInc
+                        | UnaryOp::PostDec
+                ) && self.compound_rhs_is_stable(operand)
+            }
+            CExpr::Conditional {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                self.compound_rhs_is_stable(cond)
+                    && self.compound_rhs_is_stable(then_expr)
+                    && self.compound_rhs_is_stable(else_expr)
+            }
+            CExpr::Cast { expr, .. } => self.compound_rhs_is_stable(expr),
+            CExpr::Call { .. }
+            | CExpr::Index { .. }
+            | CExpr::Member { .. }
+            | CExpr::Arrow { .. }
+            | CExpr::CompoundLiteral { .. }
+            | CExpr::Generic { .. }
+            | CExpr::StmtExpr(_) => false,
+        }
+    }
+
+    /// Compute the stored value of `x op= rhs` for the bounded, sound lane.
+    /// C11 6.5.16.2 evaluates the old lvalue value and RHS before one store,
+    /// performs the operator's promotions/conversions, then converts the result
+    /// back to the lvalue type. We materialize those conversions explicitly.
+    fn compound_assignment_value(
+        &mut self,
+        op: BinOp,
+        left: &CExpr,
+        right: &CExpr,
+    ) -> Option<(String, CExpr)> {
+        let base_op = Self::compound_base_op(op)?;
+        let CExpr::Var(name) = left else {
+            self.add_unsupported(
+                "compound assignment to complex lvalue: alias/write effect not modeled",
+            );
+            return None;
+        };
+        if self.ambiguous_variables.contains(name) {
+            self.add_unsupported(
+                "compound assignment to shadowed object: scope identity not modeled",
+            );
+            return None;
+        }
+        if self.address_taken.contains(name) {
+            self.add_unsupported(
+                "compound assignment to aliased object: memory substitution not authoritative",
+            );
+            return None;
+        }
+        let Some(left_ty) = self.variable_types.get(name).cloned() else {
+            self.add_unsupported("compound assignment to object with unknown declared type");
+            return None;
+        };
+        if Self::type_is_volatile(&left_ty) {
+            self.add_unsupported(
+                "compound assignment to volatile object: observable access not modeled",
+            );
+            return None;
+        }
+        if !left_ty.is_integer() {
+            self.add_unsupported("compound assignment outside the bounded integer-scalar WP lane");
+            return None;
+        }
+        // A nested assignment, increment, call, or statement expression can
+        // change the old lvalue/RHS values or introduce unspecified sequencing.
+        // This lane represents one pre-write RHS value, so fail closed instead
+        // of silently reusing the post-side-effect symbolic variable.
+        if right.has_side_effects() {
+            self.add_unsupported(
+                "side effect inside compound-assignment RHS: evaluation order not modeled",
+            );
+            return None;
+        }
+        if !self.compound_rhs_is_stable(right) {
+            self.add_unsupported(
+                "compound-assignment RHS reads aliased, volatile, or unmodelled state",
+            );
+            return None;
+        }
+        let Some(right_ty) = self.wp_expr_type(right) else {
+            self.add_unsupported(
+                "compound-assignment RHS type/conversions could not be established",
+            );
+            return None;
+        };
+        if !right_ty.is_integer() {
+            self.add_unsupported("compound assignment outside the bounded integer-scalar WP lane");
+            return None;
+        }
+
+        let (operation_ty, converted_right_ty) = if base_op.is_shift() {
+            (left_ty.integer_promotion(), right_ty.integer_promotion())
+        } else {
+            let common = left_ty.usual_arithmetic_conversion(&right_ty);
+            (common.clone(), common)
+        };
+        if !operation_ty.is_integer() || !converted_right_ty.is_integer() {
+            self.add_unsupported("compound-assignment integer conversions were not closed");
+            return None;
+        }
+
+        let converted_left = Self::cast_for_conversion(CExpr::var(name), &left_ty, &operation_ty);
+        let converted_right =
+            Self::cast_for_conversion(right.clone(), &right_ty, &converted_right_ty);
+        let operation = CExpr::binop(base_op, converted_left, converted_right);
+        let stored = Self::cast_for_conversion(operation, &operation_ty, &left_ty);
+        Some((name.clone(), stored))
+    }
+
+    /// Compute the stored value of a plain scalar assignment.  Syntactic
+    /// substitution is authoritative only for one unambiguous, non-aliased,
+    /// non-volatile integer object and a stable, side-effect-free RHS.
+    fn plain_assignment_value(&mut self, left: &CExpr, right: &CExpr) -> Option<(String, CExpr)> {
+        let CExpr::Var(name) = left else {
+            self.add_unsupported("assignment to complex lvalue: memory write effect not modeled");
+            return None;
+        };
+        if right.has_side_effects() {
+            self.add_unsupported(
+                "side effect inside assignment RHS: evaluation/state sequencing not modeled",
+            );
+            return None;
+        }
+        if self.ambiguous_variables.contains(name) {
+            self.add_unsupported("assignment to shadowed object: scope identity not modeled");
+            return None;
+        }
+        if self.address_taken.contains(name) {
+            self.add_unsupported(
+                "assignment to aliased object: memory substitution not authoritative",
+            );
+            return None;
+        }
+        let Some(left_ty) = self.variable_types.get(name).cloned() else {
+            // `wp_stmt` remains a public diagnostic primitive and some unit
+            // fixtures call it without `gen_function`'s type preparation.  We
+            // retain its historical symbolic substitution, but the Unsupported
+            // row means this path can never certify a function.
+            self.add_unsupported("assignment to object with unknown declared type");
+            return Some((name.clone(), right.clone()));
+        };
+        if Self::type_is_volatile(&left_ty) {
+            self.add_unsupported("assignment to volatile object: observable access not modeled");
+            return None;
+        }
+        if !left_ty.is_integer() {
+            self.add_unsupported("assignment outside the bounded integer-scalar WP lane");
+            return None;
+        }
+        if !self.compound_rhs_is_stable(right) {
+            self.add_unsupported("assignment RHS reads aliased, volatile, or unmodelled state");
+            return None;
+        }
+        let Some(right_ty) = self.wp_expr_type(right) else {
+            self.add_unsupported("assignment RHS type/conversion could not be established");
+            return None;
+        };
+        if !right_ty.is_integer() {
+            self.add_unsupported("assignment outside the bounded integer-scalar WP lane");
+            return None;
+        }
+        Some((
+            name.clone(),
+            Self::cast_for_conversion(right.clone(), &right_ty, &left_ty),
+        ))
+    }
+
     /// Compute WP for expressions with side effects.
     ///
     /// This has two responsibilities kept strictly separate:
@@ -723,33 +1641,46 @@ impl VCGen {
                 left,
                 right,
             } => {
-                // wp(x = e, Q) = Q[e/x]. UB (RHS eval + write-target validity)
-                // was already emitted by `check_expr_ub` above.
-                if let CExpr::Var(name) = left.as_ref() {
-                    self.substitute(postcond, name, right)
+                // UB (RHS eval + write-target validity) was already emitted by
+                // `check_expr_ub`.  The state transformation is authoritative
+                // only in the bounded scalar lane.
+                if let Some((name, stored_value)) =
+                    self.plain_assignment_value(left.as_ref(), right.as_ref())
+                {
+                    self.substitute(postcond, &name, &stored_value)
                 } else {
-                    // Complex LHS (e.g., *p = e, a[i] = e): the write's memory
-                    // effect is not tracked by substitution, so the WP is the
-                    // postcondition unchanged. The write-target memory-safety
-                    // obligation was emitted by `check_expr_ub`.
+                    // Every refusal emits Unsupported.  Retaining Q is only a
+                    // diagnostic approximation and cannot mint authority.
+                    postcond.clone()
+                }
+            }
+
+            CExpr::BinOp { op, left, right } if Self::compound_base_op(*op).is_some() => {
+                if let Some((name, stored_value)) = self.compound_assignment_value(*op, left, right)
+                {
+                    self.substitute(postcond, &name, &stored_value)
+                } else {
+                    // Every refusal above emits Unsupported, so retaining Q as
+                    // a diagnostic approximation cannot mint authority.
                     postcond.clone()
                 }
             }
 
             CExpr::UnaryOp { op, operand } => match op {
-                crate::expr::UnaryOp::PreInc | crate::expr::UnaryOp::PostInc => {
-                    if let CExpr::Var(name) = operand.as_ref() {
-                        // x++ or ++x: Q[x+1/x]
-                        let incremented = CExpr::add(CExpr::var(name), CExpr::int(1));
-                        self.substitute(postcond, name, &incremented)
+                UnaryOp::PreInc | UnaryOp::PostInc => {
+                    if let Some((name, incremented)) =
+                        self.compound_assignment_value(BinOp::AddAssign, operand, &CExpr::int(1))
+                    {
+                        self.substitute(postcond, &name, &incremented)
                     } else {
                         postcond.clone()
                     }
                 }
-                crate::expr::UnaryOp::PreDec | crate::expr::UnaryOp::PostDec => {
-                    if let CExpr::Var(name) = operand.as_ref() {
-                        let decremented = CExpr::sub(CExpr::var(name), CExpr::int(1));
-                        self.substitute(postcond, name, &decremented)
+                UnaryOp::PreDec | UnaryOp::PostDec => {
+                    if let Some((name, decremented)) =
+                        self.compound_assignment_value(BinOp::SubAssign, operand, &CExpr::int(1))
+                    {
+                        self.substitute(postcond, &name, &decremented)
                     } else {
                         postcond.clone()
                     }
@@ -759,7 +1690,10 @@ impl VCGen {
 
             CExpr::Call { func, args } => {
                 // Function call: check precondition, assume postcondition. Arg
-                // UB was already emitted by `check_expr_ub`.
+                // UB was already emitted by `check_expr_ub`.  Callee assigns /
+                // heap effects are not applied to Q yet, so even a known spec
+                // is diagnostic-only and must not carry proof authority.
+                self.add_unsupported("function call state effects are not represented in WP");
                 if let CExpr::Var(func_name) = func.as_ref() {
                     if let Some(func_spec) = self.func_specs.get(func_name).cloned() {
                         // Convert actual arguments to Spec for substitution
@@ -804,9 +1738,17 @@ impl VCGen {
                 postcond.clone()
             }
 
-            // All other expression shapes contribute no state transformation;
-            // their UB obligations were emitted by `check_expr_ub` above.
-            _ => postcond.clone(),
+            // All other expression shapes contribute no modeled state
+            // transformation.  A nested assignment/inc/call/comma/statement
+            // expression must therefore fail closed rather than retain Q.
+            _ => {
+                if expr.has_side_effects() {
+                    self.add_unsupported(
+                        "expression side effects are not represented by the selected WP lane",
+                    );
+                }
+                postcond.clone()
+            }
         }
     }
 
@@ -846,6 +1788,13 @@ impl VCGen {
                 if op.is_assignment() {
                     self.check_assign_lhs_ub(left);
                     self.check_expr_ub(right);
+                    // `x op= y` computes the same binary operation as `x op
+                    // y` before converting and storing. The operation's own UB
+                    // (overflow, zero divisor, invalid shift) is therefore live
+                    // even though the RHS alone is harmless.
+                    if let Some(base_op) = Self::compound_base_op(*op) {
+                        self.emit_binary_op_ub(base_op, left, right);
+                    }
                     return;
                 }
 
@@ -853,54 +1802,23 @@ impl VCGen {
                 self.check_expr_ub(left);
                 self.check_expr_ub(right);
 
-                match op {
-                    BinOp::Div | BinOp::Mod => {
-                        // SOUNDNESS: division / modulo by zero is UB. We check
-                        // the primary, commonly-reachable side condition
-                        // (`divisor != 0`) so the canonical safe program
-                        // `//@ requires b != 0; return a/b;` verifies. The
-                        // pathological `INT_MIN / -1` (and `% -1`) overflow is a
-                        // secondary UB deliberately NOT emitted here: emitting it
-                        // would make that canonical safe program fail (a=INT_MIN
-                        // is not excluded by `b != 0`), which is over-tightening.
-                        let divisor = self.expr_to_spec(right);
-                        self.add_vc(
-                            VCKind::NoUB,
-                            "Divisor is non-zero",
-                            Spec::ne(divisor, Spec::int(0)),
-                            None,
-                        );
-                    }
-                    BinOp::Add | BinOp::Sub | BinOp::Mul => {
-                        // SOUNDNESS: signed integer overflow is UB.
-                        self.emit_signed_overflow_vc(*op, left, right);
-                    }
-                    BinOp::Shl | BinOp::Shr => {
-                        // SOUNDNESS: shift by a negative amount or by >= the
-                        // operand width is UB (C11 6.5.7). Left-shift that
-                        // overflows the signed result is also UB, but the
-                        // shift-amount bound is the primary reachable case.
-                        let amount = self.expr_to_spec(right);
-                        self.add_vc(
-                            VCKind::NoUB,
-                            "Shift amount is non-negative",
-                            Spec::ge(amount.clone(), Spec::int(0)),
-                            None,
-                        );
-                        self.add_vc(
-                            VCKind::NoUB,
-                            "Shift amount is less than operand width",
-                            Spec::lt(amount, Spec::int(Self::SIGNED_INT_BITS)),
-                            None,
-                        );
-                    }
-                    _ => {}
-                }
+                self.emit_binary_op_ub(*op, left, right);
             }
 
             CExpr::UnaryOp { op, operand } => {
+                if op.is_inc_dec() {
+                    self.check_assign_lhs_ub(operand);
+                    let arithmetic = if matches!(op, UnaryOp::PreInc | UnaryOp::PostInc) {
+                        BinOp::Add
+                    } else {
+                        BinOp::Sub
+                    };
+                    self.emit_binary_op_ub(arithmetic, operand, &CExpr::int(1));
+                    return;
+                }
+
                 self.check_expr_ub(operand);
-                if matches!(op, crate::expr::UnaryOp::Deref) {
+                if matches!(op, UnaryOp::Deref) {
                     // SOUNDNESS: dereference requires a valid pointer.
                     let ptr_spec = self.expr_to_spec(operand);
                     self.add_vc(
@@ -909,6 +1827,8 @@ impl VCGen {
                         Spec::valid(ptr_spec),
                         None,
                     );
+                } else if matches!(op, UnaryOp::Neg) {
+                    self.emit_unary_neg_ub(operand);
                 }
             }
 
@@ -969,27 +1889,233 @@ impl VCGen {
                 );
             }
 
-            // Constructs the walker does not model precisely. Recurse where we
-            // can; the enclosing statement/expr handling emits an Unsupported
-            // obligation for genuinely-unmodeled forms.
-            CExpr::CompoundLiteral { .. } | CExpr::Generic { .. } | CExpr::StmtExpr(_) => {}
+            // These evaluated forms need selection/initializer/control-flow
+            // semantics that this recursive UB walker does not carry.  Their
+            // presence is therefore authority-blocking, not silently skipped.
+            CExpr::CompoundLiteral { .. } => {
+                self.add_unsupported("compound literal evaluation is not modeled by UB/WP");
+            }
+            CExpr::Generic { .. } => {
+                self.add_unsupported("generic selection evaluation is not modeled by UB/WP");
+            }
+            CExpr::StmtExpr(_) => {
+                self.add_unsupported("statement expression evaluation is not modeled by UB/WP");
+            }
         }
     }
 
-    /// Bit-width used for the conservative signed-overflow / shift-amount
-    /// bounds. The C surface promotes narrow integer operands to `int` before
-    /// arithmetic (C11 6.3.1.1), so `int` (32-bit) is the correct default for
-    /// the common case; wider `long`/`long long` operations produce a stricter
-    /// (i.e. more-easily-provable) obligation than reality, never a weaker one.
-    const SIGNED_INT_BITS: i64 = 32;
-    const SIGNED_INT_MIN: i64 = i32::MIN as i64;
-    const SIGNED_INT_MAX: i64 = i32::MAX as i64;
+    /// Emit only the UB introduced by the binary operator itself. Operand UB
+    /// is handled by the recursive walker, which lets compound assignment
+    /// reuse this for its implicit `old_lhs op rhs` without evaluating the RHS
+    /// twice.
+    fn emit_binary_op_ub(&mut self, op: BinOp, left: &CExpr, right: &CExpr) {
+        let conversion = self.integer_binary_conversion(op, left, right);
+        match op {
+            BinOp::Div | BinOp::Mod => {
+                let (operation_ty, converted_left, converted_right) =
+                    if let Some(parts) = conversion {
+                        parts
+                    } else {
+                        self.add_unsupported(
+                            "division/remainder operand types or conversions are not established",
+                        );
+                        // Keep the historical zero-divisor diagnostic too; the
+                        // Unsupported row is what closes unknown authority.
+                        let divisor = self.expr_to_spec(right);
+                        self.add_vc(
+                            VCKind::NoUB,
+                            "Divisor is non-zero",
+                            Spec::ne(divisor, Spec::int(0)),
+                            None,
+                        );
+                        return;
+                    };
+                let dividend = self.expr_to_spec(&converted_left);
+                let divisor = self.expr_to_spec(&converted_right);
+                self.add_vc(
+                    VCKind::NoUB,
+                    "Divisor is non-zero",
+                    Spec::ne(divisor.clone(), Spec::int(0)),
+                    None,
+                );
+                if let Some((minimum, _)) = Self::signed_integer_bounds(&operation_ty) {
+                    // C11 6.5.5p5: when the mathematical quotient cannot be
+                    // represented, both `/` and `%` have undefined behavior.
+                    self.add_vc(
+                        VCKind::NoUB,
+                        "Signed division/remainder excludes MIN divided by -1",
+                        Spec::not(Spec::and(vec![
+                            Spec::eq(dividend, Spec::int(minimum)),
+                            Spec::eq(divisor, Spec::int(-1)),
+                        ])),
+                        None,
+                    );
+                }
+            }
+            BinOp::Add | BinOp::Sub | BinOp::Mul => {
+                if let Some((operation_ty, converted_left, converted_right)) = conversion {
+                    // Unsigned arithmetic wraps.  Only a signed operation has
+                    // the representability side condition.
+                    if let Some((minimum, maximum)) = Self::signed_integer_bounds(&operation_ty) {
+                        self.emit_signed_overflow_vc(
+                            op,
+                            &converted_left,
+                            &converted_right,
+                            minimum,
+                            maximum,
+                        );
+                    }
+                } else {
+                    self.add_unsupported(
+                        "arithmetic operand types or conversions are not established",
+                    );
+                }
+            }
+            BinOp::Shl | BinOp::Shr => {
+                let Some((operation_ty, converted_left, converted_right)) = conversion else {
+                    self.add_unsupported("shift operand types or promotions are not established");
+                    let amount = self.expr_to_spec(right);
+                    self.add_vc(
+                        VCKind::NoUB,
+                        "Shift amount is non-negative",
+                        Spec::ge(amount.clone(), Spec::int(0)),
+                        None,
+                    );
+                    self.add_vc(
+                        VCKind::NoUB,
+                        "Shift amount is less than operand width",
+                        Spec::lt(amount, Spec::int(Self::SIGNED_INT_BITS)),
+                        None,
+                    );
+                    return;
+                };
+                let amount = self.expr_to_spec(&converted_right);
+                let Some(width) = Self::integer_width(&operation_ty) else {
+                    self.add_unsupported("shift operation width is not established");
+                    return;
+                };
+                self.add_vc(
+                    VCKind::NoUB,
+                    "Shift amount is non-negative",
+                    Spec::ge(amount.clone(), Spec::int(0)),
+                    None,
+                );
+                self.add_vc(
+                    VCKind::NoUB,
+                    "Shift amount is less than operand width",
+                    Spec::lt(amount.clone(), Spec::int(width)),
+                    None,
+                );
+                if op == BinOp::Shl {
+                    if let Some((_, maximum)) = Self::signed_integer_bounds(&operation_ty) {
+                        let value = self.expr_to_spec(&converted_left);
+                        self.add_vc(
+                            VCKind::NoUB,
+                            "Signed left-shift operand is non-negative",
+                            Spec::ge(value.clone(), Spec::int(0)),
+                            None,
+                        );
+                        self.add_vc(
+                            VCKind::NoUB,
+                            "Signed left-shift result is representable",
+                            Spec::le(Spec::binop(BinOp::Shl, value, amount), Spec::int(maximum)),
+                            None,
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 
-    /// Emit a signed-overflow obligation `INT_MIN <= (a op b) <= INT_MAX` for an
+    /// Apply integer promotions / usual arithmetic conversions and return the
+    /// operation type plus explicit converted operands.
+    fn integer_binary_conversion(
+        &self,
+        op: BinOp,
+        left: &CExpr,
+        right: &CExpr,
+    ) -> Option<(CType, CExpr, CExpr)> {
+        let left_ty = self.wp_expr_type(left)?;
+        let right_ty = self.wp_expr_type(right)?;
+        if !left_ty.is_integer() || !right_ty.is_integer() {
+            return None;
+        }
+        if op.is_shift() {
+            let operation_ty = left_ty.integer_promotion();
+            let right_promoted = right_ty.integer_promotion();
+            Some((
+                operation_ty.clone(),
+                Self::cast_for_conversion(left.clone(), &left_ty, &operation_ty),
+                Self::cast_for_conversion(right.clone(), &right_ty, &right_promoted),
+            ))
+        } else {
+            let operation_ty = left_ty.usual_arithmetic_conversion(&right_ty);
+            Some((
+                operation_ty.clone(),
+                Self::cast_for_conversion(left.clone(), &left_ty, &operation_ty),
+                Self::cast_for_conversion(right.clone(), &right_ty, &operation_ty),
+            ))
+        }
+    }
+
+    fn signed_integer_bounds(ty: &CType) -> Option<(i64, i64)> {
+        match ty.unqualified() {
+            CType::Int(kind, Signedness::Signed) => Some((
+                i64::try_from(kind.signed_min()).ok()?,
+                i64::try_from(kind.signed_max()).ok()?,
+            )),
+            CType::Enum { .. } => Self::signed_integer_bounds(&ty.enum_underlying_type()),
+            _ => None,
+        }
+    }
+
+    fn integer_width(ty: &CType) -> Option<i64> {
+        match ty.unqualified() {
+            CType::Int(kind, _) => i64::try_from(kind.size().checked_mul(8)?).ok(),
+            CType::Enum { .. } => Self::integer_width(&ty.enum_underlying_type()),
+            _ => None,
+        }
+    }
+
+    fn emit_unary_neg_ub(&mut self, operand: &CExpr) {
+        let Some(source_ty) = self.wp_expr_type(operand) else {
+            self.add_unsupported("unary negation operand type/promotion is not established");
+            return;
+        };
+        if !source_ty.is_integer() {
+            // Floating negation does not have the signed-integer MIN edge.
+            return;
+        }
+        let promoted = source_ty.integer_promotion();
+        if let Some((minimum, _)) = Self::signed_integer_bounds(&promoted) {
+            let converted = Self::cast_for_conversion(operand.clone(), &source_ty, &promoted);
+            self.add_vc(
+                VCKind::NoUB,
+                "Signed unary negation excludes the minimum value",
+                Spec::ne(self.expr_to_spec(&converted), Spec::int(minimum)),
+                None,
+            );
+        }
+    }
+
+    /// Conservative fallback width used only when a direct diagnostic caller
+    /// has not supplied the function's type environment.  Such a path also
+    /// emits Unsupported, so it cannot carry authority.
+    const SIGNED_INT_BITS: i64 = 32;
+
+    /// Emit a signed-overflow obligation `MIN <= (a op b) <= MAX` for an
     /// arithmetic operator, using the full-precision Spec arithmetic so the
     /// obligation is discharged when the operands are appropriately bounded by
     /// a precondition/invariant, and fails when overflow is reachable.
-    fn emit_signed_overflow_vc(&mut self, op: BinOp, left: &CExpr, right: &CExpr) {
+    fn emit_signed_overflow_vc(
+        &mut self,
+        op: BinOp,
+        left: &CExpr,
+        right: &CExpr,
+        minimum: i64,
+        maximum: i64,
+    ) {
         let l = self.expr_to_spec(left);
         let r = self.expr_to_spec(right);
         let result = Spec::binop(op, l, r);
@@ -997,8 +2123,8 @@ impl VCGen {
             VCKind::NoUB,
             "Signed arithmetic does not overflow",
             Spec::and(vec![
-                Spec::le(Spec::int(Self::SIGNED_INT_MIN), result.clone()),
-                Spec::le(result, Spec::int(Self::SIGNED_INT_MAX)),
+                Spec::le(Spec::int(minimum), result.clone()),
+                Spec::le(result, Spec::int(maximum)),
             ]),
             None,
         );
@@ -1013,7 +2139,7 @@ impl VCGen {
         match lhs {
             CExpr::Var(_) => {}
             CExpr::UnaryOp {
-                op: crate::expr::UnaryOp::Deref,
+                op: UnaryOp::Deref,
                 operand,
             } => {
                 self.check_expr_ub(operand);
@@ -1040,6 +2166,17 @@ impl VCGen {
                 let l = self.expr_to_spec(left);
                 let r = self.expr_to_spec(right);
                 Spec::binop(*op, l, r)
+            }
+            CExpr::UnaryOp {
+                op: UnaryOp::Neg,
+                operand,
+            } if matches!(operand.as_ref(), CExpr::IntLit(_)) => {
+                let CExpr::IntLit(value) = operand.as_ref() else {
+                    unreachable!("guard establishes integer literal")
+                };
+                value
+                    .checked_neg()
+                    .map_or_else(|| Spec::Expr(expr.clone()), Spec::Int)
             }
             CExpr::UnaryOp { op, operand } => Spec::UnaryOp {
                 op: *op,

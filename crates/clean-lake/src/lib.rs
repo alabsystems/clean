@@ -27,7 +27,10 @@ pub mod toml_config;
 pub mod workspace;
 
 pub use build::{BuildContext, BuildOptions, BuildResult};
-pub use config::{LakeConfig, LakeScript, LeanExe, LeanLib, LeanTest, PackageConfig};
+pub use config::{
+    LakeConfig, LakeScript, LakefileParseMode, LeanExe, LeanLib, LeanTest, PackageConfig,
+    SkippedConstruct,
+};
 pub use error::{LakeError, LakeResult};
 pub use fetch::{FetchManager, ResolveResult, ResolvedPackage, UpdateResult, UpdateStatus};
 pub use glob::{parse_globs, GlobKind, ModuleGlob};

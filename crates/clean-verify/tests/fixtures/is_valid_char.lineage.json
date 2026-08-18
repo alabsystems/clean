@@ -1,0 +1,271 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "measured": "2026-08-14",
+ "build": {
+  "clean_repo_HEAD": "a00e00d16",
+  "trust_repo_rev_of_sealed_compiler": "6b868c1b332ffe3f4dec2935e69f042d78d5d31b",
+  "trustc": "$HOME/trust/scratchpad/lane1chain/tc (SEALED snapshot, unique dylib leaf; `seal_driver.sh guard` PASS before the run)",
+  "trustc_dylib_sha256": "c999eaaf02d4e63d4555d7683477cb1f7dc1231466d3ad7a91ddae1482c414f8",
+  "trustc_rustc_main_sha256": "b8e388c396f60483dbd58c1032479d9b714fa288ffb03e95f0564acd8d2d74cc",
+  "compiler_identified_by_behaviour_not_stamp": "The sealed driver registers TEN -Ztrust-sat-perturb classes (enum-reshape enum-case-value enum-ctor enum-disc-index switch-map enum-payload marker-order marker-drop agg-field-order marker-arm) and emits under body_lineage.v2; build/<host>/stage1/bin/trustc registers six and knows none of the four marker-* / agg-field-order classes. `trustc -vV`'s date stamp is NOT a source identity, so the driver was identified by what it does, and SEALED before measuring because another lane replaces the shared live driver without warning.",
+  "command": "CARGO_TARGET_DIR=<tgt> RUSTC=<sealed tc> RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Ztrust-verify=off -Cdebuginfo=0' RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir>",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build - only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
+  "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED cfg-split body was compiled rather than its debug twin.",
+  "crate_totals": "bodies 13771 / lowered 9067 / spliced 7571 / derived-MIR agreed 1542 / mismatch 0 / markers_exact 1084 (27 NON-vacuous) / lineage rows 13143",
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 19
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "5b3c183c0a6b5d876961c152e5f5ab76de84e56a57c85dc6f81835c484e4ec42",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+  "trust_ir_bin_sha256": "029d2cd32fb2026844a7e1c8e50573ffc3eadd3e8cca712a5c5381e4c40f214d",
+  "note": "Three builds in three separate CARGO_TARGET_DIRs: the flip build, its repeat, and the negative control. All three emit a byte-identical coverage.json and trust-ir dump, so `lineage` is a measurement rather than one observation."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "event_for_this_body_present": false
+ },
+ "def_path": "env::native_reducers_char::is_valid_char",
+ "def_index": 15081,
+ "func_id": 4359,
+ "instr_count": 15,
+ "lowered": true,
+ "spliced": true,
+ "lineage": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "8 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "12 marker line(s) identical",
+  "markers_exact_is_vacuous_here": "NOT VACUOUS: `12 marker line(s) identical`, the second longest marker sequence of any chained body. 1057 of the 1084 markers_exact rows in this crate compare two EMPTY sequences and this is not one of them."
+ },
+ "interpreter_differential": {
+  "verdict": "agreed",
+  "samples": 5,
+  "detail": "THIR-trust-ir == MIR-trust-ir on 5 sampled input(s) (differential interpretation)"
+ },
+ "bodyful_reachable_closure": "PASS - the body makes NO calls (resolved 0, extern_decls 0, unresolved 0), so the reachable callee closure is the body itself and contains no declaration-only entry. This is the A0 criterion that FAILS for level::Level::is_zero, whose closure reaches Option::as_deref / Option::expect (6 resolved calls at this HEAD).",
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "ctfe": false,
+  "asserts": 0,
+  "flipped_so_far": 194,
+  "lineage": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+  "matches_artifact_lineage": true,
+  "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15081 ~ clean_kernel[4676]::env::native_reducers_char::is_valid_char), asserts=0, lineage=sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b, flipped_so_far=194",
+  "occurrences_of_this_did_in_flip_log": 1
+ },
+ "candidate_selection": {
+  "criteria": "derived-MIR agreed AND markers_exact AND unsupported [] AND spliced AND a codegen flip event whose lineage equals the coverage row's AND zero calls",
+  "bodies_satisfying_the_first_four": 1084,
+  "of_those_with_a_clean_kernel_codegen_flip_event": 177,
+  "of_those_with_zero_calls": 177,
+  "markers_exact_rows_total": 1084,
+  "markers_exact_rows_that_are_NON_vacuous": 27,
+  "why_non_vacuity_matters": "1057 of the 1084 markers_exact rows carry `0 marker line(s) identical`, i.e. markers_exact is a comparison of two EMPTY sequences - a true statement about nothing. A page that quotes 1084 as `markers agree` is quoting the vacuous majority.",
+  "measured_utc_date": "2026-08-14",
+  "measurement_provenance": "RE-DERIVED by this lane from a fresh whole-crate dump against a freshly sealed driver, not inherited from data/crystal_flip_census_lane2_2026-08-13.json. An independently written parser joined flip events to coverage rows by def_index WITHIN the compile.",
+  "disagreements_with_the_committed_census": [
+   "bodies 13771 here vs 13770 in data/crystal_flip_census_lane2_2026-08-13.json; lowered 9067 vs 9066; spliced 7571 vs 7570; lineage rows 13143 vs 13142; derived-MIR agreed 1542 vs 1541. clean-kernel gained ONE more body between c4e33541d and this HEAD. Every def_index this lane cares about is UNCHANGED from the lane-2 census, so the new body sits later in the index space.",
+   "markers_exact 1084 here vs 1082 in the lane-2 census, vacuous 1057 vs 1055 -- and the NON-VACUOUS count is still 27. This is the second independent confirmation of the drift CRYSTAL_STATUS 4c predicted: a markers_exact gain is not evidence of a fidelity gain.",
+   "loud fallbacks 19 here vs 17 in the lane-2 census.",
+   "COST LAW: the lane-2 record (CRYSTAL_STATUS 3c, eval_ir_bvar_range.rs, bundles.rs) reads its 0.021 / 0.431 / 6.586 s at W = 8 / 12 / 16 as a `2^W law`. Re-measured here at FIXED width with a varying dividend, the cost of ir_wrap w n is LINEAR IN n and INDEPENDENT of w: 1.322 / 2.644 / 5.399 s at w = 64 for n = 7000 / 14000 / 28000, and 1.356 s at w = 8 for n = 7000. The earlier points varied width and dividend together (its dividend was 2^W - 1 each time), so the x15.3 it saw is the x16 in the DIVIDEND. The ~5-day extrapolation it drew stands, at ~9.6 days by this law. Operationally the difference is total: `wide type => unaffordable` is false and would have refused is_valid_char, which is at width 64 and chains."
+  ],
+  "why_this_body": "Of the 177 fully-chainable codegen-flipped bodies, exactly TWO contain a condbr (expr::bvar_in_range, already chained, and this one) and they are the only two carrying a short-circuit as real control flow. This one is at width 64 -- twice the other's -- has BOTH a `||` and a `&&`, is the only chainable body that puts a materialised constant in an icmp's LEFT operand, carries 12 real marker lines, and is the only condbr-carrying body for which a CONCRETE ir_eval witness is affordable at all (24.4 s at n = 65, measured; the other has none at any argument)."
+ },
+ "measurement_scope": "Every numeric and digest field on this page was measured on 2026-08-14 at the clean HEAD above against the SEALED stage1 driver above, whose `guard` returned PASS before the run. Nothing is carried forward from an earlier dated artifact; where this measurement disagrees with the committed census the disagreement is recorded in candidate_selection.disagreements_with_the_committed_census.",
+ "residue_cost_law_remeasured": {
+  "claim": "ir_wrap w n costs O(n) in the DIVIDEND and is INDEPENDENT of the width w.",
+  "measurements_seconds": {
+   "w64_n3": 0.01,
+   "w64_n7000": 1.322,
+   "w64_n14000": 2.644,
+   "w64_n28000": 5.399,
+   "w8_n7000": 1.356,
+   "w32_n55296": 11.123,
+   "w64_n55296": 10.909
+  },
+  "method": "One `Eq Nat (ir_wrap w n) n` declaration each in tests/evalir_scratchpad.rs, per-declaration wall clock, same spec build.",
+  "supersedes": "The `2^W law` recorded on 2026-08-13 (x15.3 per four bits at W = 8/12/16). Those three timings are real; the law read off them is not, because the dividend there was 2^W - 1 and moved with the width.",
+  "consequence": "`wide type => unaffordable` is false; `large CONSTANT => unaffordable` is true. This body is at width 64 with constants 55296/57343/1114112 and chains.",
+  "superseded_by": "residue_cost_law_after_the_folding_lemma (2026-08-15). Every row above was measured on an ir_div_go whose guard was ir_nat_ltb, a paired unary walk; the law is TRUE of that definition and the definition changed. Kept, not rewritten: it is the measurement that made this chain exist."
+ },
+ "witness_costs_seconds": {
+  "ir_eval_at_65": 24.4,
+  "ir_eval_at_0": 36.8,
+  "ir_eval_at_55296": 73.8,
+  "decide_c1_at_0": 21.1,
+  "decide_c2_at_0": 22.5,
+  "decide_c3_at_0": 439.8,
+  "note": "Exactly one concrete ir_eval witness is REGISTERED (n = 65). Any argument whose emitted path reaches bb4 must decide ir_vc_c3, whose dividend is 1114112, i.e. ~7.3 minutes on every Specification::new(). The other three paths are covered by PATH witnesses. SUPERSEDED 2026-08-15: these six rows were measured before the ir_wrap literal-folding lemma and are kept as the record of the wall. Four concrete ir_eval witnesses are now registered (65, 55296, 70000, 1114112) covering every emitted path; see witness_costs_seconds_after_the_folding_lemma."
+ },
+ "residue_cost_law_after_the_folding_lemma": {
+  "claim": "ir_wrap w n costs O(w + n/2^w): linear in the QUOTIENT, independent of the DIVIDEND. A residue whose quotient is zero -- every residue any chain in this program forces -- folds in ~0.01 s at any width and any literal.",
+  "lemma": "ir_nat_ltb_sub_eq : forall a b, Eq Bool (ir_nat_pos (Nat.sub b a)) (ir_nat_ltb a b). ir_div_go's guard is now ir_nat_ltb_sub; ir_div_go_guard restates the loop's unfolding equation with ir_nat_ltb back in it, so the substitution is kernel-checked rather than read off two definitions. No new accelerated constant: Nat.sub was already the outer operation of ir_nat_rem.",
+  "measurements_seconds": {
+   "before_w64_n57343_single": 14.923,
+   "after_w64_n57343_single": 0.009,
+   "before_w64_n57343_double": 24.973,
+   "after_w64_n57343_double": 0.01,
+   "after_w64_n1114112_double": 0.01,
+   "after_w32_n4294967295_double": 0.007,
+   "before_w8_n300_double_q1": 0.096,
+   "after_w8_n300_q1": 0.004,
+   "after_w16_n55296_q0": 0.005,
+   "after_w8_n55296_q216": 0.08,
+   "after_w8_n110592_q432": 0.159,
+   "after_w8_n221184_q864": 0.325
+  },
+  "method": "One `Eq Nat (ir_wrap w n) r` declaration each in tests/evalir_scratchpad.rs, per-declaration wall clock. The `before` rows are one process against origin/main@1ec739677; the `after` rows are one process against the same tree plus the lemma.",
+  "consequence": "The 24 s that ir_vc_split1 paid on every Specification::new() is 0.010 s, and the ~9.6-day sentinel residue of the fifth chain -- extrapolated, never measured -- is 0.007 s. Three concrete ir_eval witnesses are registered in eval_ir_bvar_range, which had none at any argument.",
+  "what_it_does_NOT_fix": "ir_nat_eqb still walks its FIRST operand unary, so the fifth chain's sentinel-TRUE path (end = 4294967295) has no concrete witness. Same technique, different theorem, not proved here."
+ },
+ "witness_costs_seconds_after_the_folding_lemma": {
+  "decide_c1_at_0": 0.008,
+  "decide_c2_at_0": 0.008,
+  "decide_c3_at_0": 0.008,
+  "ir_eval_at_65": 0.065,
+  "ir_eval_at_0": 0.052,
+  "ir_eval_at_55296": 19.106,
+  "ir_eval_at_70000": 31.404,
+  "ir_eval_at_1114112": 210.144,
+  "registered": [
+   "ir_vc_concrete_ascii (65)"
+  ],
+  "declined": "ir_eval at 55296 (19.106 s), at 70000 (31.404 s) and at 1114112 (210.144 s). All three RUN -- the residue wall is gone -- and all three were declined: covering this body's other condbr edges needs an argument above 0xD800 by construction, so 260 s on every Specification::new() against a lemma that saves 33-107 s of one. The fifth chain's three concrete witnesses ARE registered, at 0.1 s each, because its arguments are small.",
+  "why_these_are_not_zero": "The residue is no longer the cost: ir_int_cmp compares through ir_nat_ltb, which peels its FIRST operand -- the ARGUMENT -- one Nat.rec layer at a time, so a concrete execution costs about the code point. An ir_nat_ltb lemma of the same shape as ir_nat_ltb_sub_eq is what would make it free; ir_wrap's does not.",
+  "method": "One declaration each in tests/spec_scratchpad.rs against the full spec, per-declaration wall clock, on a box running six concurrent spec builds -- so these are upper bounds.",
+  "note_superseded": "SUPERSEDED 2026-08-15 (later, comparison lemmas). The three declined rows below were measured on a box carrying six concurrent spec builds and are upper bounds; the same three declarations are now REGISTERED, and both the walk baseline and the folded run were re-measured on one box in one window -- see witness_costs_seconds_after_the_comparison_lemmas."
+ },
+ "full_specification_new_seconds": {
+  "headline": "4 replicates each side, run 4-way concurrent in the same window on an otherwise quiet box: the distributions do not overlap.",
+  "pristine_1ec739677_wall": [
+   1600.0,
+   1600.4,
+   1608.0,
+   1610.4
+  ],
+  "with_the_lemma_wall": [
+   1540.4,
+   1546.5,
+   1548.7,
+   1556.3
+  ],
+  "pristine_mean_wall": 1604.7,
+  "with_the_lemma_mean_wall": 1548.0,
+  "saving_wall": 56.7,
+  "saving_percent": 3.53,
+  "pristine_mean_user_cpu": 1602.0,
+  "with_the_lemma_mean_user_cpu": 1545.6,
+  "saving_user_cpu": 56.4,
+  "earlier_single_run_pairs": "On a busier box the same comparison gave 1774.3 (pristine, solo) vs 1741.4 (lemma, paired) = 33 s, and 1847.9 (pristine, paired) vs 1741.4 = 107 s. The 4x4 matched set above is the estimate to quote.",
+  "evalir_flavour_wall": "7.1 s pristine -> 7.8 s with the lemma, matched pair. That bundle GAINS 0.7 s: it carries the five new declarations and forces no large residue, because the chains whose residues were the wall are Full-only stages.",
+  "corrects": "docs/CRYSTAL_STATUS.md brackets chains 6+7 at 'about 11 minutes added to every full Specification::new(), concentrated in one place: the width-64 residue of 57,343'. Removing that residue entirely is worth 57 s of a 1,605 s build -- 3.5%, not 42%. The bracket (a failing run against a green one) is honest as a bracket; the attribution inside it is not. The residue itself really is ~25 s once per build, exactly as the standalone measurement of it says.",
+  "method": "The printed 'one process-wide build took Ns' from cargo test --locked -p clean-verify --test {premise_witness_gate,vacuity_firewall,axiom_ratchet,proof_status_invariants}, four targets launched together. before is a pristine worktree at 1ec739677; after is the same tree plus the lemma and the three bvar_in_range witnesses.",
+  "superseded_note": "The rows below are the ir_wrap folding lemma's effect and remain true of it. The comparison lemmas that followed on 2026-08-15 have the OPPOSITE sign -- see full_specification_new_seconds_after_the_comparison_lemmas."
+ },
+ "witness_costs_seconds_after_the_comparison_lemmas": {
+  "lemmas": "ir_nat_ltb_walk_eq / ir_nat_eqb_walk_eq / ir_nat_leb_walk_eq (eval_ir_state): ir_nat_ltb, ir_nat_eqb and ir_nat_leb decide through Nat.sub and are kernel-checked equal to the paired unary walks, which are kept verbatim as ir_nat_ltb_walk / ir_nat_eqb_walk / ir_nat_leb_walk. Seven restatements put the walk back into what RUNS: ir_div_go_guard for the division loop and ir_icmp_{ult,ugt,ule,uge,eq,ne}_walk for the six integer icmp arms.",
+  "walk_baseline_same_box_same_window": {
+   "ir_eval_at_55296": 3.071,
+   "ir_eval_at_70000": 5.045,
+   "ir_eval_at_1114112": 33.752
+  },
+  "folded": {
+   "ir_eval_at_55296": 0.016,
+   "ir_eval_at_70000": 0.017,
+   "ir_eval_at_1114112": 0.016
+  },
+  "registered": [
+   "ir_vc_concrete_ascii (65)",
+   "ir_vc_concrete_surrogate (55296)",
+   "ir_vc_concrete_above_surrogate (70000)",
+   "ir_vc_concrete_out_of_range (1114112)"
+  ],
+  "declined": "none. All three declarations declined on cost by the previous lane are registered, and with ir_vc_concrete_ascii they execute EVERY emitted condbr edge at a real code point: 65 -> bb0/bb2, 55296 -> bb1/bb5 (short circuit), 70000 -> bb1/bb4 (upper bound holds), 1114112 -> bb1/bb4 (rejects).",
+  "fifth_chain_sentinel_path": "The other body the equality lemma unblocked. ir_eval bvar_in_range at (3, 1, 4294967295) had no concrete witness at ANY argument in this program's history: on the pristine tree the identical declaration ran 2857 s (47 min 37 s) without returning and was KILLED; folded it is 0.010 s. Registered as ir_br_concrete_unbounded, with ir_br_concrete_unbounded_below_start.",
+  "method": "One declaration each in tests/spec_scratchpad.rs against the full spec, per-declaration wall clock. Both columns on this box; the pristine worktree and the folded worktree ran their scratchpads in the same window."
+ },
+ "full_specification_new_seconds_after_the_comparison_lemmas": {
+  "headline": "A COST, not a saving: +5.13 s of wall and +5.10 s of CPU on a ~215 s Specification::new(), i.e. +2.4%. Three paired rounds, two replicates per side launched TOGETHER so both sides share one window at matched 4-way concurrency; sequential rounds on this box drifted by 20 s and cannot support a 5 s claim.",
+  "paired_rounds_wall": {
+   "round1_before": [
+    218.984,
+    218.985
+   ],
+   "round1_after": [
+    224.349,
+    224.291
+   ],
+   "round2_before": [
+    210.102,
+    209.901
+   ],
+   "round2_after": [
+    214.963,
+    215.279
+   ],
+   "round3_before": [
+    216.634,
+    217.085
+   ],
+   "round3_after": [
+    221.619,
+    221.945
+   ]
+  },
+  "paired_rounds_user_cpu": {
+   "round1_before": [
+    210.71,
+    210.81
+   ],
+   "round1_after": [
+    216.1,
+    216.15
+   ],
+   "round2_before": [
+    205.89,
+    205.58
+   ],
+   "round2_after": [
+    210.67,
+    210.82
+   ],
+   "round3_before": [
+    210.36,
+    210.82
+   ],
+   "round3_after": [
+    215.29,
+    215.7
+   ]
+  },
+  "cost_wall": 5.13,
+  "cost_user_cpu": 5.1,
+  "cost_percent": 2.4,
+  "declaration_count": "6207 -> 6223 (+16): 11 substrate declarations (2 retired, 13 added) and 5 concrete execution witnesses.",
+  "where_it_goes": "Measured, not attributed. A per-stage clock over all 160 stages on both trees in one window: exactly ONE stage moved -- add_eval_ir_contains, 1.822 -> 7.034 s at the SAME 28 declarations. Inside it: ir_fc_exact 0.893 -> 3.700, ir_fc_never_faults 0.449 -> 2.874, ir_fc_machine_sound 0.460 -> 2.866. That chain's A4 is an Eq.refl at SYMBOLIC bytes and its predicate's head is ir_nat_eqb; a subtraction equality test names BOTH operands TWICE (a-b and b-a) where the walk names each once, so the stuck term compared structurally is about twice the size. add_eval_ir_valid_char went DOWN, 0.651 -> 0.512 s, while gaining three executions.",
+  "priced_alternative": "Folding ir_nat_ltb alone buys all three is_valid_char witnesses (that body's three comparisons are all ult) at no measurable cost, and leaves the fifth chain's fourth path PATH-only. The trade taken is 5.1 s per full spec build for two executions of an emitted condbr edge no argument could reach before. Both agreement theorems are proved either way: a theorem costs nothing, the DEFINITION the machine runs is what costs.",
+  "method": "tests/zz_spec_clock-style harness: one Specification::new() per process, wall from Instant::now() around the build and user CPU from /usr/bin/time -p on the whole process."
+ }
+}

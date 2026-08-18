@@ -42,52 +42,18 @@ pub struct Range {
 }
 
 // ============================================================================
-// Interactive Goal Types
+// Interactive Goal Types (shared home: clean_elab::interactive_goals)
 // ============================================================================
 
-/// A bundle of hypotheses sharing the same type.
-///
-/// In Lean 4 infoview, `a b c : Nat` becomes one bundle with
-/// `names: ["a", "b", "c"]` and `type_: "Nat"`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InteractiveHypothesisBundle {
-    pub names: Vec<String>,
-    #[serde(rename = "type")]
-    pub type_: String,
-    #[serde(default)]
-    pub is_instance: bool,
-    #[serde(default)]
-    pub is_inserted: bool,
-}
-
-/// A single tactic goal with hypotheses and target type.
-///
-/// Mirrors `Lean.Widget.InteractiveGoal`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InteractiveGoal {
-    pub hyps: Vec<InteractiveHypothesisBundle>,
-    #[serde(rename = "type")]
-    pub type_: String,
-    /// `"⊢"` for standard goals, `"case <name>"` for named cases.
-    #[serde(default = "default_goal_prefix")]
-    pub goal_prefix: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
-    #[serde(default)]
-    pub is_converted: bool,
-}
-
-fn default_goal_prefix() -> String {
-    "\u{22a2}".to_string()
-}
-
-/// Response for `Lean.Widget.getInteractiveGoals`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InteractiveGoals {
-    pub goals: Vec<InteractiveGoal>,
-}
+// The interactive goal payloads and their plain-text rendering live in
+// `clean_elab::interactive_goals` — the single shared home used by both this
+// TCP/WebSocket JSON-RPC channel and the LSP `$/lean/rpc/call` channel
+// (`clean-lsp`), so the two protocols serve one data shape. Re-exported here
+// to keep existing `crate::rpc_goals::*` paths stable.
+pub use clean_elab::interactive_goals::{
+    render_goal_plain, render_goals_plain, InteractiveGoal, InteractiveGoals,
+    InteractiveHypothesisBundle,
+};
 
 // ============================================================================
 // Interactive Diagnostics Types
@@ -137,33 +103,6 @@ pub struct GetInteractiveDiagnosticsParams {
     pub text_document: TextDocumentIdentifier,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line_range: Option<(u32, u32)>,
-}
-
-// ============================================================================
-// Plain Goal Rendering
-// ============================================================================
-
-/// Render an [`InteractiveGoal`] as plain text matching Lean 4 `$/lean/plainGoal`.
-#[must_use]
-pub fn render_goal_plain(goal: &InteractiveGoal) -> String {
-    let mut lines: Vec<String> = goal
-        .hyps
-        .iter()
-        .map(|h| format!("{} : {}", h.names.join(" "), h.type_))
-        .collect();
-    lines.push(format!("{} {}", goal.goal_prefix, goal.type_));
-    lines.join("\n")
-}
-
-/// Render all goals as plain text separated by blank lines.
-/// Returns `None` when there are no goals.
-#[must_use]
-pub fn render_goals_plain(goals: &InteractiveGoals) -> Option<String> {
-    if goals.goals.is_empty() {
-        return None;
-    }
-    let rendered: Vec<String> = goals.goals.iter().map(render_goal_plain).collect();
-    Some(rendered.join("\n\n"))
 }
 
 // ============================================================================

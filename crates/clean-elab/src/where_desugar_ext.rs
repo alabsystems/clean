@@ -59,6 +59,93 @@ pub(crate) fn collect_free_idents(expr: &SurfaceExpr) -> HashSet<String> {
     free
 }
 
+/// Whether [`collect_free_idents`] can analyze `expr` COMPLETELY.
+///
+/// `collect_free_idents` documents itself as "may undercount edges, never
+/// overcount": its final match arm silently ignores constructs it does not
+/// model (`Proj`, `Do`, `StructLit`, `ByTactic`, `Explicit`, `NamedArg`,
+/// `InterpolatedStr`, `IfLet`, ...), so an identifier occurring only inside one
+/// of those is never reported.
+///
+/// Undercounting is sound for the dependency analysis the collector was written
+/// for. It is NOT sound for callers that must see every use — notably
+/// `used_section_binders`, where a missed identifier means a section `variable`
+/// is not prepended and the declaration registers with the WRONG ARITY.
+/// Measured: `variable {α : Type} (p : α × α)` + `def f : α × α := (p.2, p.1)`
+/// dropped `p` (it appears only as a `Proj` receiver), so `f` took no explicit
+/// argument and every later application failed with `TooManyArguments`.
+///
+/// Such callers must consult this predicate and fall back to including
+/// everything rather than trusting an undercount.
+#[must_use]
+pub(crate) fn free_idents_are_complete(expr: &SurfaceExpr) -> bool {
+    let mut complete = true;
+    free_idents_complete_inner(expr, &mut complete);
+    complete
+}
+
+fn free_idents_complete_inner(expr: &SurfaceExpr, complete: &mut bool) {
+    if !*complete {
+        return;
+    }
+    match expr {
+        SurfaceExpr::Ident(_, _)
+        | SurfaceExpr::Hole(_)
+        | SurfaceExpr::Lit(_, _)
+        | SurfaceExpr::Universe(_, _)
+        | SurfaceExpr::SyntheticSorry(_) => {}
+        SurfaceExpr::Lambda(_, binders, body)
+        | SurfaceExpr::PatternMatchLambda(_, binders, body)
+        | SurfaceExpr::Pi(_, binders, body) => {
+            for b in binders {
+                if let Some(ty) = &b.ty {
+                    free_idents_complete_inner(ty, complete);
+                }
+            }
+            free_idents_complete_inner(body, complete);
+        }
+        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
+            if let Some(ty) = &binder.ty {
+                free_idents_complete_inner(ty, complete);
+            }
+            free_idents_complete_inner(val, complete);
+            free_idents_complete_inner(body, complete);
+        }
+        SurfaceExpr::App(_, func, args) => {
+            free_idents_complete_inner(func, complete);
+            for arg in args {
+                free_idents_complete_inner(&arg.expr, complete);
+            }
+        }
+        SurfaceExpr::Arrow(_, lhs, rhs) => {
+            free_idents_complete_inner(lhs, complete);
+            free_idents_complete_inner(rhs, complete);
+        }
+        SurfaceExpr::Ascription(_, e, ty) => {
+            free_idents_complete_inner(e, complete);
+            free_idents_complete_inner(ty, complete);
+        }
+        SurfaceExpr::If(_, c, t, e) => {
+            free_idents_complete_inner(c, complete);
+            free_idents_complete_inner(t, complete);
+            free_idents_complete_inner(e, complete);
+        }
+        SurfaceExpr::Match(_, _, scrutinee, arms) => {
+            free_idents_complete_inner(scrutinee, complete);
+            for arm in arms {
+                free_idents_complete_inner(&arm.body, complete);
+            }
+        }
+        SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::OutParam(_, inner)
+        | SurfaceExpr::SemiOutParam(_, inner) => {
+            free_idents_complete_inner(inner, complete);
+        }
+        // Everything else is exactly what the collector's final arm swallows.
+        _ => *complete = false,
+    }
+}
+
 fn collect_free_idents_inner(
     expr: &SurfaceExpr,
     free: &mut HashSet<String>,

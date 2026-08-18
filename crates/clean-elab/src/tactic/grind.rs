@@ -68,8 +68,25 @@ pub fn grind_with_config(state: &mut ProofState, config: GrindConfig) -> TacticR
     }
 
     let mut splits_remaining = config.max_splits;
+    let trace = std::env::var_os("CLEAN_GRIND_TRACE").is_some();
+    macro_rules! gtrace {
+        ($msg:expr) => {
+            if trace {
+                eprintln!("grind-trace: {}", $msg);
+            }
+        };
+    }
 
     // Phase 0: Normalize — substitute known equalities (e.g., x = 5 → replace x)
+    if trace {
+        let target = state
+            .goals
+            .front()
+            .map(|g| format!("{:?}", g.target))
+            .unwrap_or_default();
+        let head: String = target.chars().take(120).collect();
+        eprintln!("grind-trace: phase0 normalize goal={head}");
+    }
     stack_safe(|| grind_normalize(state));
 
     if state.is_complete() {
@@ -78,6 +95,7 @@ pub fn grind_with_config(state: &mut ProofState, config: GrindConfig) -> TacticR
 
     // Phase 1: Preprocessing — simplify goal and hypotheses
     if config.use_simp {
+        gtrace!("phase1 simp preprocess");
         stack_safe(|| grind_preprocess(state, &config));
     }
 
@@ -86,6 +104,7 @@ pub fn grind_with_config(state: &mut ProofState, config: GrindConfig) -> TacticR
     }
 
     // Phase 2: Core grind loop — CC + E-matching + case splitting
+    gtrace!("phase2 core");
     stack_safe(|| grind_core(state, &config, 0, &mut splits_remaining))
 }
 
@@ -137,17 +156,27 @@ fn grind_core(
         return Err(grind_no_progress(GRIND_MAX_DEPTH_EXHAUSTED));
     }
 
+    let trace = std::env::var_os("CLEAN_GRIND_TRACE").is_some();
     // Step 1: Try immediate closers (stack_safe: closers may call whnf/is_def_eq)
+    if trace {
+        eprintln!("grind-trace: core depth={depth} step1 closers");
+    }
     if stack_safe(|| try_closers(state, config)) {
         return Ok(());
     }
 
     // Step 2: Congruence closure (stack_safe: CC may trigger deep type checker calls)
+    if trace {
+        eprintln!("grind-trace: core depth={depth} step2 cc");
+    }
     if config.use_cc && stack_safe(|| try_cc(state, config)) {
         return Ok(());
     }
 
     // Step 3: Automation engine (SMT + superposition via clean-auto)
+    if trace {
+        eprintln!("grind-trace: core depth={depth} step3 automation");
+    }
     if config.use_automation && stack_safe(|| try_automation_engine(state, config)) {
         return Ok(());
     }
@@ -157,6 +186,9 @@ fn grind_core(
         return Err(grind_no_progress(GRIND_SPLIT_LIMIT_EXHAUSTED));
     }
 
+    if trace {
+        eprintln!("grind-trace: core depth={depth} step4 splits");
+    }
     // Try splitting on disjunctions in hypotheses
     if config.split_disjunctions {
         if let Some(result) = try_split_disjunction(state, config, depth, splits_remaining) {
@@ -191,41 +223,57 @@ fn grind_no_progress(tactic: &'static str) -> TacticError {
 /// Try lightweight tactics to close the goal immediately.
 /// Returns `true` if the goal was closed.
 fn try_closers(state: &mut ProofState, config: &GrindConfig) -> bool {
+    let trace = std::env::var_os("CLEAN_GRIND_TRACE").is_some();
+    macro_rules! ctrace {
+        ($msg:expr) => {
+            if trace {
+                eprintln!("grind-trace: closer {}", $msg);
+            }
+        };
+    }
     // Reflexivity
+    ctrace!("rfl");
     if try_tactic_preserving_state(state, rfl) {
         return true;
     }
 
     // Assumption
+    ctrace!("assumption");
     if try_tactic_preserving_state(state, assumption) {
         return true;
     }
 
     // Trivial (True, empty goals)
+    ctrace!("trivial");
     if try_tactic_preserving_state(state, trivial) {
         return true;
     }
 
     // Contradiction
+    ctrace!("contradiction");
     if try_tactic_preserving_state(state, contradiction) {
         return true;
     }
 
     // Solve by elim with bounded depth
     let sbe_depth = config.solve_by_elim_depth;
+    ctrace!("triggered_solve_by_elim");
     if try_triggered_solve_by_elim(state, sbe_depth) {
         return true;
     }
+    ctrace!("solve_by_elim");
     if try_tactic_preserving_state(state, |s| solve_by_elim(s, sbe_depth)) {
         return true;
     }
 
     // Tauto for propositional reasoning
+    ctrace!("tauto");
     if config.use_tauto && try_tactic_preserving_state(state, tauto) {
         return true;
     }
 
     // Arithmetic closers: project normalization, raw mathverse, decide, dec_trivial.
+    ctrace!("arithmetic");
     if config.use_arithmetic_closers && try_arithmetic_closers(state) {
         return true;
     }
@@ -234,15 +282,27 @@ fn try_closers(state: &mut ProofState, config: &GrindConfig) -> bool {
 }
 
 fn try_arithmetic_closers(state: &mut ProofState) -> bool {
+    let trace = std::env::var_os("CLEAN_GRIND_TRACE").is_some();
+    macro_rules! atrace {
+        ($msg:expr) => {
+            if trace {
+                eprintln!("grind-trace: arith-closer {}", $msg);
+            }
+        };
+    }
+    atrace!("cert_mathverse");
     if try_tactic_preserving_state(state, cert_mathverse) {
         return true;
     }
+    atrace!("omega");
     if try_tactic_preserving_state(state, omega) {
         return true;
     }
+    atrace!("decide");
     if try_tactic_preserving_state(state, decide) {
         return true;
     }
+    atrace!("dec_trivial");
     if try_tactic_preserving_state(state, dec_trivial) {
         return true;
     }

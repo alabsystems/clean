@@ -44,7 +44,7 @@ fn add_decl_rejects_free_variable_in_type() {
         .expect_err("declaration type containing fvar must fail");
 
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name } if *decl_name == name),
+        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name, .. } if *decl_name == name),
         "expected ContainsFreeVar for {name:?}, got: {err:?}"
     );
 }
@@ -65,7 +65,7 @@ fn add_decl_rejects_free_variable_in_value() {
         .expect_err("declaration value containing fvar must fail");
 
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name } if *decl_name == name),
+        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name, .. } if *decl_name == name),
         "expected ContainsFreeVar for {name:?}, got: {err:?}"
     );
 }
@@ -259,7 +259,7 @@ fn add_decl_rejects_meta_tagged_fvar_in_type() {
         .expect_err("declaration with meta-tagged FVar in type must fail");
 
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name } if *decl_name == name),
+        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name, .. } if *decl_name == name),
         "expected ContainsFreeVar for meta-tagged FVar, got: {err:?}"
     );
 }
@@ -281,7 +281,7 @@ fn add_decl_rejects_meta_tagged_fvar_in_value() {
         .expect_err("declaration with meta-tagged FVar in value must fail");
 
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name } if *decl_name == name),
+        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name, .. } if *decl_name == name),
         "expected ContainsFreeVar for meta-tagged FVar, got: {err:?}"
     );
 }
@@ -302,7 +302,7 @@ fn add_decl_rejects_nested_fvar_in_app() {
         .expect_err("nested FVar must be caught by O(1) metadata check");
 
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name } if *decl_name == name),
+        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name, .. } if *decl_name == name),
         "expected ContainsFreeVar for nested FVar, got: {err:?}"
     );
 }
@@ -326,7 +326,7 @@ fn add_decl_rejects_deeply_nested_fvar_in_lambda() {
         .expect_err("deeply nested FVar must be caught");
 
     assert!(
-        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name } if *decl_name == name),
+        matches!(err, EnvError::ContainsFreeVar { name: ref decl_name, .. } if *decl_name == name),
         "expected ContainsFreeVar for deeply nested FVar, got: {err:?}"
     );
 }

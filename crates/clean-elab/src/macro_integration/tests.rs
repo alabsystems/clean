@@ -283,6 +283,105 @@ fn test_register_notation_prefix() {
 }
 
 #[test]
+fn test_scoped_notation_gated_by_current_namespace_and_activation() {
+    let mut ctx = MacroCtx::new();
+    let pattern = vec![NotationItem::Literal("two".to_string())];
+    let expansion = SurfaceExpr::Ident(Span::dummy(), "Two.mk".to_string());
+
+    ctx.register_scoped_notation("Foo", NotationKind::Notation, None, &pattern, &expansion)
+        .expect("scoped nullary notation should lower");
+
+    // Inert at root: not in the base registry, alias not visible.
+    assert!(
+        ctx.lookup_simple_notation("two").is_none(),
+        "scoped notation must be INERT at root without activation"
+    );
+
+    // Active while the declaring namespace is current …
+    ctx.set_current_namespace("Foo");
+    assert!(
+        ctx.lookup_simple_notation("two").is_some(),
+        "scoped notation must be active inside its declaring namespace"
+    );
+    // … or an ancestor of the current namespace.
+    ctx.set_current_namespace("Foo.Bar");
+    assert!(
+        ctx.lookup_simple_notation("two").is_some(),
+        "scoped notation must be active in child namespaces"
+    );
+    // A non-dot-boundary prefix must NOT activate (Foo vs Foobar).
+    ctx.set_current_namespace("Foobar");
+    assert!(
+        ctx.lookup_simple_notation("two").is_none(),
+        "`Foobar` must not activate `Foo`'s scoped notation"
+    );
+
+    // `open` activation is frame-bounded.
+    ctx.set_current_namespace("");
+    ctx.push_scoped_activation_frame();
+    ctx.activate_scoped_namespace("Foo");
+    assert!(
+        ctx.lookup_simple_notation("two").is_some(),
+        "activation must make the scoped notation visible"
+    );
+    ctx.pop_scoped_activation_frame();
+    assert!(
+        ctx.lookup_simple_notation("two").is_none(),
+        "popping the frame must deactivate the scoped notation"
+    );
+}
+
+#[test]
+fn test_scoped_infix_joins_effective_registry_only_when_active() {
+    let mut ctx = MacroCtx::new();
+    let pattern = vec![
+        NotationItem::Variable("a".to_string()),
+        NotationItem::Literal(" +++ ".to_string()),
+        NotationItem::Variable("b".to_string()),
+    ];
+    let expansion = SurfaceExpr::Ident(Span::dummy(), "myAdd".to_string());
+
+    ctx.register_scoped_notation("Foo", NotationKind::Infixl, Some(65), &pattern, &expansion)
+        .expect("scoped infixl should lower");
+
+    // The BASE registry never holds the scoped def.
+    assert!(
+        !ctx.registry()
+            .macro_names()
+            .iter()
+            .any(|n| n.contains("infixl") && n.contains("+++")),
+        "scoped notation must stay out of the base registry"
+    );
+
+    // Inactive: no effective registry is materialized.
+    assert!(
+        ctx.effective_registry.is_none(),
+        "no effective registry without an active scoped notation"
+    );
+
+    // Active: the effective registry holds the scoped def.
+    ctx.set_current_namespace("Foo");
+    let effective = ctx
+        .effective_registry
+        .as_ref()
+        .expect("activation must materialize the effective registry");
+    assert!(
+        effective
+            .macro_names()
+            .iter()
+            .any(|n| n.contains("infixl") && n.contains("+++")),
+        "active scoped notation must be in the effective registry"
+    );
+
+    // Deactivate: the effective registry is dropped again.
+    ctx.set_current_namespace("");
+    assert!(
+        ctx.effective_registry.is_none(),
+        "deactivation must drop the effective registry"
+    );
+}
+
+#[test]
 fn test_register_macro_declaration() {
     let mut ctx = MacroCtx::new();
 

@@ -12,6 +12,8 @@
 //! - `scripts`: Script listing, execution, and documentation
 //! - `cache`: Cache management and .olean pack/unpack/upload
 //! - `check`: Dry-run checks for build, test, and lint
+//! - `smoke`: Lake replacement smoke evidence generator (#3707)
+//! - `serve`: Lake-compatible editor entry point (stdio LSP server)
 
 mod build;
 mod cache;
@@ -21,10 +23,14 @@ mod goodness;
 mod lint;
 mod run;
 mod scripts;
+mod serve;
+mod smoke;
 mod verify_fresh;
 
+pub(crate) use serve::lake_serve;
+
 use crate::cli_args::{CacheCommands, LakeCommands, ScriptCommands};
-use clean_lake::{LakeConfig, LakeError};
+use clean_lake::{LakeConfig, LakeError, LakefileParseMode};
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 
@@ -38,10 +44,24 @@ const NO_LAKEFILE_HINT: &str = "No lakefile.toml or lakefile.lean found in curre
 ///
 /// On a missing lakefile this surfaces the friendly two-line hint mentioning
 /// both `lakefile.toml` and `lakefile.lean`; parse and IO errors propagate so
-/// malformed lakefiles still fail loudly.
+/// malformed lakefiles still fail loudly. Top-level `lakefile.lean` constructs
+/// the declarative parser skipped are surfaced as warnings by default;
+/// setting `CLEAN_LAKE_STRICT_LAKEFILE=1` upgrades them to a hard error.
 pub(super) fn load_project_config(cwd: &Path) -> anyhow::Result<LakeConfig> {
-    match LakeConfig::load_from_dir(cwd) {
-        Ok(config) => Ok(config),
+    load_project_config_with_mode(cwd, LakefileParseMode::from_env())
+}
+
+/// [`load_project_config`] with an explicit lakefile.lean parse mode (the
+/// public entry resolves the mode from `CLEAN_LAKE_STRICT_LAKEFILE`).
+fn load_project_config_with_mode(
+    cwd: &Path,
+    mode: LakefileParseMode,
+) -> anyhow::Result<LakeConfig> {
+    match LakeConfig::load_from_dir_with_mode(cwd, mode) {
+        Ok(config) => {
+            warn_skipped_constructs(&config);
+            Ok(config)
+        }
         Err(LakeError::LakefileNotFound(_)) => anyhow::bail!("{NO_LAKEFILE_HINT}"),
         Err(other) => Err(anyhow::Error::new(other)
             .context(format!("failed to load lakefile in {}", cwd.display()))),
@@ -53,11 +73,29 @@ pub(super) fn load_project_config(cwd: &Path) -> anyhow::Result<LakeConfig> {
 /// callers can fall through to their no-project branch, while still surfacing
 /// parse/IO errors so a malformed lakefile is never silently ignored.
 pub(super) fn try_load_project_config(cwd: &Path) -> anyhow::Result<Option<LakeConfig>> {
-    match LakeConfig::load_from_dir(cwd) {
-        Ok(config) => Ok(Some(config)),
+    match LakeConfig::load_from_dir_with_mode(cwd, LakefileParseMode::from_env()) {
+        Ok(config) => {
+            warn_skipped_constructs(&config);
+            Ok(Some(config))
+        }
         Err(LakeError::LakefileNotFound(_)) => Ok(None),
         Err(other) => Err(anyhow::Error::new(other)
             .context(format!("failed to load lakefile in {}", cwd.display()))),
+    }
+}
+
+/// Surface `lakefile.lean` constructs the declarative parser skipped as
+/// warnings so programmatic lakefiles no longer under-parse silently. In
+/// strict mode (`CLEAN_LAKE_STRICT_LAKEFILE=1`) parsing already failed inside
+/// `clean-lake` before this point, so a loaded config only ever carries
+/// lenient-mode diagnostics.
+fn warn_skipped_constructs(config: &LakeConfig) {
+    for skipped in &config.diagnostics {
+        eprintln!(
+            "warning: lakefile.lean:{}: skipped unrecognized top-level construct `{}` \
+             (set CLEAN_LAKE_STRICT_LAKEFILE=1 to make this an error)",
+            skipped.line, skipped.token
+        );
     }
 }
 
@@ -101,7 +139,8 @@ pub(crate) fn handle_lake_command(
             verbose,
             force,
             jobs,
-        } => build::lake_build(target, verbose, force, jobs, dir),
+            permissive_imports,
+        } => build::lake_build(target, verbose, force, jobs, permissive_imports, dir),
         LakeCommands::New { name, lib, exe } => build::lake_new(&name, lib, exe),
         LakeCommands::Clean { verbose } => build::lake_clean(verbose, dir),
         LakeCommands::Init { name } => build::lake_init(name, dir),
@@ -141,6 +180,7 @@ pub(crate) fn handle_lake_command(
         LakeCommands::Pack { output, verbose } => cache::lake_pack(output, verbose, dir),
         LakeCommands::Unpack { archive, verbose } => cache::lake_unpack(&archive, verbose, dir),
         LakeCommands::Upload { verbose, dry_run } => cache::lake_upload(verbose, dry_run, dir),
+        LakeCommands::Smoke { report, verbose } => smoke::lake_smoke(&report, verbose),
         LakeCommands::VerifyFresh {
             source_root,
             module,
@@ -153,6 +193,16 @@ pub(crate) fn handle_lake_command(
             constant,
             json,
         } => goodness::lake_goodness(module, olean_search_path, constant, json),
+        // Fail-closed guard, not a handler: `lake serve` runs the async stdio
+        // language server and is dispatched in `lib.rs::run()` BEFORE this
+        // synchronous Lake dispatcher (mirroring `clean lsp`). Reaching this
+        // arm means the async pre-dispatch was bypassed — refuse loudly
+        // instead of silently doing nothing.
+        LakeCommands::Serve { .. } => anyhow::bail!(
+            "`clean lake serve` must be dispatched through the async CLI entry point \
+             (lib.rs::run); the synchronous Lake dispatcher cannot host the stdio \
+             language server"
+        ),
     }
 }
 
@@ -171,5 +221,70 @@ fn handle_cache_command(cmd: CacheCommands, dir: Option<PathBuf>) -> anyhow::Res
         CacheCommands::Get { verbose } => cache::lake_cache_get(verbose, dir),
         CacheCommands::Put { verbose } => cache::lake_cache_put(verbose, dir),
         CacheCommands::Add { files, verbose } => cache::lake_cache_add(&files, verbose, dir),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A lakefile with a custom `target` declaration — a construct the
+    /// declarative lakefile.lean parser does not model.
+    const CUSTOM_TARGET_LAKEFILE: &str = r#"import Lake
+open Lake DSL
+
+package demo
+
+lean_lib Demo
+
+target generateAssets pkg : System.FilePath := do
+  pure (pkg.buildDir / "assets")
+"#;
+
+    #[test]
+    fn test_load_project_config_lenient_records_custom_target_diagnostic() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("lakefile.lean"), CUSTOM_TARGET_LAKEFILE)
+            .expect("write lakefile");
+        let config = load_project_config_with_mode(dir.path(), LakefileParseMode::Lenient)
+            .expect("lenient load should succeed with diagnostics");
+        assert_eq!(
+            config.diagnostics.len(),
+            1,
+            "exactly the target declaration should be skipped: {:?}",
+            config.diagnostics
+        );
+        assert_eq!(config.diagnostics[0].token, "target");
+        assert_eq!(config.diagnostics[0].line, 8);
+    }
+
+    #[test]
+    fn test_load_project_config_strict_errors_on_custom_target() {
+        // The strict-mode error propagates as anyhow::Err through
+        // handle_lake_command, which is exactly what makes the `clean lake`
+        // process exit nonzero.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("lakefile.lean"), CUSTOM_TARGET_LAKEFILE)
+            .expect("write lakefile");
+        let err = load_project_config_with_mode(dir.path(), LakefileParseMode::Strict)
+            .expect_err("strict load must fail on a custom target declaration");
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains("`target`"),
+            "error should name the unrecognized construct: {chain}"
+        );
+    }
+
+    #[test]
+    fn test_load_project_config_strict_clean_lakefile_no_diagnostics() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("lakefile.lean"),
+            "import Lake\nopen Lake DSL\n\npackage demo\n\nlean_lib Demo\n",
+        )
+        .expect("write lakefile");
+        let config = load_project_config_with_mode(dir.path(), LakefileParseMode::Strict)
+            .expect("fully-modeled lakefile should load in strict mode");
+        assert!(config.diagnostics.is_empty(), "no skipped constructs");
     }
 }

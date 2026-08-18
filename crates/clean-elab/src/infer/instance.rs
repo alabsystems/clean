@@ -345,11 +345,8 @@ impl<'a> ElabCtx<'a> {
             // candidate's universe metavariables — makes unification pin
             // per-candidate names that cannot alias anything else.
             let mut raw_level_params: Vec<Name> = Vec::new();
-            crate::universe_poly::collect_level_params_from_expr(
-                &inst.type_,
-                &mut raw_level_params,
-            );
-            crate::universe_poly::collect_level_params_from_expr(&inst.expr, &mut raw_level_params);
+            crate::level_params::collect_level_params_from_expr(&inst.type_, &mut raw_level_params);
+            crate::level_params::collect_level_params_from_expr(&inst.expr, &mut raw_level_params);
             let (inst_type_fresh, inst_expr_fresh) = if raw_level_params.is_empty() {
                 (inst.type_.clone(), inst.expr.clone())
             } else {

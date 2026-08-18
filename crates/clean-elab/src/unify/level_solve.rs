@@ -50,7 +50,32 @@ fn assign(metas: &mut MetaState, name: Name, level: Level) -> UnifyResult {
 }
 
 /// Solve `l1 =?= l2`, assigning level metavariables in `metas`.
+///
+/// An UNDETERMINED equation (some side still mentions a solvable, non-rigid
+/// level parameter) is DEFERRED rather than failed — see arm 9. Deferral is not
+/// acceptance: `MetaState::drain_postponed_levels` re-solves the queue at the
+/// declaration boundary and errors on anything left. A definite conflict fails
+/// here, immediately, exactly as before.
 pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> UnifyResult {
+    solve_level_eq_impl(metas, l1, l2, true)
+}
+
+/// As [`solve_level_eq`] but never defers — used by the drain, which must not
+/// re-queue the equation it is trying to discharge.
+pub(crate) fn solve_level_eq_no_postpone(
+    metas: &mut MetaState,
+    l1: &Level,
+    l2: &Level,
+) -> UnifyResult {
+    solve_level_eq_impl(metas, l1, l2, false)
+}
+
+fn solve_level_eq_impl(
+    metas: &mut MetaState,
+    l1: &Level,
+    l2: &Level,
+    may_postpone: bool,
+) -> UnifyResult {
     stack_safe(|| {
         // First, instantiate any already-solved level params.
         let l1 = metas.instantiate_level(l1);
@@ -78,7 +103,9 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             (_, Level::Param(name)) if !l1.has_params() => assign(metas, name.clone(), l1.clone()),
 
             // Succ decomposition (recursion cancels whole towers).
-            (Level::Succ(inner1), Level::Succ(inner2)) => solve_level_eq(metas, inner1, inner2),
+            (Level::Succ(inner1), Level::Succ(inner2)) => {
+                solve_level_eq_impl(metas, inner1, inner2, may_postpone)
+            }
 
             // Param vs Succ(..), occurs-checked (self-referential equations
             // like `u = Succ(u)` are unsatisfiable and would loop during
@@ -86,7 +113,7 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             (Level::Param(name), Level::Succ(_)) => {
                 if level_param_occurs(name, &l2) {
                     UnifyResult::Failure(format!(
-                        "occurs check failed for level param {name:?} in {l2:?}"
+                        "occurs check failed for level param {name} in {l2}"
                     ))
                 } else {
                     assign(metas, name.clone(), l2.clone())
@@ -95,7 +122,7 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             (Level::Succ(_), Level::Param(name)) => {
                 if level_param_occurs(name, &l1) {
                     UnifyResult::Failure(format!(
-                        "occurs check failed for level param {name:?} in {l1:?}"
+                        "occurs check failed for level param {name} in {l1}"
                     ))
                 } else {
                     assign(metas, name.clone(), l1.clone())
@@ -112,13 +139,13 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             // `Type (max ?fam ?idx) =?= Type u` before either meta is pinned.
             (Level::Param(name), Level::Max(a, b) | Level::IMax(a, b)) => {
                 if metas.is_rigid_level_param(name) {
-                    match solve_level_eq(metas, a, &l1) {
-                        UnifyResult::Success => solve_level_eq(metas, b, &l1),
+                    match solve_level_eq_impl(metas, a, &l1, may_postpone) {
+                        UnifyResult::Success => solve_level_eq_impl(metas, b, &l1, may_postpone),
                         other => other,
                     }
                 } else if level_param_occurs(name, &l2) {
                     UnifyResult::Failure(format!(
-                        "occurs check failed for level param {name:?} in {l2:?}"
+                        "occurs check failed for level param {name} in {l2}"
                     ))
                 } else {
                     assign(metas, name.clone(), l2.clone())
@@ -126,13 +153,13 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             }
             (Level::Max(a, b) | Level::IMax(a, b), Level::Param(name)) => {
                 if metas.is_rigid_level_param(name) {
-                    match solve_level_eq(metas, a, &l2) {
-                        UnifyResult::Success => solve_level_eq(metas, b, &l2),
+                    match solve_level_eq_impl(metas, a, &l2, may_postpone) {
+                        UnifyResult::Success => solve_level_eq_impl(metas, b, &l2, may_postpone),
                         other => other,
                     }
                 } else if level_param_occurs(name, &l1) {
                     UnifyResult::Failure(format!(
-                        "occurs check failed for level param {name:?} in {l1:?}"
+                        "occurs check failed for level param {name} in {l1}"
                     ))
                 } else {
                     assign(metas, name.clone(), l1.clone())
@@ -148,7 +175,7 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             (Level::Max(a, b), Level::Succ(c)) | (Level::Succ(c), Level::Max(a, b)) => {
                 if let (Level::Succ(a1), Level::Succ(b1)) = (a.as_ref(), b.as_ref()) {
                     let inner = Level::max(a1.as_ref().clone(), b1.as_ref().clone());
-                    solve_level_eq(metas, &inner, c)
+                    solve_level_eq_impl(metas, &inner, c, may_postpone)
                 } else if Level::is_def_eq(&l1, &l2) {
                     UnifyResult::Success
                 } else {
@@ -161,7 +188,7 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
                             crate::u2_histogram::level_str(&l2)
                         ),
                     );
-                    UnifyResult::Failure(format!("level mismatch: {l1:?} vs {l2:?}"))
+                    UnifyResult::Failure(format!("level mismatch: {l1} vs {l2}"))
                 }
             }
 
@@ -170,14 +197,56 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
             //   max(a,b) = 0  ⟺  a = 0 ∧ b = 0
             //   imax(a,b) = 0 ⟺  b = 0        (imax _ 0 = 0; b > 0 forces
             //                                   imax = max ≥ b > 0)
+            // Congruence decomposition: max/imax against the SAME head.
+            //
+            // `a = c ∧ b = d` is SUFFICIENT for `max(a,b) = max(c,d)` but not
+            // NECESSARY — `max(0,u) =?= max(u,0)` holds while the componentwise
+            // split fails. So unlike the Zero-RHS arms below (where both
+            // components being zero is the most-general solution, and a failure
+            // there is a real failure), this attempt must leave NO trace when
+            // it does not work: it runs in its own scope, commits on success,
+            // and rolls back and falls through to normalization / `is_def_eq` /
+            // postponement otherwise. Without the rollback a half-applied split
+            // would wrongly constrain every later equation.
+            (Level::Max(a, b), Level::Max(c, d)) | (Level::IMax(a, b), Level::IMax(c, d)) => {
+                metas.push_scope();
+                let split = match solve_level_eq_impl(metas, a, c, false) {
+                    UnifyResult::Success => solve_level_eq_impl(metas, b, d, false),
+                    other => other,
+                };
+                if matches!(split, UnifyResult::Success) {
+                    metas.commit();
+                    crate::u2_histogram::u2_hist(
+                        "level-congruence-split",
+                        "solver",
+                        "max/imax componentwise",
+                    );
+                    UnifyResult::Success
+                } else {
+                    metas.pop_scope();
+                    // Fall through to the conservative tail: normalization can
+                    // still equate reordered/absorbed forms the split misses.
+                    if Level::is_def_eq(&l1, &l2) {
+                        UnifyResult::Success
+                    } else if may_postpone && metas.level_eq_is_undetermined(&l1, &l2) {
+                        metas.postpone_level_eq(l1.clone(), l2.clone());
+                        UnifyResult::Success
+                    } else {
+                        UnifyResult::Failure(format!("level mismatch: {l1} vs {l2}"))
+                    }
+                }
+            }
+
             (Level::Max(a, b), Level::Zero) | (Level::Zero, Level::Max(a, b)) => {
-                match solve_level_eq(metas, a, &Level::Zero) {
-                    UnifyResult::Success => solve_level_eq(metas, b, &Level::Zero),
+                match solve_level_eq_impl(metas, a, &Level::Zero, may_postpone) {
+                    UnifyResult::Success => {
+                        solve_level_eq_impl(metas, b, &Level::Zero, may_postpone)
+                    }
                     other => other,
                 }
             }
             (Level::IMax(_, b), Level::Zero) | (Level::Zero, Level::IMax(_, b)) => {
-                solve_level_eq(metas, b, &Level::Zero)
+                solve_level_eq_impl(metas, b, &Level::Zero, may_postpone)
             }
 
             // Max/IMax of two ASSIGNABLE params vs a CONCRETE level: assign
@@ -193,8 +262,8 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
                         if !metas.is_rigid_level_param(x)
                             && !metas.is_rigid_level_param(y)) =>
             {
-                match solve_level_eq(metas, a, &l2) {
-                    UnifyResult::Success => solve_level_eq(metas, b, &l2),
+                match solve_level_eq_impl(metas, a, &l2, may_postpone) {
+                    UnifyResult::Success => solve_level_eq_impl(metas, b, &l2, may_postpone),
                     other => other,
                 }
             }
@@ -205,8 +274,8 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
                         if !metas.is_rigid_level_param(x)
                             && !metas.is_rigid_level_param(y)) =>
             {
-                match solve_level_eq(metas, a, &l1) {
-                    UnifyResult::Success => solve_level_eq(metas, b, &l1),
+                match solve_level_eq_impl(metas, a, &l1, may_postpone) {
+                    UnifyResult::Success => solve_level_eq_impl(metas, b, &l1, may_postpone),
                     other => other,
                 }
             }
@@ -240,9 +309,24 @@ pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> U
                         );
                     }
                     if !l1.has_params() && !l2.has_params() {
-                        UnifyResult::Failure(format!("universe level conflict: {l1:?} vs {l2:?}"))
+                        // DEFINITE conflict: both sides ground and unequal.
+                        // Never deferred — no later assignment can change it.
+                        UnifyResult::Failure(format!("universe level conflict: {l1} vs {l2}"))
+                    } else if may_postpone && metas.level_eq_is_undetermined(&l1, &l2) {
+                        // UNDETERMINED: some side still mentions a solvable
+                        // parameter, so a later assignment may settle this.
+                        // Deferred, NOT accepted — `drain_postponed_levels`
+                        // re-solves at the declaration boundary and errors on
+                        // whatever is left.
+                        crate::u2_histogram::u2_hist(
+                            "level-postponed",
+                            "solver",
+                            "deferred undetermined equation",
+                        );
+                        metas.postpone_level_eq(l1.clone(), l2.clone());
+                        UnifyResult::Success
                     } else {
-                        UnifyResult::Failure(format!("level mismatch: {l1:?} vs {l2:?}"))
+                        UnifyResult::Failure(format!("level mismatch: {l1} vs {l2}"))
                     }
                 }
             }

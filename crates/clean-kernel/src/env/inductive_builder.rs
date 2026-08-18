@@ -825,7 +825,10 @@ impl Environment {
             return Err(EnvError::ContainsMetavar { name: name.clone() });
         }
         if expr.has_fvar_quick() {
-            return Err(EnvError::ContainsFreeVar { name: name.clone() });
+            return Err(EnvError::ContainsFreeVar {
+                name: name.clone(),
+                fvars: super::types::collect_fvar_ids_for_diagnostics(&[expr]),
+            });
         }
         if let Some(undef) = find_undef_level_param(expr, level_params) {
             return Err(EnvError::UndefinedLevelParam {

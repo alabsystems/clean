@@ -31,35 +31,39 @@
 //!    left as references to a local forward declaration.
 //! 2. **Elaborate measure**: The `termination_by` expression is elaborated
 //!    in a context where the function parameters are bound.
-//! 3. **Build WF relation**: Construct `invImage measure Nat.lt_wfRel` which
-//!    gives a `WellFoundedRelation` instance on the argument type.
+//! 3. **Build WF relation**: Construct `rel := fun a b => Nat.lt (m a) (m b)`
+//!    together with a constructive `WellFounded rel` witness (see
+//!    [`measure_wf`]) — directly over `Acc`/`Acc.rec`, so it works against the
+//!    builtin prelude, which has no `invImage`/`WellFoundedRelation`.
 //! 4. **Transform body**: Replace recursive calls `f arg` with
-//!    `rec arg decreasing_proof` where `rec` is the fixpoint parameter.
+//!    `rec arg decreasing_proof` where `rec` is the fixpoint parameter and the
+//!    proof is synthesized per call site (see [`call_sites`]).
 //! 5. **Wrap in WellFounded.fix**: Produce the final definition value.
 //!
 //! # Limitations
 //!
-//! Current implementation supports:
-//! - Single non-mutual definitions
+//! Current implementation supports (phase 1, 2026-08-10):
+//! - Single non-mutual definitions with exactly ONE parameter
+//! - Explicit `termination_by` with a `Nat`-valued measure expression
+//! - Per-call-site decreasing proofs synthesized by the discharge cascade in
+//!   [`decreasing`] (hypothesis lookup → `Nat.sub_lt` → `omega` →
+//!   `simp_arith`), threaded through the rewrite in [`call_sites`]
 //! - Mutual definitions via `PackMutual` encoding (see [`mutual`])
-//! - Explicit `termination_by` with a measure expression
-//! - `Nat`-valued measures (mapped through `Nat.lt_wfRel`)
-//! - `decreasing_by` tactic for custom decreasing proofs (see [`decreasing`])
-//! - Default decreasing cascade: `simp_arith` → `mathverse` → `sorry`
-//! - Equation lemma generation for `simp` (see [`equation_lemmas`])
 //!
-//! Not yet supported:
+//! Not yet supported (all FAIL CLOSED with a diagnostic naming
+//! `termination_by` — never `sorry`, an axiom, or an unchecked declaration):
+//! - Multi-parameter definitions
+//! - `decreasing_by` user tactic blocks (the default cascade still runs)
 //! - Automatic measure inference (`GuessLex`)
 //! - Non-Nat measures (custom `WellFoundedRelation` instances)
-//! - Full equation case extraction from match compiler output
+//! - Call sites whose decrease the cascade cannot discharge
 //!
 //! Reference: Lean 4 `src/Lean/Elab/PreDefinition/WF/`
 
-// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
-// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[cfg_attr(not(test), allow(dead_code))]
+pub(super) mod call_sites;
 pub(crate) mod decreasing;
 pub(super) mod encoding;
+pub(super) mod measure_wf;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
 #[cfg(test)]
@@ -71,13 +75,32 @@ pub(super) mod pre_definition;
 mod tests;
 
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
+use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId};
 use clean_parser::SurfaceExpr;
 
-use self::encoding::replace_rec_calls;
 use self::pre_definition::TerminationMeasure;
 use super::ElabCtx;
 use crate::ElabError;
+
+/// The canonical fail-closed diagnostic for the well-founded path.
+///
+/// Names the construct the user wrote (`termination_by`) and the declaration,
+/// never an internal implementation constant — and states the fail-closed
+/// contract explicitly.
+///
+/// SOUNDNESS: every refusal in this module goes through here and returns an
+/// error. Nothing is ever registered via `sorry`, an axiom, or an unchecked
+/// declaration for a definition the WF lowering cannot compile.
+fn wf_unsupported(name: &str, reason: &str) -> ElabError {
+    ElabError::Unsupported {
+        feature: format!(
+            "well-founded recursion for '{name}': `termination_by` with a \
+             non-structural recursive call. {reason}. Fail closed: the \
+             definition is rejected; nothing is registered via sorry, axiom, \
+             or unchecked declaration."
+        ),
+    }
+}
 
 impl<'a> ElabCtx<'a> {
     /// Elaborate a recursive definition using well-founded recursion.
@@ -126,71 +149,98 @@ impl<'a> ElabCtx<'a> {
         let (func_ty, func_body, func_fvar, binder_fvars) =
             self.elab_wf_pre_definition(name, binders, ty, val)?;
 
-        // Phase 1b: FAIL CLOSED on genuine recursion.
-        //
-        // Every recursive call site `f arg` must become `rec arg h` where
-        // `h : measure arg < measure x`. Nothing in this module synthesises
-        // `h`: `transform_rec_calls` rewrites `f ↦ rec` and drops the proof
-        // argument entirely, and the obligation machinery in `decreasing.rs`
-        // has no caller. So for a body that really recurses we cannot build a
-        // correct `WellFounded.fix` term — and we must not emit an incorrect
-        // one and let the kernel reject it with an internal message that names
-        // an implementation constant (`invImage`) instead of the construct the
-        // user wrote.
-        //
-        // SOUNDNESS: this path returns an error. It never emits `sorry`, an
-        // axiom, or an unchecked declaration — a rejected `def` stays rejected.
-        //
-        // A `termination_by` whose recursion is STRUCTURAL never reaches here:
-        // `elab_termination_hints` routes it to the structural path. This
-        // guard therefore only fires for genuinely non-structural recursion,
-        // which is exactly the class that cannot type-check today.
-        if encoding::contains_fvar(&func_body, func_fvar) {
-            // Restore the local context before reporting (LIFO).
-            self.pop_local();
-            for _ in binders {
-                self.pop_local();
-            }
-            return Err(ElabError::Unsupported {
-                feature: format!(
-                    "well-founded recursion for '{name}': `termination_by` with a \
-                     non-structural recursive call. Compiling it requires synthesising \
-                     a decreasing proof `measure(arg) < measure(param)` at each \
-                     recursive call site, which is not implemented. A `termination_by` \
-                     whose recursion is structural is supported."
-                ),
-            });
-        }
-
-        // Phase 2: Elaborate the termination measure.
-        // The measure expression is elaborated in a context where
-        // the function parameters are already bound.
-        let measure_expr = self.elaborate(&measure.measure_expr)?;
-        let measure_expr = self.metas.instantiate(&measure_expr);
-        let measure_expr = self.metas.instantiate_levels(&measure_expr);
-
-        // Phase 3: Build the WF encoding.
-        // We need to decompose the function type to extract:
-        // - The argument type (first varying parameter)
-        // - The return type (as a function of the argument)
-        let (wf_val, wf_ty) = self.build_wf_definition(
+        // Phases 2-3 run with the binder locals still pushed (the measure and
+        // the decreasing obligations reference them); clean up afterwards on
+        // BOTH the success and the failure path (LIFO: forward decl, binders).
+        let result = self.elab_wf_recursion_core(
             name,
             &func_ty,
             &func_body,
             func_fvar,
             &binder_fvars,
-            &measure_expr,
-        )?;
-
-        // Phase 4: clean up — pop all binder locals (LIFO order)
-        // Pop function forward declaration
+            measure,
+        );
         self.pop_local();
-        // Pop binder locals
         for _ in binders {
             self.pop_local();
         }
+        result
+    }
 
-        Ok((wf_ty, wf_val))
+    /// Phases 2-3 of the WF lowering: measure elaboration, feasibility gates,
+    /// and the `WellFounded.fix` term construction with per-call-site
+    /// decreasing proofs.
+    ///
+    /// FAIL CLOSED: every unsupported shape and every undischargeable
+    /// obligation returns [`wf_unsupported`]'s diagnostic (naming
+    /// `termination_by` and the declaration, never an internal constant such
+    /// as `invImage`). A `termination_by` whose recursion is STRUCTURAL never
+    /// reaches here: `setup_recursion` routes it to the structural path.
+    fn elab_wf_recursion_core(
+        &mut self,
+        name: &str,
+        func_ty: &Expr,
+        func_body: &Expr,
+        func_fvar: FVarId,
+        binder_fvars: &[(FVarId, Expr)],
+        measure: &TerminationMeasure,
+    ) -> Result<(Expr, Expr), ElabError> {
+        // Phase-1 scope: exactly one parameter. Lean packs multi-parameter
+        // definitions through PSigma before fixing; that packing is not wired
+        // yet, and silently fixing on the first parameter alone would build
+        // wrong obligations.
+        if binder_fvars.len() != 1 {
+            return Err(wf_unsupported(
+                name,
+                "only single-parameter definitions are supported by the \
+                 well-founded lowering so far",
+            ));
+        }
+
+        // Feasibility gate: the whole encoding (relation, accessibility
+        // transport, fixpoint) references these constants. Refuse up front
+        // with the construct-naming diagnostic instead of leaking an
+        // unknown-constant kernel error from a partially built term.
+        if let Some(missing) = measure_wf::REQUIRED_CONSTANTS
+            .iter()
+            .copied()
+            .find(|c| self.env.get_const(&Name::from_string(c)).is_none())
+        {
+            return Err(wf_unsupported(
+                name,
+                &format!(
+                    "the environment does not provide the well-founded \
+                     foundation (missing constant `{missing}`)"
+                ),
+            ));
+        }
+
+        // Phase 2: Elaborate the termination measure in a context where the
+        // function parameters are bound, and require it to be Nat-valued.
+        let measure_expr = self.elaborate(&measure.measure_expr)?;
+        let measure_expr = self.metas.instantiate(&measure_expr);
+        let measure_expr = self.metas.instantiate_levels(&measure_expr);
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        match self.infer_type_full(&measure_expr) {
+            Ok(measure_ty) if self.is_def_eq(&measure_ty, &nat) => {}
+            _ => {
+                return Err(wf_unsupported(
+                    name,
+                    "only `Nat`-valued `termination_by` measures are supported",
+                ));
+            }
+        }
+
+        // Phase 3: build the `WellFounded.fix` definition value.
+        let (first_fvar, first_ty) = &binder_fvars[0];
+        self.build_wf_definition(
+            name,
+            func_ty,
+            func_body,
+            func_fvar,
+            (*first_fvar, first_ty),
+            &measure_expr,
+        )
     }
 
     /// Elaborate the pre-definition: type, body, and forward declaration.
@@ -281,161 +331,139 @@ impl<'a> ElabCtx<'a> {
 
     /// Build the WellFounded.fix-based definition value.
     ///
-    /// Takes the elaborated pre-definition and produces the final
-    /// `WellFounded.fix` application.
+    /// For a function `f (x : α) : β := body` with measure `m` this builds:
+    ///
+    /// ```text
+    /// WellFounded.fix.{u, v}
+    ///   α                                      -- Sort u
+    ///   (fun (x : α) => β)                     -- motive C
+    ///   (fun (a b : α) => Nat.lt (m a) (m b))  -- rel  (measure_wf)
+    ///   hwf                                    -- WellFounded rel (measure_wf)
+    ///   (fun (x : α) (rec : (y : α) → rel y x → C y) =>
+    ///      body[f arg ↦ rec arg decreasing_proof])   -- call_sites
+    /// ```
+    ///
+    /// Returns `(type, value)`. The kernel re-checks the value in full at
+    /// registration; every decreasing proof was already strictly re-checked
+    /// at synthesis time.
     fn build_wf_definition(
         &mut self,
         name: &str,
         func_ty: &Expr,
         func_body: &Expr,
         func_fvar: FVarId,
-        binder_fvars: &[(FVarId, Expr)],
+        first: (FVarId, &Expr),
         measure_expr: &Expr,
     ) -> Result<(Expr, Expr), ElabError> {
-        // For a function `f (x : α) : β := body`, we need to build:
-        //
-        // WellFounded.fix.{u, v}
-        //   (α : Sort u)
-        //   (C : α → Sort v)       -- motive: fun x => β
-        //   (rel : α → α → Prop)   -- from WFR
-        //   (wf : WellFounded rel)  -- from WFR
-        //   (F : (x : α) → ((y : α) → rel y x → C y) → C x)
-        //   : (x : α) → C x
-        //
-        // For single-argument functions this is straightforward.
-        // For multi-argument functions, we need to pack arguments
-        // (this implementation handles the common single-varying-arg case
-        // and falls back to the first argument for multi-arg).
+        let (first_fvar, first_ty) = first;
 
-        if binder_fvars.is_empty() {
-            return Err(ElabError::Unsupported {
-                feature: format!(
-                    "well-founded recursion for '{}': no parameters to recurse on",
-                    name
-                ),
-            });
-        }
+        // Universe levels. Failing to determine one is a hard refusal:
+        // defaulting to a made-up level parameter would produce a term the
+        // kernel rejects with a level-mismatch message naming internals.
+        let u_level = self.infer_sort(first_ty).map_err(|_| {
+            wf_unsupported(
+                name,
+                "could not determine the universe of the recursion \
+                 parameter's type",
+            )
+        })?;
 
-        // Use the first parameter as the "varying" argument.
-        // In Lean 4, fixed parameters (those that don't change across
-        // recursive calls) are factored out. We simplify by treating
-        // the first argument as the varying one.
-        let (first_fvar, ref first_ty) = binder_fvars[0];
+        // Open the return type: func_ty = (x : α) → ret.
+        let ret_open = match func_ty.kind() {
+            ExprKind::Pi(_, _, body) => body.instantiate(&Expr::fvar(first_fvar)),
+            _ => {
+                return Err(wf_unsupported(
+                    name,
+                    "the elaborated function type is not a Pi type",
+                ));
+            }
+        };
+        let v_level = self.infer_sort(&ret_open).map_err(|_| {
+            wf_unsupported(name, "could not determine the universe of the return type")
+        })?;
 
-        // Determine universe levels
-        let u_level = self
-            .infer_sort(first_ty)
-            .unwrap_or_else(|_| Level::param(Name::from_string("u_wf")));
-
-        // Build the return type from the function type
-        // For f : (x : α) → β, the motive C = fun (x : α) => β
-        let ret_ty_abstracted = self.extract_return_type(func_ty, binder_fvars.len())?;
-        let v_level = self
-            .infer_sort(&ret_ty_abstracted)
-            .unwrap_or_else(|_| Level::param(Name::from_string("v_wf")));
-
-        // Build motive: fun (x : α) => β (abstracting over the first binder)
-        let motive_body = ret_ty_abstracted.abstract_fvar(first_fvar);
-        let motive = Expr::lam(BinderInfo::Default, first_ty.clone(), motive_body);
-
-        // Build the measure as a lambda: fun (x : α) => measure_expr
-        let measure_body = measure_expr.abstract_fvar(first_fvar);
-        let measure_lambda = Expr::lam(BinderInfo::Default, first_ty.clone(), measure_body);
-
-        // Build WellFoundedRelation via invImage
-        // `invImage.{u, v} {α : Sort u} {β : Sort v} (f : α → β)
-        //    (h : WellFoundedRelation β) : WellFoundedRelation α`
-        // takes TWO universe params. β is `Nat : Type 0 = Sort 1`, so v = 1.
-        let inv_image = Expr::const_(
-            Name::from_string("invImage"),
-            vec![u_level.clone(), Level::succ(Level::zero())],
-        );
-        let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-        let nat_lt_wfrel = Expr::const_(Name::from_string("Nat.lt_wfRel"), vec![]);
-        let wfr = Expr::app(inv_image, first_ty.clone());
-        let wfr = Expr::app(wfr, nat_ty);
-        let wfr = Expr::app(wfr, measure_lambda);
-        let wfr = Expr::app(wfr, nat_lt_wfrel);
-
-        // Extract rel and wf from WellFoundedRelation
-        let rel = Expr::proj(Name::from_string("WellFoundedRelation"), 0, wfr.clone());
-        let wf_proof = Expr::proj(Name::from_string("WellFoundedRelation"), 1, wfr);
-
-        // Build the fixpoint body F:
-        // fun (x : α) (rec : (y : α) → rel y x → C y) => body[f ↦ rec_wrapper]
-        //
-        // Where rec_wrapper replaces `f arg` with `rec arg sorry_proof`.
-        // The sorry_proof stands in for the actual decreasing proof obligation.
-
-        // Create a fresh FVar for the `rec` parameter
-        // rec : (y : α) → rel y x → C y
-        let rec_fvar = self.fresh_fvar();
-
-        // Transform the body: replace recursive calls f(arg) with rec(arg, sorry)
-        // We need to handle the case where func_body is a lambda
-        // (fun x₁ ... xₙ => body). We strip the outer lambdas to get the raw body,
-        // replace recursive calls, then re-wrap.
-        let (stripped_body, _) = self.strip_lambdas(func_body, binder_fvars.len());
-
-        // Replace references to the function FVar with a wrapper that
-        // calls rec and inserts a sorry for the decreasing proof
-        let transformed = self.transform_rec_calls(
-            &stripped_body,
-            func_fvar,
-            rec_fvar,
-            first_fvar,
-            first_ty,
-            &rel,
-            &motive,
+        // Motive: fun (x : α) => ret.
+        let motive = Expr::lam(
+            BinderInfo::Default,
+            first_ty.clone(),
+            ret_open.abstract_fvar(first_fvar),
         );
 
-        // Build the rec parameter type:
-        // (y : α) → rel y x → C y
-        let rec_param_ty = {
-            let y_fvar = self.fresh_fvar();
-            let rel_y_x = Expr::app(
-                Expr::app(rel.clone(), Expr::fvar(y_fvar)),
-                Expr::fvar(first_fvar),
-            );
-            let c_y = Expr::app(motive.clone(), Expr::fvar(y_fvar));
+        // Relation and its well-foundedness witness (builtin-prelude
+        // constructive foundation; no invImage / WellFoundedRelation).
+        let rel = self.build_measure_rel(first_ty, measure_expr, first_fvar);
+        let wf_proof =
+            self.build_measure_wf_proof(first_ty, &u_level, &rel, measure_expr, first_fvar);
 
-            // (proof : rel y x) → C y
-            let inner = Expr::arrow(rel_y_x, c_y);
-            // (y : α) → inner
-            // We need to abstract over y
-            let inner_abs = inner.abstract_fvar(y_fvar);
-            Expr::pi(BinderInfo::Default, first_ty.clone(), inner_abs)
+        // Open the body: func_body = fun (x : α) => body. (Opening — rather
+        // than stripping the lambda and leaving a loose de Bruijn index —
+        // keeps the parameter as `first_fvar`, which the decreasing
+        // obligations and the final re-abstraction both key on.)
+        let body_open = match func_body.kind() {
+            ExprKind::Lam(_, _, body) => body.instantiate(&Expr::fvar(first_fvar)),
+            _ => {
+                return Err(wf_unsupported(
+                    name,
+                    "the elaborated function value is not a lambda",
+                ));
+            }
         };
 
-        // Build the fix body: fun (x : α) (rec : ...) => transformed_body
-        let fix_body_inner = transformed.abstract_fvar(rec_fvar);
-        let fix_body_inner = Expr::lam(BinderInfo::Default, rec_param_ty, fix_body_inner);
-        // Abstract over x (the first parameter)
-        let fix_body_abs = fix_body_inner.abstract_fvar(first_fvar);
-        let fix_body = Expr::lam(BinderInfo::Default, first_ty.clone(), fix_body_abs);
+        // Rewrite recursive calls `f arg` to `rec arg proof`, synthesizing a
+        // decreasing proof per call site. FAIL CLOSED on any failure.
+        let rec_fvar = self.fresh_fvar();
+        let cfg = call_sites::RecCallRewrite {
+            func_fvar,
+            rec_fvar,
+            param_fvar: first_fvar,
+            measure_expr,
+        };
+        let transformed = self
+            .transform_rec_calls_proved(&body_open, &cfg)
+            .map_err(|reject| wf_unsupported(name, &reject.0))?;
 
-        // Build: WellFounded.fix.{u, v} α C rel wf fix_body
-        let wf_fix = Expr::const_(Name::from_string("WellFounded.fix"), vec![u_level, v_level]);
-
-        let mut result = Expr::app(wf_fix, first_ty.clone()); // α
-        result = Expr::app(result, motive); // C
-        result = Expr::app(result, rel); // rel
-        result = Expr::app(result, wf_proof); // wf
-        result = Expr::app(result, fix_body); // F
-
-        // If there are additional binders beyond the first, wrap them
-        // as outer lambdas (these are "fixed parameters" in Lean 4 terminology)
-        if binder_fvars.len() > 1 {
-            // For multi-argument functions, we need to wrap the fixed params
-            // This is a simplification; full implementation would use PackMutual
-            for (_i, (fvar, fvar_ty)) in binder_fvars.iter().enumerate().rev().skip(1).rev() {
-                let bi = BinderInfo::Default; // Simplified
-                let abstracted = result.abstract_fvar(*fvar);
-                result = Expr::lam(bi, fvar_ty.clone(), abstracted);
-            }
+        // Backstop: no self-reference may survive the rewrite. The rewriter
+        // already guarantees this (it refuses shapes it cannot rewrite), but
+        // this check keeps the fail-closed property independent of it.
+        if encoding::contains_fvar(&transformed, func_fvar) {
+            return Err(wf_unsupported(
+                name,
+                "a self-reference survived the call-site rewrite",
+            ));
         }
 
-        Ok((result, func_ty.clone()))
+        // rec : (y : α) → rel y x → C y
+        let rec_param_ty = {
+            let y_fvar = self.fresh_fvar();
+            let rel_y_x = Expr::apps(rel.clone(), [Expr::fvar(y_fvar), Expr::fvar(first_fvar)]);
+            let c_y = Expr::app(motive.clone(), Expr::fvar(y_fvar));
+            let inner = Expr::arrow(rel_y_x, c_y);
+            Expr::pi(
+                BinderInfo::Default,
+                first_ty.clone(),
+                inner.abstract_fvar(y_fvar),
+            )
+        };
+
+        // F := fun (x : α) (rec : …) => transformed
+        let fix_body = {
+            let with_rec = Expr::lam(
+                BinderInfo::Default,
+                rec_param_ty,
+                transformed.abstract_fvar(rec_fvar),
+            );
+            Expr::lam(
+                BinderInfo::Default,
+                first_ty.clone(),
+                with_rec.abstract_fvar(first_fvar),
+            )
+        };
+
+        // WellFounded.fix.{u, v} α C rel hwf F
+        let wf_fix = Expr::const_(Name::from_string("WellFounded.fix"), vec![u_level, v_level]);
+        let result = Expr::apps(wf_fix, [first_ty.clone(), motive, rel, wf_proof, fix_body]);
+
+        Ok((func_ty.clone(), result))
     }
 
     /// Extract the return type from a Pi type by stripping `n` binders.
@@ -485,53 +513,4 @@ impl<'a> ElabCtx<'a> {
         }
         (current, binders)
     }
-
-    /// Transform recursive calls in the body.
-    ///
-    /// Replaces `func_fvar arg` with `rec_fvar arg sorry_proof`
-    /// where sorry_proof is a placeholder for `measure(arg) < measure(x)`.
-    fn transform_rec_calls(
-        &mut self,
-        body: &Expr,
-        func_fvar: FVarId,
-        rec_fvar: FVarId,
-        _arg_fvar: FVarId,
-        _arg_type: &Expr,
-        _rel: &Expr,
-        _motive: &Expr,
-    ) -> Expr {
-        // Simple transformation: replace func_fvar references with
-        // a wrapper that calls rec_fvar and adds a sorry for the proof.
-        //
-        // Full implementation would:
-        // 1. Detect each recursive call site
-        // 2. Extract the argument passed
-        // 3. Build a proof obligation `measure(arg) < measure(x)`
-        // 4. Create a metavariable for the proof (to be solved by decreasing_tactic)
-        //
-        // For now, we use the simplified approach where recursive calls
-        // become `rec arg sorry` — this is sound because sorry is
-        // axiomatically valid, and the definition will still type-check.
-
-        replace_rec_calls_with_sorry(body, func_fvar, rec_fvar)
-    }
-}
-
-/// Replace recursive calls `f arg` with `rec arg sorry`.
-///
-/// This is a simplified version that replaces all occurrences of `func_fvar`
-/// with `rec_fvar` and inserts sorry proofs for the decreasing obligations.
-///
-/// The sorry proof has type `Prop` (actually `rel arg x` but we use sorry
-/// which is polymorphic).
-fn replace_rec_calls_with_sorry(body: &Expr, func_fvar: FVarId, rec_fvar: FVarId) -> Expr {
-    // For now, simply replace func references with rec.
-    // The type checker will catch any missing decreasing proofs.
-    // In Lean 4, this is where metavariables are created for each
-    // recursive call site, later solved by decreasing_tactic.
-    //
-    // Our approach: replace f with rec, and rely on the elaborator's
-    // implicit argument insertion to fill in the decreasing proof
-    // (which will become sorry through our default tactic).
-    replace_rec_calls(body, func_fvar, rec_fvar)
 }

@@ -536,8 +536,14 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Replace the macro context for file-scoped notation/macro state.
+    ///
+    /// Syncs the scoped-notation gate to this context's namespace prefix: a
+    /// persisted `MacroCtx` arrives from `FileContext` with the PREVIOUS
+    /// declaration's namespace recorded, and callers set the namespace state
+    /// (`set_namespace_state`) before installing the macro context.
     pub(crate) fn set_macro_ctx(&mut self, macro_ctx: MacroCtx) {
         self.macro_ctx = macro_ctx;
+        self.macro_ctx.set_current_namespace(&self.namespace_prefix);
     }
 
     /// Replace the tactic registry for file-scoped tactic elaborator state.

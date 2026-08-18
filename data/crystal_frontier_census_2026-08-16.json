@@ -1,0 +1,438 @@
+{
+ "schema": "clean.crystal.frontier_census/1",
+ "date": "2026-08-16",
+ "lane": "LANE 1 \u2014 frontier scope",
+ "subject": {
+  "clean": "6d84131c7afcc609c52cd1b37bd47992eb1a6c95",
+  "trust": "304ec590ca46a1aa0e06e2e32796548232289873",
+  "driver_seal": "scratchpad/f16/seal-f16",
+  "driver_sha256": "a54b67c40f9fd8ebd9d35a9376355d49d229c7ea74e618794249ec371ae2429b",
+  "guard": "PASS",
+  "verify": "OK",
+  "selftest": "UNPROVEN (identical 10-class sets)"
+ },
+ "control": {
+  "clean": "6d84131c7afcc609c52cd1b37bd47992eb1a6c95",
+  "trust": "2d7e094f2224994b112e06fdab49123d469c6b43",
+  "driver_seal": "$HOME/trust-lane8/.lane8/seal-lane8",
+  "driver_sha256": "30fc10cc5d0e190e8c4b0243d651912e32b2a730538636796eb12bd930ce4bb7",
+  "note": "PRE the no-op-landing-pad fix 9f85e0a574; same clean HEAD"
+ },
+ "identical_blobs_subject_vs_control": {
+  "to_mir.rs": "74b9c47253a6e470d1d9bc3bb6f0189695ef54f0",
+  "flip.rs": "88e27c198caa11befaaaa8215cb9e1499758ed86",
+  "flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+  "mir_differential.rs": "461ab7afcca265c0c11988e619831e19555aa321"
+ },
+ "changed_blobs_subject_vs_control": {
+  "trust-ir-bridge/src/lower.rs": {
+   "control": "60365a596e20",
+   "subject": "e77d84c9d468"
+  },
+  "trust-thir-lower/src/lib.rs": {
+   "control": "eae33632afc1",
+   "subject": "4a357082ef17"
+  }
+ },
+ "digests": {
+  "O3.coverage.json": "sha256:6cf26ef8155ca7beb2ff36de0161b02797490ba8a931f5adff09dd9a94925c1a",
+  "O3.trust-ir.txt": "sha256:23b0622772029c4b5e87757c11450c1a9fd624216e2f9f627acbe973837fc7e6",
+  "O0.coverage.json": "sha256:6cf26ef8155ca7beb2ff36de0161b02797490ba8a931f5adff09dd9a94925c1a",
+  "O0.trust-ir.txt": "sha256:23b0622772029c4b5e87757c11450c1a9fd624216e2f9f627acbe973837fc7e6",
+  "CTL.coverage.json": "sha256:e9e472eabd89cb933000a045e64268c1c3ddb097c7a2945b44d5b64a5fdb8d42",
+  "CTL.trust-ir.txt": "sha256:0e3b0e1ca27fad616ca7b48c1a996b4b5e0e40dd21a48b1aeb2095cb3a8f5e9d"
+ },
+ "totals": {
+  "bodies": {
+   "O3": 13774,
+   "O0": 13774
+  },
+  "agreed": {
+   "O3": 1559,
+   "O0": 1559
+  },
+  "mismatch": {
+   "O3": 0,
+   "O0": 0
+  },
+  "markers_exact": {
+   "O3": 1085,
+   "O0": 1085
+  },
+  "markers_nonvacuous": {
+   "O3": 27,
+   "O0": 27
+  },
+  "codegen_flips": {
+   "O3": 178,
+   "O0": 192
+  },
+  "ctfe_flips": {
+   "O3": 32,
+   "O0": 42
+  },
+  "fallbacks_ck": {
+   "O3": 19,
+   "O0": 469
+  },
+  "ir_bodyful": {
+   "O3": 7571,
+   "O0": 7571
+  },
+  "loop_bodies": {
+   "O3": 3,
+   "O0": 3
+  },
+  "recursive_fids": {
+   "O3": 7,
+   "O0": 7
+  },
+  "self_recursive_fids": {
+   "O3": 7,
+   "O0": 7
+  },
+  "mutual_only_fids": {
+   "O3": 0,
+   "O0": 0
+  },
+  "flip_asserts_gt0": {
+   "O3": 0,
+   "O0": 4
+  },
+  "join_ok": {
+   "O3": true,
+   "O0": true
+  }
+ },
+ "control_totals": {
+  "agreed": 1543,
+  "markers_exact": 1085,
+  "codegen_flips": 178,
+  "ctfe_flips": 32,
+  "interpreter_agreed": 571,
+  "seam_agreed": 0
+ },
+ "subject_channels": {
+  "interpreter_agreed": 608,
+  "seam_agreed": 2
+ },
+ "flip_sets_identical_subject_vs_control": {
+  "codegen": true,
+  "ctfe": true
+ },
+ "constructs": {
+  "gep": {
+   "carry": 1740,
+   "agreed": 4,
+   "markers_exact": 0,
+   "bodyful_closure": 2,
+   "agreed_and_bodyful": 2,
+   "flip_O3": 0,
+   "flip_O0": 2,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0
+  },
+  "call": {
+   "carry": 5999,
+   "agreed": 450,
+   "markers_exact": 0,
+   "bodyful_closure": 11,
+   "agreed_and_bodyful": 11,
+   "flip_O3": 0,
+   "flip_O0": 0,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0
+  },
+  "panic_arm": {
+   "carry": 117,
+   "agreed": 39,
+   "markers_exact": 23,
+   "bodyful_closure": 37,
+   "agreed_and_bodyful": 37,
+   "flip_O3": 0,
+   "flip_O0": 4,
+   "ctfe_O3": 21,
+   "ctfe_O0": 31
+  },
+  "loop": {
+   "carry": 3,
+   "agreed": 1,
+   "markers_exact": 0,
+   "bodyful_closure": 1,
+   "agreed_and_bodyful": 1,
+   "flip_O3": 0,
+   "flip_O0": 1,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0
+  },
+  "recursion": {
+   "carry": 7,
+   "agreed": 2,
+   "markers_exact": 0,
+   "bodyful_closure": 0,
+   "agreed_and_bodyful": 0,
+   "flip_O3": 0,
+   "flip_O0": 0,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0
+  }
+ },
+ "crosstab_agreed_hascall_bodyfulclosure_markersexact": {
+  "(False, True, False)": 24,
+  "(False, True, True)": 1085,
+  "(True, False, False)": 439,
+  "(True, True, False)": 11
+ },
+ "call_reanswer": {
+  "agreed_and_call_and_bodyful_closure": 11,
+  "of_which_markers_exact": 0,
+  "of_which_flip_O3": 0,
+  "of_which_flip_O0": 0,
+  "bodies": [
+   "env::origin::ConstantOrigin::is_unpinned_olean_import",
+   "env::origin::ConstantOrigin::needs_recheck",
+   "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+   "env::native_reducers_name::lean4_name_hash",
+   "expr::meta::ExprMeta::has_loose_bvars",
+   "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "tc::branch_sharing::RecursorApp::<'a>::major_idx",
+   "<expr::types::BinderData as std::default::Default>::default",
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+  ]
+ },
+ "residual_wall2_bodyful_no_call": [
+  {
+   "def_path": "cert::bundle::MAX_BUNDLE_ENV_BYTES",
+   "def_index": 720,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::cross_project::hex_digit",
+   "def_index": 860,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u8` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::types::proof_cert_has_recursive_children",
+   "def_index": 1282,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::MAX_COMPRESSED_ARCHIVE_BYTES",
+   "def_index": 2089,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::MAX_UNCOMPRESSED_ARCHIVE_BYTES",
+   "def_index": 2090,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::MAX_DICTIONARY_BYTES",
+   "def_index": 2091,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::MAX_DECOMPRESSED_CERT_BYTES",
+   "def_index": 2094,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::MAX_STREAM_CERT_BYTES",
+   "def_index": 2096,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::MAX_STREAM_UNCOMPRESSED_BYTES",
+   "def_index": 2098,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u64` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#3}",
+   "def_index": 2118,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#4}",
+   "def_index": 2119,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::types::Reducibility::height",
+   "def_index": 13402,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::types::SimpPriority::value",
+   "def_index": 13411,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b4.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::ext_instance::PRIORITY_BYTES",
+   "def_index": 13605,
+   "outcome_O0": "ctfe-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::native_reducers_bitvec::to_signed",
+   "def_index": 14993,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::native_reducers_bool_ext::nat_gcd",
+   "def_index": 15043,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "marker channel(built): storage marker in unwalked block 8 (cleanup/dead code)"
+  },
+  {
+   "def_path": "env::native_reducers_sint::to_signed",
+   "def_index": 15652,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+  },
+  {
+   "def_path": "expr::types::BigNat::is_zero::{closure#0}",
+   "def_index": 16409,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u64` vs derived `<end>`"
+  },
+  {
+   "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+   "def_index": 16948,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::new",
+   "def_index": 17347,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::memory_model::AllocationId` vs derived `<end>`"
+  },
+  {
+   "def_path": "mode::CleanMode::allows_large_elimination",
+   "def_index": 17980,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b6.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+   "def_index": 19498,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+   "def_index": 19504,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "tc::reduction::cofib::CofibAtom::var",
+   "def_index": 19726,
+   "outcome_O0": "codegen-flip",
+   "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:u32` vs derived `<end>`"
+  }
+ ],
+ "O0_only_codegen_flips": [
+  {
+   "def_path": "cert::cross_project::hex_digit",
+   "def_index": 860,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u8` vs derived `<end>`"
+  },
+  {
+   "def_path": "cert::types::proof_cert_has_recursive_children",
+   "def_index": 1282,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::types::Reducibility::height",
+   "def_index": 13402,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::types::SimpPriority::value",
+   "def_index": 13411,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b4.0:live s0:opaque:Ref { mutable: false, inner: Int { width: 32, signed: false } }` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::native_reducers_bitvec::to_signed",
+   "def_index": 14993,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+  },
+  {
+   "def_path": "env::native_reducers_bool_ext::nat_gcd",
+   "def_index": 15043,
+   "markers_exact": false,
+   "markers_detail": "marker channel(built): storage marker in unwalked block 8 (cleanup/dead code)"
+  },
+  {
+   "def_path": "env::native_reducers_sint::to_signed",
+   "def_index": 15652,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+  },
+  {
+   "def_path": "expr::types::BigNat::is_zero::{closure#0}",
+   "def_index": 16409,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u64` vs derived `<end>`"
+  },
+  {
+   "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+   "def_index": 16948,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::new",
+   "def_index": 17347,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::memory_model::AllocationId` vs derived `<end>`"
+  },
+  {
+   "def_path": "mode::CleanMode::allows_large_elimination",
+   "def_index": 17980,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b6.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+   "def_index": 19498,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+   "def_index": 19504,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+  },
+  {
+   "def_path": "tc::reduction::cofib::CofibAtom::var",
+   "def_index": 19726,
+   "markers_exact": false,
+   "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:u32` vs derived `<end>`"
+  }
+ ],
+ "O3_minus_O0": []
+}

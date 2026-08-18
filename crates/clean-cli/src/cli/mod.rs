@@ -456,11 +456,12 @@ mod tests {
 
     #[test]
     fn repl_has_expected_path() {
-        assert_eq!(FEATURES.len(), 5);
+        assert_eq!(FEATURES.len(), 6);
         assert_eq!(FEATURES[0].path, &["repl"]);
         assert_eq!(FEATURES[1].path, &["sorry-trace"]);
         assert_eq!(FEATURES[2].path, &["export-cert"]);
         assert_eq!(FEATURES[3].path, &["sorry-census"]);
         assert_eq!(FEATURES[4].path, &["run"]);
+        assert_eq!(FEATURES[5].path, &["extract"]);
     }
 }

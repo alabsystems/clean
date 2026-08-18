@@ -14,16 +14,13 @@
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec_axiom_closure::{computed_axiom_closure, foundational_rule_names};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec (the `add_whnf_normalizes` stage is
 /// in the Substitution bundle, right after `add_whnf_progress`; see
 /// `bundles.rs`).
 fn build_normalizes_test_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// DIAGNOSTIC (temporary): dump the recursor types so the fixedIndicesToParams

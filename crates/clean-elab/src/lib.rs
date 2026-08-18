@@ -229,6 +229,7 @@ pub(crate) mod instances;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod instances_ext;
+pub mod interactive_goals;
 pub mod io_bridge;
 pub(crate) mod io_monad;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
@@ -239,6 +240,7 @@ pub(crate) mod io_monad_ext;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod io_monad_ext2;
+pub(crate) mod level_params;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -430,19 +432,6 @@ pub(crate) mod unify_ext;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) mod universe_constraint_ext;
-pub(crate) mod universe_poly;
-// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
-// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) mod universe_poly_ext;
-// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
-// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) mod universe_poly_ext2;
-// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
-// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod variable_cmd;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -538,7 +527,7 @@ pub use file_context::FileContext;
 pub use header::{elaborate_decl_headers_with_context, DeclHeader};
 pub use imports::{
     lake_import_search_paths_for_file, nearest_lake_root_for_file, olean_available_for_module,
-    process_imports, resolve_intra_project_import,
+    process_import_batch_with_search_paths, process_imports, resolve_intra_project_import,
 };
 pub use preprocess::preprocess_decl_with_context;
 #[cfg(not(test))]
@@ -1049,6 +1038,9 @@ fn elaborate_decl_and_register_inner_with_aux(
         // past `end` (open_export_e2e::test_open_in_section_does_not_leak).
         fc_ref.enter_section();
         fc_ref.namespace_state_mut().push_scope();
+        // Scoped-notation activation frame: an `open` / `open scoped` inside
+        // the section activates scoped notations WITHIN the section only.
+        fc_ref.macro_ctx_mut().push_scoped_activation_frame();
         for inner in decls {
             // Thread section `variable` binders exactly as the top-level
             // section-marker path in `cmd_core` does: a `variable (x : T)` inner
@@ -1089,6 +1081,7 @@ fn elaborate_decl_and_register_inner_with_aux(
         // section-scoped `set_option`s in BOTH `fc_ref` and the kernel env
         // (`apply_options_to_env` only ever adds — a section-scoped option would
         // otherwise leak past the section).
+        fc_ref.macro_ctx_mut().pop_scoped_activation_frame();
         fc_ref.namespace_state_mut().pop_scope();
         fc_ref.exit_section_restoring_env_options(env);
         return Ok(RegisteredElabResult {
@@ -1129,6 +1122,20 @@ fn elaborate_decl_and_register_inner_with_aux(
         // a `local instance` declared inside dies at `end Foo`, exactly as in
         // a section.
         fc_ref.enter_local_scope();
+        // Scoped-notation activation frame: an `open` / `open scoped` inside
+        // the block dies at `end Foo`. The block's own namespace needs no
+        // explicit activation here — each inner declaration's `ElabCtx` syncs
+        // the macro context's current namespace from the namespace state, and
+        // the current namespace (with its ancestors) is implicitly active.
+        fc_ref.macro_ctx_mut().push_scoped_activation_frame();
+        // A `namespace` block scopes `variable` / `universe` / `set_option`
+        // exactly as a `section` does (Lean pushes one Scope per namespace) —
+        // Mathlib/Data/Subtype.lean declares `variable {p q : α → Prop}`
+        // directly under `namespace Subtype` and every decl below uses them.
+        // Mirror the Section arm: enter a section frame, thread each inner
+        // through `preprocess_decl_with_context` so Variable inners accumulate
+        // and later inners get the USED closure prepended, and restore on exit.
+        fc_ref.enter_section();
         for inner in decls {
             // COLLECT per-inner outcomes instead of `?`-aborting on the first
             // failure (the namespace-ABORT bug). A sibling failure must NOT drop
@@ -1137,7 +1144,21 @@ fn elaborate_decl_and_register_inner_with_aux(
             // later siblings can reference it), while each failure is recorded
             // as an explicit `ElabResult::Failed` leaf so it is still COUNTED and
             // REPORTED — never silently swallowed.
-            match elaborate_decl_and_register_inner(env, inner, Some(fc_ref)) {
+            //
+            // Nested Section/Namespace inners self-manage their scope through
+            // their own arms — preprocessing them here would double-push their
+            // frame (see the Section arm's identical guard).
+            let processed = if matches!(
+                inner,
+                clean_parser::SurfaceDecl::Section { .. }
+                    | clean_parser::SurfaceDecl::Namespace { .. }
+            ) {
+                None
+            } else {
+                Some(preprocess_decl_with_context(inner, fc_ref))
+            };
+            let to_elab = processed.as_ref().unwrap_or(inner);
+            match elaborate_decl_and_register_inner(env, to_elab, Some(fc_ref)) {
                 Ok(inner_result) => {
                     // Preserve hole contexts from inner declarations so holes
                     // inside a namespace block remain visible to IDE surfaces.
@@ -1151,9 +1172,11 @@ fn elaborate_decl_and_register_inner_with_aux(
                 }
             }
         }
+        fc_ref.macro_ctx_mut().pop_scoped_activation_frame();
         fc_ref.exit_local_scope();
         fc_ref.namespace_state_mut().pop_scope();
         fc_ref.namespace_state_mut().exit_namespace();
+        fc_ref.exit_section_restoring_env_options(env);
         return Ok(RegisteredElabResult {
             result: ElabResult::Multiple(results),
             warning: None,
@@ -1582,12 +1605,6 @@ mod env_snapshot_tests;
 #[path = "env_snapshot_ext_tests.rs"]
 mod env_snapshot_ext_tests;
 
-#[cfg(test)]
-mod universe_constraint_ext_tests;
-
-#[cfg(test)]
-mod universe_poly_tests;
-
 // tc_outparam_tests declared in tc_outparam.rs (not here — see #3285)
 
 #[cfg(test)]
@@ -1790,14 +1807,6 @@ mod command_elab_ext_tests;
 #[cfg(test)]
 #[path = "command_elab_registry_ext_tests.rs"]
 mod command_elab_registry_ext_tests;
-
-#[cfg(test)]
-#[path = "universe_poly_ext_tests.rs"]
-mod universe_poly_ext_tests;
-
-#[cfg(test)]
-#[path = "universe_poly_ext2_tests.rs"]
-mod universe_poly_ext2_tests;
 
 #[cfg(test)]
 #[path = "meta_ext_tests.rs"]

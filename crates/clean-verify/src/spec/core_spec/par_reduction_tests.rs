@@ -6,7 +6,6 @@
 //! par_subst / par_strips were deleted 2026-07-01).
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec. This bypasses the known
@@ -14,9 +13,7 @@ use crate::Specification;
 /// `Specification::new()` (see design doc memory). `par_reduces` is in the
 /// substitution bundle (`in_substitution: true` in `bundles.rs`).
 fn build_par_test_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// `par_reduces` inductive is registered with its recursor.

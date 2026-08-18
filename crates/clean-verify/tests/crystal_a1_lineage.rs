@@ -54,269 +54,103 @@
 //! So this is the link that was missing, at the strength it can honestly be
 //! claimed: the proved module and the emitted module are checked equal on every
 //! run, and the emitted one is named by digest.
+//!
+//! ## Two bodies, and only one of them has this link
+//!
+//! `has_cubical_layer` is **not** the body the execution plan designates. The
+//! designated target is `level::Level::is_zero`, and for it link 2a is OPEN. The
+//! `level_is_zero` module keeps that measured instead of asserted: the emitted
+//! `is_zero` body is recorded verbatim
+//! (`fixtures/level_is_zero.trust-ir.txt`), the callee that blocks transcription
+//! is recorded with it (`…_deref_callee.trust-ir.txt`), the A0 verdicts are
+//! pinned (`level_is_zero.a0.json` — 4 PASS, 2 FAIL), and the divergence between
+//! the registered `ir_lz_*` module and the emitted CFG is checked. Those tests
+//! FAIL when the wall moves, which is how the transcription work gets triggered
+//! rather than forgotten.
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+// The CFG parser both sides of this gate are read with, and the lane
+// comparator that reads it. Split out on 2026-08-14: with the sixth and
+// seventh chains this file reached 945 lines against a 500-line convention,
+// and the parser is the half that is shared rather than the half that is about
+// any one body.
+#[path = "crystal_a1_lineage/emitted_cfg.rs"]
+mod emitted_cfg;
 
-fn fixture(name: &str) -> String {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(name);
-    std::fs::read_to_string(&p).unwrap_or_else(|e| {
-        panic!(
-            "crystal A1: fixture {} is missing or unreadable ({e}). It is the EMITTED trust-ir \
-             this gate exists to check against; without it the gate would pass vacuously, so it \
-             fails closed instead.",
-            p.display()
-        )
-    })
-}
+use std::collections::{BTreeMap, BTreeSet};
 
-/// The emitted function's CFG, reduced to the facts a theorem about it depends on.
-#[derive(Debug, PartialEq, Eq)]
-struct Cfg {
-    /// block id -> the constant it materializes, if any
-    consts: BTreeMap<u32, bool>,
-    /// switch case value -> target block
-    cases: BTreeMap<u32, u32>,
-    /// the switch's default target
-    default: u32,
-    /// block id -> branch target
-    branches: BTreeMap<u32, u32>,
-    /// the block that takes a parameter, if any
-    join_with_param: Option<u32>,
-    blocks: Vec<u32>,
-}
+pub(crate) use emitted_cfg::{
+    assert_entry_params, assert_lanes, clean_block_sources, fixture, parse_clean, parse_emitted,
+    Cfg,
+};
 
-fn parse_emitted(text: &str) -> Cfg {
-    let (mut consts, mut cases, mut branches) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
-    let (mut default, mut join_with_param, mut blocks, mut cur) = (u32::MAX, None, vec![], None);
-    for raw in text.lines() {
-        let line = raw.split("; #").next().unwrap_or(raw).trim();
-        if let Some(rest) = line.strip_prefix("bb") {
-            if let Some((num, tail)) = rest.split_once([':', '(']) {
-                if let Ok(id) = num.parse::<u32>() {
-                    blocks.push(id);
-                    cur = Some(id);
-                    // A parameter list is `bbN(%k: ty):`; the entry block's `(%0: ptr)`
-                    // is the FUNCTION parameter, so only non-entry blocks count.
-                    if (raw.contains("(%") || tail.starts_with('%')) && id != 0 {
-                        join_with_param = Some(id);
-                    }
-                }
-            }
-        } else if line.contains("switch") {
-            if let Some(inner) = line.split_once('[').and_then(|(_, r)| r.split_once(']')) {
-                for tok in inner.0.split_whitespace().collect::<Vec<_>>().chunks(2) {
-                    if let [k, v] = tok {
-                        let tgt = v
-                            .trim_start_matches("bb")
-                            .parse::<u32>()
-                            .unwrap_or(u32::MAX);
-                        if k.starts_with("default") {
-                            default = tgt;
-                        } else if let Ok(val) = k.trim_end_matches(':').parse::<u32>() {
-                            cases.insert(val, tgt);
-                        }
-                    }
-                }
-            }
-        } else if line.contains("const bool") {
-            if let Some(b) = cur {
-                consts.insert(b, line.contains("true"));
-            }
-        } else if let Some(t) = line.strip_prefix("br bb") {
-            if let (Some(b), Ok(tgt)) = (cur, t.split('(').next().unwrap_or("").parse::<u32>()) {
-                branches.insert(b, tgt);
-            }
-        }
-    }
-    Cfg {
-        consts,
-        cases,
-        default,
-        branches,
-        join_with_param,
-        blocks,
-    }
-}
-
-/// The same facts, read off the registered Clean spec sources.
-fn parse_clean(src: &str) -> Cfg {
-    // `ir_dN` numerals; blocks are `IRBlock.mk ir_dID params ...`.
-    let n = |s: &str| s.trim().trim_start_matches("ir_d").parse::<u32>().ok();
-    let (mut consts, mut cases, mut branches) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
-    let (mut default, mut join_with_param, mut blocks) = (u32::MAX, None, vec![]);
-    for decl in src.split("def ir_h2_b").skip(1) {
-        let body = decl.split_once(":=").map(|(_, b)| b).unwrap_or(decl);
-        let after = body.split_once("IRBlock.mk").map(|(_, r)| r).unwrap_or("");
-        let mut it = after.split_whitespace();
-        let id = it.next().and_then(n).unwrap_or(u32::MAX);
-        blocks.push(id);
-        if !after
-            .split_whitespace()
-            .nth(1)
-            .is_some_and(|p| p == "ir_nl0")
-            && id != 0
-        {
-            join_with_param = Some(id);
-        }
-        if body.contains("IRConst.bool_ Bool.true") {
-            consts.insert(id, true);
-        } else if body.contains("IRConst.bool_ Bool.false") {
-            consts.insert(id, false);
-        }
-        if let Some(sw) = body.split_once("IRInst.switch").map(|(_, r)| r) {
-            let toks: Vec<&str> = sw.split_whitespace().collect();
-            // `switch <scrut> <dflt> <dargs> (ir_sc <v> <tgt> (ir_sc …))`
-            if let Some(d) = toks.get(1).and_then(|t| n(t)) {
-                default = d;
-            }
-            let mut rest = sw;
-            while let Some((_, r)) = rest.split_once("ir_sc ") {
-                let mut t = r.split_whitespace();
-                if let (Some(v), Some(g)) = (t.next().and_then(n), t.next().and_then(n)) {
-                    cases.insert(v, g);
-                }
-                rest = r;
-            }
-        }
-        if let Some(br) = body.split_once("IRInst.br").map(|(_, r)| r) {
-            if let Some(t) = br.split_whitespace().next().and_then(n) {
-                branches.insert(id, t);
-            }
-        }
-    }
-    blocks.sort_unstable();
-    Cfg {
-        consts,
-        cases,
-        default,
-        branches,
-        join_with_param,
-        blocks,
-    }
-}
-
-/// The registered spec sources for the five blocks, in one string.
-fn clean_block_sources() -> String {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/spec/core_spec/eval_ir_mode.rs");
-    let src = std::fs::read_to_string(&p).expect("eval_ir_mode.rs must be readable");
-    // Each block is `const SRC_IR_H2_BN: &str = "def ir_h2_bN ...";`
-    src.lines()
-        .filter(|l| l.starts_with("const SRC_IR_H2_B"))
-        .map(|l| l.to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// THE GATE: the module Clean proves about must be the module trustc emits.
-#[test]
-fn proved_module_matches_the_emitted_artifact() {
-    let emitted = parse_emitted(&fixture("has_cubical_layer.trust-ir.txt"));
-    let clean = parse_clean(&clean_block_sources());
-
-    // COVERAGE DENOMINATOR. Two empty CFGs compare equal, so a parser that
-    // silently extracted nothing would make every assertion below pass while
-    // checking nothing. Pin what the emitted body actually contains first.
-    assert_eq!(emitted.blocks.len(), 5, "parser found {:?}", emitted.blocks);
-    assert_eq!(
-        emitted.cases.len(),
-        2,
-        "two switch cases: {:?}",
-        emitted.cases
-    );
-    assert_eq!(
-        emitted.consts.len(),
-        3,
-        "three constant-producing arms: {:?}",
-        emitted.consts
-    );
-    assert_eq!(
-        emitted.branches.len(),
-        3,
-        "three br edges: {:?}",
-        emitted.branches
-    );
-    assert!(
-        emitted.join_with_param.is_some(),
-        "a join block taking a parameter"
-    );
-    assert_ne!(emitted.default, u32::MAX, "a switch default");
-
-    assert_eq!(
-        emitted.blocks, clean.blocks,
-        "block set differs: emitted {:?} vs Clean {:?}",
-        emitted.blocks, clean.blocks
-    );
-    assert_eq!(
-        emitted.cases, clean.cases,
-        "SWITCH CASES differ: emitted {:?} vs Clean {:?}. The first version of this module \
-         enumerated all six tags; the compiler emits only the true ones and routes the rest \
-         through the default.",
-        emitted.cases, clean.cases
-    );
-    assert_eq!(
-        emitted.default, clean.default,
-        "switch DEFAULT differs: emitted bb{} vs Clean bb{}",
-        emitted.default, clean.default
-    );
-    assert_eq!(
-        emitted.consts, clean.consts,
-        "per-block CONSTANTS differ: emitted {:?} vs Clean {:?}. Two distinct true blocks are \
-         emitted; collapsing them into one is a different CFG.",
-        emitted.consts, clean.consts
-    );
-    assert_eq!(
-        emitted.branches, clean.branches,
-        "BRANCH targets differ: emitted {:?} vs Clean {:?}",
-        emitted.branches, clean.branches
-    );
-    assert_eq!(
-        emitted.join_with_param, clean.join_with_param,
-        "the JOIN block differs: emitted {:?} vs Clean {:?}. The emitted body funnels every arm \
-         into a block taking a bool parameter and returns it; returning directly from each arm \
-         is a different body.",
-        emitted.join_with_param, clean.join_with_param
-    );
-    assert!(
-        !fixture("has_cubical_layer.trust-ir.txt").contains("unreachable"),
-        "the emitted body has no trap block; a Clean module with one is not this body"
-    );
-}
-
-/// The measurement the whole chain rests on, pinned so it cannot quietly rot.
+/// A0 and A6, asserted for a chain in one place: every criterion of the
+/// candidate filter, the flip event, and **the flip-event lineage == the
+/// coverage-row lineage** — the gate that says the artifact the differential
+/// inspected is the artifact codegen compiled.
 ///
-/// Taken on **clean-kernel itself**, not on a probe crate: the differential
-/// verdict, the flip event, and the equality of the two lineage digests.
-#[test]
-fn a0_a6_evidence_is_pinned_on_the_shipped_kernel() {
-    let j = fixture("has_cubical_layer.lineage.json");
-    let evidence: serde_json::Value =
-        serde_json::from_str(&j).expect("crystal A0/A6 evidence must be valid JSON");
+/// Factored out when the sixth and seventh chains landed. The first five each
+/// carry their own copy, which had already drifted: two of them check
+/// `deferred_to_seam`, one checks the negative control, and one checks neither.
+/// A helper cannot retroactively fix those, but it stops the drift growing.
+fn assert_a0_a6(evidence: &serde_json::Value, def_path: &str) {
+    assert_a0_a6_on_seam(evidence, def_path, "codegen", 0);
+}
+
+/// The same, for a chain whose flip fired on a seam other than codegen or whose
+/// body carries asserts.
+///
+/// **Added 2026-08-16 by the TENTH chain**, which is the first over a CTFE flip
+/// and the first over a panic arm. Both facts were HARD-CODED here before —
+/// `seam == "codegen"` and `asserts == 0` — and both are still pinned, per
+/// chain, rather than relaxed: a codegen chain that started reporting `ctfe`,
+/// or a zero-assert body that grew one, still fails. The count is the number of
+/// asserts `verify_assert_parity` VERIFIED (count + kind class + polarity, in
+/// canonical DFS preorder, against the built sibling), so on the CTFE chain it
+/// is evidence rather than metadata: on all 178 codegen flips that check is
+/// vacuous at zero.
+fn assert_a0_a6_on_seam(evidence: &serde_json::Value, def_path: &str, seam: &str, asserts: u64) {
     assert_eq!(
         evidence["crate"].as_str(),
         Some("clean-kernel (THE SHIPPED KERNEL, not a probe)")
     );
-    assert_eq!(
-        evidence["def_path"].as_str(),
-        Some("mode::CleanMode::has_cubical_layer")
-    );
-    assert_eq!(evidence["derived_mir"]["verdict"].as_str(), Some("agreed"));
-    assert_eq!(
-        evidence["derived_mir"]["markers_exact"].as_bool(),
-        Some(true)
-    );
+    assert_eq!(evidence["def_path"].as_str(), Some(def_path));
+
+    // A0, criterion by criterion.
+    assert_eq!(evidence["lowered"].as_bool(), Some(true));
+    assert_eq!(evidence["spliced"].as_bool(), Some(true));
     assert_eq!(
         evidence["unsupported"].as_array().map(Vec::is_empty),
         Some(true)
     );
+    assert_eq!(evidence["derived_mir"]["verdict"].as_str(), Some("agreed"));
+    assert_eq!(
+        evidence["derived_mir"]["markers_exact"].as_bool(),
+        Some(true),
+        "markers_exact is the -O gate Level::is_zero fails; it must be TRUE here"
+    );
+    for k in ["resolved", "extern_decls", "unresolved"] {
+        assert_eq!(
+            evidence["calls"][k].as_u64(),
+            Some(0),
+            "a non-zero {k} call count would reopen the closure question"
+        );
+    }
+    assert_eq!(evidence["deferred_to_seam"].as_bool(), Some(false));
     assert_eq!(evidence["flip_event"]["fired"].as_bool(), Some(true));
     assert_eq!(
-        evidence["flip_event"]["matches_artifact_lineage"].as_bool(),
-        Some(true)
+        evidence["flip_event"]["seam"].as_str(),
+        Some(seam),
+        "the seam is part of what link 2b MEANS: a codegen flip binds the instruction stream \
+         codegen consumes, a CTFE flip binds the VALUE the const-eval interpreter produced. They \
+         are not interchangeable and neither is a default."
+    );
+    assert_eq!(
+        evidence["flip_event"]["asserts"].as_u64(),
+        Some(asserts),
+        "the number of asserts `verify_assert_parity` verified against the built sibling"
     );
 
+    // A6: the artifact inspected must be the artifact compiled.
     let artifact_lineage = evidence["lineage"]
         .as_str()
         .expect("artifact lineage must be a string");
@@ -331,6 +165,10 @@ fn a0_a6_evidence_is_pinned_on_the_shipped_kernel() {
         artifact_lineage, flip_lineage,
         "the artifact inspected by the differential gate must be the artifact compiled by A6"
     );
+    assert_eq!(
+        evidence["flip_event"]["matches_artifact_lineage"].as_bool(),
+        Some(true)
+    );
     assert!(
         evidence["flip_event"]["raw"]
             .as_str()
@@ -338,7 +176,212 @@ fn a0_a6_evidence_is_pinned_on_the_shipped_kernel() {
         "the raw flip event must carry the same lineage"
     );
     assert!(
-        !j.contains("hclprobe") && !j.contains("hclflip"),
-        "the evidence must come from clean-kernel, not from a probe crate"
+        evidence["flip_event"]["raw"]
+            .as_str()
+            .is_some_and(|raw| raw.contains("clean_kernel[")),
+        "attribution: THIS chain's flip event must name clean_kernel, whatever the aggregates say"
     );
+    assert_eq!(
+        evidence["lineage_domain"].as_str(),
+        Some("trust_thir_lower.body_lineage.v2"),
+        "a digest and its domain travel together or neither means anything"
+    );
+
+    // The negative control and the reproduction are part of the evidence.
+    assert_eq!(
+        evidence["negative_control"]["flip_events_crate_wide"].as_u64(),
+        Some(0)
+    );
+    assert_eq!(
+        evidence["negative_control"]["event_for_this_body_present"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(
+        evidence["reproduction"]["coverage_json_byte_identical_across_all_three"].as_bool(),
+        Some(true),
+        "three clean builds must reproduce the digest, or `lineage` is not a measurement"
+    );
+}
+
+// The FIRST complete chain — `mode::CleanMode::has_cubical_layer`. Its two
+// gates lived in THIS file until 2026-08-16, when the ninth chain took it past
+// the 500-line convention; they moved unchanged, into the per-chain file every
+// other chain already had.
+#[path = "crystal_a1_lineage/has_cubical_layer.rs"]
+mod has_cubical_layer;
+
+// The designated `Level::is_zero` target has a separate measured-open lane.
+#[path = "crystal_a1_lineage/level_is_zero.rs"]
+mod level_is_zero;
+
+// The SECOND complete chain — `Level::kind_ord` — has the same two gates, over
+// a structurally different body: seven blocks, a four-case switch with a
+// reachable default, five distinct integer answers, a `u8` join parameter.
+#[path = "crystal_a1_lineage/level_kind_ord.rs"]
+mod level_kind_ord;
+
+// The THIRD complete chain — `CleanMode::from_source_system` — fourteen blocks,
+// eleven explicit switch cases on a NON-CONTIGUOUS list, a by-value argument
+// with no load at all, and AGGREGATE constants as its answers. It was measured
+// as unchainable until `IRConst` gained an aggregate form.
+#[path = "crystal_a1_lineage/from_source_system.rs"]
+mod from_source_system;
+
+// The FOURTH complete chain — `flat::types::FlatFlags::contains` — and the
+// first over a body that COMPUTES: a width-8 bitwise AND and a width-8
+// equality, two parameters, three field reads one of which is a duplicate, and
+// no constant anywhere. `markers_exact` here is NON-vacuous (8 marker lines).
+#[path = "crystal_a1_lineage/flat_flags_contains.rs"]
+mod flat_flags_contains;
+
+// The FIFTH complete chain — `expr::bvar_in_range` — and the first over a body
+// that BRANCHES: two condbrs, four icmps, seven blocks, two chained join
+// blocks, three parameters, and a short circuit expressed as control flow.
+// 21 non-vacuous marker lines, and the only chained body the producer's own
+// interpreter differential exercised (agreed on 125 sampled inputs).
+#[path = "crystal_a1_lineage/bvar_in_range.rs"]
+mod bvar_in_range;
+
+// Every chain above records `markers_exact: true` while comparing ZERO marker lines — the
+// flag is vacuous on them. This module keeps that from being a free pass: it pins a
+// two-sided witness (markers that exist and agree on a flipping body; markers that exist and
+// DIFFER on a body the -O gate consequently refuses) so the channel is shown to discriminate
+// rather than to report `true` about everything.
+#[path = "crystal_a1_lineage/markers_channel.rs"]
+mod markers_channel;
+
+// The SIXTH complete chain — `env::native_reducers_char::is_valid_char` — the
+// second and last condbr-carrying body in the crate, at width 64, with a
+// materialised constant in an `icmp`'s LEFT operand and an entry `condbr` whose
+// polarity is the opposite of the fifth chain's. 12 non-vacuous marker lines,
+// and the only branching body with an affordable concrete `ir_eval` witness.
+#[path = "crystal_a1_lineage/is_valid_char.rs"]
+mod is_valid_char;
+
+// The SEVENTH complete chain — `<tc::ExprPathStep as Clone>::clone` — thirteen
+// blocks, ten explicit cases plus a reachable default over eleven variants,
+// eleven aggregate constants, and a `load` prologue: the first chained body
+// combining the first chain's shape with the third chain's. Written by
+// `#[derive(Clone)]`, not by hand. Its `markers_exact` is VACUOUS and the gate
+// asserts that rather than omitting it.
+#[path = "crystal_a1_lineage/expr_path_step_clone.rs"]
+mod expr_path_step_clone;
+
+// The EIGHTH chain, 2026-08-15 —
+// `env::native_reducers_float::reduce_float_div::{closure#0}`, the first over
+// FLOAT ARITHMETIC and the ground the 2026-08-15 lane-8 census recorded as
+// covered by no chain. It is one block and two instructions — not the smallest
+// chainable body (106 of the 177 are ONE instruction, every one a bare `ret`),
+// but one of only four in the whole chainable set that does float arithmetic.
+// Being two instructions is why it forced two new lanes into
+// `emitted_cfg.rs`: the binop's TYPE (`fdiv f32` vs `fdiv f64` are different
+// operations and differed in no lane) and the RETURNED value id (`ret %1`
+// instead of `ret %3` returns an argument instead of the answer, and agreed
+// with every lane this file had, on every chain).
+#[path = "crystal_a1_lineage/float_div.rs"]
+mod float_div;
+
+// The NINTH chain, 2026-08-16 —
+// `env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}`, the first
+// over a CAST and the other half of the ground the 2026-08-15 lane-8 census
+// recorded as covered by no chain. One block, two instructions — and until this
+// module it parsed to an ENTIRELY EMPTY `Cfg` on both sides, because a cast was
+// in no lane at all. It adds two: `casts` (op, result, operand — `zext` and
+// `trunc` are the same shape and opposite operations) and `cast_tys` (op,
+// result, SOURCE, DESTINATION — a cast has TWO types and both are semantic
+// input, one more than `binop_tys` has to carry).
+#[path = "crystal_a1_lineage/get_char_val_trunc.rs"]
+mod get_char_val_trunc;
+
+// The TENTH complete chain —
+// `tc::local_context::LocalContext::push_low_local::META_TAG`, the first over a
+// PANIC ARM and the first over a CTFE FLIP. Nine nodes in one block, and three
+// of them were invisible before it: the `assert` (in no lane at all — it binds
+// no result, carries no type and has no target, so DELETING it changed nothing
+// the gate read), the three constants in ONE block (the value lanes were keyed
+// by block and kept one of each kind, and `assert_lanes` carried a ratchet that
+// refused such a body and named this repair), and a multi-result node's ids (the
+// program-order lane's result slot was a single `u32` read with
+// `unwrap_or(u32::MAX)`).
+#[path = "crystal_a1_lineage/meta_tag_shl.rs"]
+mod meta_tag_shl;
+
+// THE COVERAGE DENOMINATOR FOR THE WHOLE FILE — ten chains against every lane,
+// pinned cell by cell, plus parser totality over the emitted instruction set.
+// Added 2026-08-16 by the lane-completeness audit, which found four constructs
+// present in the bodies that no lane read and one lane a chain never compared.
+#[path = "crystal_a1_lineage/lane_matrix.rs"]
+mod lane_matrix;
+
+/// **The numeral convention the type lane resolves through, PROVED from the
+/// registered sources rather than assumed.**
+///
+/// `norm_clean_ty` reads `ir_d64` as 64 — the name carries the value. That is a
+/// convention, and a convention a gate relies on silently is a hole: if
+/// `ir_d32` were ever registered as anything but 32, every width comparison in
+/// the type lanes would compare two wrong numbers and agree. So the numeral
+/// chain is re-derived here from the `def ir_dK` declarations themselves.
+#[test]
+fn numeral_names_carry_their_values() {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/spec/core_spec");
+    let mut seen: BTreeMap<u32, String> = BTreeMap::new();
+    for entry in std::fs::read_dir(&dir)
+        .expect("core_spec must be readable")
+        .flatten()
+    {
+        let p = entry.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
+        let Ok(src) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        for line in src.lines() {
+            let Some((_, rest)) = line.split_once("def ir_d") else {
+                continue;
+            };
+            let Some((num, body)) = rest.split_once(" : Nat := ") else {
+                continue;
+            };
+            let Ok(k) = num.parse::<u32>() else { continue };
+            let body = body.split('"').next().unwrap_or(body).trim().to_string();
+            if let Some(prev) = seen.insert(k, body.clone()) {
+                assert_eq!(
+                    prev, body,
+                    "ir_d{k} is declared twice with different bodies"
+                );
+            }
+        }
+    }
+    assert!(
+        seen.len() >= 18,
+        "the numeral chain must have been found: {seen:?}"
+    );
+    assert_eq!(seen.get(&0).map(String::as_str), Some("Nat.zero"));
+    for (k, body) in &seen {
+        if *k == 0 {
+            continue;
+        }
+        if let Some(pred) = body.strip_prefix("Nat.succ ir_d") {
+            let pred: u32 = pred.parse().unwrap_or_else(|_| panic!("ir_d{k} := {body}"));
+            assert_eq!(pred + 1, *k, "ir_d{k} is Nat.succ ir_d{pred}");
+        } else if let Some(sum) = body.strip_prefix("Nat.add ir_d") {
+            let (a, b) = sum
+                .split_once(" ir_d")
+                .unwrap_or_else(|| panic!("ir_d{k} := {body}"));
+            let a: u32 = a.parse().unwrap_or_else(|_| panic!("ir_d{k} := {body}"));
+            let b: u32 = b.parse().unwrap_or_else(|_| panic!("ir_d{k} := {body}"));
+            assert_eq!(a + b, *k, "ir_d{k} is Nat.add ir_d{a} ir_d{b}");
+        } else {
+            panic!(
+                "ir_d{k} := {body} — an unrecognised numeral form. The type lanes read `ir_dK` as \
+                 K; a numeral defined some other way would silently make every width comparison \
+                 compare the wrong numbers."
+            );
+        }
+    }
+    // The three widths the type lanes actually resolve today.
+    for w in [8u32, 32, 64] {
+        assert!(seen.contains_key(&w), "ir_d{w} must be registered");
+    }
 }

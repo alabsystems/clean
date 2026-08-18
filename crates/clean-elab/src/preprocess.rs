@@ -41,9 +41,21 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
 
     match decl {
         // Variable declarations add their binders to the context
-        SurfaceDecl::Variable { binders, .. } => {
+        SurfaceDecl::Variable { binders, span } => {
+            // Validation-scope fix: a later `variable`'s type may reference
+            // EARLIER section variables (`variable {β : α → Sort*}` after
+            // `variable {α}`). `elab_variable_binders` validates types by
+            // elaborating them, so hand it the full accumulated telescope —
+            // prior binders first, this command's after — or the reference
+            // auto-binds as a bare Sort and dies with TooManyArguments.
+            // Only the NEW binders are accumulated into the file context.
+            let mut full = file_ctx.current_variables().to_vec();
             file_ctx.add_variables(binders);
-            decl.clone() // Return as-is (will be skipped during elaboration)
+            full.extend(binders.iter().cloned());
+            SurfaceDecl::Variable {
+                span: *span,
+                binders: full,
+            }
         }
 
         // Universe declarations add their names to the context
@@ -87,7 +99,17 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params.clone()
                 };
                 let new_binders = if has_file_variables {
-                    let mut new_binders = file_ctx.current_variables().to_vec();
+                    // Lean parity: prepend only the USED section variables
+                    // (dependency fixpoint + instance activation + own-binder
+                    // shadowing). Prepending ALL of them registers same-file
+                    // constants with phantom implicit binders; every later use
+                    // then mints fresh metavariables nothing can solve, and
+                    // the decl dies at the kernel with "contains free
+                    // variables" (the 2026-08-15 Mathlib Logic/Basic class).
+                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                        file_ctx.current_variables(),
+                        decl,
+                    );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
@@ -133,7 +155,17 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params.clone()
                 };
                 let new_binders = if has_file_variables {
-                    let mut new_binders = file_ctx.current_variables().to_vec();
+                    // Lean parity: prepend only the USED section variables
+                    // (dependency fixpoint + instance activation + own-binder
+                    // shadowing). Prepending ALL of them registers same-file
+                    // constants with phantom implicit binders; every later use
+                    // then mints fresh metavariables nothing can solve, and
+                    // the decl dies at the kernel with "contains free
+                    // variables" (the 2026-08-15 Mathlib Logic/Basic class).
+                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                        file_ctx.current_variables(),
+                        decl,
+                    );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
@@ -175,7 +207,17 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params.clone()
                 };
                 let new_binders = if has_file_variables {
-                    let mut new_binders = file_ctx.current_variables().to_vec();
+                    // Lean parity: prepend only the USED section variables
+                    // (dependency fixpoint + instance activation + own-binder
+                    // shadowing). Prepending ALL of them registers same-file
+                    // constants with phantom implicit binders; every later use
+                    // then mints fresh metavariables nothing can solve, and
+                    // the decl dies at the kernel with "contains free
+                    // variables" (the 2026-08-15 Mathlib Logic/Basic class).
+                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                        file_ctx.current_variables(),
+                        decl,
+                    );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
@@ -360,7 +402,17 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params.clone()
                 };
                 let new_binders = if has_file_variables {
-                    let mut new_binders = file_ctx.current_variables().to_vec();
+                    // Lean parity: prepend only the USED section variables
+                    // (dependency fixpoint + instance activation + own-binder
+                    // shadowing). Prepending ALL of them registers same-file
+                    // constants with phantom implicit binders; every later use
+                    // then mints fresh metavariables nothing can solve, and
+                    // the decl dies at the kernel with "contains free
+                    // variables" (the 2026-08-15 Mathlib Logic/Basic class).
+                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                        file_ctx.current_variables(),
+                        decl,
+                    );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {

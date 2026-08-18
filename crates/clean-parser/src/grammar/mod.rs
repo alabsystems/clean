@@ -201,6 +201,18 @@ pub struct Parser {
     /// this via [`Parser::quant_binders`]. Non-quantifier callers of
     /// `binders()` clear it, so a stale guard can never leak between binders.
     pending_binder_guards: Vec<SurfaceExpr>,
+    /// Namespace-path stack for scoped custom notation: each entry is the
+    /// FULL dotted path at that nesting depth (`namespace A.B` inside
+    /// `namespace X` pushes `"X.A.B"`). A `scoped infixl` is tagged with the
+    /// top of this stack and consulted only while its namespace is active
+    /// (current, an ancestor of the current path, or opened). See
+    /// `custom_notation.rs`.
+    notation_ns_stack: Vec<String>,
+    /// Scoped-notation namespaces activated at parse time by simple `open X`
+    /// / `open scoped X` commands. Bounded by the enclosing namespace /
+    /// section block (saved and truncated by the block parsers) and by an
+    /// `open … in`'s body.
+    open_scoped_notation_ns: Vec<String>,
 }
 
 impl Parser {
@@ -255,6 +267,8 @@ impl Parser {
             custom_mixfixes: Vec::new(),
             custom_min_prec: custom_notation::CUSTOM_PREC_FLOOR,
             pending_binder_guards: Vec::new(),
+            notation_ns_stack: Vec::new(),
+            open_scoped_notation_ns: Vec::new(),
         }
     }
 

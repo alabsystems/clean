@@ -150,14 +150,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     use crate::spec::ProofStatus;
-    use crate::test_utils::run_with_stack;
     use crate::Specification;
 
     fn build_substitution_spec_with_stack() -> Specification {
-        run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        })
+        crate::test_utils::build_substitution_spec_with_stack()
     }
 
     #[test]

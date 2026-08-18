@@ -68,6 +68,9 @@ pub struct BuildArgs {
     pub force: bool,
     /// Only type-check, skip code generation
     pub check_only: bool,
+    /// Warn and continue when a stdlib/local-dep `.olean` import fails to load
+    /// (fail-closed default: such failures fail the module build)
+    pub permissive_imports: bool,
 }
 
 /// Arguments for `lake clean`

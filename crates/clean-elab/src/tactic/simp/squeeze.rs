@@ -11,8 +11,8 @@ use crate::stack_safe;
 use crate::tactic::core::{Goal, ProofState, TacticError, TacticResult};
 use crate::tactic::{assumption, rfl};
 
+use super::cache::collect_simp_lemmas_cached;
 use super::expr::try_apply_simp_lemma_with_proof;
-use super::lemmas::collect_simp_lemmas;
 use super::proof::{mk_congr, mk_congr_arg, mk_congr_fun, mk_eq_trans, mk_forall_congr, mk_funext};
 use super::reduce::{beta_reduce, eta_reduce};
 use super::types::{SimpConfig, SimpLemmaSet, SimpResult};
@@ -110,7 +110,7 @@ pub fn squeeze_simp_with_config(
     let mut accumulated_proof: Option<Expr> = None;
 
     // Collect simp lemmas from environment
-    let simp_lemmas = collect_simp_lemmas(state, &config.simp_config);
+    let simp_lemmas = collect_simp_lemmas_cached(state, &config.simp_config);
 
     // Main simplification loop - track which lemmas are actually applied
     while steps < config.simp_config.max_steps {

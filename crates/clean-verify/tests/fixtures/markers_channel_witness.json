@@ -1,0 +1,70 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "what_this_discharges": "`markers_exact: true` is VACUOUS on the crystal chain bodies \u2014 their `markers_detail` reads \"0 marker line(s) identical\", i.e. the flag compares two EMPTY sequences. Recording that caveat is not enough: a reader still cannot tell whether the marker channel is a real instrument or one that reports `true` because it extracts nothing from anything. This fixture answers that by measurement, with a two-sided witness taken from the SAME build as the chain evidence.",
+ "population": {
+  "derived_mir_agreed": 1541,
+  "markers_exact_true": 1082,
+  "of_those_comparing_ZERO_marker_lines": 1055,
+  "of_those_comparing_MORE_THAN_ZERO": 27,
+  "markers_exact_false": 459,
+  "reading": "The flag is vacuously true for 1055 of the 1082 bodies that carry it \u2014 but NOT for all, and it is false for 459. A channel that extracted nothing from everything could produce neither the 27 nor the 459.",
+  "moved_by_the_marker_lanes": "Non-vacuous comparisons rose 17 -> 27 and markers_exact=false fell 469 -> 459 between trustc bd36c65a8 and 110cc6379: trust's marker-fidelity lanes K (cross-block storage markers) and L (aggregate + Inst::Load operand temps) taught the shim to reproduce markers it previously omitted. The instrument got SHARPER, which is why a witness has to name its compiler."
+ },
+ "positive_witness": {
+  "why": "Non-vacuous AGREEMENT, on a body that actually ships through the flip. The channel compared eight real marker lines and they matched.",
+  "def_path": "flat::types::FlatFlags::contains",
+  "def_index": 16836,
+  "markers_exact": true,
+  "markers_detail": "8 marker line(s) identical",
+  "marker_lines_compared": 8,
+  "derived_mir_verdict": "agreed",
+  "lineage": "sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f",
+  "flip_event_fired": true,
+  "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16836 ~ clean_kernel[348e]::flat::types::{impl#1}::contains), asserts=0, lineage=sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f, flipped_so_far=150"
+ },
+ "negative_witness": {
+  "why": "Non-vacuous DISAGREEMENT, and the -O gate acts on it. This is the half that proves the flag can be false for a substantive reason rather than merely absent.",
+  "def_path": "level::Level::is_zero",
+  "def_index": 17078,
+  "markers_exact": false,
+  "markers_detail_head": "markers differ: line 0: built `mk b8.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"clean_kernel::level::LevelArc\", ... } }` vs derived `<end>`",
+  "the_difference": "BUILT carries marker lines that DERIVED does not have at all (`<end>` = derived's marker stream ended). This is a real missing-marker difference, not an empty-vs-empty comparison.",
+  "derived_mir_verdict": "agreed",
+  "flip_event_fired": false,
+  "consequence": "`flip_registry::record_green` refuses the body: `if tcx.sess.emit_lifetime_markers() && !markers_exact { return; }`. DefId(0:17078) occurs 0 times in the build log \u2014 no flip event and no fallback event. The wall STANDS at 110cc6379, through the marker lanes that fixed 10 other bodies."
+ },
+ "why_the_gate_is_live_in_this_build": "`Session::emit_lifetime_markers()` is true whenever `opts.optimize != OptLevel::No`. The measurement is a `--release` build, so the marker gate is ARMED, not dormant. A body with `markers_exact: false` is therefore genuinely refused here, which is exactly what the negative witness shows.",
+ "what_this_does_NOT_establish": "That the chain bodies' own `markers_exact: true` carries information. It does not, and this fixture does not pretend otherwise: for `has_cubical_layer`, `from_source_system` and `level::Level::kind_ord` the comparison is still empty-vs-empty, and the honest reading of their flag is 'this body has no lifetime markers on either side', NOT 'this body's markers were checked and agree'. What the witnesses establish is narrower and is the thing that was actually in doubt: the CHANNEL discriminates, so a zero-marker reading is a fact about those bodies rather than an artefact of a dead instrument.",
+ "build": {
+  "trust_repo_HEAD": "110cc63792d7fcb9c3f568fa01ef998974231f05",
+  "command": "RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info CARGO_TARGET_DIR=<tgt> RUSTC=<stage1>/rustc RUSTFLAGS='-Ztrust-verify=off -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir> -Cdebuginfo=0' <stage1>/cargo build --locked --release -p clean-kernel",
+  "same_build_as": "the 2026-08-13 re-pin of all four chain fixtures \u2014 the witnesses and the chain evidence are rows of ONE coverage dump, not separate measurements stitched together"
+ },
+ "trustc": {
+  "version_string": "rustc 1.99.0-dev (110cc6379 2026-08-13) (trustc 0.1.0)",
+  "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+  "binary_sha256": "ac41b080aaa22f2a96777836cf3874b9afde25d60be7679850e948a238cdae3a",
+  "lineage_domain": "trust_thir_lower.body_lineage.v2"
+ },
+ "measured": "2026-08-13",
+ "cross_session_divergence_2026_08_13": {
+  "status": "RESOLVED BY MEASUREMENT \u2014 the sibling fixture was RIGHT and this one's earlier reading was STALE.",
+  "what_was_contradicted": "`bvar_in_range.lineage.json` recorded markers_exact true, \"21 marker line(s) identical\", flip fired. Measured at trustc bd36c65a8 it was markers_exact FALSE (`built mk b0.0:live s0:bool vs derived <end>`) with DefId(0:16565) absent from the log \u2014 no flip, no fallback.",
+  "resolution": "Re-measured at trustc 110cc6379 (96 commits later): markers_exact TRUE, \"21 marker line(s) identical\", flip FIRED. The sibling's claim reproduces exactly.",
+  "cause": "Trust's marker-fidelity campaign landed in between \u2014 lane K (`the shim reproduces built's CROSS-BLOCK storage markers`) and lane L (`aggregate + Inst::Load operand-temp markers`). Before them the shim omitted markers built emits, so a marker-bearing body read markers_exact=false and the -O gate refused it. bvar_in_range is a BRANCHING body with cross-block temps, exactly lane K's subject.",
+  "ruled_out_first": "That the chain flattening (trust bd36c65a81) caused it \u2014 bvar_in_range is a short-circuit body, so it was the obvious suspect. markers_exact is FALSE for it in kd7 (BEFORE the flattening), kd8 and kd10 alike with a character-identical detail string, and TRUE at 110cc6379 which also contains the flattening. Not the flattening; the marker lanes.",
+  "the_actual_defect": "Neither fixture recorded the compiler it was measured on, so two contradictory readings could coexist with no way to tell which was current. Both now record trustc.version_string, trustc.binary_sha256 and build.trust_repo_HEAD, and ALL SIX chain fixtures are pinned on this ONE compiler.",
+  "known_residual_at_this_HEAD": "trust 110cc63792 is itself a review commit reporting `the marker residual is 12, not 0 \u2014 mf-residual-zero NOT merged`, with 7 lost flips from a written-field-order clause. The marker channel is under active repair; these numbers are a snapshot of a moving instrument, which is the whole reason the compiler identity is recorded."
+ },
+ "second_positive_witness": {
+  "why": "A STRONGER non-vacuous agreement than the first, and the body whose contradiction across sessions forced this reconciliation.",
+  "def_path": "expr::bvar_in_range",
+  "def_index": 16566,
+  "markers_exact": true,
+  "markers_detail": "21 marker line(s) identical",
+  "marker_lines_compared": 21,
+  "lineage": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+  "flip_event_fired": true,
+  "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16566 ~ clean_kernel[348e]::expr::bvar_in_range), asserts=0, lineage=sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a, flipped_so_far=202"
+ }
+}

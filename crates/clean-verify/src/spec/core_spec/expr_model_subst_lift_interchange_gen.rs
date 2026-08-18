@@ -560,15 +560,10 @@ impl Specification {
 #[cfg(test)]
 mod tests {
     use crate::spec::types::ProofStatus;
-    use crate::test_utils::run_with_stack;
-    use crate::Specification;
 
     #[test]
     fn test_interchange_gen_is_fully_constructive() {
-        let spec = run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        });
+        let spec = crate::test_utils::build_substitution_spec_with_stack();
 
         let gen_def = spec
             .definitions()
@@ -585,10 +580,7 @@ mod tests {
 
     #[test]
     fn test_interchange_bridge_is_fully_derived() {
-        let spec = run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        });
+        let spec = crate::test_utils::build_substitution_spec_with_stack();
 
         let interchange = spec
             .definitions()

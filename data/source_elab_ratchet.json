@@ -1,0 +1,13 @@
+{
+  "schema_version": "Clean-srcelab-ratchet-v1",
+  "last_updated": "2026-08-10",
+  "armed": false,
+  "counting_basis": "allow_sorry_success",
+  "files": {
+    "Mathlib/Logic/Basic.lean": { "success_baseline": 0 },
+    "Mathlib/Logic/Function/Basic.lean": { "success_baseline": 0 },
+    "Mathlib/Data/Subtype.lean": { "success_baseline": 0 },
+    "Mathlib/Logic/Unique.lean:1-240": { "success_baseline": 0, "cap_lines": 240 }
+  },
+  "notes": "Initial UNARMED baseline (all zeros) for scripts/source_elab_gate.sh, the gate-owned successor to the HISTORICAL 2026-07-14 source-elab rates in docs/plans/SOURCE_ELAB_IMPORTS_2026-07-13.md (Logic/Basic 86/257, Logic/Function/Basic 36/231, Data/Subtype 3/45, Unique[1..240] 2-3/40 — measured pre-header-first-elaboration, MUST NOT be merged into a current claim). The first central run with target/release/clean plus a Mathlib checkout and an explicit `scripts/source_elab_gate.sh --update` ARMS this ratchet with measured per-file success counts; until then the gate measures and reports but enforces nothing (armed=false keeps the zero baselines explicitly vacuous rather than silently green). Once armed, per-file success_baseline is monotonic-up: the gate fails if any pinned file drops below it, and --update refuses to lower an armed baseline. counting_basis=allow_sorry_success because Clean-check-report-v1 (crates/clean-cli/src/cmd_core.rs) carries NO per-decl sorry-taint field: under --allow-sorry, sorry-tainted decls are folded into success_count (record_checked_decl) and taint is only visible as the run-wide trust_summary.sorry_axioms counter, which the gate records per file in reports/source-elab/ as taint evidence. A strict per-decl sorry-free basis (elaborated AND kernel-registered AND sorry-free) requires a companion run WITHOUT --allow-sorry, where sorry decls surface individually in trust_failures — tracked follow-up; do not present allow_sorry_success as sorry-free. Mathlib/Logic/Unique.lean is pinned capped at line 240 because its final section (lines 241-270: Unique.subtypeEq/subtypeEq' + Fin.instUnique) OOMs at ~19.5 GB (SOURCE_ELAB_IMPORTS_2026-07-13.md OOM note)."
+}

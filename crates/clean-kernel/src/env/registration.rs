@@ -1135,14 +1135,20 @@ impl Environment {
         }
         // Check 3: no free variables
         if type_.has_fvar_quick() {
-            return Err(EnvError::ContainsFreeVar { name: name.clone() });
+            return Err(EnvError::ContainsFreeVar {
+                name: name.clone(),
+                fvars: super::types::collect_fvar_ids_for_diagnostics(&[type_]),
+            });
         }
         if let Some(value) = opt_value {
             if value.has_expr_mvar_quick() || value.has_level_mvar_quick() {
                 return Err(EnvError::ContainsMetavar { name: name.clone() });
             }
             if value.has_fvar_quick() {
-                return Err(EnvError::ContainsFreeVar { name: name.clone() });
+                return Err(EnvError::ContainsFreeVar {
+                    name: name.clone(),
+                    fvars: super::types::collect_fvar_ids_for_diagnostics(&[value]),
+                });
             }
         }
 

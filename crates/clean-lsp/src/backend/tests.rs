@@ -2791,6 +2791,90 @@ async fn test_live_hover_excludes_checked_declaration_end_boundary() {
 }
 
 #[tokio::test]
+async fn test_live_hover_renders_lean_syntax_type_not_debug() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///live-hover-pretty-type.lean").unwrap();
+    let text = "def f : Nat → Nat := fun n => n\n".to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text, "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+
+    let (query_position, type_str) = backend
+        .documents
+        .get(&uri)
+        .and_then(|doc| {
+            let decl = doc.elaborated.as_ref()?.declarations.first()?;
+            Some((doc.offset_to_position(decl.start), decl.type_str.clone()))
+        })
+        .expect("live check should elaborate the function declaration");
+    assert_eq!(
+        type_str, "Nat -> Nat",
+        "elaborated declaration type must be the pretty-printed Lean form"
+    );
+
+    let hover = backend
+        .get_hover_at(&uri, query_position)
+        .expect("hover should surface the elaborated declaration");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markdown hover contents");
+    };
+    assert!(
+        markup.value.contains("f : Nat -> Nat"),
+        "hover should render the declaration type in Lean syntax, got: {}",
+        markup.value
+    );
+    for token in ["Const(", "Sort(", "Pi(", "Name {"] {
+        assert!(
+            !markup.value.contains(token),
+            "hover must not leak Rust Debug formatting ({token}), got: {}",
+            markup.value
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_plain_term_goal_sorry_hole_renders_lean_syntax_type_not_debug() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///sorry-hole-pretty-type.lean").unwrap();
+    // The `sorry`-body hole path copies the declaration's `type_str` into the
+    // hole context verbatim, so this exercises the pretty-printed rendering
+    // end-to-end through `$/lean/plainTermGoal`.
+    let text = "def g : Nat → Nat := sorry\n".to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text.clone(), "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+
+    let hole_offset = text.find("sorry").expect("text contains the hole token");
+    let hole_position = backend
+        .documents
+        .get(&uri)
+        .map(|doc| doc.offset_to_position(hole_offset))
+        .expect("live checked document should remain open");
+
+    let response = backend.plain_term_goal(crate::rpc::PlainTermGoalParams {
+        text_document: crate::rpc::TextDocumentIdentifier { uri },
+        position: hole_position,
+    });
+    let goal = response
+        .goal
+        .expect("plainTermGoal on a `sorry` body should report the hole-local expected type");
+    assert_eq!(
+        goal, "Nat -> Nat",
+        "plainTermGoal must expose the pretty-printed Lean type, not Rust Debug structure"
+    );
+}
+
+#[tokio::test]
 async fn test_live_goto_definition_uses_checked_document_declaration_range() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
@@ -7534,5 +7618,215 @@ fn test_is_widget_module_decl_detects_attribute() {
     assert!(
         !CleanBackend::is_widget_module_decl(&other[0]),
         "an unrelated attribute is not a widget module declaration"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Interactive goals on the LSP RPC channel
+// (Lean.Widget.getInteractiveGoals / getInteractiveTermGoal)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_rpc_call_get_interactive_goals_returns_hypothesis_bundles_for_fixture_theorem() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///interactive-goals-fixture.lean").unwrap();
+    let text = "theorem demo : True := by\n  trivial\n".to_string();
+    let mut doc = Document::new(uri.clone(), 1, text, "lean".to_string());
+    doc.elaborated = Some(ElaboratedDocument {
+        errors: vec![],
+        warnings: vec![],
+        declarations: vec![ElaboratedDecl {
+            name: "demo".to_string(),
+            type_str: "True".to_string(),
+            start: 0,
+            end: "theorem demo : True := by\n  trivial".len(),
+        }],
+        holes: vec![],
+        widget_modules: vec![],
+    });
+    backend.documents.insert(uri.clone(), doc);
+    backend.tactic_goal_snapshots.insert(
+        uri.clone(),
+        vec![TacticGoalSnapshot {
+            range: Range::new(Position::new(1, 2), Position::new(1, 9)),
+            goals: vec!["h : False\n⊢ True".to_string()],
+        }],
+    );
+
+    // Drive the real LSP RPC surface: connect, then call the method.
+    let connected = backend
+        .rpc_connect(crate::rpc::RpcConnectParams { uri: uri.clone() })
+        .expect("rpc connect should start a session");
+    let result = backend.rpc_call(crate::rpc::RpcCallParams {
+        text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
+        position: Position::new(1, 4),
+        session_id: connected.session_id,
+        method: "Lean.Widget.getInteractiveGoals".to_string(),
+        params: serde_json::Value::Null,
+    });
+
+    let value = match result {
+        Ok(value) => value,
+        Err(err) => panic!(
+            "getInteractiveGoals must be registered on the LSP channel \
+             (must not be -32601 Method not found): {err:?}"
+        ),
+    };
+    let goals: InteractiveGoals =
+        serde_json::from_value(value).expect("response should be a structured InteractiveGoals");
+    assert_eq!(
+        goals.goals.len(),
+        1,
+        "one tactic goal covers the requested position"
+    );
+    assert_eq!(goals.goals[0].type_, "True");
+    assert_eq!(
+        goals.goals[0].hyps.len(),
+        1,
+        "the goal should carry a structured hypothesis bundle, not a plain string"
+    );
+    assert_eq!(goals.goals[0].hyps[0].names, ["h"]);
+    assert_eq!(goals.goals[0].hyps[0].type_, "False");
+
+    // Outside the snapshot range the endpoint stays fail-closed (null).
+    let outside = backend
+        .rpc_call(crate::rpc::RpcCallParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri },
+            position: Position::new(0, 0),
+            session_id: connected.session_id,
+            method: "Lean.Widget.getInteractiveGoals".to_string(),
+            params: serde_json::Value::Null,
+        })
+        .expect("out-of-range call should still succeed");
+    assert!(
+        outside.is_null(),
+        "positions without live tactic goal state must return null, got {outside}"
+    );
+}
+
+#[test]
+fn test_rpc_call_get_interactive_term_goal_prefers_hole_context_over_declaration() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///interactive-term-goal.lean").unwrap();
+    let text = "def foo : Nat := _\n".to_string();
+    let hole_start = text.find('_').unwrap();
+    let mut doc = Document::new(uri.clone(), 1, text, "lean".to_string());
+    doc.elaborated = Some(ElaboratedDocument {
+        errors: vec![],
+        warnings: vec![],
+        declarations: vec![ElaboratedDecl {
+            name: "foo".to_string(),
+            type_str: "Nat".to_string(),
+            start: 0,
+            end: hole_start + 1,
+        }],
+        holes: vec![crate::document::HoleContext {
+            start: hole_start,
+            end: hole_start + 1,
+            expected_type: "Nat".to_string(),
+            local_bindings: vec![("n".to_string(), "Nat".to_string())],
+        }],
+        widget_modules: vec![],
+    });
+    backend.documents.insert(uri.clone(), doc);
+
+    let connected = backend
+        .rpc_connect(crate::rpc::RpcConnectParams { uri: uri.clone() })
+        .expect("rpc connect should start a session");
+
+    // On the hole: the hole-local expected type with its local context wins.
+    let on_hole = backend
+        .rpc_call(crate::rpc::RpcCallParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
+            position: Position::new(0, u32::try_from(hole_start).unwrap()),
+            session_id: connected.session_id,
+            method: "Lean.Widget.getInteractiveTermGoal".to_string(),
+            params: serde_json::Value::Null,
+        })
+        .expect("getInteractiveTermGoal must be registered on the LSP channel");
+    let hole_goal: InteractiveTermGoal =
+        serde_json::from_value(on_hole).expect("response should be a structured term goal");
+    assert_eq!(hole_goal.type_, "Nat");
+    assert_eq!(
+        hole_goal.hyps.len(),
+        1,
+        "hole-local hypotheses should surface as structured bundles"
+    );
+    assert_eq!(hole_goal.hyps[0].names, ["n"]);
+
+    // Inside the declaration but off the hole: the declaration type, no hyps.
+    let on_decl = backend
+        .rpc_call(crate::rpc::RpcCallParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri },
+            position: Position::new(0, 4),
+            session_id: connected.session_id,
+            method: "Lean.Widget.getInteractiveTermGoal".to_string(),
+            params: serde_json::Value::Null,
+        })
+        .expect("declaration-range call should succeed");
+    let decl_goal: InteractiveTermGoal =
+        serde_json::from_value(on_decl).expect("response should be a structured term goal");
+    assert_eq!(decl_goal.type_, "Nat");
+    assert!(
+        decl_goal.hyps.is_empty(),
+        "a declaration-level term goal has no hole-local hypotheses"
+    );
+}
+
+#[test]
+fn test_refresh_infoview_goals_clears_stale_goal_state_when_snapshots_removed() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///interactive-goals-stale.lean").unwrap();
+    let text = "theorem demo : True := by\n  trivial\n".to_string();
+    let mut doc = Document::new(uri.clone(), 1, text, "lean".to_string());
+    doc.elaborated = Some(ElaboratedDocument {
+        errors: vec![],
+        warnings: vec![],
+        declarations: vec![],
+        holes: vec![],
+        widget_modules: vec![],
+    });
+    backend.documents.insert(uri.clone(), doc);
+    backend.tactic_goal_snapshots.insert(
+        uri.clone(),
+        vec![TacticGoalSnapshot {
+            range: Range::new(Position::new(1, 2), Position::new(1, 9)),
+            goals: vec!["⊢ True".to_string()],
+        }],
+    );
+
+    let connected = backend
+        .rpc_connect(crate::rpc::RpcConnectParams { uri: uri.clone() })
+        .expect("rpc connect should start a session");
+    let live = backend
+        .rpc_call(crate::rpc::RpcCallParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
+            position: Position::new(1, 4),
+            session_id: connected.session_id,
+            method: "Lean.Widget.getInteractiveGoals".to_string(),
+            params: serde_json::Value::Null,
+        })
+        .expect("live snapshot call should succeed");
+    assert!(!live.is_null(), "live snapshot should produce goals");
+
+    // Snapshot state disappears (e.g. re-elaboration removed it): the next
+    // call must refresh the registry and fail closed instead of serving
+    // stale goals.
+    backend.tactic_goal_snapshots.remove(&uri);
+    let stale = backend
+        .rpc_call(crate::rpc::RpcCallParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri },
+            position: Position::new(1, 4),
+            session_id: connected.session_id,
+            method: "Lean.Widget.getInteractiveGoals".to_string(),
+            params: serde_json::Value::Null,
+        })
+        .expect("call after snapshot removal should still succeed");
+    assert!(
+        stale.is_null(),
+        "removed snapshots must not leave stale interactive goals behind"
     );
 }

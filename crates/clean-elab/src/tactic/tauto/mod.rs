@@ -35,7 +35,14 @@ pub fn tauto(state: &mut ProofState) -> TacticResult {
         .max_depth_override()
         .unwrap_or(DEFAULT_TAUTO_MAX_DEPTH);
 
+    let trace = std::env::var_os("CLEAN_GRIND_TRACE").is_some();
+    if trace {
+        eprintln!("tauto-trace: enter max_depth={max_depth}");
+    }
     preprocess_tauto_context(state)?;
+    if trace {
+        eprintln!("tauto-trace: preprocess done");
+    }
 
     if state.goals.is_empty() {
         return Ok(());
@@ -57,6 +64,9 @@ pub fn tauto(state: &mut ProofState) -> TacticResult {
         return Ok(());
     }
 
+    if trace {
+        eprintln!("tauto-trace: closers done, entering tauto_prove");
+    }
     if tauto_prove(state, &goal, 0, max_depth)? {
         return Ok(());
     }
@@ -81,6 +91,9 @@ fn preprocess_tauto_context(state: &mut ProofState) -> Result<(), TacticError> {
 
         for decl in goal.local_ctx.clone() {
             let ty = state.metas.instantiate(&decl.ty);
+            if std::env::var_os("CLEAN_GRIND_TRACE").is_some() {
+                eprintln!("tauto-trace: preprocess whnf hyp {}", decl.name);
+            }
             let ty_whnf = state.whnf(&goal, &ty);
 
             if is_false(&ty_whnf) {
@@ -145,6 +158,9 @@ fn tauto_prove(
             return Ok(false);
         }
 
+        if std::env::var_os("CLEAN_GRIND_TRACE").is_some() {
+            eprintln!("tauto-trace: prove depth={depth}");
+        }
         preprocess_tauto_context(state)?;
 
         if state.goals.is_empty() {

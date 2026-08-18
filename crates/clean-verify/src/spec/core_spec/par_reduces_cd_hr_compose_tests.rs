@@ -6,13 +6,10 @@
 //! (#2859 Increment H++, Stage 4 — Hindley-Rosen assembly).
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 fn build_hr_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The sandwich + composition lemmas are DerivedProved with zero axiom deps.

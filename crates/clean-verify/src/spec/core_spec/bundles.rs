@@ -1633,13 +1633,230 @@ const STAGES: &[CoreSpecStage] = &[
     // kernel function already in the class the compiler flips.
     //
     // AFTER add_eval_ir_correct, and the order is load-bearing: its A5-analogue
-    // consumes `ir_outcome_bool`, which that stage registers. Placed earlier it
+    // consumes `ir_outcome_bool`, which that stage registers.
+    //
+    // That justification was briefly FALSE and nothing noticed. `9c37f0ef0`
+    // deleted the A5-analogue during a re-authoring, leaving this comment
+    // explaining the ordering by a dependency that no longer existed, for two
+    // days. Restored 2026-08-12 as `ir_h2_machine_sound` (+ witness, +
+    // `ir_h2_never_faults`), and `eval_ir_mode.rs`'s
+    // `test_a5_is_present_and_composes` now fails if it goes missing again.
+    //
+    // Placed earlier it
     // elaborates fine in the scratchpad -- which builds the whole spec and only
     // THEN appends candidates, so it is structurally blind to stage ordering --
     // and then fails the real build with an unknown identifier surfacing as a
     // bogus arity error. Same trap that cost a cycle on A5.
     CoreSpecStage {
         apply: Specification::add_eval_ir_mode,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The SECOND complete width-one chain: `level::Level::kind_ord`, chosen by
+    // whole-crate measurement rather than by taste (see the module doc's
+    // candidate table). Structurally the most different fully-chainable body in
+    // clean-kernel: 7 blocks, a four-case switch plus a reachable default, five
+    // distinct integer answers through a u8 join-block parameter, over the
+    // payload-bearing recursive `Level` rather than a fieldless enum.
+    //
+    // AFTER add_eval_ir_correct AND add_eval_ir_mode, and the order is
+    // load-bearing in three separate ways, every one of them a name this stage
+    // would otherwise not find:
+    //   * `ir_outcome_is_ret` (add_eval_ir_correct) — `ir_ko_never_faults`;
+    //   * `level_is_zero_sound` / `level_eval` (add_kexpr_beq_sound) — the A5
+    //     that reaches a denotational conclusion;
+    //   * `EncodesLevelArc` (add_eval_ir_repr) — the bridge lemma.
+    // The scratchpad CANNOT see any of that: it builds the whole spec and only
+    // then appends candidates, so a stage-ordering fault is invisible there and
+    // surfaces in the real build as an unknown identifier or a bogus arity
+    // error. Same trap that cost a cycle on A5 and on add_premise_witnesses.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_kind_ord,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The THIRD complete width-one chain: `mode::CleanMode::from_source_system`
+    // — rank 2 in the 2026-08-12 candidate measurement, and recorded there as
+    // NOT chainable because every arm emits `const enum.13 { k }`, a
+    // `trust_ir::Constant::Aggregate`, and `IRConst` had no aggregate form. The
+    // build item that closes it (the `IRConst` inline element spine plus
+    // `ir_const_agg_eval`) landed in `eval_ir_syntax.rs` / `eval_ir_ops.rs`,
+    // per the standing rule that a lowering gap is a build item and never a
+    // reason to retarget the proof.
+    //
+    // AFTER add_eval_ir_correct AND add_eval_ir_mode AND add_eval_ir_kind_ord,
+    // and the order is load-bearing in three ways, each a name this stage would
+    // otherwise not find:
+    //   * `ir_outcome_is_ret` (add_eval_ir_correct) — `ir_fs_never_faults`;
+    //   * `CleanModeR` / `clean_mode_tag` / `clean_mode_has_cubical`
+    //     (add_eval_ir_mode) — the RESULT type of this body is CleanMode, so
+    //     this chain's theorem is stated in the first chain's vocabulary and
+    //     its A5 composes with the first chain's reflected predicate;
+    //   * `ir_scalar_nat` (add_eval_ir_kind_ord) — `ir_spine_head_nat`.
+    // The scratchpad CANNOT see any of that: it builds the whole spec and only
+    // then appends candidates, so a stage-ordering fault is invisible there and
+    // surfaces in the real build as an unknown identifier or a bogus arity
+    // error. Same trap that cost a cycle on A5 and on add_premise_witnesses.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_from_source,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The FOURTH and FIFTH chains: `flat::types::FlatFlags::contains` and
+    // `expr::bvar_in_range` — the first two chained bodies that COMPUTE their
+    // answer (a `binop`+`icmp`, and four `icmp`s through two `condbr`s) rather
+    // than select a materialised constant, and the first two whose
+    // `markers_exact: true` compares a NON-EMPTY marker sequence (8 and 21
+    // lines, against `0 marker line(s)` on all three chains above).
+    //
+    // AFTER add_eval_ir_correct, and that is load-bearing for both: their A4
+    // theorems are stated over `ir_eval` with a `Le` fuel premise and go through
+    // `ir_run_le_ret`, and their corollaries need `ir_outcome_bool` /
+    // `ir_outcome_is_ret`. In the dependency-scoped EvalIr bundle those names do
+    // not exist, which is exactly why the 2026-08-13 probe could reach only 45
+    // of the 63 declarations there and why this is the position, not the order
+    // the modules happen to be written in.
+    //
+    // Registered 2026-08-13 (lane 3) after the ONE blocker was settled by
+    // measurement rather than assumed. `ir_br_exact` had run 3.5 minutes without
+    // returning, and the cause was NOT the `condbr`, the nine-step run, or the
+    // size of the stuck term: it was a single `Nat` comparison. The reflected
+    // predicate named the sentinel (`ir_wrap ir_d32 ir_br_umax` for
+    // `ir_br_umax := 4294967295`) where the machine materialises the literal,
+    // and against two syntactically different arguments the kernel reduces both
+    // `ir_wrap` applications — a width-w residue is ~2^w `Nat.rec` unfoldings
+    // (measured on that shape: 0.021 / 0.431 / 6.586 s at w = 8 / 12 / 16, so
+    // w = 32 is about five days). `ir_br_c1` and `ir_br_m1` now carry the
+    // literal the emitted `IRInst.const_` carries, which is also the more
+    // faithful transcription, and the chain checks in milliseconds.
+    //
+    // `ir_br_exact` additionally goes through `ir_run_steps_split` (a general
+    // lemma of the semantics) plus `ir_br_two_steps`, which stops before the
+    // branch. That is not what unblocked it — the one-liner also checks, in
+    // 0.010 s — it is what makes the bound structural instead of empirical. The
+    // statement of `ir_br_exact` is unchanged.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_contains,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_bvar_range,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The SIXTH and SEVENTH chains: `env::native_reducers_char::is_valid_char`
+    // and `<tc::expr_location::ExprPathStep as Clone>::clone` — the two bodies
+    // the 2026-08-13 census named as the remaining candidates, re-derived from a
+    // fresh whole-crate dump before either was written.
+    //
+    // `is_valid_char` is the SECOND and LAST condbr-carrying chainable body in
+    // the crate, and it is at width **64**. That is only affordable because the
+    // residue cost law on record was wrong: `ir_wrap w n` costs O(n) in the
+    // DIVIDEND and is independent of the WIDTH (re-measured here: 1.322 s at
+    // w = 64 / n = 7000 against 1.356 s at w = 8 / n = 7000; and 1.322 →
+    // 2.644 → 5.399 s as n doubles). The 2026-08-13 "×15.3 per four bits, so
+    // 2^W" reading varied width and dividend together — its dividend was
+    // `2^W - 1` at each point — and would have refused this body on sight.
+    //
+    // `ExprPathStep::clone` needed NO build item: the `IRConst` aggregate spine
+    // the THIRD chain landed is exactly the construct it emits, which is why
+    // the 2026-08-12 candidate measurement recorded both bodies as refused for
+    // the same reason and the same shape (`const enum.13 { k }` /
+    // `const enum.181 { k }`).
+    //
+    // AFTER add_eval_ir_from_source, and that is load-bearing rather than
+    // alphabetical: `ir_ep_machine_sound` reads the tag out of the returned
+    // AGGREGATE with `ir_outcome_disc`, which that stage registers, and both
+    // chains' A4 go through `ir_run_le_ret` / `ir_outcome_is_ret` from
+    // add_eval_ir_fuel and add_eval_ir_correct.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_valid_char,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_path_step,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The EIGHTH chain, 2026-08-15:
+    // `env::native_reducers_float::reduce_float_div::{closure#0}` — the first
+    // over FLOAT ARITHMETIC, and the ground the 2026-08-15 lane-8 census
+    // recorded as covered by no chain (`unclaimed_ground_recorded_not_chained`
+    // in `data/crystal_flip_census_lane8_2026-08-15.json`: a cast, and float
+    // arithmetic).
+    //
+    // It needed a BUILD ITEM and it is the whole reason to do it: until this
+    // lane every float-domain operation in the semantics was the single verdict
+    // `ir_float_fault`, so link 3 did not hold for any float body. The binary64
+    // value domain (`add_eval_ir_float`, registered inside `add_eval_ir_ops`
+    // because `ir_binop_eval` dispatches into it) is that item.
+    //
+    // AFTER add_eval_ir_path_step, and load-bearing rather than alphabetical:
+    // this stage needs `ir_vl2` (add_eval_ir_contains), `ir_outcome_is_ret`
+    // (add_eval_ir_correct), `ir_run_steps_split` (add_eval_ir_steps) and
+    // `ir_outcome_fuelout_ne_ret_prop` (add_eval_ir_fuel) — the last of which it
+    // extends, because its A4 conclusion is not an `IROutcome.ret` and the
+    // ret-only fuel monotonicity therefore does not apply to it.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_float_div,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The NINTH chain, 2026-08-16:
+    // `env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}` — the
+    // first over a CAST, and the other half of the ground the 2026-08-15 lane-8
+    // census recorded as unclaimed (`unclaimed_ground_recorded_not_chained.cast`
+    // in `data/crystal_flip_census_lane8_2026-08-15.json`).
+    //
+    // It needed NO build item on the semantics side, and that is a measurement
+    // rather than a hope: `IRInst.cast` has been a constructor since the syntax
+    // was written, `IRCastOp` carries 17/17 of `trust_ir::CastOp`,
+    // `ir_cast_eval` dispatches all seventeen arms with exact `ir_trunc_eval` /
+    // `ir_zext_eval` / `ir_sext_eval` evaluators, and `ir_step` has always had a
+    // case for the instruction. The build item was in the GATE — a cast was in
+    // no CFG lane at all, so a body whose whole content is `trunc` + `ret`
+    // parsed to an EMPTY `Cfg` on both sides, and two empty CFGs compare equal.
+    //
+    // AFTER add_eval_ir_valid_char and add_eval_ir_bvar_range, and load-bearing
+    // rather than alphabetical: this stage REUSES `EncodesU64Val` and
+    // `ir_vc_tu64` (sixth chain), `ir_br_tu32` (fifth), `ir_outcome_nat`
+    // (second), `ir_run_le_ret` (add_eval_ir_fuel) and `ir_outcome_is_ret`
+    // (add_eval_ir_correct). Re-declaring any of them is the eighth chain's one
+    // real error, which elaborated cleanly in every fast gate and failed only in
+    // the full `Specification::new()`.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_trunc,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The TENTH chain, 2026-08-16:
+    // `tc::local_context::LocalContext::push_low_local::META_TAG` — the first
+    // over a PANIC ARM and the first over a CTFE FLIP. Both were unclaimed for
+    // the same reason: `docs/analysis/frontier-2026-08-16.md` §2 records that
+    // "panic arms 0" is a statement about CODEGEN flips only — 21 of the crate's
+    // 32 CTFE flips carry an `Inst::Assert` and 0 of its 178 codegen flips do,
+    // and all nine earlier chains are over codegen flips.
+    //
+    // The ASSERT needed NO build item: `IRInst.assert` has been a constructor
+    // since the syntax was written and `ir_assert_exec` -> `ir_assert_b` was
+    // already exact, with `ub assert_failed` on false and `type_error not_bool`
+    // on a non-Bool. The semantics build item was `IRCastOp.bitcast`, which was
+    // a blanket `ir_width_fault`: `ir_bitcast_eval` (registered inside
+    // `add_eval_ir_ops`, because `ir_cast_eval` dispatches into it) decides
+    // exactly the same-width integer-to-integer fragment the original refusal's
+    // stated reason does not cover, and leaves width mismatches, floats,
+    // pointers and `transmute` refused. The gate build item was the assert lane
+    // plus two holes it exposed — see `tests/crystal_a1_lineage/emitted_cfg.rs`.
+    //
+    // AFTER add_eval_ir_trunc, and load-bearing rather than alphabetical: this
+    // stage REUSES `ir_vc_tu64` (sixth chain), `ir_br_tu32` (fifth),
+    // `ir_outcome_nat` (second), `ir_outcome_is_ret` (add_eval_ir_correct),
+    // `ir_run_le_ret` (add_eval_ir_fuel) and `ir_run_steps_split` /
+    // `ir_run_halted` (add_eval_ir_steps).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_meta_tag,
         in_substitution: false,
         in_impl_soundness: false,
     },

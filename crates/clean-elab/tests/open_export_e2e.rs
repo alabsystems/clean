@@ -456,39 +456,151 @@ def afterWrap : Nat := s
 // `scoped notation` / `open scoped` (p10)
 // =========================================================================
 
-/// p10 (half 1): a `scoped notation` DECLARATION is not honestly implementable
-/// (no namespace-gated notation registry), so it is rejected LOUDLY as an
-/// `Unsupported` feature rather than silently dropped from the declaration
-/// count (which previously let its token auto-bind at the use site).
+/// p10 (half 1): a `scoped notation` declared inside its namespace registers
+/// namespace-gated (no failure leaf, nothing silently dropped) and is ACTIVE
+/// for later declarations inside the declaring namespace — the value pin
+/// certifies the notation actually expanded.
 #[test]
-fn test_scoped_notation_is_loud_unsupported() {
-    let results = elaborate_results(
+fn test_scoped_notation_active_inside_declaring_namespace() {
+    let env = elaborate_module(
+        r#"
+namespace Foo
+scoped notation "two" => (2 : Nat)
+def b : Nat := two
+end Foo
+theorem pin10a : Foo.b = 2 := rfl
+"#,
+    )
+    .expect("scoped notation must be active INSIDE its declaring namespace");
+    assert_axiom_free(&env, &["Foo.b", "pin10a"]);
+}
+
+/// p10 (half 1b): OUTSIDE the declaring namespace, without any `open`, the
+/// scoped notation is INERT — its token stays an ordinary unknown identifier
+/// and the using declaration fails closed (never auto-bound, never expanded).
+#[test]
+fn test_scoped_notation_inert_outside_without_open() {
+    expect_rejected(
         r#"
 namespace Foo
 scoped notation "two" => (2 : Nat)
 end Foo
+def usesTwo : Nat := two
 "#,
-    );
-    // The namespace block surfaces the inner failure as a `Failed` leaf; assert
-    // the scoped-notation declaration did NOT silently vanish.
-    let mut failures = Vec::new();
-    for r in results.iter().flatten() {
-        collect_failures(r, &mut failures);
-    }
-    let direct_unsupported = results
-        .iter()
-        .any(|r| matches!(r, Err(ElabError::Unsupported { .. })));
-    assert!(
-        direct_unsupported || failures.iter().any(|f| f.contains("scoped notation")),
-        "`scoped notation` must be a LOUD unsupported error (never silently dropped); \
-         results = {results:?}, failures = {failures:?}"
+        "the scoped-notation token `two` outside `Foo` without any open",
     );
 }
 
-/// p10 (half 2): `open scoped Foo` merely activates a namespace's scoped
-/// notations — clean honors none, so it hides nothing and stays a tolerated
-/// administrative no-op (faithful to the valid Lean program `open scoped Foo`;
-/// it must NOT over-reject). It elaborates to `Skipped` and registers nothing.
+/// p10 (half 1c): `open scoped Foo` ACTIVATES the namespace's scoped
+/// notations for the rest of the file; the value pin certifies expansion.
+#[test]
+fn test_scoped_notation_active_after_open_scoped() {
+    let env = elaborate_module(
+        r#"
+namespace Foo
+scoped notation "two" => (2 : Nat)
+end Foo
+open scoped Foo
+def a : Nat := two
+theorem pin10b : a = 2 := rfl
+"#,
+    )
+    .expect("`open scoped Foo` must activate Foo's scoped notation");
+    assert_axiom_free(&env, &["a", "pin10b"]);
+}
+
+/// A plain simple `open Foo` also activates scoped notations (Lean
+/// `elabOpen`: the simple form calls `activateScoped`).
+#[test]
+fn test_scoped_notation_active_after_plain_open() {
+    let env = elaborate_module(
+        r#"
+namespace Foo
+scoped notation "two" => (2 : Nat)
+end Foo
+open Foo
+def viaPlainOpen : Nat := two
+theorem pin10c : viaPlainOpen = 2 := rfl
+"#,
+    )
+    .expect("plain `open Foo` must activate Foo's scoped notation");
+    assert_axiom_free(&env, &["viaPlainOpen", "pin10c"]);
+}
+
+/// A root-level `scoped notation` has no namespace to register against; Lean
+/// rejects the `scoped` modifier there, and so do we — loudly, never
+/// registering an ungateable notation.
+#[test]
+fn test_scoped_notation_at_root_is_loud_error() {
+    let err = expect_rejected(
+        r#"
+scoped notation "two" => (2 : Nat)
+"#,
+        "root-level `scoped notation` (no namespace to register against)",
+    );
+    assert!(
+        err.contains("scoped notation") || err.contains("namespace"),
+        "root-level scoped-notation error should explain the namespace requirement, got: {err}"
+    );
+}
+
+/// `open scoped Foo in <decl>` bounds the activation to the body: the token
+/// works inside the body and is inert right after.
+#[test]
+fn test_scoped_notation_open_in_does_not_leak() {
+    let env = elaborate_module(
+        r#"
+namespace Foo
+scoped notation "two" => (2 : Nat)
+end Foo
+open scoped Foo in def inBody : Nat := two
+theorem pin10d : inBody = 2 := rfl
+"#,
+    )
+    .expect("`open scoped Foo in def …` must activate the notation for the body");
+    assert_axiom_free(&env, &["inBody", "pin10d"]);
+
+    expect_rejected(
+        r#"
+namespace Foo
+scoped notation "two" => (2 : Nat)
+end Foo
+open scoped Foo in def inBody : Nat := two
+def afterBody : Nat := two
+"#,
+        "the scoped-notation token after an `open scoped … in` body",
+    );
+}
+
+/// Mathlib-shaped fixture: a `scoped infixl` declared in a namespace, used
+/// after `open scoped` from outside — the parse-time operator registry is
+/// namespace-gated in lockstep with the elaborator's macro registry, and the
+/// value pin certifies the lowering (`1 ⊗ 2` really is `Nat.add 1 2`).
+#[test]
+fn test_scoped_infixl_mathlib_shape_elaborates() {
+    let env = elaborate_module(
+        "namespace Foo\nscoped infixl:65 \" ⊗ \" => Nat.add\nend Foo\nopen scoped Foo\ndef s : Nat := 1 ⊗ 2\ntheorem pin_inf : s = 3 := rfl\n",
+    )
+    .expect("Mathlib-shaped scoped infixl must elaborate after `open scoped`");
+    assert_axiom_free(&env, &["s", "pin_inf"]);
+}
+
+/// The same scoped infixl WITHOUT any open is inert at the use site: the
+/// declaration parses and registers, but `1 ⊗ 2` outside the namespace fails
+/// closed (ordinary parse/elab error, never a silent lowering).
+#[test]
+fn test_scoped_infixl_inert_outside_without_open() {
+    expect_rejected(
+        "namespace Foo\nscoped infixl:65 \" ⊗ \" => Nat.add\nend Foo\ndef t : Nat := 1 ⊗ 2\n",
+        "a scoped infixl use outside its namespace without any open",
+    );
+}
+
+/// p10 (half 2): `open scoped Foo` activates a namespace's scoped notations
+/// and nothing else; on a namespace without scoped notations it remains a
+/// tolerated administrative command (faithful to the valid Lean program
+/// `open scoped Foo`; it must NOT over-reject). It elaborates to `Skipped`
+/// and registers nothing.
 #[test]
 fn test_open_scoped_is_administrative_noop() {
     let results = elaborate_results(

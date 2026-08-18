@@ -123,6 +123,7 @@ fn test_coercion_identities_are_proved_theorems_with_empty_axiom_closure() {
         names::BVF_SUB_CONG,
         names::BVF_AND_CONG,
         names::BVF_XOR_CONG,
+        names::BVF_OR_CONG,
         names::BVF_MUL_CONG,
         names::BVF_OR_CONG2,
         names::BVF_ZEXT_CONG,
@@ -137,6 +138,7 @@ fn test_coercion_identities_are_proved_theorems_with_empty_axiom_closure() {
         names::BV_BEQ_REFL,
         names::SELECT_STORE_SAME,
         names::SELECT_STORE_DIFF,
+        names::SELECT_ADDR_CONG,
         names::BV_BEQ_CONS_FALSE,
         names::BEQ_EQ_ISZERO_SUB,
         names::EQ_VALUE_BRIDGE,
@@ -770,6 +772,87 @@ fn test_bvf_lifted_identities_typecheck_at_a_concrete_embedding() {
     let exp2 = eq_list(eval(or_f), eval(e));
     tc.check_type(&thm2, &exp2)
         .expect("bvf_or_zero_id typechecks at Leaf [t,f]");
+}
+
+/// `bvf_or_cong` — the GENERAL two-sided OR congruence, instantiated concretely
+/// and mutation-checked.
+///
+/// This theorem is what puts a machine `Orr Wd, Wn, Wm` with TWO REAL OPERANDS
+/// on the O(1) coercion-identity path. Before it existed only `bvf_or_cong2`
+/// did, which fixes the left operand — enough for the `Orr Wd, WZR, Ws`
+/// register-move wrapper and nothing else — so every user-level `|` fell back
+/// to bit-blasting. (c) MEASURED at the time, one function through `trust-cg`
+/// `--emit=link`: `(x ^ y) ^ (x & y)` was 2.76 s / 0.99 GB and
+/// `(x ^ y) | (x & y)` — one instruction different — was 20.94 s / 27.41 GB.
+///
+/// The instantiation is deliberately NOT reflexive on either side: `Leaf l` and
+/// `Const l` are DIFFERENT `BvF` terms whose `bvfEval` both reduce to `l`, so
+/// `Eq.refl` discharges the hypotheses while the conclusion genuinely relates
+/// two structurally distinct `Or` nodes.
+#[test]
+fn test_bvf_or_cong_is_the_general_two_sided_congruence() {
+    let env = env();
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    let eval = |x: Expr| Expr::app(Expr::const_str(names::BVF_EVAL), x);
+
+    // Two distinct BvF terms per side, each pair sharing a bvfEval.
+    let la = cons(btrue(), cons(bfalse(), nil()));
+    let lb = cons(bfalse(), cons(btrue(), nil()));
+    let (a, ap) = (f_leaf(la.clone()), f_const(la.clone()));
+    let (b, bp) = (f_leaf(lb.clone()), f_const(lb.clone()));
+
+    // `Leaf l` and `Const l` are not the same term.
+    assert_ne!(a, ap, "the instantiation must not be reflexive");
+
+    let ha = eq_refl_list(eval(a.clone()));
+    let hb = eq_refl_list(eval(b.clone()));
+    let thm = Expr::apps(
+        Expr::const_str(names::BVF_OR_CONG),
+        [
+            a.clone(),
+            ap.clone(),
+            b.clone(),
+            bp.clone(),
+            ha.clone(),
+            hb.clone(),
+        ],
+    );
+    let expected = eq_list(
+        eval(f_or(a.clone(), b.clone())),
+        eval(f_or(ap.clone(), bp.clone())),
+    );
+    tc.check_type(&thm, &expected)
+        .expect("bvf_or_cong must typecheck at Leaf/Const over two real operands");
+
+    // ANTI-VACUITY. A RETARGETED conclusion — one this application does NOT
+    // have — must be REJECTED. `lb` does not evaluate to `la`, so an `Or` whose
+    // right operand is swapped for the left's is a different list.
+    let wrong = eq_list(
+        eval(f_or(a.clone(), b.clone())),
+        eval(f_or(ap.clone(), f_const(la.clone()))),
+    );
+    assert!(
+        tc.check_type(&thm, &wrong).is_err(),
+        "a retargeted conclusion must be refused; otherwise the theorem proves anything"
+    );
+
+    // And the hypotheses are load-bearing: an `Eq.refl` at the WRONG list cannot
+    // discharge `bvfEval b = bvfEval b'`.
+    let bad_hb = eq_refl_list(eval(f_leaf(la)));
+    let bad = Expr::apps(
+        Expr::const_str(names::BVF_OR_CONG),
+        [a, ap, b_dummy(), bp, ha, bad_hb],
+    );
+    let _ = b;
+    assert!(
+        tc.check_type(&bad, &expected).is_err(),
+        "a mismatched hypothesis must be refused"
+    );
+}
+
+/// A `BvF` distinct from every term used above, for the mismatched-hypothesis arm.
+fn b_dummy() -> Expr {
+    f_leaf(cons(btrue(), cons(btrue(), nil())))
 }
 
 // ── B2a: the COMPOSED gate-shape discharge (bvf_wrapper_id) ────────────────────
@@ -1494,6 +1577,192 @@ fn test_bv_take_len_append_dropping_prefix_structure_is_rejected() {
     assert!(
         res.is_err(),
         "the DECOUPLED bvTakeLenAppend (prefix != tag) must be KERNEL-REJECTED"
+    );
+}
+
+/// NON-VACUITY for `selectAddrCong` — the CALLER-PROVIDED-MEMORY keystone (a read
+/// from an opaque PRE-STATE, i.e. a load through a `&T` parameter).
+///
+/// The danger with a congruence is that it is discharged by `Eq.refl` at every
+/// instantiation anyone actually uses, in which case it proves nothing. So this
+/// instantiates it NON-REFLEXIVELY: the two addresses are `bvZipOr (bvAllFalse x) x`
+/// and `x` for a SYMBOLIC `x`. `or_zero_id x` proves them equal, but `bvZipOr`
+/// recurses on its list argument, so at a symbolic `x` the left address is STUCK —
+/// the conclusion is NOT provable by `Eq.refl` and the transport does real work.
+///
+/// Four checks, in the shape the rest of this file uses:
+///  (P) POSITIVE — the non-reflexive instance type-checks.
+///  (1) RETARGETED CONCLUSION — the SAME proof term against a conclusion whose
+///      right-hand address is `bvNot x` instead of `x` must be REFUSED.
+///  (2) MISMATCHED HYPOTHESIS — `or_zero_id` supplied at a DIFFERENT symbolic list
+///      `y` proves `bvZipOr (bvAllFalse y) y = y`, not the equation the conclusion
+///      needs, and must be REFUSED.
+///  (3) DROPPED HYPOTHESIS — the unconditional `∀ m a a', bvSelect m a = bvSelect m a'`
+///      is FALSE (at the identity array it reads `a = a'`) and must be REJECTED.
+#[test]
+fn test_select_addr_cong_non_reflexive_instance_and_mutations_are_rejected() {
+    use crate::env::decl_builder::EnvDeclBuilder;
+    // Built before the shadowing `env` binding below; arm (3) adds a decl to it.
+    let mut env2 = env();
+    let env = env();
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    let arr = || Expr::arrow(list_bool(), list_bool());
+    let sel = |m: Expr, a: Expr| Expr::apps(Expr::const_str(names::BV_SELECT), [m, a]);
+    let bv_not = |x: Expr| Expr::app(Expr::const_str(names::BV_NOT), x);
+    let or_zero_id = |z: Expr| Expr::app(Expr::const_str(names::OR_ZERO_ID), z);
+    // The non-reflexive address: `bvZipOr (bvAllFalse x) x`, equal to `x` by
+    // `or_zero_id` but STUCK for a symbolic `x`.
+    let padded = |x: Expr| zip_or(all_false(x.clone()), x);
+    let cong = |m: Expr, a: Expr, ap: Expr, h: Expr| {
+        Expr::apps(Expr::const_str(names::SELECT_ADDR_CONG), [m, a, ap, h])
+    };
+
+    // ── (P) the honest, non-reflexive instance ────────────────────────────────
+    // ∀ (m : List Bool → List Bool) (x : List Bool),
+    //     bvSelect m (bvZipOr (bvAllFalse x) x) = bvSelect m x
+    let good_ty = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (x_id, x) = b.fresh_local(list_bool());
+        let g = eq_list(sel(m.clone(), padded(x.clone())), sel(m.clone(), x));
+        let t = b.mk_pi(x_id, BinderInfo::Default, list_bool(), g);
+        b.finish(b.mk_pi(m_id, BinderInfo::Default, arr(), t))
+    };
+    let good_val = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (x_id, x) = b.fresh_local(list_bool());
+        let p = cong(m, padded(x.clone()), x.clone(), or_zero_id(x));
+        let r = b.mk_lam(x_id, BinderInfo::Default, list_bool(), p);
+        b.finish(b.mk_lam(m_id, BinderInfo::Default, arr(), r))
+    };
+    tc.check_type(&good_val, &good_ty)
+        .expect("the NON-REFLEXIVE selectAddrCong instance must type-check");
+    // The instance is genuinely non-reflexive: `Eq.refl` alone does NOT prove it
+    // (bvZipOr is stuck on the symbolic x), so the lemma is load-bearing here.
+    let refl_only = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (x_id, x) = b.fresh_local(list_bool());
+        let r = b.mk_lam(
+            x_id,
+            BinderInfo::Default,
+            list_bool(),
+            eq_refl_list(sel(m.clone(), padded(x))),
+        );
+        b.finish(b.mk_lam(m_id, BinderInfo::Default, arr(), r))
+    };
+    assert!(
+        tc.check_type(&refl_only, &good_ty).is_err(),
+        "the witness must be NON-reflexive: Eq.refl must NOT prove it, or the \
+         positive arm above would be vacuous"
+    );
+
+    // ── (1) RETARGETED CONCLUSION: right-hand address swapped to `bvNot x` ─────
+    let retargeted_ty = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (x_id, x) = b.fresh_local(list_bool());
+        let g = eq_list(sel(m.clone(), padded(x.clone())), sel(m.clone(), bv_not(x)));
+        let t = b.mk_pi(x_id, BinderInfo::Default, list_bool(), g);
+        b.finish(b.mk_pi(m_id, BinderInfo::Default, arr(), t))
+    };
+    assert!(
+        tc.check_type(&good_val, &retargeted_ty).is_err(),
+        "a RETARGETED conclusion (read at bvNot x, proof transports to x) must be \
+         KERNEL-REJECTED"
+    );
+
+    // ── (2) MISMATCHED HYPOTHESIS: `or_zero_id y` for the `x` equation ─────────
+    let mismatch_ty = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (x_id, x) = b.fresh_local(list_bool());
+        let (y_id, _y) = b.fresh_local(list_bool());
+        let g = eq_list(sel(m.clone(), padded(x.clone())), sel(m.clone(), x));
+        let t = b.mk_pi(y_id, BinderInfo::Default, list_bool(), g);
+        let t = b.mk_pi(x_id, BinderInfo::Default, list_bool(), t);
+        b.finish(b.mk_pi(m_id, BinderInfo::Default, arr(), t))
+    };
+    let mismatch_val = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (x_id, x) = b.fresh_local(list_bool());
+        let (y_id, y) = b.fresh_local(list_bool());
+        let p = cong(m, padded(x.clone()), x, or_zero_id(y));
+        let r = b.mk_lam(y_id, BinderInfo::Default, list_bool(), p);
+        let r = b.mk_lam(x_id, BinderInfo::Default, list_bool(), r);
+        b.finish(b.mk_lam(m_id, BinderInfo::Default, arr(), r))
+    };
+    assert!(
+        tc.check_type(&mismatch_val, &mismatch_ty).is_err(),
+        "a MISMATCHED hypothesis (or_zero_id at y, conclusion about x) must be \
+         KERNEL-REJECTED"
+    );
+
+    // ── (3) DROPPED HYPOTHESIS: the unconditional form is FALSE ───────────────
+    let uncond_ty = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (a_id, a) = b.fresh_local(list_bool());
+        let (ap_id, ap) = b.fresh_local(list_bool());
+        let g = eq_list(sel(m.clone(), a), sel(m.clone(), ap));
+        let t = b.mk_pi(ap_id, BinderInfo::Default, list_bool(), g);
+        let t = b.mk_pi(a_id, BinderInfo::Default, list_bool(), t);
+        b.finish(b.mk_pi(m_id, BinderInfo::Default, arr(), t))
+    };
+    let uncond_val = {
+        let mut b = EnvDeclBuilder::new();
+        let (m_id, m) = b.fresh_local(arr());
+        let (a_id, a) = b.fresh_local(list_bool());
+        let (ap_id, _ap) = b.fresh_local(list_bool());
+        let r = b.mk_lam(
+            ap_id,
+            BinderInfo::Default,
+            list_bool(),
+            eq_refl_list(sel(m.clone(), a.clone())),
+        );
+        let r = b.mk_lam(a_id, BinderInfo::Default, list_bool(), r);
+        b.finish(b.mk_lam(m_id, BinderInfo::Default, arr(), r))
+    };
+    let res = env2.add_decl(crate::Declaration::Theorem {
+        name: Name::from_string("Clean.BVC.selectAddrCong_WRONG_unconditional"),
+        level_params: vec![],
+        type_: uncond_ty,
+        value: uncond_val,
+    });
+    assert!(
+        res.is_err(),
+        "the UNCONDITIONAL selectAddrCong (hypothesis dropped) must be KERNEL-REJECTED"
+    );
+
+    // ── the address argument is LOAD-BEARING at a concrete witness ────────────
+    // At the IDENTITY array `m := fun w => w`, `bvSelect m a` reduces to `a`, so
+    // two reads at different addresses genuinely differ. Without this, the whole
+    // congruence could be true because `bvSelect` ignores its address.
+    let ident = {
+        let mut b = EnvDeclBuilder::new();
+        let (w_id, w) = b.fresh_local(list_bool());
+        b.finish(b.mk_lam(w_id, BinderInfo::Default, list_bool(), w))
+    };
+    let a_t = bv_lit(1, 1);
+    let a_f = bv_lit(0, 1);
+    assert!(
+        tc.check_type(
+            &eq_refl_list(a_t.clone()),
+            &eq_list(sel(ident.clone(), a_t.clone()), a_t.clone())
+        )
+        .is_ok(),
+        "bvSelect (fun w => w) [true] must reduce to [true]"
+    );
+    assert!(
+        tc.check_type(
+            &eq_refl_list(a_t.clone()),
+            &eq_list(sel(ident.clone(), a_t), sel(ident, a_f))
+        )
+        .is_err(),
+        "reads at DIFFERENT addresses of the identity array differ; equating them \
+         must be KERNEL-REJECTED (the address argument is load-bearing)"
     );
 }
 

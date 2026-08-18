@@ -82,9 +82,40 @@ pass_probe p26_rfl_match_pattern.lean 3
 pass_probe p27_quotient_setoid.lean 8
 pass_probe p28_bare_ctor_expected_type.lean 4
 
+# Auto-bound universes (2026-08-14). p29 pins that legitimate auto-bound
+# POLYMORPHISM still works — `u` is never forced, so it survives as a real
+# parameter and `@k.{0}` accepts a universe argument. Its FAIL-pinned sibling
+# p30 is below.
+pass_probe p29_autobound_undeclared.lean 2
+pass_probe p32_mutual_poly_ok.lean 2
+# p33 FLIPPED 2026-08-14: universe-polymorphic `class ... extends` now
+# elaborates. p35 pins that it also RESOLVES AND COMPUTES — elaborating is
+# not the same as working, and a probe that only checks the former would be
+# satisfied by a declaration no user can use.
+pass_probe p33_class_extends_upoly.lean 2
+pass_probe p35_class_extends_upoly_resolves.lean 6
+# p36 FLIPPED 2026-08-14: the `Type _` hole spelling of class-extends. Its
+# `level_params` drifted from the expressions because canonicalization renames
+# minted params AFTER the list is fixed; a declared param is its own
+# representative, which is why only this spelling broke.
+pass_probe p36_class_extends_hole.lean 2
+pass_probe p34_structure_extends_upoly_ok.lean 2
+
 echo "[u2-battery] pinned failures (the solver gap + defaults + gates):"
 fail_probe p06_rigid_refusal_MUST_FAIL.lean 'TypeMismatch { expected: "Sort u", actual: "Type" }'
 fail_probe p12_sigma_over_type_MUST_FAIL.lean 'TypeMismatch { expected: "Type", actual: "Type 1" }'
+# p30 is p06's body with the `.{u}` REMOVED, and it must fail IDENTICALLY: an
+# auto-bound universe name is a genuine parameter, so the rigid refusal has to
+# fire whether the name was declared or inferred. It did NOT before 2026-08-14
+# — `u` solved to 1 and the decl registered monomorphic with empty
+# level_params. Same pinned shape as p06 is the point of this probe.
+fail_probe p30_autobound_rigid_refusal_MUST_FAIL.lean 'TypeMismatch { expected: "Sort u", actual: "Type" }'
+# p31 is p06's body wrapped in `mutual`, and must fail IDENTICALLY. The mutual
+# and inductive paths bypassed `set_decl_universe_params` (6 sites), so a
+# DECLARED `.{u}` was not rigid there — worse than p30, where the universe was
+# merely inferred. p32 pins that the fix did not become over-strict.
+fail_probe p31_mutual_rigid_refusal_MUST_FAIL.lean 'TypeMismatch { expected: "Sort u", actual: "Type" }'
+
 
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 python3 - "$OUT_JSON" "$GIT_SHA" "$BIN" "$FIX" <<'PY'
@@ -98,8 +129,8 @@ report = {
     "clean_binary_sha256": sha256(bin_path),
     "fixtures": {os.path.basename(p): sha256(p) for p in sorted(glob.glob(f"{fix}/*.lean"))},
     "split": {
-        "pass": ["p01", "p02", "p03", "p04", "p05", "p07", "p08", "p09", "p10", "p11", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23", "p24", "p25", "p26", "p27", "p28"],
-        "fail_pinned": ["p06", "p12"],
+        "pass": ["p01", "p02", "p03", "p04", "p05", "p07", "p08", "p09", "p10", "p11", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23", "p24", "p25", "p26", "p27", "p28", "p29", "p32", "p33", "p34", "p35", "p36"],
+        "fail_pinned": ["p06", "p12", "p30", "p31"],
     },
     "note": "P6 is a SOUND loud reject (rigid refusal) and stays a FAIL pin "
             "forever; P8/P9 FLIPPED at rung 2 (structure-ctor params were "

@@ -440,3 +440,109 @@ fn test_low_precedence_postfix_fails_closed() {
         "unsupported low-precedence postfix must not leave a partial definition: {decls:#?}",
     );
 }
+
+// ===========================================================================
+// Namespace-gated `scoped` notation (Phase 1 #4a): a `scoped infixl` is
+// consulted only while its declaring namespace is active — inside the
+// namespace, or after `open Ns` / `open scoped Ns` — and is INERT elsewhere
+// (the use site falls into ordinary error recovery, never a silent lowering).
+// ===========================================================================
+
+/// Whether `decls` contains a real `def <name>` whose value lowered to a
+/// two-argument application of `head` (the notation's expansion).
+fn def_lowered_to(decls: &[SurfaceDecl], name: &str, head: &str) -> bool {
+    fn walk<'a>(decls: &'a [SurfaceDecl], name: &str, out: &mut Option<&'a SurfaceExpr>) {
+        for d in decls {
+            match d {
+                SurfaceDecl::Def { name: n, val, .. } if n == name => *out = Some(val),
+                SurfaceDecl::Namespace { decls, .. } | SurfaceDecl::Section { decls, .. } => {
+                    walk(decls, name, out);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut val = None;
+    walk(decls, name, &mut val);
+    match val {
+        Some(SurfaceExpr::App(_, f, args)) => {
+            matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n == head) && args.len() == 2
+        }
+        _ => false,
+    }
+}
+
+#[test]
+fn test_scoped_infixl_active_inside_declaring_namespace() {
+    let code = "namespace Foo\nscoped infixl:65 \" ** \" => mul\ndef foo := a ** b\nend Foo";
+    let decls = parse_file(code).expect("scoped infixl inside its namespace should parse");
+    assert!(
+        def_lowered_to(&decls, "foo", "mul"),
+        "scoped infixl must be ACTIVE inside its declaring namespace: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_scoped_infixl_inert_outside_namespace_without_open() {
+    let code = "namespace Foo\nscoped infixl:65 \" ** \" => mul\nend Foo\ndef bar := a ** b";
+    let decls = parse_file(code).expect("file parser should recover from the inert operator use");
+    assert!(
+        !def_lowered_to(&decls, "bar", "mul"),
+        "scoped infixl must be INERT outside its namespace without an open: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_scoped_infixl_active_after_open_scoped() {
+    let code = "namespace Foo\nscoped infixl:65 \" ** \" => mul\nend Foo\nopen scoped Foo\ndef baz := a ** b";
+    let decls = parse_file(code).expect("open scoped + scoped infixl use should parse");
+    assert!(
+        def_lowered_to(&decls, "baz", "mul"),
+        "`open scoped Foo` must activate Foo's scoped infixl: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_scoped_infixl_active_after_plain_open() {
+    let code =
+        "namespace Foo\nscoped infixl:65 \" ** \" => mul\nend Foo\nopen Foo\ndef qux := a ** b";
+    let decls = parse_file(code).expect("plain open + scoped infixl use should parse");
+    assert!(
+        def_lowered_to(&decls, "qux", "mul"),
+        "a simple `open Foo` must activate Foo's scoped infixl: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_scoped_infixl_open_inside_section_does_not_leak() {
+    let code = "namespace Foo\nscoped infixl:65 \" ** \" => mul\nend Foo\n\
+                section\nopen scoped Foo\ndef inside := a ** b\nend\ndef outside := a ** b";
+    let decls = parse_file(code).expect("file parser should recover from the post-section use");
+    assert!(
+        def_lowered_to(&decls, "inside", "mul"),
+        "activation must be in force inside the section: {decls:#?}"
+    );
+    assert!(
+        !def_lowered_to(&decls, "outside", "mul"),
+        "`open scoped` inside a section must not leak past `end`: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_unscoped_and_local_notation_remain_ungated() {
+    // Plain and `local` notation keep their pre-existing file-wide parse
+    // behavior — the namespace gate applies to `scoped` only.
+    let code = "namespace Foo\ninfixl:65 \" ** \" => mul\nend Foo\ndef plainUse := a ** b";
+    let decls = parse_file(code).expect("plain notation in a namespace should parse");
+    assert!(
+        def_lowered_to(&decls, "plainUse", "mul"),
+        "plain notation must stay active file-wide: {decls:#?}"
+    );
+
+    let code = "local infixl:65 \" ** \" => mul\ndef localUse := a ** b";
+    let decls = parse_file(code).expect("local notation should parse");
+    assert!(
+        def_lowered_to(&decls, "localUse", "mul"),
+        "local notation must stay active in its file: {decls:#?}"
+    );
+}

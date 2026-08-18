@@ -15,15 +15,12 @@
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec_axiom_closure::{computed_axiom_closure, foundational_rule_names};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec (`add_ctx_canonical_forms` is in
 /// the Substitution bundle; see `bundles.rs`).
 fn build_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The ladder. Each entry must be DerivedProved with a value and empty

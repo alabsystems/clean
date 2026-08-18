@@ -9,8 +9,10 @@
 //! [`super::features::FEATURES_CORE`] and [`FEATURES_EXT`] into the public
 //! `FEATURES` constant.
 //!
-//! Contains the `script`, `cache`, `lint`, `check-*`, `pack`, `unpack`, and
-//! `upload` verbs — everything beyond the core build/test verbs.
+//! Contains the `script`, `cache`, `lint`, `check-*`, `pack`, `unpack`,
+//! `upload`, `verify-fresh`, `goodness`, `smoke`, and `serve` verbs —
+//! everything
+//! beyond the core build/test verbs.
 
 use clean_features::{Category, Example, FeatureDescriptor, Stability};
 
@@ -291,6 +293,54 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
             what: "profile a theorem's identity, goodness, and complexity",
         }],
         see_also: &["lake verify-fresh"],
+        references: COMMON_REFS,
+        domain_root: Some("lake"),
+        alternative_forms: &[],
+        feature_gate: None,
+    },
+    FeatureDescriptor {
+        path: &["lake", "smoke"],
+        summary: "Run the governed Lake replacement smoke and write its JSON evidence artifact",
+        description: "Runs the init/build/test sequence of the `clean lake init` template in a \
+                      throwaway temp project, entirely through clean-owned in-process Lake \
+                      handlers (never delegating to Lean4's `lean`/`lake` binaries), and writes \
+                      per-step pass/fail evidence as JSON. This is the generator for the \
+                      lake-workflow replacement row's artifact \
+                      `reports/lake-replacement-smoke.json`; it exits non-zero when any step \
+                      fails, after still recording the honest per-step results.",
+        category: Category::Build,
+        stability: Stability::V1,
+        examples: &[
+            Example {
+                cmd: "clean lake smoke",
+                what: "run the smoke and write reports/lake-replacement-smoke.json",
+            },
+            Example {
+                cmd: "clean lake smoke --report reports/lake-replacement-smoke.json",
+                what: "run the smoke with an explicit artifact path",
+            },
+        ],
+        see_also: &["lake init", "lake build", "lake test"],
+        references: COMMON_REFS,
+        domain_root: Some("lake"),
+        alternative_forms: &[],
+        feature_gate: None,
+    },
+    FeatureDescriptor {
+        path: &["lake", "serve"],
+        summary: "Start the Clean language server over stdio for this project",
+        description: "Lake-compatible editor entry point: editors (the VS Code Lean 4 extension \
+                      among them) launch `lake serve --` in the project root and speak LSP over \
+                      the child's stdio. Loads the workspace configuration (lakefile + \
+                      lean-toolchain) fail-closed, enters the project root, and runs the Clean \
+                      LSP server until the client closes the stream.",
+        category: Category::Build,
+        stability: Stability::V1,
+        examples: &[Example {
+            cmd: "clean lake serve",
+            what: "serve LSP over stdio for the current project",
+        }],
+        see_also: &["lake env", "lake build"],
         references: COMMON_REFS,
         domain_root: Some("lake"),
         alternative_forms: &[],

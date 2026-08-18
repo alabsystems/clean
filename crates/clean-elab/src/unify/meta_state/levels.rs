@@ -50,7 +50,7 @@ impl MetaState {
         // early-return above; any other target is a genuine conflict.
         if self.is_rigid_level_param(&param_name) {
             return Err(format!(
-                "cannot assign rigid universe parameter {param_name:?} := {level:?}"
+                "cannot assign rigid universe parameter {param_name} := {level}"
             ));
         }
 
@@ -446,5 +446,314 @@ impl MetaState {
         }
 
         expr.fold_opt_or_clone(&mut CanonicalizeLevels { state: self })
+    }
+}
+
+impl MetaState {
+    /// Is this level equation UNDETERMINED — could a later assignment settle it?
+    ///
+    /// True only when some side mentions a solvable (non-rigid) level parameter.
+    /// A definite conflict — both sides ground, or every param rigid — is NOT
+    /// undetermined and must fail immediately. This predicate is the entire
+    /// safety boundary of postponement: widen it and a genuine universe
+    /// conflict becomes a deferred obligation that a later drain might not
+    /// re-derive.
+    pub(crate) fn level_eq_is_undetermined(&self, l1: &Level, l2: &Level) -> bool {
+        let mut params = Vec::new();
+        l1.collect_params(&mut params);
+        l2.collect_params(&mut params);
+        params.iter().any(|p| !self.is_rigid_level_param(p))
+    }
+
+    /// Defer an undetermined level equation.
+    ///
+    /// NOT an acceptance. The equation is recorded and must be re-solved by
+    /// [`Self::drain_postponed_levels`] at the declaration boundary; anything
+    /// still unsolved there is an error.
+    pub(crate) fn postpone_level_eq(&mut self, l1: Level, l2: Level) {
+        self.record_undo(UndoRecord::LevelPostpone);
+        self.postponed_levels.push((l1, l2));
+    }
+
+    /// How many level equations are currently deferred.
+    #[must_use]
+    pub fn postponed_level_count(&self) -> usize {
+        self.postponed_levels.len()
+    }
+
+    /// Re-solve every deferred level equation. FAIL-CLOSED.
+    ///
+    /// Returns `Err` naming the first equation that still does not solve. Call
+    /// this at the declaration boundary: an undrained queue means obligations
+    /// were accepted without being discharged, which is precisely the failure
+    /// mode postponement could otherwise introduce.
+    ///
+    /// Iterates to a fixed point — solving one equation can assign a parameter
+    /// that settles another — and stops when a full pass makes no progress.
+    pub(crate) fn drain_postponed_levels(&mut self) -> Result<(), String> {
+        let mut pending = std::mem::take(&mut self.postponed_levels);
+        loop {
+            if pending.is_empty() {
+                return Ok(());
+            }
+            let before = pending.len();
+            let mut still: Vec<(Level, Level)> = Vec::new();
+            for (l1, l2) in pending.into_iter() {
+                let a = self.instantiate_level(&l1);
+                let b = self.instantiate_level(&l2);
+                if a == b || Level::is_def_eq(&a, &b) {
+                    continue;
+                }
+                match crate::unify::level_solve::solve_level_eq_no_postpone(self, &a, &b) {
+                    crate::unify::unifier::UnifyResult::Success => {}
+                    // Stuck is NOT success: keep it pending so the
+                    // no-progress check below can turn it into an error rather
+                    // than letting an undischarged obligation through.
+                    crate::unify::unifier::UnifyResult::Failure(_)
+                    | crate::unify::unifier::UnifyResult::Stuck => still.push((l1, l2)),
+                }
+            }
+            if still.is_empty() {
+                return Ok(());
+            }
+            if still.len() == before {
+                // A whole pass with no progress: the remainder is genuinely
+                // unsolved, not merely waiting on each other.
+                let (l1, l2) = &still[0];
+                let a = self.instantiate_level(l1);
+                let b = self.instantiate_level(l2);
+                self.postponed_levels.clear();
+                return Err(format!(
+                    "unresolved universe level equation after postponement: {a:?} =?= {b:?}"
+                ));
+            }
+            pending = still;
+        }
+    }
+}
+
+#[cfg(test)]
+mod postponement_tests {
+    //! U2 level POSTPONEMENT and its fail-closed contract.
+    //!
+    //! The solver used to commit on every undetermined level equation — the
+    //! fallthrough was `is_def_eq` or `Failure`, with no queue anywhere, while
+    //! Lean parks undetermined equations and drains them at a checkpoint.
+    //!
+    //! Deferral is sound only if it is NOT acceptance. Both halves are pinned
+    //! here: a definite conflict must still fail immediately, and a deferred
+    //! equation that never resolves must fail at the boundary.
+
+    use super::MetaState;
+    use clean_kernel::name::Name;
+    use clean_kernel::Level;
+
+    fn p(s: &str) -> Level {
+        Level::param(Name::from_string(s))
+    }
+
+    /// A definite conflict — both sides ground and unequal — is NEVER deferred.
+    ///
+    /// This is the safety boundary of the whole feature. If ground conflicts
+    /// could be postponed, a real universe error would become a deferred
+    /// obligation, and any gap in draining would let it through.
+    #[test]
+    fn test_ground_conflict_is_not_undetermined() {
+        let metas = MetaState::new();
+        assert!(
+            !metas.level_eq_is_undetermined(&Level::zero(), &Level::succ(Level::zero())),
+            "0 =?= 1 is a definite conflict and must never be deferred"
+        );
+    }
+
+    /// An equation mentioning a solvable parameter IS undetermined.
+    #[test]
+    fn test_open_param_equation_is_undetermined() {
+        let metas = MetaState::new();
+        assert!(
+            metas.level_eq_is_undetermined(&p("u"), &Level::succ(p("v"))),
+            "an equation over unassigned params may still be settled later"
+        );
+    }
+
+    /// RIGID params are not solvable, so a rigid-only equation is NOT
+    /// undetermined — deferring it would be deferring a real failure.
+    #[test]
+    fn test_rigid_only_equation_is_not_undetermined() {
+        let mut metas = MetaState::new();
+        metas.set_rigid_level_params([Name::from_string("u"), Name::from_string("v")]);
+        assert!(
+            !metas.level_eq_is_undetermined(&p("u"), &p("v")),
+            "declared level params cannot be assigned, so this cannot resolve later"
+        );
+    }
+
+    /// THE FAIL-CLOSED TEST: a deferred equation that never resolves is an
+    /// ERROR at the drain, not a silent success. Without this, postponement
+    /// would be a way to make any level equation pass.
+    #[test]
+    fn test_undischargeable_deferral_fails_at_the_drain() {
+        let mut metas = MetaState::new();
+        metas.set_rigid_level_params([Name::from_string("u")]);
+        metas.postpone_level_eq(p("u"), Level::zero());
+        assert_eq!(metas.postponed_level_count(), 1);
+        assert!(
+            metas.drain_postponed_levels().is_err(),
+            "an unsolvable deferred equation must FAIL at the boundary — if \
+             this ever returns Ok, postponement has become a soundness hole"
+        );
+    }
+
+    /// max/imax congruence splits componentwise.
+    ///
+    /// NOTE the shape: `Level::max` NORMALIZES, so `max(u,0)` collapses to `u`
+    /// and `max(1,0)` to `1`. An earlier version of this test used those and
+    /// was VACUOUS — it never built a `(Max, Max)` pair at all, so the arm
+    /// under test never ran, and it passed via a plain param assignment. Two
+    /// distinct params on each side is the smallest form that survives
+    /// normalization.
+    #[test]
+    fn test_max_congruence_splits_componentwise() {
+        use crate::unify::level_solve::solve_level_eq;
+        use crate::unify::unifier::UnifyResult;
+        let mut metas = MetaState::new();
+        let lhs = Level::max(p("u"), p("v"));
+        let rhs = Level::max(p("a"), p("b"));
+        assert!(
+            matches!(lhs, Level::Max(_, _)),
+            "the fixture must actually be a Max, or this tests nothing"
+        );
+        assert!(
+            matches!(solve_level_eq(&mut metas, &lhs, &rhs), UnifyResult::Success),
+            "max(u,v) =?= max(a,b) should solve componentwise"
+        );
+    }
+
+    /// A FAILED split leaves NO assignments behind.
+    ///
+    /// The componentwise split is sufficient, not necessary, so it must roll
+    /// back — a half-applied split would wrongly constrain every later
+    /// equation. This is what distinguishes the congruence arm from the
+    /// Zero-RHS arms, where a failure is a genuine failure.
+    ///
+    /// Verified by mutation: replacing the `pop_scope` with `commit` makes
+    /// this fail.
+    #[test]
+    fn test_failed_split_leaves_no_assignments() {
+        use crate::unify::level_solve::solve_level_eq;
+        let mut metas = MetaState::new();
+        metas.set_rigid_level_params([Name::from_string("r"), Name::from_string("s")]);
+        // max(u, r) =?= max(a, s): u := a succeeds, then r =?= s fails (two
+        // DISTINCT rigid params). u must not survive.
+        let lhs = Level::max(p("u"), p("r"));
+        let rhs = Level::max(p("a"), p("s"));
+        assert!(
+            matches!(lhs, Level::Max(_, _)) && matches!(rhs, Level::Max(_, _)),
+            "both fixtures must be Max, or the congruence arm never runs"
+        );
+        let _ = solve_level_eq(&mut metas, &lhs, &rhs);
+        let u_after = metas.instantiate_level(&p("u"));
+        assert_eq!(
+            u_after,
+            p("u"),
+            "a failed componentwise split must roll back; u was left as {u_after:?}"
+        );
+    }
+
+    /// ABSORPTION (`max(a,b)` collapses when the level order decides) is
+    /// ALREADY REALIZED — by the kernel, not by this solver.
+    ///
+    /// This is the `Le` capability `universe_constraint_ext.rs` modeled but
+    /// never applied. A solver arm for it was written, tested, and then DELETED
+    /// as provably unreachable: `Level::max`
+    /// (`clean-kernel/src/level/mod.rs:456-464`) performs exactly this `is_geq`
+    /// subsumption at construction, `instantiate_level_guarded` rebuilds every
+    /// `Max` through that normalizing constructor, and `solve_level_eq_impl`
+    /// instantiates both sides before matching. No `Max` with comparable
+    /// components can reach the solver's arms at all.
+    ///
+    /// NOTE the construction below. `Level::max` normalizes eagerly, so
+    /// `max(u, succ u)` is built as `succ u` and never exists as a `Max` — an
+    /// earlier version of this test used exactly that and was vacuous. The
+    /// shape where absorption is observable is a `Max` built while its
+    /// components were incomparable (`max(u, v)`, which survives), that a later
+    /// assignment makes comparable (`v := succ u`).
+    ///
+    /// SENSITIVITY, verified by mutation: disabling the two `is_geq` returns in
+    /// `Level::max` makes this test FAIL. It is pinned to the real mechanism,
+    /// which is why it is worth keeping after the solver arm was removed — it
+    /// is the only test tying elaborator-visible absorption to that kernel
+    /// line.
+    #[test]
+    fn test_max_absorbs_once_components_compare() {
+        use crate::unify::level_solve::solve_level_eq;
+        use crate::unify::unifier::UnifyResult;
+        let mut metas = MetaState::new();
+        let lhs = Level::max(p("u"), p("v"));
+        assert!(
+            matches!(lhs, Level::Max(_, _)),
+            "incomparable components must survive normalization as a Max"
+        );
+        // A later assignment makes v dominate u.
+        metas
+            .add_level_constraint(Name::from_string("v"), Level::succ(p("u")))
+            .expect("v := succ u");
+        assert!(
+            matches!(
+                solve_level_eq(&mut metas, &lhs, &p("w")),
+                UnifyResult::Success
+            ),
+            "max(u, v) with v := succ u should absorb to succ u =?= w"
+        );
+        assert_eq!(
+            metas.instantiate_level(&p("w")),
+            Level::succ(p("u")),
+            "w must get the DOMINATING side, not the absorbed one"
+        );
+    }
+
+    /// Absorption must not fire when the order is undecided.
+    ///
+    /// `max(u, v)` for unrelated params has no dominating side; `Level::leq` is
+    /// conservative and answers false both ways, so the arm must not fire and
+    /// the equation must reach the other arms instead of being wrongly
+    /// collapsed to one component.
+    #[test]
+    fn test_absorption_does_not_fire_on_incomparable_levels() {
+        use clean_kernel::Level as L;
+        assert!(
+            !L::leq(&p("v"), &p("u")) && !L::leq(&p("u"), &p("v")),
+            "unrelated params must be incomparable, or absorption would pick a \
+             side arbitrarily and silently drop the other"
+        );
+    }
+
+    /// A deferred equation a later assignment settles drains cleanly.
+    #[test]
+    fn test_resolvable_deferral_drains_ok() {
+        let mut metas = MetaState::new();
+        metas.postpone_level_eq(p("u"), Level::zero());
+        assert_eq!(metas.postponed_level_count(), 1);
+        assert!(
+            metas.drain_postponed_levels().is_ok(),
+            "u =?= 0 with u solvable must discharge at the drain"
+        );
+    }
+
+    /// The queue does not survive a rolled-back speculative branch: an
+    /// obligation from an abandoned path would otherwise be drained against a
+    /// state that never produced it.
+    #[test]
+    fn test_rollback_discards_deferred_equations() {
+        let mut metas = MetaState::new();
+        metas.push_scope();
+        metas.postpone_level_eq(p("u"), Level::zero());
+        assert_eq!(metas.postponed_level_count(), 1);
+        metas.pop_scope();
+        assert_eq!(
+            metas.postponed_level_count(),
+            0,
+            "a rolled-back branch must not leave obligations behind"
+        );
     }
 }

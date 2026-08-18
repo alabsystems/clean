@@ -929,15 +929,10 @@ fn let_arm() -> String {
 #[cfg(test)]
 mod tests {
     use crate::spec::types::ProofStatus;
-    use crate::test_utils::run_with_stack;
-    use crate::Specification;
 
     #[test]
     fn test_lift_instantiate_swap_is_derived_proved() {
-        let spec = run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        });
+        let spec = crate::test_utils::build_substitution_spec_with_stack();
 
         for name in ["lift_instantiate_swap_bvar", "lift_instantiate_swap"] {
             let def = spec

@@ -8474,16 +8474,18 @@ fn test_b106_named_have_still_works() {
     assert_all_ok(&results, "b106 named have control");
 }
 
-#[test]
-fn test_r100_everyday_lock() {
-    // R100 strategic re-measure (fresh independent no-avoid battery,
-    // 5-agent gen 2026-07-20): the 38 everyday snippets that
-    // parse -> elaborate -> kernel-verify clean today. Pins them
-    // against regression. Full sweep 38/63 = 60.3%; the failing 25
-    // are tracked in the R100 backlog (deriving Repr x6, omega/linarith
-    // x4, recursive dot-notation x3, simp-set x2, prelude consts x2,
-    // do/coe/array/rw tail x8).
-    let passing: &[(&str, &str)] = &[
+/// R100 strategic re-measure (fresh independent no-avoid battery,
+/// 5-agent gen 2026-07-20): the 38 everyday snippets that
+/// parse -> elaborate -> kernel-verify clean at that measure,
+/// BYTE-IDENTICAL to the set locked in commit f7f1c78bb. Pinned against
+/// regression by `test_r100_everyday_lock` and re-measured on the same
+/// 63-snippet denominator by `test_r100_everyday_battery_full`. The full
+/// 2026-07-20 sweep was 38/63 = 60.3%; the failing 25 (deriving Repr x6,
+/// omega/linarith x4, recursive dot-notation x3, simp-set x2, prelude
+/// consts x2, do/coe/array/rw tail x8) live in
+/// `r100_reconstructed_snippets` — see its comment for provenance.
+fn r100_locked_snippets() -> &'static [(&'static str, &'static str)] {
+    &[
         (
             "logic_and-comm-impl",
             r####"theorem and_comm_impl (p q : Prop) : p ∧ q → q ∧ p := by
@@ -8866,9 +8868,15 @@ example : double 4 = 8 := rfl
 example : double 0 = 0 := rfl
 "####,
         ),
-    ];
+    ]
+}
+
+#[test]
+fn test_r100_everyday_lock() {
+    // Fail-closed regression gate over the byte-identical 2026-07-20
+    // passing set (see `r100_locked_snippets`).
     let mut failures: Vec<String> = Vec::new();
-    for (name, code) in passing {
+    for (name, code) in r100_locked_snippets() {
         let decls = match parse_file(code) {
             Ok(d) => d,
             Err(e) => {
@@ -8892,6 +8900,577 @@ example : double 0 = 0 := rfl
         failures.is_empty(),
         "R100 everyday lock regressed:\n{}",
         failures.join("\n")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// R100 full 63-snippet everyday battery — same denominator, rerunnable.
+//
+// RECOVERABILITY FINDING (2026-08-10): commit f7f1c78bb (the 2026-07-20
+// 38/63 measurement) committed ONLY the 38 passing snippets; the 25 failing
+// snippets were banked to an ephemeral agent scratchpad
+// (`scratchpad/r100_battery.json`) that no longer exists, and no other
+// commit, comment, or tracked file carries their source. What IS recorded
+// (commit message of f7f1c78bb + the R100 cluster map) is 24 of the 25
+// snippet NAMES and a per-snippet failure cause for every cluster. The
+// snippets below are therefore RECONSTRUCTIONS (2026-08-10) of the recorded
+// failure surface, not byte-identical originals:
+//
+//   1. deriving Repr x6 ......... class_point-add-instance, class_wrap-add-decide,
+//                                 class_account-with-update, class_pair-generic-beq,
+//                                 data_point-struct, mixed_point_struct_decidable
+//                                 (each was solely a `structure … deriving Repr`
+//                                 Unsupported bail; none assert Repr OUTPUT)
+//   2. omega/linarith x4 ........ arith-int-bound (`a-1<b+1` from `a≤b` over Int),
+//                                 arith-double-even-exists (`∃k, n+n=2*k` witness n),
+//                                 arith-double-eq-induction (omega after simp only),
+//                                 data_sum-append ("could not extract linear constraints")
+//   3. recursive dot-notation x3  data_tree-mirror-size (`l.size` self-ref),
+//                                 mixed_tree_mirror_involutive (Tree.mirror),
+//                                 mixed_mylist_append_assoc (MyList.append)
+//   4. simp-set x2 .............. data_reverse-reverse, data_map-map-fusion (NoProgress)
+//   5. prelude consts x2 ........ mixed_option_do_firsttwo (List.head?),
+//                                 class_config-option-do (Option.isSome)
+//   6. tail one-offs x8 ......... class_except-safediv-do, data_array-size,
+//                                 arith-vec2-add-comm, mixed_coe_nat_option,
+//                                 mixed_swap_pairs_nested, logic_contrapositive,
+//                                 logic_demorgan-not-or, + one slot whose name was
+//                                 NOT recorded (the record double-lists
+//                                 class_config-option-do in clusters 5 and 6), kept
+//                                 here as `unrecorded_r100_slot25` reconstructed
+//                                 from the prelude-consts cluster description
+//
+// The artifact records this via `comparison_basis`; verdicts on the 38 locked
+// snippets are directly comparable to 2026-07-20, verdicts on these 25 are not.
+// ---------------------------------------------------------------------------
+
+/// The 25 R100 failing snippets, reconstructed from the recorded cluster map
+/// (see the recoverability finding above). NEVER pre-asserted pass or fail —
+/// `test_r100_everyday_battery_full` records their live verdicts in
+/// `reports/everyday-battery.json`.
+fn r100_reconstructed_snippets() -> &'static [(&'static str, &'static str)] {
+    &[
+        (
+            "class_point-add-instance",
+            r####"structure Point where
+  x : Int
+  y : Int
+  deriving Repr
+
+instance : Add Point where
+  add p q := ⟨p.x + q.x, p.y + q.y⟩
+
+example : ((⟨1, 2⟩ : Point) + ⟨3, 4⟩).x = 4 := rfl
+"####,
+        ),
+        (
+            "class_wrap-add-decide",
+            r####"structure Wrap where
+  val : Nat
+  deriving Repr, DecidableEq
+
+instance : Add Wrap where
+  add a b := ⟨a.val + b.val⟩
+
+example : ((⟨2⟩ : Wrap) + ⟨3⟩) = (⟨5⟩ : Wrap) := by decide
+"####,
+        ),
+        (
+            "class_account-with-update",
+            r####"structure Account where
+  owner : String
+  balance : Nat
+  deriving Repr
+
+def Account.deposit (a : Account) (amt : Nat) : Account :=
+  { a with balance := a.balance + amt }
+
+example : (Account.deposit ⟨"ann", 10⟩ 5).balance = 15 := rfl
+"####,
+        ),
+        (
+            "class_pair-generic-beq",
+            r####"structure Pair (α β : Type) where
+  fst : α
+  snd : β
+  deriving Repr, BEq
+
+example : ((⟨1, true⟩ : Pair Nat Bool) == ⟨1, true⟩) = true := rfl
+"####,
+        ),
+        (
+            "data_point-struct",
+            r####"structure data_Point where
+  x : Nat
+  y : Nat
+  deriving Repr
+
+def data_Point.flip (p : data_Point) : data_Point := ⟨p.y, p.x⟩
+
+example : (data_Point.flip ⟨1, 2⟩).x = 2 := rfl
+"####,
+        ),
+        (
+            "mixed_point_struct_decidable",
+            r####"structure MixedPoint where
+  x : Nat
+  y : Nat
+  deriving Repr, DecidableEq
+
+example : (⟨1, 2⟩ : MixedPoint) ≠ ⟨2, 1⟩ := by decide
+"####,
+        ),
+        (
+            "arith-int-bound",
+            r####"theorem arith_int_bound (a b : Int) (h : a ≤ b) : a - 1 < b + 1 := by
+  omega
+"####,
+        ),
+        (
+            "arith-double-even-exists",
+            r####"theorem arith_double_even (n : Nat) : ∃ k, n + n = 2 * k := ⟨n, by omega⟩
+"####,
+        ),
+        (
+            "arith-double-eq-induction",
+            r####"theorem arith_double_eq (n : Nat) : n + n = 2 * n := by
+  induction n with
+  | zero => rfl
+  | succ k ih =>
+    simp only [Nat.add_succ, Nat.succ_add, Nat.mul_succ]
+    omega
+"####,
+        ),
+        (
+            "data_sum-append",
+            r####"def data_listSum : List Nat → Nat
+  | [] => 0
+  | x :: xs => x + data_listSum xs
+
+theorem data_sum_append (xs ys : List Nat) :
+    data_listSum (xs ++ ys) = data_listSum xs + data_listSum ys := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    simp only [List.cons_append, data_listSum, ih]
+    omega
+"####,
+        ),
+        (
+            "data_tree-mirror-size",
+            r####"inductive data_Tree where
+  | leaf
+  | node : data_Tree → data_Tree → data_Tree
+
+def data_Tree.size : data_Tree → Nat
+  | .leaf => 1
+  | .node l r => l.size + r.size
+
+def data_Tree.mirror : data_Tree → data_Tree
+  | .leaf => .leaf
+  | .node l r => .node r.mirror l.mirror
+
+theorem data_tree_mirror_size (t : data_Tree) : t.mirror.size = t.size := by
+  induction t with
+  | leaf => rfl
+  | node l r ihl ihr =>
+    simp [data_Tree.mirror, data_Tree.size, ihl, ihr, Nat.add_comm]
+"####,
+        ),
+        (
+            "mixed_tree_mirror_involutive",
+            r####"inductive Tree where
+  | leaf
+  | node : Tree → Tree → Tree
+
+def Tree.mirror : Tree → Tree
+  | .leaf => .leaf
+  | .node l r => .node r.mirror l.mirror
+
+theorem tree_mirror_involutive (t : Tree) : t.mirror.mirror = t := by
+  induction t with
+  | leaf => rfl
+  | node l r ihl ihr => simp [Tree.mirror, ihl, ihr]
+"####,
+        ),
+        (
+            "mixed_mylist_append_assoc",
+            r####"inductive MyList (α : Type) where
+  | nil
+  | cons : α → MyList α → MyList α
+
+def MyList.append {α : Type} : MyList α → MyList α → MyList α
+  | .nil, ys => ys
+  | .cons x xs, ys => .cons x (xs.append ys)
+
+theorem mylist_append_assoc {α : Type} (xs ys zs : MyList α) :
+    (xs.append ys).append zs = xs.append (ys.append zs) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih => simp [MyList.append, ih]
+"####,
+        ),
+        (
+            "data_reverse-reverse",
+            r####"theorem data_reverse_reverse {α : Type} (xs : List α) :
+    xs.reverse.reverse = xs := by
+  simp
+"####,
+        ),
+        (
+            "data_map-map-fusion",
+            r####"theorem data_map_map_fusion {α β γ : Type} (f : α → β) (g : β → γ) (xs : List α) :
+    (xs.map f).map g = xs.map (g ∘ f) := by
+  simp
+"####,
+        ),
+        (
+            "mixed_option_do_firsttwo",
+            r####"def firstTwo (xs : List Nat) : Option (Nat × Nat) := do
+  let a ← xs.head?
+  let b ← xs.tail.head?
+  pure (a, b)
+
+example : firstTwo [1, 2, 3] = some (1, 2) := rfl
+
+example : firstTwo [1] = none := rfl
+"####,
+        ),
+        (
+            "class_config-option-do",
+            r####"structure Config where
+  host : String
+  port : Option Nat
+
+def Config.hasPort (c : Config) : Bool := c.port.isSome
+
+def Config.portOr (c : Config) (d : Nat) : Nat :=
+  match c.port with
+  | some p => p
+  | none => d
+
+example : Config.hasPort ⟨"srv", some 80⟩ = true := rfl
+
+example : Config.portOr ⟨"srv", none⟩ 8080 = 8080 := rfl
+"####,
+        ),
+        (
+            "class_except-safediv-do",
+            r####"def class_safeDiv (a b : Nat) : Except String Nat :=
+  if b = 0 then Except.error "div by zero" else Except.ok (a / b)
+
+def class_divTwice (a b c : Nat) : Except String Nat := do
+  let x ← class_safeDiv a b
+  class_safeDiv x c
+
+example : class_divTwice 12 3 2 = Except.ok 2 := rfl
+"####,
+        ),
+        (
+            "data_array-size",
+            r####"def data_pushTwo (xs : Array Nat) : Array Nat :=
+  (xs.push 1).push 2
+
+example : (data_pushTwo #[]).size = 2 := rfl
+"####,
+        ),
+        (
+            "arith-vec2-add-comm",
+            r####"structure arith_Vec2 where
+  x : Int
+  y : Int
+
+instance : Add arith_Vec2 where
+  add u v := ⟨u.x + v.x, u.y + v.y⟩
+
+theorem arith_vec2_add_comm (u v : arith_Vec2) : (u + v).x = (v + u).x := by
+  rw [Int.add_comm]
+"####,
+        ),
+        (
+            "mixed_coe_nat_option",
+            r####"def mixed_toOpt (n : Nat) : Option Nat := n
+
+example : mixed_toOpt 5 = some 5 := rfl
+"####,
+        ),
+        (
+            "mixed_swap_pairs_nested",
+            r####"def swapPairs {α β : Type} : List (α × β) → List (β × α)
+  | [] => []
+  | (a, b) :: rest => (b, a) :: swapPairs rest
+
+example : swapPairs [(1, 2), (3, 4)] = [(2, 1), (4, 3)] := rfl
+"####,
+        ),
+        (
+            "logic_contrapositive",
+            r####"theorem logic_contrapositive (p q : Prop) (h : p → q) : ¬q → ¬p := by
+  intro hnq hp
+  exact hnq (h hp)
+"####,
+        ),
+        (
+            "logic_demorgan-not-or",
+            r####"theorem logic_demorgan_not_or (p q : Prop) : ¬(p ∨ q) → ¬p ∧ ¬q := by
+  intro h
+  constructor
+  · intro hp
+    exact h (Or.inl hp)
+  · intro hq
+    exact h (Or.inr hq)
+"####,
+        ),
+        (
+            "unrecorded_r100_slot25",
+            r####"def data_firstOrZero (xs : List Nat) : Nat :=
+  match xs.head? with
+  | some x => x
+  | none => 0
+
+example : data_firstOrZero [7, 8] = 7 := rfl
+
+example : data_firstOrZero [] = 0 := rfl
+"####,
+        ),
+    ]
+}
+
+const EVERYDAY_UPDATE_ENV_VAR: &str = "CLEAN_EVERYDAY_UPDATE";
+const EVERYDAY_REPORT_REL: &str = "reports/everyday-battery.json";
+const EVERYDAY_LOCKED_PROVENANCE: &str = "locked-2026-07-20";
+const EVERYDAY_RECONSTRUCTED_PROVENANCE: &str = "reconstructed-2026-08-10";
+
+/// Recorded in the artifact so every consumer sees exactly what a rerun is
+/// (and is not) comparable to.
+const R100_COMPARISON_BASIS: &str = "38/63 snippets are byte-identical to the 2026-07-20 R100 \
+     battery (the passing set locked in commit f7f1c78bb, test_r100_everyday_lock). The 25 \
+     failing snippets were never committed — the R100 run banked them only to an ephemeral \
+     scratchpad (scratchpad/r100_battery.json), since lost — and are RECONSTRUCTED (2026-08-10) \
+     from the recorded per-snippet names and failure causes in commit f7f1c78bb's message and \
+     the R100 cluster map (24 of 25 names recorded; the unrecorded slot is \
+     unrecorded_r100_slot25, rebuilt from the missing-prelude-consts cluster description). \
+     Verdicts on the 38 locked snippets are directly comparable to 2026-07-20; verdicts on the \
+     25 reconstructed snippets measure the same recorded failure surface but are not \
+     byte-comparable.";
+
+fn everyday_repo_root() -> std::path::PathBuf {
+    // CARGO_MANIFEST_DIR = <root>/crates/clean-elab
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("crate manifest dir has a two-level ancestor")
+        .to_path_buf()
+}
+
+/// Run one battery snippet through the exact harness the R100 lock uses
+/// (fresh prelude env, parse -> preprocess -> elaborate+register per decl),
+/// catching panics so one crashing snippet cannot take down the battery.
+/// Returns `(verdict, first_error)` with verdict one of
+/// `pass` / `parse_error` / `elab_error` / `panic`.
+fn run_everyday_snippet(code: &str) -> (&'static str, Option<String>) {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let decls = match parse_file(code) {
+            Ok(d) => d,
+            Err(e) => return ("parse_error", Some(format!("{e:?}"))),
+        };
+        let mut env = Environment::with_prelude();
+        let mut file_ctx = FileContext::new();
+        for (i, decl) in decls.iter().enumerate() {
+            let processed = preprocess_decl_with_context(decl, &mut file_ctx);
+            if let Err(e) =
+                elaborate_decl_and_register_with_context(&mut env, &processed, &mut file_ctx)
+            {
+                return ("elab_error", Some(format!("decl#{i} {e:?}")));
+            }
+        }
+        ("pass", None)
+    }));
+    match outcome {
+        Ok(v) => v,
+        Err(payload) => {
+            let msg = payload
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "non-string panic payload".to_string());
+            ("panic", Some(msg))
+        }
+    }
+}
+
+/// Bound an error string for the artifact (char-boundary safe).
+fn truncate_everyday_error(e: &str) -> String {
+    const MAX_CHARS: usize = 400;
+    if e.chars().count() <= MAX_CHARS {
+        e.to_string()
+    } else {
+        let head: String = e.chars().take(MAX_CHARS).collect();
+        format!("{head}…[truncated]")
+    }
+}
+
+/// Same-denominator rerun of the FULL 2026-07-20 R100 everyday battery
+/// (38 byte-identical locked snippets + 25 reconstructed failures = 63).
+///
+/// Fail-closed gate: every locked snippet must still pass. The 25
+/// reconstructed snippets are never pre-asserted either way — their live
+/// verdicts are the measurement, recorded per snippet.
+///
+/// Artifact lanes, mirroring `clean-olean/tests/prelude_collision_census.rs`:
+/// - `CLEAN_EVERYDAY_UPDATE=1` rewrites `reports/everyday-battery.json`
+///   (schema: `generated_at_commit`, `comparison_basis`, `total`, `passed`,
+///   `per_snippet: [{name, provenance, verdict, first_error}]`).
+/// - Otherwise, if the artifact exists it must still match the live
+///   name -> verdict map (a flip means the artifact is stale — regenerate,
+///   do not hand-edit). `first_error` strings are not compared.
+///
+/// Regenerate with:
+///
+/// ```sh
+/// CLEAN_EVERYDAY_UPDATE=1 \
+///   cargo test --locked -p clean-elab --lib test_r100_everyday_battery_full
+/// ```
+#[test]
+fn test_r100_everyday_battery_full() {
+    let battery: Vec<(&str, &str, &str)> = r100_locked_snippets()
+        .iter()
+        .map(|(n, c)| (*n, *c, EVERYDAY_LOCKED_PROVENANCE))
+        .chain(
+            r100_reconstructed_snippets()
+                .iter()
+                .map(|(n, c)| (*n, *c, EVERYDAY_RECONSTRUCTED_PROVENANCE)),
+        )
+        .collect();
+    assert_eq!(battery.len(), 63, "same-denominator battery must stay 63");
+    let unique: std::collections::BTreeSet<&str> = battery.iter().map(|(n, _, _)| *n).collect();
+    assert_eq!(unique.len(), 63, "battery snippet names must be unique");
+
+    let mut locked_regressions: Vec<String> = Vec::new();
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    let mut fresh: Vec<(&str, &'static str)> = Vec::new();
+    let mut passed = 0usize;
+    for (name, code, provenance) in &battery {
+        let (verdict, first_error) = run_everyday_snippet(code);
+        if verdict == "pass" {
+            passed += 1;
+        } else if *provenance == EVERYDAY_LOCKED_PROVENANCE {
+            locked_regressions.push(format!(
+                "{name}: {verdict} {}",
+                first_error.as_deref().unwrap_or("")
+            ));
+        }
+        rows.push(serde_json::json!({
+            "name": name,
+            "provenance": provenance,
+            "verdict": verdict,
+            "first_error": first_error.as_deref().map(truncate_everyday_error),
+        }));
+        fresh.push((*name, verdict));
+    }
+    assert!(
+        locked_regressions.is_empty(),
+        "R100 locked snippets regressed inside the full battery:\n{}",
+        locked_regressions.join("\n")
+    );
+    eprintln!("everyday battery: {passed}/63 pass");
+
+    let path = everyday_repo_root().join(EVERYDAY_REPORT_REL);
+    if std::env::var(EVERYDAY_UPDATE_ENV_VAR).is_ok() {
+        let commit = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(everyday_repo_root())
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_else(|| {
+                panic!(
+                    "fail-closed: {EVERYDAY_UPDATE_ENV_VAR}=1 needs `git rev-parse HEAD` \
+                     for artifact provenance"
+                )
+            });
+        let artifact = serde_json::json!({
+            "schema": "everyday-battery-v1",
+            "generated_at_commit": commit,
+            "generated_by": format!(
+                "{EVERYDAY_UPDATE_ENV_VAR}=1 cargo test --locked -p clean-elab --lib \
+                 test_r100_everyday_battery_full"
+            ),
+            "comparison_basis": R100_COMPARISON_BASIS,
+            "total": battery.len(),
+            "passed": passed,
+            "per_snippet": rows,
+        });
+        let json = serde_json::to_string_pretty(&artifact).expect("artifact must serialize");
+        std::fs::write(&path, json + "\n")
+            .unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
+        eprintln!("WROTE {EVERYDAY_REPORT_REL}: {passed}/63 pass");
+        return;
+    }
+
+    if !path.exists() {
+        eprintln!(
+            "NOTE: {EVERYDAY_REPORT_REL} not present — generate it with \
+             {EVERYDAY_UPDATE_ENV_VAR}=1 (see this test's doc comment) and commit it."
+        );
+        return;
+    }
+    let bytes =
+        std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    let recorded: serde_json::Value = serde_json::from_slice(&bytes)
+        .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()));
+    let recorded_rows = recorded["per_snippet"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{EVERYDAY_REPORT_REL}: per_snippet must be an array"));
+    let recorded_map: std::collections::BTreeMap<&str, &str> = recorded_rows
+        .iter()
+        .map(|r| {
+            let name = r["name"].as_str().expect("per_snippet.name is a string");
+            let verdict = r["verdict"]
+                .as_str()
+                .expect("per_snippet.verdict is a string");
+            (name, verdict)
+        })
+        .collect();
+    let mut drift: Vec<String> = Vec::new();
+    if recorded_map.len() != fresh.len() {
+        drift.push(format!(
+            "artifact records {} snippets, live battery has {}",
+            recorded_map.len(),
+            fresh.len()
+        ));
+    }
+    for (name, verdict) in &fresh {
+        match recorded_map.get(name) {
+            None => drift.push(format!("{name}: missing from artifact")),
+            Some(rec) if rec != verdict => drift.push(format!(
+                "{name}: artifact records `{rec}`, live run says `{verdict}`"
+            )),
+            Some(_) => {}
+        }
+    }
+    let recorded_passed = recorded_rows
+        .iter()
+        .filter(|r| r["verdict"].as_str() == Some("pass"))
+        .count();
+    if recorded["passed"].as_u64() != Some(recorded_passed as u64) {
+        drift.push(format!(
+            "artifact `passed` ({:?}) != its own pass rows ({recorded_passed})",
+            recorded["passed"]
+        ));
+    }
+    if recorded["total"].as_u64() != Some(63) {
+        drift.push(format!(
+            "artifact `total` ({:?}) must be 63",
+            recorded["total"]
+        ));
+    }
+    assert!(
+        drift.is_empty(),
+        "{EVERYDAY_REPORT_REL} is stale against the live battery — regenerate with \
+         {EVERYDAY_UPDATE_ENV_VAR}=1 and commit the result (never hand-edit):\n{}",
+        drift.join("\n")
     );
 }
 

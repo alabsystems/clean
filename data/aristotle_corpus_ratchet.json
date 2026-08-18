@@ -367,6 +367,17 @@
         "proof-irrelevance-r3"
       ]
     },
+    "proof-irrelevance-r4": {
+      "inductive HasType::a735cfe8b2d4b2df": [
+        "proof-irrelevance-r4"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "proof-irrelevance-r4"
+      ],
+      "inductive Tm::686b2582ad35a8ae": [
+        "proof-irrelevance-r4"
+      ]
+    },
     "quot-computation": {
       "inductive HasType::d74d2960eab943b9": [
         "quot-computation"
@@ -610,6 +621,14 @@
     }
   },
   "global_assumptions": {
+    "ac": {
+      "rungs": [
+        "let-delta-decidable",
+        "let-delta-sn",
+        "let-delta-whnf-conversion"
+      ],
+      "status": "UNDISCHARGED_SIDE_CONDITION"
+    },
     "cr": {
       "rungs": [
         "dec-conv",
@@ -636,6 +655,7 @@
         "dependent-whnf-conversion",
         "dependent-wtype-sr",
         "dependent-wtype-whnf-conversion",
+        "let-delta-decidable",
         "let-delta-whnf-conversion",
         "stlc-betaeta-decidable",
         "stlc-decide-defeq",
@@ -661,9 +681,16 @@
       ],
       "status": "UNDISCHARGED"
     },
+    "hcomp": {
+      "rungs": [
+        "proof-irrelevance-r4"
+      ],
+      "status": "UNDISCHARGED"
+    },
     "pinj": {
       "rungs": [
-        "proof-irrelevance-r3"
+        "proof-irrelevance-r3",
+        "proof-irrelevance-r4"
       ],
       "status": "UNDISCHARGED"
     },
@@ -688,6 +715,22 @@
       ],
       "status": "UNDISCHARGED_AND_FALSE_UNDER_TYPE_IN_TYPE"
     },
+    "wcr": {
+      "rungs": [
+        "newman"
+      ],
+      "status": "BY_DESIGN_STATEMENT_PREMISE"
+    },
+    "wf": {
+      "rungs": [
+        "dep-bidir-r4",
+        "let-delta-decidable",
+        "let-delta-sn",
+        "let-delta-sr",
+        "let-delta-whnf-conversion"
+      ],
+      "status": "UNDISCHARGED_SIDE_CONDITION"
+    },
     "whnf_conv": {
       "rungs": [
         "dep-bidir-r4"
@@ -709,6 +752,7 @@
   },
   "hypothesis_names": [
     "IH",
+    "ac",
     "acc",
     "bsn",
     "convb_complete",
@@ -720,6 +764,7 @@
     "cr2B",
     "cr3A",
     "cr3B",
+    "d",
     "decWH",
     "esn",
     "h",
@@ -732,10 +777,19 @@
     "hAs",
     "hB",
     "hB'",
+    "hB2",
     "hC",
     "hEnv",
     "hF",
+    "hFbnd",
+    "hP",
+    "hT'",
+    "hTT",
+    "hV",
+    "hX",
+    "hY",
     "ha",
+    "haa'",
     "hab",
     "hac",
     "hacc",
@@ -746,48 +800,81 @@
     "hc",
     "hcAA'",
     "hcBB'",
+    "hcX",
+    "hcY",
+    "hcod",
+    "hcoh",
+    "hcomp",
     "hconv",
+    "hcx",
     "hd",
+    "hdisj",
+    "hdom",
     "he",
     "hec",
     "hf",
+    "hf'",
     "hg",
     "hinst",
     "hinv",
+    "hjunk",
     "hkonst",
     "hl",
+    "hlc",
     "hm",
     "hmap",
     "hn",
+    "hn1",
+    "hn2",
+    "hna",
+    "hnb",
+    "hnewman",
+    "hnf",
     "hns",
     "hp",
+    "hpi",
     "hprop",
     "hq",
     "hr",
+    "hrs",
     "hs",
     "hsa",
     "hsb",
     "hsf",
     "hsg",
+    "hsn",
     "hsound",
+    "hst",
     "ht",
+    "hterm",
+    "hu",
     "hv",
+    "hwt",
+    "hx",
     "hxy",
+    "hy",
+    "hyy'",
     "hyz",
     "hz",
     "ih",
     "lc",
+    "n",
+    "na",
+    "nb",
     "nm",
     "pinj",
     "pres",
     "r",
     "sn",
+    "sna",
+    "snb",
+    "wcr",
     "wf",
     "whnf_conv",
     "whnf_pi",
     "whnf_reduces"
   ],
-  "rung_count": 79,
+  "rung_count": 80,
   "rungs": {
     "confluence-3way": {
       "banned": {},
@@ -798,6 +885,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/confluence-3way/solution/project_aristotle/Confluence3Way.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/confluence-3way/solution/project_aristotle/Confluence3Way.lean"
+      ],
       "hypotheses": [],
       "lines": 399,
       "theorems": 24,
@@ -812,6 +902,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/confluence-conv/solution/project_aristotle/ConfluenceConv.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/confluence-conv/solution/project_aristotle/ConfluenceConv.lean"
+      ],
       "hypotheses": [
         "h"
       ],
@@ -828,7 +921,14 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/confluence-nf-unique/solution/project_aristotle/ConfluenceNF.lean",
-      "hypotheses": [],
+      "files": [
+        "proofs/aristotle-whnf-model-guides/confluence-nf-unique/solution/project_aristotle/ConfluenceNF.lean"
+      ],
+      "hypotheses": [
+        "hnf",
+        "na",
+        "nb"
+      ],
       "lines": 424,
       "theorems": 26,
       "vacuity": {}
@@ -840,6 +940,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dec-conv/solution/DecConv.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dec-conv/solution/DecConv.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -859,6 +962,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dec-conv-exec/solution/DecConvExec.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dec-conv-exec/solution/DecConvExec.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -881,6 +987,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/delta-progress/solution/delta-progress_aristotle/DeltaProgress.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/delta-progress/solution/delta-progress_aristotle/DeltaProgress.lean"
+      ],
       "hypotheses": [
         "hns"
       ],
@@ -900,6 +1009,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dep-bidir-r4/solution/DepBidir.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dep-bidir-r4/solution/DepBidir.lean"
+      ],
       "hypotheses": [
         "convb_complete",
         "convb_sound",
@@ -936,6 +1048,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dep-lambda-pi-r3/solution/DepLambdaPi.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dep-lambda-pi-r3/solution/DepLambdaPi.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -967,6 +1082,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dep-progress/solution/DepProgress.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dep-progress/solution/DepProgress.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -989,6 +1107,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-bool/solution/DependentBool.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-bool/solution/DependentBool.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1021,6 +1142,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-bool-cr/solution/DependentBoolCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-bool-cr/solution/DependentBoolCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1044,6 +1168,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/DependentBoolWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/DependentBoolWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1081,6 +1208,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-cr/solution/DependentCoproductCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-cr/solution/DependentCoproductCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1104,6 +1234,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-sr/solution/DependentCoproductSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-sr/solution/DependentCoproductSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1140,6 +1273,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/DependentCoproductWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/DependentCoproductWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1181,6 +1317,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-eta-conv-sr/solution/DependentEtaConvSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-eta-conv-sr/solution/DependentEtaConvSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1206,6 +1345,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-cr/solution/DependentIdJCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-cr/solution/DependentIdJCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1229,6 +1371,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-sr/solution/DependentIdJSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-sr/solution/DependentIdJSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1262,6 +1407,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/DependentIdJWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/DependentIdJWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1299,6 +1447,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-nat-cr/solution/DependentNatCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-nat-cr/solution/DependentNatCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1322,6 +1473,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-nat-rec-sr/solution/DependentNatRecSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-nat-rec-sr/solution/DependentNatRecSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1356,6 +1510,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/DependentNatWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/DependentNatWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1396,10 +1553,16 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-nf-unique/solution/DependentNFUnique.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-nf-unique/solution/DependentNFUnique.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
-        "h2"
+        "h2",
+        "hn",
+        "hn1",
+        "hn2"
       ],
       "lines": 112,
       "theorems": 3,
@@ -1416,6 +1579,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-cr/solution/DependentSigmaCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-cr/solution/DependentSigmaCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1439,6 +1605,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-progress/solution/DependentSigmaProgress.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-progress/solution/DependentSigmaProgress.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1461,6 +1630,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-sr/solution/DependentSigmaSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-sr/solution/DependentSigmaSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1493,6 +1665,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/DependentSigmaWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/DependentSigmaWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1529,6 +1704,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-cr/solution/DependentUnifiedCoreCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-cr/solution/DependentUnifiedCoreCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1552,6 +1730,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-sr/solution/DependentUnifiedCoreSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-sr/solution/DependentUnifiedCoreSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1588,6 +1769,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/DependentUnifiedCoreWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/DependentUnifiedCoreWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1628,6 +1812,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-cr/solution/DependentUnifiedFullCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-cr/solution/DependentUnifiedFullCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1651,6 +1838,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-sr/solution/DependentUnifiedFullSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-sr/solution/DependentUnifiedFullSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1692,6 +1882,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/DependentUnifiedFullWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/DependentUnifiedFullWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1738,6 +1931,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/DependentWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/DependentWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1773,6 +1969,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-cr/solution/DependentWTypeCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-cr/solution/DependentWTypeCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1796,6 +1995,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-sr/solution/DependentWTypeSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-sr/solution/DependentWTypeSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -1833,6 +2035,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/DependentWTypeWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/DependentWTypeWhnfConversion.lean"
+      ],
       "hypotheses": [
         "cr",
         "decWH",
@@ -1874,7 +2079,12 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/full-loop-iota/solution/full-loop-iota_aristotle/FullLoopIota.lean",
-      "hypotheses": [],
+      "files": [
+        "proofs/aristotle-whnf-model-guides/full-loop-iota/solution/full-loop-iota_aristotle/FullLoopIota.lean"
+      ],
+      "hypotheses": [
+        "hEnv"
+      ],
       "lines": 509,
       "theorems": 15,
       "vacuity": {}
@@ -1888,7 +2098,12 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/full-loop-universal/solution/full-loop-universal_aristotle/FullLoopUniversal.lean",
-      "hypotheses": [],
+      "files": [
+        "proofs/aristotle-whnf-model-guides/full-loop-universal/solution/full-loop-universal_aristotle/FullLoopUniversal.lean"
+      ],
+      "hypotheses": [
+        "hEnv"
+      ],
       "lines": 661,
       "theorems": 13,
       "vacuity": {}
@@ -1902,6 +2117,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/full-progress/solution/full-progress_aristotle/FullProgress.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/full-progress/solution/full-progress_aristotle/FullProgress.lean"
+      ],
       "hypotheses": [
         "hns"
       ],
@@ -1918,6 +2136,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/iota-progress/solution/iota-progress_aristotle/IotaProgress.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/iota-progress/solution/iota-progress_aristotle/IotaProgress.lean"
+      ],
       "hypotheses": [
         "hns"
       ],
@@ -1936,6 +2157,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/lambda-cr/solution/LambdaCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/lambda-cr/solution/LambdaCR.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -1958,14 +2182,27 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaDecidable.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaDecidable.lean"
+      ],
       "hypotheses": [
+        "ac",
         "acc",
+        "cr",
         "h",
         "h1",
         "h2",
         "ha",
         "hb",
-        "ht"
+        "hlc",
+        "hn",
+        "hna",
+        "hnb",
+        "hnewman",
+        "hsn",
+        "ht",
+        "n",
+        "wf"
       ],
       "lines": 638,
       "theorems": 12,
@@ -1982,12 +2219,18 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaSN.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaSN.lean"
+      ],
       "hypotheses": [
+        "ac",
         "h",
         "hac",
+        "hc",
         "hg",
         "hinst",
-        "hkonst"
+        "hkonst",
+        "wf"
       ],
       "lines": 950,
       "theorems": 54,
@@ -2004,11 +2247,15 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaSR.lean"
+      ],
       "hypotheses": [
         "h",
         "ha",
         "hb",
-        "ht"
+        "ht",
+        "wf"
       ],
       "lines": 580,
       "theorems": 30,
@@ -2025,8 +2272,12 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaWhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaWhnfConversion.lean"
+      ],
       "hypotheses": [
         "IH",
+        "ac",
         "cr",
         "h",
         "h1",
@@ -2035,13 +2286,15 @@
         "hb",
         "hf",
         "ht",
-        "sn"
+        "ih",
+        "sn",
+        "sna",
+        "snb",
+        "wf"
       ],
-      "lines": 884,
-      "theorems": 46,
-      "vacuity": {
-        "Classical.propDecidable": 1
-      }
+      "lines": 1186,
+      "theorems": 56,
+      "vacuity": {}
     },
     "level-eq-decidable": {
       "banned": {},
@@ -2050,15 +2303,23 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/level-eq-decidable/solution/LevelEqDecidable.lean",
-      "hypotheses": [
-        "h"
+      "files": [
+        "proofs/aristotle-whnf-model-guides/level-eq-decidable/solution/LevelEqDecidable.lean"
       ],
-      "lines": 357,
-      "theorems": 16,
-      "vacuity": {
-        "Classical.propDecidable": 1,
-        "classical_decide": 1
-      }
+      "hypotheses": [
+        "h",
+        "h1",
+        "h2",
+        "hB2",
+        "ha",
+        "hb",
+        "ht",
+        "hterm",
+        "hz"
+      ],
+      "lines": 1057,
+      "theorems": 37,
+      "vacuity": {}
     },
     "newman": {
       "banned": {},
@@ -2069,9 +2330,13 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/newman/solution/Newman.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/newman/solution/Newman.lean"
+      ],
       "hypotheses": [
         "ha",
-        "sn"
+        "sn",
+        "wcr"
       ],
       "lines": 95,
       "theorems": 6,
@@ -2088,21 +2353,106 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/proof-irrelevance-r3/solution/ProofIrrelevance.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r3/solution/ProofIrrelevance.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
         "h2",
         "hA",
+        "hP",
+        "hT'",
         "ha",
         "hc",
+        "he",
         "hp",
         "hprop",
         "hq",
         "ht",
         "pinj"
       ],
-      "lines": 928,
-      "theorems": 47,
+      "lines": 1058,
+      "theorems": 54,
+      "vacuity": {}
+    },
+    "proof-irrelevance-r4": {
+      "banned": {},
+      "blocks": {
+        "inductive HasType": "a735cfe8b2d4b2df",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "686b2582ad35a8ae"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KFund.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KFund.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KRel.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KWhnf.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjConfluence.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjFundamental.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjIrrelFree.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjModel.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjObstruction.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjSortNoConfusion.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjSubst.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/ProofIrrelevanceR4.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/SNCFundamental.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/SNCMain.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/SNCModel.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/SNCNonVacuous.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/SNCSub.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/SNCUnique.lean"
+      ],
+      "hypotheses": [
+        "h",
+        "h'",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hF",
+        "hFbnd",
+        "hTT",
+        "hV",
+        "hX",
+        "hY",
+        "ha",
+        "haa'",
+        "hab",
+        "hb",
+        "hc",
+        "hcX",
+        "hcY",
+        "hcod",
+        "hcoh",
+        "hcomp",
+        "hconv",
+        "hcx",
+        "hdom",
+        "hf",
+        "hf'",
+        "hjunk",
+        "hp",
+        "hpi",
+        "hprop",
+        "hq",
+        "hrs",
+        "hs",
+        "hst",
+        "ht",
+        "hu",
+        "hx",
+        "hxy",
+        "hy",
+        "hyy'",
+        "ih",
+        "pinj"
+      ],
+      "lines": 6072,
+      "theorems": 400,
       "vacuity": {}
     },
     "quot-computation": {
@@ -2116,6 +2466,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/quot-computation/solution/QuotComputation.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/quot-computation/solution/QuotComputation.lean"
+      ],
       "hypotheses": [
         "h",
         "ha",
@@ -2133,7 +2486,12 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/spec-iota/solution/spec-iota_aristotle/SpecIota.lean",
-      "hypotheses": [],
+      "files": [
+        "proofs/aristotle-whnf-model-guides/spec-iota/solution/spec-iota_aristotle/SpecIota.lean"
+      ],
+      "hypotheses": [
+        "hdisj"
+      ],
       "lines": 179,
       "theorems": 3,
       "vacuity": {}
@@ -2145,7 +2503,12 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/spec-loop-complete/solution/spec-loop-complete_aristotle/SpecLoopComplete.lean",
-      "hypotheses": [],
+      "files": [
+        "proofs/aristotle-whnf-model-guides/spec-loop-complete/solution/spec-loop-complete_aristotle/SpecLoopComplete.lean"
+      ],
+      "hypotheses": [
+        "hEnv"
+      ],
       "lines": 424,
       "theorems": 8,
       "vacuity": {}
@@ -2157,6 +2520,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/spec-red-classify/solution/project_aristotle/SpecRedClassify.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/spec-red-classify/solution/project_aristotle/SpecRedClassify.lean"
+      ],
       "hypotheses": [
         "hEnv",
         "ha"
@@ -2172,8 +2538,13 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/spec-red-loop/solution/spec-red-loop_aristotle/SpecRedLoop.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/spec-red-loop/solution/spec-red-loop_aristotle/SpecRedLoop.lean"
+      ],
       "hypotheses": [
-        "ha"
+        "hEnv",
+        "ha",
+        "hdisj"
       ],
       "lines": 942,
       "theorems": 30,
@@ -2188,6 +2559,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stepfun-adequacy/solution/stepfun-adequacy_aristotle/StepFunAdequacy.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stepfun-adequacy/solution/stepfun-adequacy_aristotle/StepFunAdequacy.lean"
+      ],
       "hypotheses": [],
       "lines": 170,
       "theorems": 5,
@@ -2205,13 +2579,19 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-betaeta-confluence/solution/StlcBetaEtaConfluence.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-betaeta-confluence/solution/StlcBetaEtaConfluence.lean"
+      ],
       "hypotheses": [
         "bsn",
         "esn",
         "h",
         "hb",
         "hec",
+        "hwt",
         "lc",
+        "na",
+        "nb",
         "nm",
         "pres"
       ],
@@ -2229,12 +2609,22 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-betaeta-decidable/solution/StlcBetaEtaDecidable.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-betaeta-decidable/solution/StlcBetaEtaDecidable.lean"
+      ],
       "hypotheses": [
         "acc",
         "cr",
+        "h",
+        "h1",
+        "h2",
         "ha",
         "hb",
+        "hn",
+        "hna",
+        "hnb",
         "ht",
+        "n",
         "sn"
       ],
       "lines": 607,
@@ -2251,6 +2641,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-confluence/solution/StlcConfluence.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-confluence/solution/StlcConfluence.lean"
+      ],
       "hypotheses": [],
       "lines": 458,
       "theorems": 31,
@@ -2267,6 +2660,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-decide-defeq/solution/StlcDecideDefeq.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-decide-defeq/solution/StlcDecideDefeq.lean"
+      ],
       "hypotheses": [
         "acc",
         "cr",
@@ -2275,7 +2671,11 @@
         "h2",
         "ha",
         "hb",
+        "hn",
+        "hna",
+        "hnb",
         "ht",
+        "n",
         "sn"
       ],
       "lines": 393,
@@ -2293,6 +2693,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-eta-postponement/solution/StlcEtaPostponement.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-eta-postponement/solution/StlcEtaPostponement.lean"
+      ],
       "hypotheses": [
         "ht"
       ],
@@ -2310,6 +2713,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-eta-sr/solution/StlcEtaSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-eta-sr/solution/StlcEtaSR.lean"
+      ],
       "hypotheses": [
         "h",
         "hb",
@@ -2330,6 +2736,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-products-cr/solution/StlcProductsCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-products-cr/solution/StlcProductsCR.lean"
+      ],
       "hypotheses": [],
       "lines": 606,
       "theorems": 35,
@@ -2346,6 +2755,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-products-decidable/solution/StlcProductsDecidable.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-products-decidable/solution/StlcProductsDecidable.lean"
+      ],
       "hypotheses": [
         "acc",
         "cr",
@@ -2354,7 +2766,11 @@
         "h2",
         "ha",
         "hb",
+        "hn",
+        "hna",
+        "hnb",
         "ht",
+        "n",
         "sn"
       ],
       "lines": 454,
@@ -2372,10 +2788,15 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-products-sn/solution/StlcProductsSN.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-products-sn/solution/StlcProductsSN.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
         "h2",
+        "hA",
+        "hB",
         "ha",
         "hag",
         "hb",
@@ -2397,6 +2818,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-sn/solution/StlcSN.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-sn/solution/StlcSN.lean"
+      ],
       "hypotheses": [
         "cr1A",
         "cr1B",
@@ -2410,8 +2834,8 @@
         "hm",
         "hsa"
       ],
-      "lines": 676,
-      "theorems": 42,
+      "lines": 725,
+      "theorems": 46,
       "vacuity": {}
     },
     "stlc-sum-cr-conf": {
@@ -2424,6 +2848,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-sum-cr-conf/solution/StlcSumCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-sum-cr-conf/solution/StlcSumCR.lean"
+      ],
       "hypotheses": [],
       "lines": 698,
       "theorems": 42,
@@ -2440,6 +2867,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-sum-decidable/solution/StlcSumDecidable.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-sum-decidable/solution/StlcSumDecidable.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -2447,6 +2877,9 @@
         "h2",
         "ha",
         "hb",
+        "hn",
+        "hna",
+        "hnb",
         "ht",
         "sn"
       ],
@@ -2465,6 +2898,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-sum-sn/solution/StlcSumSN.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-sum-sn/solution/StlcSumSN.lean"
+      ],
       "hypotheses": [
         "h",
         "hbody",
@@ -2489,6 +2925,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/stlc-typecheck-decidable/solution/StlcTypecheckDecidable.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stlc-typecheck-decidable/solution/StlcTypecheckDecidable.lean"
+      ],
       "hypotheses": [
         "h",
         "h'"
@@ -2506,6 +2945,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/system-t-cr/solution/SystemTCR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/system-t-cr/solution/SystemTCR.lean"
+      ],
       "hypotheses": [],
       "lines": 598,
       "theorems": 18,
@@ -2521,6 +2963,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/system-t-eta-sr/solution/SystemTEtaSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/system-t-eta-sr/solution/SystemTEtaSR.lean"
+      ],
       "hypotheses": [
         "h",
         "hb",
@@ -2540,7 +2985,14 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/system-t-nf-unique/solution/SystemTNFUnique.lean",
-      "hypotheses": [],
+      "files": [
+        "proofs/aristotle-whnf-model-guides/system-t-nf-unique/solution/SystemTNFUnique.lean"
+      ],
+      "hypotheses": [
+        "hn",
+        "hn1",
+        "hn2"
+      ],
       "lines": 112,
       "theorems": 3,
       "vacuity": {}
@@ -2556,6 +3008,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/system-t-safety/solution/SystemTSafety.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/system-t-safety/solution/SystemTSafety.lean"
+      ],
       "hypotheses": [
         "ha",
         "hb",
@@ -2575,6 +3030,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/system-t-typecheck-decidable/solution/SystemTTypecheckDecidable.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/system-t-typecheck-decidable/solution/SystemTTypecheckDecidable.lean"
+      ],
       "hypotheses": [
         "h",
         "h'"
@@ -2593,6 +3051,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/type-infer/solution/project_aristotle/TypeInfer.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/type-infer/solution/project_aristotle/TypeInfer.lean"
+      ],
       "hypotheses": [
         "h",
         "h1",
@@ -2613,6 +3074,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/type-safety/solution/project_aristotle/TypeSafety.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/type-safety/solution/project_aristotle/TypeSafety.lean"
+      ],
       "hypotheses": [
         "ha",
         "hb",
@@ -2635,6 +3099,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/univ-strat-sr-r3/solution/UnivStratSR.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/univ-strat-sr-r3/solution/UnivStratSR.lean"
+      ],
       "hypotheses": [
         "cr",
         "h",
@@ -2666,9 +3133,13 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/whnf-conversion/solution/WhnfConversion.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/whnf-conversion/solution/WhnfConversion.lean"
+      ],
       "hypotheses": [
         "IH",
         "cr",
+        "d",
         "decWH",
         "h",
         "h1",
@@ -2677,10 +3148,14 @@
         "hb",
         "hf",
         "ht",
-        "sn"
+        "hx",
+        "hy",
+        "sn",
+        "sna",
+        "snb"
       ],
-      "lines": 763,
-      "theorems": 43,
+      "lines": 1238,
+      "theorems": 70,
       "vacuity": {}
     },
     "whnf-loop": {
@@ -2692,6 +3167,9 @@
       "elab_sorries": 0,
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/whnf-loop/solution/whnf-loop_aristotle/WhnfLoop.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/whnf-loop/solution/whnf-loop_aristotle/WhnfLoop.lean"
+      ],
       "hypotheses": [
         "hsound"
       ],
@@ -2701,8 +3179,8 @@
     }
   },
   "toolchain": "leanprover/lean4:v4.30.0-rc2",
-  "total_lines": 79526,
-  "total_theorems": 3519,
-  "undischarged_assumption_count": 6,
-  "vacuity_debt": 3
+  "total_lines": 87254,
+  "total_theorems": 3988,
+  "undischarged_assumption_count": 10,
+  "vacuity_debt": 0
 }

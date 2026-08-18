@@ -1,0 +1,212 @@
+{
+ "schema": "clean.trust_ir_ratchet.verdict.v1",
+ "measured_utc_date": "2026-08-13",
+ "question": "scripts/trust_ir_build.sh is RED at clean HEAD: lowered 9068 -> 9065 and spliced 7572 -> 7569 against data/trust_ir_build_baseline.json. Is that compiler drift or a clean-side producer regression?",
+ "verdict": "compiler-drift",
+ "verdict_detail": "Not a clean-side producer regression. On ONE fixed clean tree (clean c4e33541d) the baseline's OWN compiler binary lowers 9069/splices 7573 -- i.e. the ratchet PASSES and clean-kernel is producing MORE than at baseline -- while a newer Trust compiler generation lowers 9066/splices 7570. The def_path sets are identical in both directions; exactly three compiler-synthesized #[derive(Clone)] bodies stop lowering.",
+ "decisive_ab": {
+  "note": "Same subject crate, same commit, same release profile (-C opt-level=3 -Cdebug-assertions=off; the script's PROFILE ASSERTION for the release-only inference spine passed). Only the compiler differs.",
+  "clean_rev": "c4e33541ddffeb2181b09a39c7182f14bd6c89f7",
+  "def_path_set_delta": {
+   "only_in_A": 0,
+   "only_in_B": 0
+  },
+  "bodies_differing_in_lowered": 3,
+  "bodies_differing_in_spliced": 3,
+  "A_baseline_compiler": {
+   "bodies": 13770,
+   "lowered": 9069,
+   "spliced": 7573,
+   "derived_mir_agreed": 1172,
+   "mismatch": 5,
+   "lineage_rows": 13142,
+   "three_named_bodies_lowered": "111",
+   "ratchet_vs_committed_baseline": "PASSES (9069 >= 9068, 7573 >= 7572, mismatch 5 <= 5)",
+   "flip_events_total": 185,
+   "flip_events_codegen": 153,
+   "flip_events_ctfe": 32,
+   "flip_events_reproduce_baseline_file": true
+  },
+  "B_newer_compiler": {
+   "bodies": 13770,
+   "lowered": 9066,
+   "spliced": 7570,
+   "derived_mir_agreed": 1541,
+   "mismatch": 0,
+   "lineage_rows": 13142,
+   "three_named_bodies_lowered": "000",
+   "ratchet_vs_committed_baseline": "FAILS (9066 < 9068, 7570 < 7572)",
+   "flip_events_total": 209,
+   "flip_events_codegen": 177,
+   "flip_events_ctfe": 32
+  }
+ },
+ "the_three_bodies": [
+  {
+   "def_path": "<env::algebra_rat_quotient::SumTree as std::clone::Clone>::clone",
+   "origin": "compiler-synthesized #[derive(Clone)]",
+   "shape": "recursive enum: Mono(ProdTree) | Add(Box<SumTree>, Box<SumTree>)",
+   "source": "crates/clean-kernel/src/env/algebra_rat_quotient.rs:3447",
+   "instr_count_before": 20,
+   "instr_count_after": 1,
+   "new_rejection": [
+    "EnumMatch(ref payload no layout descriptor)"
+   ]
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionCandidate as std::clone::Clone>::clone",
+   "origin": "compiler-synthesized #[derive(Clone)]",
+   "shape": "struct of Name / Declaration fields",
+   "source": "crates/clean-kernel/src/env/inductive_no_confusion.rs:74-76",
+   "instr_count_before": 35,
+   "instr_count_after": 1,
+   "new_rejection": [
+    "Adt(unsupported field)",
+    "Borrow(non-local place) x2",
+    "Call(unsupported arg)",
+    "Deref(arg no value)"
+   ]
+  },
+  {
+   "def_path": "<env::inductive_no_confusion_hetero::EqTelescopeGroup as std::clone::Clone>::clone",
+   "origin": "compiler-synthesized #[derive(Clone)]",
+   "shape": "struct of Vec<OpenedLocal> / OpenedLocal fields",
+   "source": "crates/clean-kernel/src/env/inductive_no_confusion_hetero.rs:94-96",
+   "instr_count_before": 20,
+   "instr_count_after": 1,
+   "new_rejection": [
+    "Adt(unsupported field)",
+    "Borrow(non-local place) x2",
+    "Call(unsupported arg)",
+    "Deref(arg no value)"
+   ]
+  }
+ ],
+ "clean_side_innocence": {
+  "source_files_last_touched": "2026-07-31 (37dbe3f9e), i.e. before the 2026-08-12 baseline",
+  "hand_written_code_involved": false,
+  "crystal_width_one_chain_affected": false,
+  "level_is_zero": "lowered + spliced + derived-MIR agreed under BOTH compilers"
+ },
+ "compilers": {
+  "A": {
+   "role": "the compiler data/trust_ir_build_baseline.json was taken with (located, not rebuilt)",
+   "path": "$HOME/trust/build/aarch64-apple-darwin/stage1/bin/trustc",
+   "binary_sha256": "5cd23255ddd7b6bb0e3ba01d7cf883d4e87bfd6e232644f65cf676cb6735e711",
+   "binary_sha256_matches_baseline_file": true,
+   "driver": "build/aarch64-apple-darwin/stage1/lib/librustc_driver-700755489a5c5a6a.dylib",
+   "driver_sha256": "3f99926bde9172d1f29acb0178956c658242058472232faaac71460632e18c8a",
+   "driver_mtime": "2026-08-11 20:33:45",
+   "trust_rev": "94147b34fcdc57378c2d10aff2bb82c91fb5ce17",
+   "perturb_classes": [
+    "enum-reshape",
+    "enum-case-value",
+    "enum-ctor",
+    "enum-disc-index",
+    "switch-map",
+    "enum-payload"
+   ],
+   "provenance_note": "The 51KB trustc is a shim; the driver dylib is the identity. Its inode is distinct from the live stage1-rustc deps driver (rebuilt 2026-08-13 13:23 by another lane), and the 6-class perturbation signature distinguishes it behaviourally from every newer driver on this machine (which register 10).",
+   "seal_note": "seal_driver.sh guard REFUSES this binary, but that is a guard defect on @rpath load commands: it compares the unresolved string against itself. DYLD_LIBRARY_PATH was unset for the run and the dylib leaf name is hash-unique, so the unhashed librustc_driver.dylib in the shared deps dir cannot be substituted for it.",
+   "identity_confirmations": {
+    "note": "Every field data/trust_ir_build_baseline.json records that is determined by the COMPILER is reproduced exactly by compiler A. The only fields that moved are the three determined by the CLEAN TREE, and each moved UP by exactly 1 (selectAddrCong, 25a17ef93).",
+    "trustc_sha256": "baseline 5cd23255... == measured 5cd23255...",
+    "version_stamp": "identical",
+    "derived_mir_agreed": "baseline 1172 == measured 1172",
+    "mismatch": "baseline 5 == measured 5",
+    "flip_events": "baseline 185/153/32 == measured 185/153/32",
+    "clean_tree_fields_moved_up_by_one": {
+     "bodies": "13769 -> 13770",
+     "lowered": "9068 -> 9069",
+     "spliced": "7572 -> 7573"
+    },
+    "driver_mtime_predates_baseline_date": "driver 2026-08-11 20:33:45 < baseline updated_utc_date 2026-08-12",
+    "behavioural": "registers 6 perturbation classes; every newer driver here registers 10"
+   }
+  },
+  "B": {
+   "role": "the newer generation that produces the red",
+   "trust_head": "b8fabcad7714938889ce55c00031905ee7654517",
+   "commits_past_A": 311,
+   "instances_used": [
+    {
+     "path": "$HOME/trust/scratchpad/laneP/seal-lane4",
+     "rev": "352aa0306ddc0852fc2f7bb44fdd423329694127",
+     "driver_sha256": "bf3185e57362f8ceba726df3f3e11a14b1c3cdd20c54e8dd4445819112fd7dc0"
+    },
+    {
+     "path": "scratchpad/lane2/seal_new",
+     "rev": "b8fabcad7714938889ce55c00031905ee7654517",
+     "tree": "dirty",
+     "driver_sha256": "b120e7582126bdf87a8d62dbbe75362265ebedf6b2a52ab1ce51b015d3014c5e"
+    }
+   ],
+   "perturb_classes_count": 10,
+   "agreement": "both instances agree on every figure reported for B"
+  }
+ },
+ "cause": {
+  "kind": "deliberate conservatism in Trust's THIR->trust-ir layout guard",
+  "bracketed_not_bisected": true,
+  "window_evidence": "lane L merge 1199bd5059 recorded agreed 1540 / unsup 12228 / mismatch 1 on BOTH sides from base 6d6382725b (08-12 17:50); lane K review 352aa0306d recorded agreed 1541 / unsup 12228 / mismatch 0 on both sides. The flip landed between those bases.",
+  "mechanism_consistent_commits": [
+   {
+    "rev": "e453b0cd15",
+    "date": "2026-08-12 18:35",
+    "what": "opaque-reveal guard blind through ADT FIELDS: layout_query_is_reentrant_safe -> layout_query_is_reentrant_safe_deep, which descends into all fields of a local ADT and declines if any is unsafe to normalize"
+   },
+   {
+    "rev": "ba3ec075f2",
+    "date": "2026-08-12 20:58",
+    "what": "the projection spelling of the same guard"
+   },
+   {
+    "rev": "836857707c",
+    "date": "2026-08-12 22:57",
+    "what": "the fourth copy, on a callee signature"
+   }
+  ],
+  "prime_suspect": "e453b0cd15",
+  "why": "bodies 2 and 3 fail with Adt(unsupported field), which is the ADT-field descent; body 1 fails at the enum site whose in-source gate order is 'reentrant-safe, then layout_of, then for_variant(..).fields.offset(..)', producing 'no layout descriptor'. 836857707c states the governing property: 'Every guard is strictly more conservative -- declines where it previously proceeded, never the reverse.'",
+  "not_bisected_because": "each bisection step is a ~25 min compiler build; the bracket plus the mechanism match was judged sufficient and is reported as a bracket, not as a single named commit"
+ },
+ "why_it_was_missed": "All three bodies sit in the derived-MIR 'unsupported' bucket in BOTH generations, so the whole-crate tables the lanes publish read 1540/12228/1 -> 1541/12228/0 and show no loss. lowered/spliced are not columns in that harness. scripts/trust_ir_build.sh is the only instrument in either repo that watches lowering coverage, and it is what caught this.",
+ "corroboration": {
+  "archived_dumps_examined": 104,
+  "span": "2026-08-11 18:23 .. 2026-08-13 13:27",
+  "correlation": "perfect: compiler fingerprint (agreed 1541 / mismatch 0) <=> all three bodies unlowered <=> lowered 9065 at 13769 bodies; every older fingerprint (1157/1162/1170/1172/1536/1540) <=> all three lowered <=> 9068",
+  "time_alternation": "the value alternates in wall-clock time on one fixed clean tree -- [111] at 08-13 00:16 and 01:26, [000] at 08-12 23:26 and 08-13 01:30 -- which a monotone clean-side regression cannot do, because lanes build and seal their own drivers at different revisions",
+  "script": "reports/trust-ir-ratchet-verdict-2026-08-13.evidence.py"
+ },
+ "recommendation": {
+  "update_applied": false,
+  "baseline_file_touched": false,
+  "instruction": "Re-baseline in the SAME commit as the next compiler pin, so lowered/spliced and the flip counts move together. Whoever pins should re-measure and record that run's numbers.",
+  "reference_numbers_under_compiler_B_at_clean_c4e33541d": {
+   "bodies": 13770,
+   "lowered": 9066,
+   "spliced": 7570,
+   "derived_mir_agreed": 1541,
+   "mismatch": 0,
+   "lineage_rows": 13142
+  },
+  "do_not": [
+   "Do NOT lower the baseline to 9066 as an isolated edit that moves only the two fields that fell. That ratchets away 3 bodies of real lowering coverage to accommodate a compiler narrowing nobody has decided to accept. See compiler_generation_trade for the full A->B picture.",
+   "Do NOT treat the red as noise -- it is the only signal that caught this."
+  ],
+  "blocking": "no -- the gate is opt-in via CLEAN_TRUST_IR_BUILD=1 in scripts/local_gate.sh"
+ },
+ "compiler_generation_trade": {
+  "note": "The A->B delta on this same clean tree. Stated in both directions because it is a good trade overall; the narrow +1 agreed / -1 mismatch figure belongs to the single generation step (1540/1 -> 1541/0) that carried the -3, not to A->B.",
+  "gains": {
+   "derived_mir_agreed": "1172 -> 1541 (+369)",
+   "mismatch": "5 -> 0",
+   "flip_events_total": "185 -> 209 (+24)"
+  },
+  "losses": {
+   "lowered": "9069 -> 9066 (-3)",
+   "spliced": "7573 -> 7570 (-3)"
+  },
+  "assessment": "The new compiler is substantially better on every axis the crystal cares about and worse on exactly three #[derive(Clone)] bodies. Accepting the loss is very likely right -- but as an owner's recorded decision, not a silent side-effect of a re-baseline."
+ }
+}

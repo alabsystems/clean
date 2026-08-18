@@ -1,0 +1,78 @@
+{
+  "_comment": [
+    "Results reported to lane H by the orchestrating brief as 'already measured today',",
+    "imported here so the next agent does not re-derive them from nothing.",
+    "",
+    "CRITICAL: these are seeded, NOT verified. The brief supplied the pass counts but no",
+    "commit sha, no command line and no verbatim output, so there is nothing to attribute",
+    "them to. scripts/verify_runner.py therefore reports every record with",
+    "source == 'seeded' as UNKNOWN, not GREEN, until this runner measures the target",
+    "itself and mints a record with a real input digest. Promoting an unattributed report",
+    "to GREEN is exactly the failure this artifact exists to prevent."
+  ],
+  "seeds": [
+    {
+      "target": "clean-verify::test::axiom_ratchet",
+      "package": "clean-verify",
+      "kind": "test",
+      "status": "GREEN",
+      "command": "cargo test --locked -p clean-verify --test axiom_ratchet",
+      "commit": null,
+      "final_line": "reported as 3/3 passing",
+      "counts": { "passed": 3, "failed": 0, "ignored": 0 },
+      "seed_note": "lane H brief, 2026-08-12: reported 3/3; sha and verbatim output not supplied"
+    },
+    {
+      "target": "clean-verify::test::vacuity_firewall",
+      "package": "clean-verify",
+      "kind": "test",
+      "status": "GREEN",
+      "command": "cargo test --locked -p clean-verify --test vacuity_firewall",
+      "commit": null,
+      "final_line": "reported as 4/4 passing",
+      "counts": { "passed": 4, "failed": 0, "ignored": 0 },
+      "seed_note": "lane H brief, 2026-08-12: reported 4/4; sha and verbatim output not supplied"
+    },
+    {
+      "target": "clean-verify::test::crystal_a1_lineage",
+      "package": "clean-verify",
+      "kind": "test",
+      "status": "GREEN",
+      "command": "cargo test --locked -p clean-verify --test crystal_a1_lineage",
+      "commit": null,
+      "final_line": "reported as 7/7 passing",
+      "counts": { "passed": 7, "failed": 0, "ignored": 0 },
+      "seed_note": "lane H brief, 2026-08-12: reported 7/7; sha and verbatim output not supplied"
+    },
+    {
+      "target": "gate::check",
+      "package": "__workspace__",
+      "kind": "gate",
+      "status": "GREEN",
+      "command": "cargo check --locked --all-targets",
+      "commit": null,
+      "final_line": "reported green",
+      "seed_note": "lane H brief, 2026-08-12: reported green; sha and verbatim output not supplied"
+    },
+    {
+      "target": "gate::clippy",
+      "package": "__workspace__",
+      "kind": "gate",
+      "status": "GREEN",
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "commit": null,
+      "final_line": "reported green",
+      "seed_note": "lane H brief, 2026-08-12: reported green; sha and verbatim output not supplied"
+    },
+    {
+      "target": "gate::fmt",
+      "package": "__workspace__",
+      "kind": "gate",
+      "status": "GREEN",
+      "command": "cargo fmt --check",
+      "commit": null,
+      "final_line": "reported green",
+      "seed_note": "lane H brief, 2026-08-12: reported green; sha and verbatim output not supplied"
+    }
+  ]
+}

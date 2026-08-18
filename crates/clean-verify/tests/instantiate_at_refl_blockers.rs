@@ -5,15 +5,11 @@
 use std::collections::HashSet;
 
 use clean_verify::spec::{SpecDefinition, SpecError};
-use clean_verify::test_utils::run_with_stack;
 use clean_verify::Specification;
 use clean_verify::{AxiomCategory, ProofStatus};
 
 fn build_substitution_spec_with_stack() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec()
-            .expect("substitution/WHNF test spec should build")
-    })
+    clean_verify::test_utils::build_substitution_spec_with_stack()
 }
 
 #[test]

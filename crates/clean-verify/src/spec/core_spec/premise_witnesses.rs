@@ -142,6 +142,49 @@ const SIMPLE: &[(&str, &str, &str, &str)] = &[
         "IRFault IS INHABITED. A fault type nothing inhabits would make every \
          does-not-fault claim trivially true.",
     ),
+    (
+        "irf64class_witness",
+        "IRF64Class",
+        "IRF64Class.fin_",
+        "IRF64Class IS INHABITED, at the FINITE class — the one the eighth chain's \
+         division-by-zero corollary assumes of its dividend. The binary64 value domain's whole \
+         dispatch is indexed by this type, so an uninhabited one would make every classified \
+         float table vacuous at once.",
+    ),
+    // ── the reflected ARGUMENT types of chains 3, 4 and 5 ───────────────────
+    //
+    // Each is the type a chain's A4 quantifies over. An uninhabited one makes
+    // that A4 — and every A5 corollary that goes through it — vacuously true
+    // with an impeccable axiom closure, which is the exact failure this gate
+    // exists to catch. `SourceSystemR` had been assumed since the third chain
+    // was registered and concluded by nothing; that is the gap, not a new one.
+    (
+        "sourcesystemr_witness",
+        "SourceSystemR",
+        "SourceSystemR.lean4",
+        "SourceSystemR IS INHABITED, at `lean4` — the source system the import path this \
+         reflects is actually built around, and the arm `CleanMode::from_source_system` maps \
+         to the non-cubical constructive mode.",
+    ),
+    (
+        "flatflagsr_witness",
+        "FlatFlagsR",
+        "FlatFlagsR.mk Nat.zero",
+        "FlatFlagsR IS INHABITED, at the EMPTY flag set — `FlatFlags::empty()`, the value the \
+         fourth chain's own `any-contains-empty` witness runs the emitted body on.",
+    ),
+    // The SEVENTH chain's reflected argument type. Registered with its chain
+    // rather than after a gate found it missing, which is the whole point of
+    // the lesson `SourceSystemR` cost: that one was assumed from the third
+    // chain onward and concluded by nothing until a later lane noticed.
+    (
+        "exprpathstepr_witness",
+        "ExprPathStepR",
+        "ExprPathStepR.projexpr",
+        "ExprPathStepR IS INHABITED, at `projexpr` — deliberately the variant on the emitted \
+         switch's DEFAULT edge rather than one with an explicit case, so the witness names the \
+         arm a case-table transcription is most likely to lose.",
+    ),
 ];
 
 impl Specification {
@@ -162,6 +205,172 @@ impl Specification {
                 axiom_deps: HashSet::new(),
             })?;
         }
+
+        // ── the by-value representation premises of chains 3, 4 and 5 ──────
+        //
+        // All three constrain no memory at all: the bodies they belong to take
+        // their arguments by value and perform no load. That is what makes them
+        // the thinnest premises in the program and the ones most in need of a
+        // witness — there is almost nothing left to remove before they say
+        // nothing, and an empty one takes `ir_fs_correct` / `ir_fc_correct` /
+        // `ir_br_correct` with it.
+        self.add_definition(SpecDefinition {
+            name: "encodessourcesystemval_witness".to_string(),
+            type_src: "EncodesSourceSystemVal \
+                       (ir_var (source_system_tag SourceSystemR.lean4) ir_sp0) \
+                       SourceSystemR.lean4"
+                .to_string(),
+            value_src: Some("EncodesSourceSystemVal.mk SourceSystemR.lean4 ir_sp0".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "EncodesSourceSystemVal IS INHABITED. It is the third chain's representation ",
+                "premise — \"this runtime value is this source system\" — and it had been ",
+                "assumed since that chain was registered with nothing concluding it. The ",
+                "witness is the tagged aggregate at `lean4` over the empty payload spine, ",
+                "which is exactly the shape the constructor demands. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "EncodesSourceSystemVal.mk".to_string(),
+                "source_system_tag".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "encodesflatflags_witness".to_string(),
+            type_src: "EncodesFlatFlags \
+                       (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ Nat.zero) ir_sp0)) \
+                       (FlatFlagsR.mk Nat.zero)"
+                .to_string(),
+            value_src: Some("EncodesFlatFlags.mk Nat.zero ir_sp0".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "EncodesFlatFlags IS INHABITED. The fourth chain's representation premise, at ",
+                "the empty flag set over the empty payload spine. The relation is ",
+                "spine-agnostic past field 0 by design, so the witness pins the one field it ",
+                "does constrain and leaves the rest where the relation leaves it. ",
+                "Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from(["EncodesFlatFlags.mk".to_string()])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "encodesu32val_witness".to_string(),
+            type_src: "EncodesU32Val (IRScalar.int_ Nat.zero) Nat.zero".to_string(),
+            value_src: Some("EncodesU32Val.mk Nat.zero".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "EncodesU32Val IS INHABITED. The fifth chain's representation premise and the ",
+                "THINNEST in the whole program: it says only that a u32 argument arrived as an ",
+                "integer scalar rather than as a pointer, a bool or an undef. Thin is not ",
+                "empty, and this is the term that says so — without it `ir_br_correct` would ",
+                "be a theorem about arguments nothing can supply. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from(["EncodesU32Val.mk".to_string()])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "encodesu64val_witness".to_string(),
+            type_src: "EncodesU64Val (IRScalar.int_ Nat.zero) Nat.zero".to_string(),
+            value_src: Some("EncodesU64Val.mk Nat.zero".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "EncodesU64Val IS INHABITED. The sixth chain's representation premise, which ",
+                "ties `EncodesU32Val` for thinnest in the program: it says only that a u64 ",
+                "argument arrived as an integer scalar rather than as a pointer, a bool or an ",
+                "undef. It is a separate relation rather than a reuse because that one is ",
+                "named for a width and this body is at another, and a false name is what these ",
+                "gates read. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from(["EncodesU64Val.mk".to_string()])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "encodesf64val_witness".to_string(),
+            type_src: "EncodesF64Val (IRScalar.float_ Nat.zero) Nat.zero".to_string(),
+            value_src: Some("EncodesF64Val.mk Nat.zero".to_string()),
+            is_axiom: false,
+            description: concat!(
+                "EncodesF64Val IS INHABITED, at `+0.0`. The eighth chain's representation ",
+                "premise. It has the same shape as `EncodesU64Val` and is deliberately NOT a ",
+                "reuse of it, and here the difference is not only naming discipline: that one ",
+                "concludes at `IRScalar.int_`, `ir_as_float` DECLINES `IRScalar.int_`, and so ",
+                "`ir_fd_correct` with `EncodesU64Val` in its place would be FALSE rather than ",
+                "merely misnamed — the machine answers `type_error not_float` where the theorem ",
+                "claims a value. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from(["EncodesF64Val.mk".to_string()])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // ── the seventh chain's BY-REFERENCE representation premise ─────────
+        //
+        // Unlike the three above it constrains MEMORY: the derived clone body
+        // takes `&self` and loads through it, so there is a cell to pin. The
+        // heap equation is discharged by `Eq.refl`, so the KERNEL runs
+        // `ir_mem_lookup` over a one-cell heap and compares — nothing is
+        // asserted.
+        let step_cell = "(ir_cell Nat.zero \
+                          (ir_var (expr_path_step_tag ExprPathStepR.projexpr) ir_sp0) \
+                          ir_mem0)";
+        self.add_definition(SpecDefinition {
+            name: "encodesexprpathstep_witness".to_string(),
+            type_src: format!(
+                "EncodesExprPathStep {step_cell} (IRScalar.ptr_ Nat.zero) ExprPathStepR.projexpr"
+            ),
+            value_src: Some(format!(
+                "EncodesExprPathStep.mk {step_cell} Nat.zero ExprPathStepR.projexpr ir_sp0 \
+                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk Nat.zero \
+                 (ir_var (expr_path_step_tag ExprPathStepR.projexpr) ir_sp0) Bool.true)))"
+            )),
+            is_axiom: false,
+            description: concat!(
+                "EncodesExprPathStep IS INHABITED. The seventh chain's representation premise, ",
+                "at the variant on the switch's default edge, over a one-cell heap holding it. ",
+                "The heap condition is an equation on `ir_mem_lookup` rather than a membership ",
+                "claim — a membership premise would be satisfiable by a SHADOWED duplicate ",
+                "while the machine reads a different cell — and it is discharged by Eq.refl, so ",
+                "the kernel runs the lookup. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "EncodesExprPathStep.mk".to_string(),
+                "expr_path_step_tag".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
 
         // ── arrivals from the eval_ir mode lane, and one kernel builtin ─────
         let mode_cell = "(ir_cell Nat.zero \

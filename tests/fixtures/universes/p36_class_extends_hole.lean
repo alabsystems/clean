@@ -1,0 +1,59 @@
+-- P36 — the `Type _` HOLE spelling of class-extends. FIXED 2026-08-14, on the
+-- eighth attempt, and the seven failures are kept because the shape of the
+-- search is the lesson.
+--
+-- p33 fixed `.{u}` and auto-bound `Type u` class-extends by folding
+-- self-occurrences onto the structure's surviving universe params. The hole
+-- spelling still failed:
+--
+--   Undefined universe level parameter 'u_5'
+--     in declaration HMon.toHSg._deriveAdmissionProbe
+--
+-- ROOT CAUSE, found only by measuring at the FAILURE site (registration) rather
+-- than the construction site — which is what the first six attempts all missed.
+-- At registration `Db.toDa` carried `level_params = ["u_1"]` while its TYPE
+-- mentioned `u_1` AND `u_5`; at construction the levels had been `u_1,u_2,u_3`.
+-- `canonicalize_levels_in_expr` rewrites every level to its canonical
+-- representative — renaming the minted `u_2`/`u_3` to `u_5` — while
+-- `elab_canonicalize` passed `level_params` through UNTOUCHED. A DECLARED param
+-- is its own representative, so nothing drifts for `Type u`; that is precisely
+-- why only the hole spelling broke, and why six attempts aimed at
+-- construction-time levels were aimed past the bug.
+--
+-- FIX: substitute the stray canonical representatives back onto the declared
+-- param, RENAMING rather than ADDING. Recollecting the params from the
+-- canonicalized expressions also removes the scoping error, but changes the
+-- instance's ARITY, which is a larger and less obviously safe change.
+--
+-- THE SEVEN FAILURES, kept deliberately:
+--   1. uninstantiated metas — `instantiate_levels` before folding: no-op.
+--   2. declare the leftovers found at construction: no-op (they get renamed
+--      afterwards, so the declared set still misses the final names).
+--   3. source binder types from the registered telescope: HARMFUL — moved the
+--      failure upstream into `add_inductive`.
+--   4. fold onto the instance's own levels: no-op.
+--   5. (1)+(2) combined: no-op — and the informative one, since declaring every
+--      construction-time level and STILL getting "undefined" is what proved the
+--      renaming happens later.
+--   6. canonicalize `level_params` through `instantiate_level`: no-op, because a
+--      declared param maps to itself.
+--   7. recollect after canonicalization: works, but changes arity.
+--
+-- A PROCESS NOTE WORTH MORE THAN ANY OF THEM. Attempts 7 and 8 were both judged
+-- to "regress" `lean4_corpus_tests::test_r90_discovery_lock`. They did not.
+-- r90 was ALREADY failing on the unmodified tree, broken by an unrelated commit
+-- (`8f9e67af1`, section variables prepending by USED closure — it does not
+-- chase `α` transitively through `p : α × α`, so `sectvar_transitive_incl`
+-- fails with `TooManyArguments`). The comparison had been made against a
+-- REMEMBERED green from hours earlier, on a shared branch that a dozen foreign
+-- commits had landed on since. On a live branch the baseline must be
+-- RE-MEASURED, not recalled — assuming otherwise cost a correct fix and blamed
+-- another lane's regression on this one, twice.
+--
+-- Landing criterion used here: 7,211 passed / 1 failed, the single failure being
+-- that same pre-existing r90 — i.e. zero NEW failures.
+class HSg (α : Type _) where
+  op : α → α → α
+
+class HMon (α : Type _) extends HSg α where
+  unit : α

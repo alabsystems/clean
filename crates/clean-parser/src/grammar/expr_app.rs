@@ -1564,11 +1564,35 @@ impl Parser {
                 // nested leading `¬`, so `¬ ¬ p` = `Not (Not p)`).
                 let inner = self.cmp_expr()?;
                 let end_span = inner.span();
-                Ok(SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
-                    vec![SurfaceArg::positional(inner)],
-                ))
+                // Overshoot repair, same as `build_connective_arrow_aware` and
+                // `cmp_expr`'s `=`-arrow tail: the hand-written precedence
+                // chain can hand back an `Arrow` whose DOMAIN is the actual
+                // prec-40 operand. `¬p → q` must parse as `(¬p) → q` (Lean
+                // `prefix:40 "¬"` vs `→` at 25), never `¬(p → q)` — the
+                // 2026-08-17 srcelab class where every negation-domained
+                // application failed and `(¬p → q) = ¬(p → q)` PROVED by rfl.
+                // A user-parenthesized `¬(p → q)` arrives as `Paren(Arrow …)`,
+                // not a bare `Arrow`, so it is untouched.
+                match inner {
+                    SurfaceExpr::Arrow(_, domain, codomain) => {
+                        let not_span = span.merge(domain.span());
+                        let negated = SurfaceExpr::App(
+                            not_span,
+                            Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
+                            vec![SurfaceArg::positional(*domain)],
+                        );
+                        Ok(SurfaceExpr::Arrow(
+                            span.merge(end_span),
+                            Box::new(negated),
+                            codomain,
+                        ))
+                    }
+                    other => Ok(SurfaceExpr::App(
+                        span.merge(end_span),
+                        Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
+                        vec![SurfaceArg::positional(other)],
+                    )),
+                }
             }
 
             TokenKind::LAngle => {

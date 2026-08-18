@@ -93,7 +93,8 @@ pub use module::{
     ConstantKind, ConstructorValData, DefinitionSafety, InductiveValData, OLeanLevel,
     ParsedAttrKind, ParsedClassEntry, ParsedConstant, ParsedExtension, ParsedExtensionEntry,
     ParsedExtensionEntryData, ParsedImport, ParsedInstanceEntry, ParsedModule, ParsedModulePart,
-    ParsedQuotKind, RecursorRuleData, RecursorValData, RootAnalysis,
+    ParsedQuotKind, ParsedSimpEntry, ParsedSimpEntryKind, RecursorRuleData, RecursorValData,
+    RootAnalysis,
 };
 pub use payload::{
     decode_clean_payload, encode_clean_payload, CleanPayload, CLEAN_PAYLOAD_MAGIC,

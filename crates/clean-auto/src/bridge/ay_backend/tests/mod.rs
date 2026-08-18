@@ -10,6 +10,7 @@ pub(super) use clean_kernel::expr::BigNat;
 pub(super) use clean_kernel::{Expr, FVarId};
 pub(super) use num_bigint::BigInt;
 
+mod authored_premise_scope;
 mod core;
 mod profiles;
 mod proof_backend;

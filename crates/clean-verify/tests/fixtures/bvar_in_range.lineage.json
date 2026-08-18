@@ -1,0 +1,116 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "measured": "2026-08-13",
+ "build": {
+  "clean_repo_HEAD": "c4e33541d",
+  "trust_repo_rev_of_sealed_compiler": "352aa0306ddc0852fc2f7bb44fdd423329694127",
+  "trustc": "$HOME/trust/scratchpad/laneP/seal-lane4/tc (SEALED snapshot, unique dylib leaf)",
+  "trustc_dylib_sha256": "bf3185e57362f8ceba726df3f3e11a14b1c3cdd20c54e8dd4445819112fd7dc0",
+  "trustc_rustc_main_sha256": "9bb568dc8721bcc1309d26d74dc1062def9c2165e64a94113ca6583148986bdb",
+  "compiler_identified_by_behaviour_not_stamp": "The sealed driver registers TEN -Ztrust-sat-perturb classes (enum-reshape enum-case-value enum-ctor enum-disc-index switch-map enum-payload marker-order marker-drop agg-field-order marker-arm) and emits under body_lineage.v2; build/<host>/stage1/bin/trustc registers six and knows none of the four marker-* / agg-field-order classes. `trustc -vV`'s date stamp is NOT a source identity (CFG_VER_HASH is pinned at build time), so the driver was identified by what it does, and SEALED before measuring because another lane replaces the shared live driver without warning.",
+  "command": "RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info CARGO_TARGET_DIR=<tgt> RUSTC=<stage1>/rustc RUSTFLAGS='-Ztrust-verify=off -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir> -Cdebuginfo=0' <stage1>/cargo build --locked --release -p clean-kernel",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build - only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
+  "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED cfg-split body was compiled rather than its debug twin.",
+  "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "crate_totals": "bodies 13770 / lowered 9066 / spliced 7570 / derived-MIR agreed 1541 / mismatch 0 / lineage rows 13142",
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 209,
+  "loud_fallbacks": 17,
+  "trust_repo_HEAD": "110cc63792d7fcb9c3f568fa01ef998974231f05",
+  "clean_kernel_trust_ir_bin_sha256": "b1359add7e9b1b8737ee3215cf7303dca8d0c97161b555b2472e7055f4485a04",
+  "flip_events_total": 4575,
+  "flip_events_all_from_clean_kernel": false
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "fa2ff6ae6cd87b459f80b8f9f7b714e933145b0eaa1077c0dab1276db43ee730",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_txt_sha256": "f5086ff21d15691e6f5db334e46db9b775dcce89e2254190f42501954cf4315f",
+  "trust_ir_bin_sha256": "27d74fd380a0b511976dcdd2b7604c40cf3791ba216fb1a67e9aeb0b877a883c",
+  "note": "Three builds in three separate CARGO_TARGET_DIRs with CARGO_INCREMENTAL=0: the flip build, its repeat, and the negative control. All three emit a byte-identical coverage.json and trust-ir dump, so `lineage` is a measurement rather than one observation."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "event_for_this_body_present": false
+ },
+ "def_path": "expr::bvar_in_range",
+ "def_index": 16566,
+ "func_id": 4777,
+ "instr_count": 13,
+ "lowered": true,
+ "spliced": true,
+ "lineage": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "10 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "21 marker line(s) identical",
+  "markers_exact_is_vacuous_here": "NOT VACUOUS, and the longest marker sequence of any chained body: `21 marker line(s) identical`. See the note on the sibling fixture; 1055 of the 1082 markers_exact rows compare two EMPTY sequences and this is not one of them."
+ },
+ "interpreter_differential": {
+  "verdict": "agreed",
+  "samples": 125,
+  "detail": "THIR-trust-ir == MIR-trust-ir on 125 sampled input(s) (differential interpretation)"
+ },
+ "bodyful_reachable_closure": "PASS - the body makes NO calls (resolved 0, extern_decls 0, unresolved 0), so the reachable callee closure is the body itself and contains no declaration-only entry. This is the A0 criterion that FAILS for level::Level::is_zero, whose closure reaches Option::as_deref / Option::expect (6 resolved calls at this HEAD).",
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "ctfe": false,
+  "asserts": 0,
+  "flipped_so_far": 202,
+  "lineage": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+  "matches_artifact_lineage": true,
+  "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16566 ~ clean_kernel[348e]::expr::bvar_in_range), asserts=0, lineage=sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a, flipped_so_far=202",
+  "occurrences_of_this_did_in_flip_log": 1
+ },
+ "candidate_selection": {
+  "criteria": "derived-MIR agreed AND markers_exact AND unsupported [] AND spliced AND a codegen flip event whose lineage equals the coverage row's AND zero calls",
+  "bodies_satisfying_the_first_four": 1082,
+  "of_those_with_a_clean_kernel_codegen_flip_event": 177,
+  "of_those_with_zero_calls": 177,
+  "codegen_flips_carrying_a_computing_construct": 14,
+  "codegen_flips_single_block": 157,
+  "codegen_flips_with_a_gep_a_call_or_a_panic_arm": 0,
+  "markers_exact_rows_that_are_NON_vacuous": 27,
+  "markers_exact_rows_total": 1082,
+  "why_non_vacuity_matters": "1055 of the 1082 markers_exact rows carry `0 marker line(s) identical`, i.e. markers_exact is a comparison of two EMPTY sequences - a true statement about nothing. All three chains that existed before this lane (has_cubical_layer, level::Level::kind_ord, mode::CleanMode::from_source_system) are in that vacuous majority; both bodies chained by this lane are in the 27 that are not.",
+  "measured_utc_date": "2026-08-13",
+  "measurement_provenance": "Re-derived by this lane from a fresh whole-crate dump, not inherited from data/crystal_flip_census_2026-08-13.json. An independently written parser joined flip events to coverage rows by def_index WITHIN the compile.",
+  "disagreements_with_the_committed_census": [
+   "bodies 13770 here vs 13769 in the committed census (clean-kernel gained one body between 2821390fb and c4e33541d); lowered 9066 vs 9065; spliced 7570 vs 7569; lineage rows 13142 vs 13141. Every other whole-crate field is identical.",
+   "def_index values shifted by 1 for bodies after the new one: level::Level::kind_ord is 17084 here and 17083 in the census, has_cubical_layer 17971 vs 17970, from_source_system 17966 vs 17965, level::Level::is_zero 17078 vs 17077. def_index is NOT stable across HEADs and must only be joined within one compile.",
+   "instr_count for expr::bvar_in_range is 13 in the coverage row (the census reports 13 too); an independently written text-dump parser counts 11 instruction LINES for the same body, because the coverage counter and a line counter are different denominators. Neither is wrong; they are not the same quantity and must not be quoted interchangeably."
+  ],
+  "why_this_body": "Of the 177 fully-chainable codegen-flipped bodies, exactly TWO contain a condbr (expr::bvar_in_range and env::native_reducers_char::is_valid_char) and they are the only two carrying a short-circuit as real control flow. bvar_in_range has the most comparisons of any chainable body (four icmps: eq, uge, uge, ult), seven blocks, two join blocks one of which branches into the other, three parameters, and the longest non-vacuous marker sequence (21 lines) of any chained body. It is also the only chained body whose producer-side INTERPRETER differential ran at all: agreed on 125 sampled inputs, where all four other chains are not-run."
+ },
+ "measurement_scope": "Every numeric and digest field on this page was measured on 2026-08-13 at clean HEAD c4e33541d against the SEALED stage1 driver above. Nothing is carried forward from an earlier dated artifact; where this measurement disagrees with data/crystal_flip_census_2026-08-13.json the disagreement is recorded in candidate_selection.disagreements_with_the_committed_census.",
+ "supersedes_chain": [
+  {
+   "lineage": "sha256:2789682bed3e038bd4af8998c6a5c5529f1cb8959b3f4bd69da509c27e95b4ea",
+   "measured": "2026-08-13",
+   "why": "superseded by the 2026-08-13 RECONCILIATION measurement: every chain fixture in this tree is now pinned on ONE compiler (trustc 110cc6379) with that compiler's identity recorded, after two sessions' fixtures were found to disagree because they were taken on different, partly unrecorded compilers."
+  }
+ ],
+ "trustc": {
+  "version_string": "rustc 1.99.0-dev (110cc6379 2026-08-13) (trustc 0.1.0)",
+  "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+  "binary_sha256": "ac41b080aaa22f2a96777836cf3874b9afde25d60be7679850e948a238cdae3a",
+  "lineage_domain": "trust_thir_lower.body_lineage.v2"
+ }
+}

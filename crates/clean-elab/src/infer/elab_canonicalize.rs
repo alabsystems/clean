@@ -7,7 +7,7 @@
 //! Applies level substitutions to all expressions in an `ElabResult`
 //! to ensure level metavariables are resolved to concrete levels.
 
-use clean_kernel::Expr;
+use clean_kernel::{Expr, Level, Name};
 
 use super::{DerivedInstance, ElabCtx, ElabResult};
 
@@ -18,6 +18,55 @@ impl<'a> ElabCtx<'a> {
     /// level metavariables are resolved to concrete levels.
     pub(super) fn canonicalize_levels_in_elab_result(&self, result: ElabResult) -> ElabResult {
         let canonicalize = |expr: Expr| self.metas.canonicalize_levels_in_expr(&expr);
+
+        // A derived instance's expressions must speak the names its
+        // `level_params` DECLARES, and must keep the same ARITY.
+        //
+        // `canonicalize_levels_in_expr` rewrites levels to canonical
+        // representatives, which renames a MINTED param (the `Type _` hole
+        // spelling) while `level_params`, computed earlier, keeps the old name.
+        // Measured: `level_params = ["u_1"]` beside a type mentioning `u_1` AND
+        // `u_5`, which the kernel rejects as an undefined universe parameter. A
+        // DECLARED param is its own representative, so `Type u` never drifts —
+        // which is why only the hole spelling failed.
+        //
+        // RENAME rather than ADD: recollecting the params from the canonicalized
+        // expressions also works, but changes the instance's arity. Substituting
+        // the stray representatives onto the declared param reconciles the names
+        // and leaves arity alone.
+        let reconcile = |inst: DerivedInstance| -> DerivedInstance {
+            let ty = canonicalize(inst.ty);
+            let val = canonicalize(inst.val);
+            let declared = &inst.level_params;
+            let mentioned = super::elab_types::collect_level_params(&[&ty, &val]);
+            let strays: Vec<Name> = mentioned
+                .into_iter()
+                .filter(|n| !declared.contains(n))
+                .collect();
+            // Only well-defined when a single declared param can absorb them;
+            // otherwise leave the instance exactly as before.
+            if strays.is_empty() || declared.len() != 1 {
+                return DerivedInstance {
+                    name: inst.name,
+                    class_name: inst.class_name,
+                    ty,
+                    val,
+                    priority: inst.priority,
+                    level_params: inst.level_params,
+                };
+            }
+            let target = Level::param(declared[0].clone());
+            let subst: Vec<(Name, Level)> =
+                strays.into_iter().map(|n| (n, target.clone())).collect();
+            DerivedInstance {
+                name: inst.name,
+                class_name: inst.class_name,
+                ty: ty.instantiate_level_params(&subst),
+                val: val.instantiate_level_params(&subst),
+                priority: inst.priority,
+                level_params: inst.level_params,
+            }
+        };
 
         match result {
             ElabResult::Definition {
@@ -88,17 +137,7 @@ impl<'a> ElabCtx<'a> {
                     .into_iter()
                     .map(|(name, ty)| (name, canonicalize(ty)))
                     .collect(),
-                derived_instances: derived_instances
-                    .into_iter()
-                    .map(|inst| DerivedInstance {
-                        name: inst.name,
-                        class_name: inst.class_name,
-                        ty: canonicalize(inst.ty),
-                        val: canonicalize(inst.val),
-                        priority: inst.priority,
-                        level_params: inst.level_params,
-                    })
-                    .collect(),
+                derived_instances: derived_instances.into_iter().map(reconcile).collect(),
                 wants_deep_induction,
                 modifiers,
             },
@@ -115,17 +154,7 @@ impl<'a> ElabCtx<'a> {
                 }
                 ElabResult::MutualInductive {
                     decl,
-                    derived_instances: derived_instances
-                        .into_iter()
-                        .map(|inst| DerivedInstance {
-                            name: inst.name,
-                            class_name: inst.class_name,
-                            ty: canonicalize(inst.ty),
-                            val: canonicalize(inst.val),
-                            priority: inst.priority,
-                            level_params: inst.level_params,
-                        })
-                        .collect(),
+                    derived_instances: derived_instances.into_iter().map(reconcile).collect(),
                     modifiers,
                 }
             }
@@ -162,17 +191,7 @@ impl<'a> ElabCtx<'a> {
                     .collect(),
                 projection_param_infos,
                 parents,
-                derived_instances: derived_instances
-                    .into_iter()
-                    .map(|inst| DerivedInstance {
-                        name: inst.name,
-                        class_name: inst.class_name,
-                        ty: canonicalize(inst.ty),
-                        val: canonicalize(inst.val),
-                        priority: inst.priority,
-                        level_params: inst.level_params,
-                    })
-                    .collect(),
+                derived_instances: derived_instances.into_iter().map(reconcile).collect(),
                 class_info,
                 modifiers,
             },

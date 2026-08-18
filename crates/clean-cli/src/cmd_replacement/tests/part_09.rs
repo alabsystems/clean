@@ -147,6 +147,35 @@ fn deny_sorry_launch_evidence_accepts_strict_closed_artifact() {
         .expect("strict deny-sorry artifact against a closed ratchet should validate");
 }
 
+/// Canned libtest output shaped like the real 11-test deny_sorry_gate run.
+const DENY_SORRY_KERNEL_LANE_PASSING_OUTPUT: &str = "running 11 tests\n\n\
+     test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+/// Canned libtest output shaped like a real single-test lane run.
+const DENY_SORRY_SINGLE_TEST_LANE_PASSING_OUTPUT: &str = "running 1 test\n\n\
+     test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+
+/// A stub runner keeps unit tests from spawning a nested `cargo` (which would
+/// deadlock on the build lock), mirroring the kernel-soundness lane tests.
+fn deny_sorry_passing_lane_runner(argv: &[&'static str]) -> Result<String, String> {
+    if argv == DENY_SORRY_KERNEL_GATE_LANE_COMMAND {
+        Ok(DENY_SORRY_KERNEL_LANE_PASSING_OUTPUT.to_string())
+    } else if argv == DENY_SORRY_LEAN4_PARITY_LANE_COMMAND
+        || argv == DENY_SORRY_ELAB_ACCEPT_LANE_COMMAND
+        || argv == DENY_SORRY_ELAB_REJECT_LANE_COMMAND
+    {
+        Ok(DENY_SORRY_SINGLE_TEST_LANE_PASSING_OUTPUT.to_string())
+    } else {
+        Err(format!("unexpected lane command: {argv:?}"))
+    }
+}
+
+fn deny_sorry_lane(id: &str) -> &'static DenySorryLaneExpectation {
+    DENY_SORRY_EXPECTED_LANES
+        .iter()
+        .find(|lane| lane.id == id)
+        .expect("known DENY_SORRY lane id")
+}
+
 #[test]
 fn rust_deny_sorry_generator_matches_current_ratchet_debt() {
     let ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet");
@@ -154,7 +183,10 @@ fn rust_deny_sorry_generator_matches_current_ratchet_debt() {
         .add_decl_structural_count
         .saturating_add(ratchet.add_decl_unchecked_count);
 
-    let result = generate_deny_sorry_launch_evidence("2026-04-27T00:00:00Z");
+    let result = generate_deny_sorry_launch_evidence_with(
+        "2026-04-27T00:00:00Z",
+        &deny_sorry_passing_lane_runner,
+    );
     if debt == 0 {
         let artifact = result.expect("closed ratchet must generate deny-sorry evidence");
         assert_eq!(artifact.generated_by, DENY_SORRY_RUST_GATE_COMMAND);
@@ -164,10 +196,139 @@ fn rust_deny_sorry_generator_matches_current_ratchet_debt() {
             .contains_key(TRUST_CORE_RUST_SOURCE_PATH));
         assert!(!artifact.source_sha256.contains_key(DENY_SORRY_GATE_PATH));
         assert!(!artifact.source_sha256.contains_key(LINT_SORRY_BYPASS_PATH));
+        assert_eq!(artifact.lanes.len(), DENY_SORRY_EXPECTED_LANES.len());
+        assert!(artifact
+            .lanes
+            .iter()
+            .all(|lane| lane.status == "passed" && lane.matched_expected_count));
     } else {
         let err = result
             .expect_err("open ratchet must fail deny-sorry evidence generation closed")
             .to_string();
+        assert!(
+            err.contains("current ratchet is not closed at 0/0"),
+            "unexpected generator error: {err}"
+        );
+    }
+}
+
+/// Every lane except the two in-process checks (sorry-bypass lint, ratchet
+/// closure) must be executable. A lane with no command could only ever be
+/// self-declared.
+#[test]
+fn every_executable_deny_sorry_lane_declares_a_command() {
+    for lane in DENY_SORRY_EXPECTED_LANES {
+        match lane.id {
+            "lint_sorry_bypass" | "unchecked_decl_ratchet_zero" => {
+                assert!(
+                    lane.command.is_none(),
+                    "in-process lane {} must not declare a command",
+                    lane.id
+                );
+            }
+            _ => assert!(
+                lane.command.is_some_and(|command| !command.is_empty()),
+                "lane {} must declare a non-empty command",
+                lane.id
+            ),
+        }
+    }
+}
+
+/// The gate's whole point is enforcement under DENY_SORRY=1; a lane argv that
+/// drops the env prefix would measure the permissive default instead.
+#[test]
+fn deny_sorry_lane_commands_run_under_deny_sorry_env() {
+    for lane in DENY_SORRY_EXPECTED_LANES {
+        if let Some(command) = lane.command {
+            assert!(
+                command.starts_with(&["env", "DENY_SORRY=1"]),
+                "lane {} must run under DENY_SORRY=1: {command:?}",
+                lane.id
+            );
+        }
+    }
+}
+
+#[test]
+fn deny_sorry_lane_fails_closed_on_wrong_test_count() {
+    let runner = |_argv: &[&'static str]| -> Result<String, String> {
+        // Exit status 0, but only 10 of the 11 subprocess-enforcement tests
+        // ran — the exact shape a filter typo produces, and the reason exit
+        // code alone is not sufficient evidence.
+        Ok("running 10 tests\n\ntest result: ok. 10 passed; 0 failed\n".to_string())
+    };
+
+    let err = evaluate_deny_sorry_lane(deny_sorry_lane("kernel_deny_sorry_gate"), &runner)
+        .expect_err("a 10-test run must not satisfy an 11-test expectation")
+        .to_string();
+
+    assert!(
+        err.contains("kernel_deny_sorry_gate"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        err.contains("matched_expected_count=false"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn deny_sorry_lane_fails_closed_when_command_fails() {
+    let runner = |_argv: &[&'static str]| -> Result<String, String> {
+        Err("exited with exit status: 101".to_string())
+    };
+
+    let err = evaluate_deny_sorry_lane(deny_sorry_lane("elab_soundness_gate_reject"), &runner)
+        .expect_err("a failing lane must not yield passing lane evidence")
+        .to_string();
+
+    assert!(
+        err.contains("elab_soundness_gate_reject"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn deny_sorry_lane_passes_on_expected_count() {
+    let evidence = evaluate_deny_sorry_lane(
+        deny_sorry_lane("kernel_lean4_parity"),
+        &deny_sorry_passing_lane_runner,
+    )
+    .expect("a passing lane run must produce lane evidence");
+
+    assert_eq!(evidence.id, "kernel_lean4_parity");
+    assert_eq!(evidence.expected_tests, Some(1));
+    assert!(evidence.matched_expected_count);
+    assert_eq!(evidence.status, "passed");
+}
+
+/// A runner stub returning a wrong count must never let generation emit a
+/// passing artifact. While the checked-in ratchet honestly carries open debt
+/// the generator refuses before spawning any lane (cheap checks first), so
+/// the wrong-count path itself is covered unconditionally by
+/// `deny_sorry_lane_fails_closed_on_wrong_test_count` above.
+#[test]
+fn deny_sorry_generator_fails_closed_on_wrong_test_count() {
+    let runner = |argv: &[&'static str]| -> Result<String, String> {
+        if argv == DENY_SORRY_KERNEL_GATE_LANE_COMMAND {
+            Ok("running 10 tests\n\ntest result: ok. 10 passed; 0 failed\n".to_string())
+        } else {
+            deny_sorry_passing_lane_runner(argv)
+        }
+    };
+
+    let err = generate_deny_sorry_launch_evidence_with("2026-04-27T00:00:00Z", &runner)
+        .expect_err("a wrong-count run must not yield a passing artifact")
+        .to_string();
+
+    let ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet");
+    if ratchet.add_decl_structural_count == 0 && ratchet.add_decl_unchecked_count == 0 {
+        assert!(
+            err.contains("kernel_deny_sorry_gate") && err.contains("matched_expected_count=false"),
+            "unexpected generator error: {err}"
+        );
+    } else {
         assert!(
             err.contains("current ratchet is not closed at 0/0"),
             "unexpected generator error: {err}"

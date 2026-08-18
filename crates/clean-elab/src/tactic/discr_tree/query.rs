@@ -11,6 +11,18 @@ use super::path::{is_trivially_generic_path, mk_path};
 use super::trie::Trie;
 use crate::tactic::{Goal, ProofState};
 
+/// Longest key path the tree will index or descend. Trie recursion depth is
+/// bounded by path length, and `mk_path` flattens expressions structurally —
+/// an imported lemma (or goal) carrying a structurally-expanded numeral
+/// (nested `Nat.succ` chains) can flatten to a path of millions of keys,
+/// which overflowed the stack under real `import Init` once the typed
+/// simpExtension decoder made ~10k entries live. Over-long lemma paths are
+/// refused at insert (`insert_if_specific` → `false` → the caller's
+/// always-scanned unindexed bucket, so the lemma stays fully usable);
+/// over-long query paths skip the trie (the unindexed bucket still runs, so
+/// this only narrows candidates for pathological goals, never soundness).
+const MAX_INDEX_PATH_KEYS: usize = 512;
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct DiscrTree<T> {
     root: HashMap<DiscrKey, Trie<T>>,
@@ -30,7 +42,17 @@ impl<T> DiscrTree<T> {
         value: T,
     ) -> bool {
         let path = mk_path(state, goal, expr, mode);
-        if path.is_empty() || is_trivially_generic_path(&path) {
+        self.insert_path_if_specific(&path, value)
+    }
+
+    /// Insert a value under an already-computed key path (same refusal rules
+    /// as [`Self::insert_if_specific`]). Lets callers that also need the path
+    /// for their own bookkeeping (e.g. `SimpLemmaSet`'s unindexed head-const
+    /// buckets) run `mk_path` — whose per-node `whnf` is expensive — once.
+    /// The `MAX_INDEX_PATH_KEYS` refusal lives HERE so every insertion route
+    /// (wrapper or precomputed-path) gets the over-long-path protection.
+    pub(crate) fn insert_path_if_specific(&mut self, path: &[DiscrKey], value: T) -> bool {
+        if path.is_empty() || path.len() > MAX_INDEX_PATH_KEYS || is_trivially_generic_path(path) {
             return false;
         }
 
@@ -91,6 +113,11 @@ where
     }
 
     fn get_match_by_path(&self, path: &[DiscrKey]) -> Vec<T> {
+        if path.len() > MAX_INDEX_PATH_KEYS {
+            // No lemma with a path this long is ever indexed (see
+            // MAX_INDEX_PATH_KEYS), and descending would recurse per key.
+            return Vec::new();
+        }
         let Some(root_key) = path.first() else {
             return Vec::new();
         };

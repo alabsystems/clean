@@ -92,6 +92,15 @@ pub struct CheckArgs {
     /// whose working set otherwise thrashes the cache, at the cost of memory.
     #[arg(long)]
     pub max_cache_entries: Option<usize>,
+    /// Parse only: run the parser over the file and count per-declaration
+    /// parse outcomes (parse OK / `RawDecl`-recovered / hard error) WITHOUT
+    /// elaborating or kernel-checking anything. `RawDecl` recovery
+    /// placeholders always count as failures, never as parses. With `--json`,
+    /// emits a machine-readable parse report. `--prelude`, `--allow-sorry`,
+    /// and `--imports-prefer-olean` are ignored in this mode — no declaration
+    /// is registered and no verification verdict of any kind is minted.
+    #[arg(long)]
+    pub parse_only: bool,
 }
 
 /// Subcommands for `clean cert` (proof-certificate verification).

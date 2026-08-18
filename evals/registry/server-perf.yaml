@@ -1,0 +1,36 @@
+# Andrew Yates <andrewyates.name@gmail.com>
+#
+# Server performance eval — canonical input for benchmark publication.
+#
+# Metadata side of the JSON-RPC server benchmark lane; one of the
+# CANONICAL_BENCHMARK_INPUTS sha-pinned by the publication pipeline
+# (crates/clean-cli/src/cmd_bench.rs, scripts/check_benchmark_publication.py).
+# Declares WHAT the server lane measures; carries no results (see
+# docs/BENCHMARKS.md freshness rule — numbers live only in publication
+# artifacts).
+id: server-perf
+version: 1
+description: >-
+  Criterion benchmark suite for the JSON-RPC verification server: request
+  dispatch and batch verification throughput (server_ops). Publication
+  metadata pins this file alongside the bench source so the measured suite
+  definition is part of the artifact's identity.
+owner: Andrew Yates <andrewyates.name@gmail.com>
+suites:
+  - name: server_ops
+    crate: clean-server
+    bench_target: crates/clean-server/benches/server_ops.rs
+    harness: criterion
+    run_artifacts:
+      stdout: raw/server_ops.stdout.txt
+      stderr_log: logs/server_ops.stderr.log
+      criterion_dir: raw/criterion/server_ops
+publication_contract:
+  runner: scripts/run_public_benchmarks.sh
+  checker: scripts/check_benchmark_publication.py
+  pointer: reports/benchmarks/publication/current.json
+  freshness_days_default: 14
+  claims_policy: >-
+    No performance number sourced from this suite may be quoted as current
+    outside a publication run inside the freshness window. Historical numbers
+    must carry their run date.

@@ -317,6 +317,26 @@ impl<'a> ElabCtx<'a> {
             param_fvars.push((binder.name.clone(), fvar, binder_ty));
         }
 
+        // The structure's FINAL universe parameters, as `elab_structure` (already
+        // run above) computed and registered them: the declared list filtered to
+        // those actually used. This is the only correct level list for a
+        // self-occurrence of the class inside its own derived parent instances.
+        //
+        // It cannot be reconstructed here. `mk_const` resolves through the
+        // ENVIRONMENT, where the class is not registered yet, so it yields
+        // `Const(C, [])` — zero level arguments — and the kernel rejects the
+        // derived instance with "Level count mismatch for C: declared N level
+        // params, got 0". Nor is `self.universe_params` right: it accumulates
+        // fresh universe metas minted during field elaboration, giving "got 3"
+        // where the declaration keeps one. Both were measured and reverted; see
+        // `tests/fixtures/universes/p33_class_extends_upoly_MUST_FAIL.lean`.
+        let struct_universe_params: Vec<Name> = match &result {
+            ElabResult::Structure {
+                universe_params, ..
+            } => universe_params.clone(),
+            _ => Vec::new(),
+        };
+
         let mut parent_instances: Vec<DerivedInstance> = Vec::new();
         for parent_expr in extends.iter() {
             if let Ok(parent_ty) = self.elaborate(parent_expr) {
@@ -390,8 +410,28 @@ impl<'a> ElabCtx<'a> {
                         DEFAULT_PRIORITY,
                     );
 
-                    let level_params =
-                        super::elab_types::collect_level_params(&[&inst_type, &instance_expr]);
+                    // Rewrite every self-occurrence of the class (and its
+                    // members, e.g. `C.toParent`) to carry EXACTLY the struct's
+                    // surviving params — the same treatment `elab_structure`
+                    // gives `ctor_ty` and `projections`, which the derived parent
+                    // instances were never given. Doing it by folding the
+                    // FINISHED expressions, rather than by constructing the
+                    // levels up front, is what makes it robust to the
+                    // universe pollution described above: the folder replaces
+                    // the level list outright instead of positionally filtering
+                    // a polluted one.
+                    let mut folder = FilterStructSelfLevels {
+                        struct_name: &class_name,
+                        keep_params: &struct_universe_params,
+                    };
+                    let inst_type = folder.fold_expr(&inst_type);
+                    let instance_expr = folder.fold_expr(&instance_expr);
+
+                    // The instance is polymorphic in exactly the class's
+                    // parameters. `collect_level_params` over the folded
+                    // expressions would also miss any param that survives in the
+                    // declaration but happens not to occur syntactically here.
+                    let level_params = struct_universe_params.clone();
                     parent_instances.push(DerivedInstance {
                         name: instance_name,
                         class_name: parent_class_name,

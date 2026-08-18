@@ -1,0 +1,611 @@
+{
+ "schema": "clean.crystal.cleanup_edge_fix.lane10.v1",
+ "measured_utc_date": "2026-08-15",
+ "lane": "lane 10 (fix the wire_cleanup_edge over-approximation)",
+ "question": "The 2026-08-15 lane-9 bisect named trust 80c7e86f55 as the single cause of 38 lost `agreed` verdicts and judged the loss an OVER-APPROXIMATION. Verify that verdict independently, then fix it in the PRODUCER and measure whether the 38 return with nothing else moving.",
+ "independent_verdict_check": {
+  "method": "reproduced from scratch in this lane, not inherited",
+  "control_reproduces_recorded_census_digests": "yes \u2014 byte for byte (coverage 5b3c183c\u2026, trust-ir.txt e02c3422\u2026, trust-ir.bin 029d2cd3\u2026)",
+  "subject_reproduces_recorded_lane8_digests": "yes \u2014 byte for byte (coverage a59cc78f\u2026)",
+  "bodies_reproduced_on_the_real_crate": [
+   "env::native_reducers_bitvec::width_mask (5 samples)",
+   "env::native_reducers_beq_shortcircuit::get_int_val::{closure#0} (7 samples)",
+   "cert::bundle::MAX_BUNDLE_NAME_BYTES (1 sample)",
+   "env::origin::OriginTrust::needs_recheck (seam, 3 samples)",
+   "<expr::types::BinderData as std::default::Default>::default (seam, 1 sample)"
+  ],
+  "bodies_reproduced_in_isolation": "the exact source of MAX_BUNDLE_NAME_BYTES / width_mask / get_int_val::{closure#0} / OriginTrust::needs_recheck lifted verbatim into an 27-line file: agreed(1)/agreed(5)/agreed(7) under the control driver, all not-run `undef ty bool` under the subject driver \u2014 same sample counts as the real rows",
+  "built_mir_shape_measured": "-Zdump-mir over that file: every one of the four cleanup targets is `bbN (cleanup): { resume; }` \u2014 statement-free lone-resume, the shape `mir_differential::benign_unwind` already classes benign",
+  "rustc_removes_it_measured": "width_mask at -Cpanic=abort: pad present through 2-2-004 ElaborateDrops, GONE from 2-2-006 AbortUnwindingCalls onward. RemoveNoopLandingPads::is_enabled is `sess.panic_strategy().unwinds()` so it does not run under -Cpanic=abort; its own doc says it replaces jumps to noop pads with UnwindAction::Continue.",
+  "honest_correction_to_the_prior_report": "for a CTFE const-init body the pad is NOT removed by rustc \u2014 the const pipeline ends at 3-2-001 CtfeLimit and never reaches RemoveNoopLandingPads (3-2-027). The prior lane's blanket 'rustc deletes it' holds for runtime fns, not for the 33 const bodies. The verdict is unchanged: under -Cpanic=abort the edge is still unreachable behaviour, benign_unwind still accepts the shape, and the Resume lowering is still an ill-typed zero-value exit.",
+  "verdict": "CONFIRMED \u2014 the loss is an over-approximation, not a soundness correction"
+ },
+ "fix": {
+  "repo": "trust",
+  "files": [
+   "crates/trust-ir-bridge/src/lower.rs",
+   "crates/trust-ir-bridge/src/tests.rs"
+  ],
+  "what": "one predicate, `modelled_cleanup_target`, shared by `terminator_successors` and `wire_cleanup_edge`; it declines the unwind edge when the cleanup target is the built-phase no-op landing pad (`is_noop_landing_pad`: no statements + Terminator::Resume). The pad is then neither kept reachable nor wired, so no orphan block and no demonic `Undef bool` selector exists to classify.",
+  "what_it_is_NOT": "the havoc check was NOT relaxed. `differential.rs` (undef_is_dead_seed / classify_undefs_traced), `crate_module.rs`, `to_mir.rs`, `mir_differential.rs`, `flip_registry.rs` all keep blob identity; the interpreter (first-party/trust-ir) never moved.",
+  "oracle_and_gate_blob_identity": {
+   "differential.rs": "41b77ad0dd1228e12ae8efe039c8cbccba70380f (unchanged)",
+   "crate_module.rs": "7d567c3f8a6b9c6bd6f302178715a4308c52a123 (unchanged)",
+   "to_mir.rs": "74b9c47253a6e470d1d9bc3bb6f0189695ef54f0 (unchanged)",
+   "mir_differential.rs": "461ab7afcca265c0c11988e619831e19555aa321 (unchanged)",
+   "flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9 (unchanged)"
+  }
+ },
+ "compilers": {
+  "control": {
+   "trust_rev": "6b868c1b332ffe3f4dec2935e69f042d78d5d31b",
+   "seal": "$HOME/trust/scratchpad/lane1chain",
+   "guard": "PASS",
+   "verify": "OK",
+   "dylib_sha256": "c999eaaf02d4e63d4555d7683477cb1f7dc1231466d3ad7a91ddae1482c414f8"
+  },
+  "subject": {
+   "trust_rev": "2d7e094f2224994b112e06fdab49123d469c6b43",
+   "seal": "$HOME/trust-lane8/.lane8/seal-lane8",
+   "guard": "PASS",
+   "verify": "OK",
+   "dylib_sha256": "c8746c54263d3f8da7354cbd071467f268c54c428c071fe2bc9842a7624a30d2"
+  },
+  "fixed": {
+   "trust_rev": "2d7e094f2224994b112e06fdab49123d469c6b43 + this lane's patch",
+   "seal": "$HOME/trust-lane10/.lane10/seal-l10fix",
+   "guard": "PASS",
+   "verify": "OK",
+   "dylib_sha256": "b247eda552490a087d9fc482573673587da4d74adb23915afa5f71a8b4e5bb06",
+   "rustc_main_sha256": "69a2f5d44b126c8c067a5926359630431dfc416c4cde81f6a5e9194ab9484c8d",
+   "lower_rs_blob": "62db743545c019fbd70fb367965fcafaf0e758e1",
+   "subject_lower_rs_blob": "60365a596e20681d25e5795263447b3c5eddc64f",
+   "worktree_diff_sha256": "a3126f845d8ab0c01691cc17ef9dc384a0b51a752468d8b81ea1ccb193ed1856",
+   "built_from": "$HOME/trust-lane10 (git worktree at 2d7e094f22; first-party materialised READ-ONLY via `git archive` at that revision's pins \u2014 no submodule HEAD in the user's tree moved)",
+   "never_x_py": true,
+   "selftest": "UNPROVEN \u2014 all three drivers register the same ten perturbation classes, so they are told apart behaviourally (the 53-row `undef ty bool` signature) and by the recorded blobs"
+  },
+  "why_measured_at_2d7e094f22_and_not_trust_HEAD": "trust origin/main (ab69dc4318) moves NINE first-party pins including first-party/trust-ir, which owns the interpreter this gate uses. Measuring there would reintroduce every confound the lane-9 A/B removed. The four behaviour-carrying functions (`call_uses_flat_total_summary`, `terminator_successors`, `wire_cleanup_edge`, `lower_terminator`) are BYTE-IDENTICAL at 2d7e094f22 and origin/main, the patch applies to origin/main with pure line offsets, and the resulting function texts are byte-identical to the measured ones."
+ },
+ "design": {
+  "clean_commit": "1ec739677",
+  "rows_per_run": 13771,
+  "argv": "RUSTFLAGS='-Ztrust-verify=off -Cdebuginfo=0 -Cdebug-assertions=off [-Copt-level=0]' cargo rustc --locked --release -p clean-kernel --lib -- -Ztrust-ir-lower=on -Ztrust-ir-flip=yes -Ztrust-dump=ir:<out>",
+  "non_incremental": "CARGO_INCREMENTAL=0 + `cargo clean -p clean-kernel` before every run; a lane-owned CARGO_TARGET_DIR per arm"
+ },
+ "runs": {
+  "ctl": {
+   "opt_level": 3,
+   "driver": "control",
+   "coverage_sha256": "5b3c183c0a6b5d876961c152e5f5ab76de84e56a57c85dc6f81835c484e4ec42",
+   "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust_ir_bin_sha256": "029d2cd32fb2026844a7e1c8e50573ffc3eadd3e8cca712a5c5381e4c40f214d",
+   "tally": {
+    "interp_not-run": 8488,
+    "dmir_agreed": 1542,
+    "seam_not-run": 7100,
+    "dmir_unsupported": 12229,
+    "interp_unsupported": 4677,
+    "interp_agreed": 606,
+    "seam_agreed": 2
+   }
+  },
+  "sub": {
+   "opt_level": 3,
+   "driver": "subject",
+   "coverage_sha256": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+   "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust_ir_bin_sha256": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f",
+   "tally": {
+    "interp_not-run": 8524,
+    "dmir_agreed": 1542,
+    "seam_not-run": 7102,
+    "dmir_unsupported": 12229,
+    "interp_unsupported": 4677,
+    "interp_agreed": 570
+   }
+  },
+  "fix": {
+   "opt_level": 3,
+   "driver": "fixed",
+   "coverage_sha256": "df3f1a9f11a06280352f68ca5c2ebfe53ee5ad1a785028aa0e952021a51f39fe",
+   "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust_ir_bin_sha256": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f",
+   "tally": {
+    "interp_not-run": 8487,
+    "dmir_agreed": 1542,
+    "seam_not-run": 7100,
+    "dmir_unsupported": 12229,
+    "interp_unsupported": 4677,
+    "interp_agreed": 607,
+    "seam_agreed": 2
+   }
+  },
+  "ctl0": {
+   "opt_level": 0,
+   "driver": "control",
+   "coverage_sha256": "5b3c183c0a6b5d876961c152e5f5ab76de84e56a57c85dc6f81835c484e4ec42",
+   "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust_ir_bin_sha256": "029d2cd32fb2026844a7e1c8e50573ffc3eadd3e8cca712a5c5381e4c40f214d",
+   "tally": {
+    "interp_not-run": 8488,
+    "dmir_agreed": 1542,
+    "seam_not-run": 7100,
+    "dmir_unsupported": 12229,
+    "interp_unsupported": 4677,
+    "interp_agreed": 606,
+    "seam_agreed": 2
+   }
+  },
+  "sub0": {
+   "opt_level": 0,
+   "driver": "subject",
+   "coverage_sha256": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+   "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust_ir_bin_sha256": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f",
+   "tally": {
+    "interp_not-run": 8524,
+    "dmir_agreed": 1542,
+    "seam_not-run": 7102,
+    "dmir_unsupported": 12229,
+    "interp_unsupported": 4677,
+    "interp_agreed": 570
+   }
+  },
+  "fix0": {
+   "opt_level": 0,
+   "driver": "fixed",
+   "coverage_sha256": "df3f1a9f11a06280352f68ca5c2ebfe53ee5ad1a785028aa0e952021a51f39fe",
+   "trust_ir_txt_sha256": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust_ir_bin_sha256": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f",
+   "tally": {
+    "interp_not-run": 8487,
+    "dmir_agreed": 1542,
+    "seam_not-run": 7100,
+    "dmir_unsupported": 12229,
+    "interp_unsupported": 4677,
+    "interp_agreed": 607,
+    "seam_agreed": 2
+   }
+  }
+ },
+ "result": {
+  "restored": {
+   "lost_verdicts": 38,
+   "restored_verdicts": 38,
+   "lost_is_subset_of_restored": true,
+   "extra_row_moved": "env::native_reducers_bool_ext::nat_gcd \u2014 a GAIN (not-run -> agreed on 25 sampled inputs), not caused by this patch: lane 9 measured it appearing at 39a39ffa0e (the culprit's PARENT) and being masked by the culprit. The fix unmasks it.",
+   "verdicts_lost_anywhere": 0
+  },
+  "full_differentials_block_diff_CTL_vs_FIX": {
+   "rows_differing_including_detail_text": 1,
+   "the_row": "env::native_reducers_bool_ext::nat_gcd (gain)"
+  },
+  "the_38_match_the_control_exactly": "all 38 rows' FULL `differentials` block \u2014 verdict, sample count and detail string \u2014 is byte-identical to the control's",
+  "derived_mir_rows_differing": {
+   "CTL_vs_FIX": 0,
+   "SUB_vs_FIX": 0
+  },
+  "flip_events": {
+   "ctl": 228,
+   "sub": 228,
+   "fix": 228,
+   "ctfe_ctl": 32,
+   "ctfe_sub": 32,
+   "ctfe_fix": 32,
+   "def_id_sets": "identical in all three arms"
+  },
+  "ctfe_flips_backed_by_a_LIVE_interpreter_or_seam_verdict": {
+   "control": 32,
+   "subject": 11,
+   "fixed": 32,
+   "of": 32
+  },
+  "the_21_flipping_bodies": "all 21 EXECUTE again \u2014 verdict `agreed`, samples>=1, detail 'THIR-trust-ir == MIR-trust-ir on N sampled input(s)'. Re-verified, not re-labelled.",
+  "live_havoc_offenders": {
+   "interpreter": {
+    "ctl": {
+     "fatptr<slice ty.0>": 487,
+     "struct.9": 4,
+     "struct.12": 1,
+     "struct.10": 1,
+     "(": 2,
+     "[ty.1 x 16]": 1,
+     "struct.1": 19,
+     "struct.8": 3,
+     "struct.0": 6
+    },
+    "sub": {
+     "fatptr<slice ty.0>": 487,
+     "bool": 53,
+     "struct.9": 4,
+     "struct.12": 1,
+     "struct.10": 1,
+     "(": 2,
+     "[ty.1 x 16]": 1,
+     "struct.1": 19,
+     "struct.8": 3,
+     "struct.0": 6
+    },
+    "fix": {
+     "fatptr<slice ty.0>": 487,
+     "struct.9": 4,
+     "struct.12": 1,
+     "struct.10": 1,
+     "(": 2,
+     "[ty.1 x 16]": 1,
+     "struct.1": 19,
+     "struct.8": 3,
+     "struct.0": 6
+    }
+   },
+   "seam_rows": {
+    "ctl": 10,
+    "sub": 20,
+    "fix": 10
+   }
+  },
+  "profile_independence": "the -O0 and -O3 coverage.json are BYTE-IDENTICAL within every arm (control 5b3c183c\u2026, subject a59cc78f\u2026, fixed df3f1a9f\u2026). The oracle is built from `mir_built`, before optimisation.",
+  "producer_side_untouched": "clean_kernel.trust-ir.txt is e02c342247cd9701\u2026 in ALL SIX runs and clean_kernel.trust-ir.bin is 1b946a35eb\u2026 in subject and fixed alike \u2014 the patch moves the MIR-side oracle only, never the THIR producer."
+ },
+ "chained_bodies": {
+  "checked": [
+   "mode::CleanMode::has_cubical_layer",
+   "level::Level::kind_ord",
+   "mode::CleanMode::from_source_system",
+   "flat::types::FlatFlags::contains",
+   "expr::bvar_in_range",
+   "env::native_reducers_char::is_valid_char",
+   "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "level::Level::is_zero (the designated width-one target, chain incomplete at link 2a)"
+  ],
+  "any_in_the_lost_38": false,
+  "differentials_identical_CTL_vs_SUB": true,
+  "differentials_identical_CTL_vs_FIX": true,
+  "meaning": "no completed chain ever rested on one of the 38. The chains' link-2 evidence is the `derived_mir` structural channel, which is bit-identical on all 13,771 rows in every arm."
+ },
+ "the_38": [
+  {
+   "def_index": 720,
+   "def_path": "cert::bundle::MAX_BUNDLE_ENV_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_BUNDLE_ENV_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 721,
+   "def_path": "cert::bundle::MAX_BUNDLE_NAME_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_BUNDLE_NAME_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 1284,
+   "def_path": "cert::types::recursive_drop_needs_segment::DROP_RED_ZONE",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn DROP_RED_ZONE undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2017,
+   "def_path": "cert::compression::dict::CertDictionary::DEFAULT_SIZE",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn DEFAULT_SIZE undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2089,
+   "def_path": "cert::compression::limits::MAX_COMPRESSED_ARCHIVE_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_COMPRESSED_ARCHIVE_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2090,
+   "def_path": "cert::compression::limits::MAX_UNCOMPRESSED_ARCHIVE_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_UNCOMPRESSED_ARCHIVE_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2091,
+   "def_path": "cert::compression::limits::MAX_DICTIONARY_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_DICTIONARY_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2094,
+   "def_path": "cert::compression::limits::MAX_DECOMPRESSED_CERT_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_DECOMPRESSED_CERT_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2096,
+   "def_path": "cert::compression::limits::MAX_STREAM_CERT_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_STREAM_CERT_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2098,
+   "def_path": "cert::compression::limits::MAX_STREAM_UNCOMPRESSED_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_STREAM_UNCOMPRESSED_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2115,
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#0}",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {constant#0} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2116,
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#1}",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {constant#1} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2117,
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#2}",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {constant#2} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2118,
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#3}",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {constant#3} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2119,
+   "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#4}",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {constant#4} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 2388,
+   "def_path": "cert::compression::streaming::StreamingCertReader::<R>::new::MAX_HEADER_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MAX_HEADER_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 3053,
+   "def_path": "env::origin::OriginTrust::needs_recheck",
+   "kind": "fn",
+   "channel": "seam",
+   "ctl_samples": 3,
+   "ctfe_flip": false,
+   "sub_offender": "seam-deferred body: MIR oracle bundle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 13595,
+   "def_path": "env::ext_instance::PRIORITY_BYTES",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn PRIORITY_BYTES undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 14840,
+   "def_path": "env::native_reducers_arith::UINT32_MOD",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn UINT32_MOD undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 14928,
+   "def_path": "env::native_reducers_beq_shortcircuit::get_int_val::{closure#0}",
+   "kind": "fn",
+   "channel": "interpreter",
+   "ctl_samples": 7,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {closure#0} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 14973,
+   "def_path": "env::native_reducers_bitvec::width_mask",
+   "kind": "fn",
+   "channel": "interpreter",
+   "ctl_samples": 5,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn width_mask undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15239,
+   "def_path": "env::native_reducers_decidable_ext::get_int_val::{closure#0}",
+   "kind": "fn",
+   "channel": "interpreter",
+   "ctl_samples": 7,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn {closure#0} undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15505,
+   "def_path": "env::native_reducers_int::int_from_neg_magnitude::TWO_POW_127",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn TWO_POW_127 undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15639,
+   "def_path": "env::native_reducers_sint::INT8_MODULUS",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn INT8_MODULUS undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15640,
+   "def_path": "env::native_reducers_sint::INT16_MODULUS",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn INT16_MODULUS undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15641,
+   "def_path": "env::native_reducers_sint::INT32_MODULUS",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn INT32_MODULUS undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15794,
+   "def_path": "env::native_reducers_uint::UINT8_MODULUS",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn UINT8_MODULUS undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15795,
+   "def_path": "env::native_reducers_uint::UINT16_MODULUS",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn UINT16_MODULUS undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 15796,
+   "def_path": "env::native_reducers_uint::UINT32_MODULUS",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn UINT32_MODULUS undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 16415,
+   "def_path": "expr::types::FVarId::SENTINEL_RANGE_START",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn SENTINEL_RANGE_START undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 16560,
+   "def_path": "expr::MIN_STACK_RED_ZONE",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn MIN_STACK_RED_ZONE undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 16561,
+   "def_path": "expr::STACK_GROWTH_SIZE",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn STACK_GROWTH_SIZE undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 17822,
+   "def_path": "micro::types::micro_recursive_drop_needs_segment::DROP_RED_ZONE",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn DROP_RED_ZONE undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 19632,
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn META_TAG undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 19810,
+   "def_path": "tc::reduction::int::RAT_BLOWUP_LIT_THRESHOLD",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn RAT_BLOWUP_LIT_THRESHOLD undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 20134,
+   "def_path": "tc::reduction::nat::<impl tc::TypeChecker<'env>>::native_nat_binop_grind_stuck::NATIVE_NAT_GRIND_STUCK_THRESHOLD",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn NATIVE_NAT_GRIND_STUCK_THRESHOLD undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 20136,
+   "def_path": "tc::reduction::nat::<impl tc::TypeChecker<'env>>::native_nat_grind_recursor_stuck::NATIVE_NAT_GRIND_STUCK_THRESHOLD",
+   "kind": "const-init",
+   "channel": "interpreter",
+   "ctl_samples": 1,
+   "ctfe_flip": true,
+   "sub_offender": "MIR oracle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape; eagerly-trapping, non-interpretable as a trap reference; offender: fn NATIVE_NAT_GRIND_STUCK_THRESHOLD undef ty bool); coverage-only skip \u2014 NOT a THIR divergence"
+  },
+  {
+   "def_index": 33205,
+   "def_path": "<expr::types::BinderData as std::default::Default>::default",
+   "kind": "fn",
+   "channel": "seam",
+   "ctl_samples": 1,
+   "ctfe_flip": false,
+   "sub_offender": "seam-deferred body: MIR oracle bundle carries a LIVE havoc (`Inst::Undef` outside the proven-dead-seed shape); coverage-only skip \u2014 NOT a THIR divergence"
+  }
+ ]
+}

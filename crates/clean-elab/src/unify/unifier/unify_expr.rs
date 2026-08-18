@@ -105,6 +105,15 @@ impl<'a> Unifier<'a> {
         if is_bool_prop_pair(left, right) {
             return UnifyResult::Success;
         }
+        // Kill-point tracer (CLEAN_UNIFY_TRACE): a shape bail deep in a decl
+        // surfaces upstream as an opaque TypeMismatch; stderr names the pair.
+        if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
+            eprintln!("unify-shape-bail: LEFT {left:?}\n            vs RIGHT {right:?}");
+            eprintln!(
+                "bail-backtrace: {}",
+                std::backtrace::Backtrace::force_capture()
+            );
+        }
         UnifyResult::Failure(format!(
             "cannot unify expressions of different shape: {:?} vs {:?}",
             std::mem::discriminant(left.kind()),

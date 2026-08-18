@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use crate::tactic::simp::collect_simp_lemmas;
 use clean_kernel::env::Declaration;
 use clean_kernel::{BinderInfo, ExprKind, Name};
 

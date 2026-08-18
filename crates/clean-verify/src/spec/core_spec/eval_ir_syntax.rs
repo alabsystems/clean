@@ -126,8 +126,12 @@ impl Specification {
         //    the constructor choice (`int_` signed / `uint_` unsigned), which is
         //    exactly what `Ty::I8..I128` / `Ty::U8..U128` encode as ten separate
         //    variants;
-        //  - floats carry width only; there is no float value domain (see
-        //    eval_ir_semantics' exclusion list), so nothing observes more;
+        //  - floats carry width only, and the width is now SEMANTIC INPUT: the
+        //    binary64 value domain (`eval_ir_float`, 2026-08-15) decides `w = 64`
+        //    and gives every other width the tagged unmodelled outcome, because
+        //    binary32 and binary16 are different formats with different exponent
+        //    fields. Nothing observes more than the width: there is no per-format
+        //    layout table here, only the one this module's boundary constants fix;
         //  - the pointer-like family (`Ref`/`RefMut`/`PtrConst`/`PtrMut`/`Rc`/
         //    `FatPtr`) keeps its pointee, because `PtrMetadata` dispatches on
         //    thin-vs-fat;
@@ -168,6 +172,40 @@ impl Specification {
         // =========================================================
         // Constants.
         // =========================================================
+        //
+        // AGGREGATE CONSTANTS, and why the last three constructors look like
+        // `IRScalar`'s. `trust_ir::Constant::Aggregate(Vec<Constant>)` is the
+        // spelling every enum-returning body uses for a by-value result —
+        // MEASURED at HEAD, not assumed:
+        //
+        // ```text
+        // mode::CleanMode::from_source_system      %3 = const enum.13  { 0 }
+        // <tc::ExprPathStep as Clone>::clone       %4 = const enum.181 { 0 }
+        // ```
+        //
+        // Both are `Constant::Aggregate([Constant::Int(k)])`: arity ONE,
+        // element kind `Int`, nesting depth ONE. The producer's convention
+        // (`trust-ir/src/interpret.rs:1712-1766`) is that an enum-typed
+        // aggregate constant carries its discriminant at element 0 and the
+        // selected variant's fields at `1..`, which is the same tag-at-slot-0
+        // convention `ir_var` already builds for values.
+        //
+        // A structural `agg : IRList IRConst -> IRConst` is a NESTED inductive
+        // and the elaborator does not register one. So the element spine lives
+        // INSIDE the family as two more of its own constructors — exactly the
+        // `IRScalar` `aggv`/`vnil`/`vcons` precedent (`eval_ir_state.rs`, whose
+        // module doc records the measured `ProbeNested` FAIL / `ProbeSpine`
+        // PASS pair that established it). `IRConst.aggv sp` is an aggregate
+        // whose elements are the `vnil`/`vcons` chain `sp`.
+        //
+        // The junk inhabitants are named rather than left in a commit message,
+        // as they were for `IRScalar`: a bare `vnil` / `vcons a b` is a
+        // representable `IRConst` that is not a constant of any type, and
+        // `aggv (int_ 3)` is an aggregate with a non-spine element list. Every
+        // verdict on them is fail-closed inside the existing fault alphabet —
+        // `ir_const_eval` gives a bare spine node `type_error not_agg`, and a
+        // non-spine payload materializes to a value whose `ir_vals_len` is
+        // zero, so `ExtractField` on it is `bad_field`.
         self.add_inductive(
             r"inductive IRConst : Type
 | int_ : Nat → IRConst
@@ -176,11 +214,19 @@ impl Specification {
 | null_ : IRConst
 | undef_ : IRConst
 | float_ : Nat → IRConst
-| func_ : Nat → IRConst",
-            "EvalIR constants: the `Inst::Const` payload. `float_` carries an opaque bit pattern \
-             — it can be BUILT and COMPARED for syntactic identity but no float arithmetic is \
-             modelled (see the eval_ir_semantics exclusion list). `func_` is a function id, the \
-             constant form a CallIndirect callee resolves through.",
+| func_ : Nat → IRConst
+| aggv : IRConst → IRConst
+| vnil : IRConst
+| vcons : IRConst → IRConst → IRConst",
+            "EvalIR constants: the `Inst::Const` payload. `float_` carries an IEEE 754 binary64 \
+             bit pattern. As of 2026-08-15 float arithmetic IS partly modelled — see \
+             super::eval_ir_float for exactly which fragment and the measured reason the rest is \
+             refused; this comment previously said \"no float arithmetic is modelled\" and was \
+             true when it was written. `func_` is a function id, the \
+             constant form a CallIndirect callee resolves through. `aggv`/`vnil`/`vcons` are \
+             `trust_ir::Constant::Aggregate`, carried as an INLINE element spine because a \
+             structural `IRList IRConst` field would be a nested inductive the elaborator does \
+             not register — the same shape, and the same reason, as `IRScalar`'s payload spine.",
         )?;
 
         // =========================================================
@@ -256,7 +302,12 @@ impl Specification {
 | uge : IRFCmpOp",
             "EvalIR float comparisons — 12/12 of trust_ir::FCmpOp, in declaration order. Present \
              so the FCmp instruction has a well-typed operator argument; the semantics of every \
-             one of them is the explicit `unmodelled` outcome (no float value domain).",
+             one of them is still the explicit `unmodelled` outcome. That is now a DELIBERATE \
+             boundary rather than an absence: super::eval_ir_float classifies binary64 patterns \
+             and could decide the ordered comparisons on the classified fragment, but no body in \
+             clean-kernel emits an FCmp that lowers (`reduce_float_beq/blt/ble::{closure#0}` are \
+             all `unsupported: shim: Inst::FCmp` in the coverage row), so an FCmp semantics would \
+             be modelling with no artifact to be about.",
         )?;
 
         self.add_inductive(

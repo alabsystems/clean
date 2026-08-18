@@ -1,5 +1,5 @@
 {
-  "note": "Prelude/.olean collision ratchet. Clean seeds a hand-rolled prelude and then imports Lean on top of it; .olean import is FIRST-REGISTERED-WINS (crates/clean-olean/src/import/load_register.rs:1309-1331), so every colliding name DISCARDS Lean's declaration and keeps Clean's. Where the types differ, tactics resolve a statement the user never wrote \u2014 the measured example being List.append_nil, which Clean states over bare List.append and Lean states as `as ++ []`, so `rw [List.append_nil]` on `l ++ []` matched nothing. Counts are flat-or-down. Do NOT raise a baseline to green a build: fix the prelude statement to agree with Lean, or stop seeding the stub (Environment::try_with_prelude_for_import). Measurement: crates/clean-olean/tests/prelude_collision_census.rs; artifact: data/prelude_collision_census.json; gate: scripts/check_prelude_collision_ratchet.py (wired into scripts/local_gate.sh). Established 2026-08-02 against Lean v4.30.0-rc2 `import Init`. 2026-08-09: retired the `Trans` family (411 -> 405). The prelude seeded a 3-universe, Prop-valued, outParam-less `Trans`; Lean's is 6-universe, Sort-valued, with `t : outParam (a -> c -> Sort w)`. Because import is first-registered-wins the stub shadowed Lean's class permanently, so `Trans.trans h1 h2` failed DIRECTLY (no calc) on Nat <=, mixed Nat </<=, List.Sublist and List.Perm, and `inferInstance` for a Trans instance failed. init_trans now registers Lean's exact spelling (plus Lean's `outParam` reducible identity), so `Trans`, `Trans.mk`, `Trans.rec`, `Trans.recOn`, `Trans.casesOn` and `Trans.trans` are type-EQUAL and no longer listed. `Trans.noConfusion`/`Trans.noConfusionType` REMAIN: Lean's noConfusion generator strips parameter wrappers (outParam/optParam/autoParam/semiOutParam) and Clean's does not, so the two differ only by a reducible identity and are definitionally equal. Fixing that means touching the shared noConfusion builder for every inductive with a wrapped parameter; it is left deliberately, tracked here.",
+  "note": "Prelude/.olean collision ratchet. Clean seeds a hand-rolled prelude and then imports Lean on top of it; .olean import is FIRST-REGISTERED-WINS (crates/clean-olean/src/import/load_register.rs:1309-1331), so every colliding name DISCARDS Lean's declaration and keeps Clean's. Where the types differ, tactics resolve a statement the user never wrote \u2014 the measured example being List.append_nil, which Clean states over bare List.append and Lean states as `as ++ []`, so `rw [List.append_nil]` on `l ++ []` matched nothing. Counts are flat-or-down. Do NOT raise a baseline to green a build: fix the prelude statement to agree with Lean, or stop seeding the stub (Environment::try_with_prelude_for_import). Measurement: crates/clean-olean/tests/prelude_collision_census.rs; artifact: data/prelude_collision_census.json; gate: scripts/check_prelude_collision_ratchet.py (wired into scripts/local_gate.sh). Established 2026-08-02 against Lean v4.30.0-rc2 `import Init`. 2026-08-09: retired the `Trans` family (411 -> 405). The prelude seeded a 3-universe, Prop-valued, outParam-less `Trans`; Lean's is 6-universe, Sort-valued, with `t : outParam (a -> c -> Sort w)`. Because import is first-registered-wins the stub shadowed Lean's class permanently, so `Trans.trans h1 h2` failed DIRECTLY (no calc) on Nat <=, mixed Nat </<=, List.Sublist and List.Perm, and `inferInstance` for a Trans instance failed. init_trans now registers Lean's exact spelling (plus Lean's `outParam` reducible identity), so `Trans`, `Trans.mk`, `Trans.rec`, `Trans.recOn`, `Trans.casesOn` and `Trans.trans` are type-EQUAL and no longer listed. `Trans.noConfusion`/`Trans.noConfusionType` REMAIN: Lean's noConfusion generator strips parameter wrappers (outParam/optParam/autoParam/semiOutParam) and Clean's does not, so the two differ only by a reducible identity and are definitionally equal. Fixing that means touching the shared noConfusion builder for every inductive with a wrapped parameter; it is left deliberately, tracked here. 2026-08-10: retired the wrapper decLe/decLt bare-spelled family (12 names: Float/UInt8/UInt16/UInt32/UInt64/USize \u00d7 decLe/decLt). algebra_uint_dec_le_proof.rs (both the Nat-carrier and BitVec-carrier builders) now declares `<T>.decLe : (a b : <T>) -> Decidable (@LE.le.{0} <T> instLE<T> a b)` (resp. `LT.lt`/`instLT<T>`) \u2014 Lean's exact serialized spelling \u2014 instead of the bare `Decidable (<T>.le a b)`; the values are unchanged and still kernel-checked (the class form \u03b4-unfolds through LE.le/instLE<T> to `<T>.le a b`, the same conversion instDecidable<T>Le already exercised). The 12 names are dropped from known_bare_spelled in this commit; baselines stay at 405/129 until the census is regenerated under a real `import Init` (CLEAN_PRELUDE_CENSUS_UPDATE=1), then run check_prelude_collision_ratchet.py --update to lock in the drop. Nat.decLe/Nat.decLt/Int.decLe/Int.decLt REMAIN listed: Lean serializes their binder domains mdata-wrapped, a separate spelling gap.",
   "baseline_type_differing": 405,
   "baseline_bare_spelled": 129,
   "known_bare_spelled": [
@@ -11,8 +11,6 @@
     "Fin.mk",
     "Fin.rec",
     "Fin.recOn",
-    "Float.decLe",
-    "Float.decLt",
     "Int.add_assoc",
     "Int.add_comm",
     "Int.add_le_add_left",
@@ -121,16 +119,6 @@
     "Nat.zero_add",
     "Nat.zero_le",
     "Nat.zero_mul",
-    "Nat.zero_sub",
-    "UInt16.decLe",
-    "UInt16.decLt",
-    "UInt32.decLe",
-    "UInt32.decLt",
-    "UInt64.decLe",
-    "UInt64.decLt",
-    "UInt8.decLe",
-    "UInt8.decLt",
-    "USize.decLe",
-    "USize.decLt"
+    "Nat.zero_sub"
   ]
 }

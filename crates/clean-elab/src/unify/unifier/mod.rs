@@ -479,6 +479,11 @@ impl<'a> Unifier<'a> {
 
     /// Try to unify two expressions
     pub fn unify(&mut self, left: &Expr, right: &Expr) -> UnifyResult {
+        if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
+            let l: String = format!("{left:?}").chars().take(150).collect();
+            let r: String = format!("{right:?}").chars().take(150).collect();
+            eprintln!("unify-top: L={l} R={r}");
+        }
         // Instantiate any assigned metavariables
         let left = self.metas.instantiate(left);
         let right = self.metas.instantiate(right);

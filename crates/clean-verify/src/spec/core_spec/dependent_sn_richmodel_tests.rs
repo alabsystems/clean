@@ -7,13 +7,10 @@
 //! generated recursor/constructors) and the two non-vacuity witnesses register
 //! and re-verify against the live kernel environment.
 
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 fn build_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The dependent judgment, its lookup, recursor, constructors and witnesses all

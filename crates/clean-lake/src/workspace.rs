@@ -87,6 +87,7 @@ impl Workspace {
                 tests: vec![],
                 scripts: vec![],
                 default_targets: vec![],
+                diagnostics: vec![],
             },
             toolchain,
             toolchain_version,

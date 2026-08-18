@@ -21,6 +21,7 @@ pub(crate) fn handle_replacement_command(
         ReplacementCommands::TacticParity(args) => run_tactic_parity(args),
         ReplacementCommands::TrustCoreEvidence(args) => run_trust_core_evidence(args),
         ReplacementCommands::TrustBoundaryAudit(args) => run_trust_boundary_audit(args),
+        ReplacementCommands::RustFirstTooling(args) => run_rust_first_tooling(args),
     }
 }
 

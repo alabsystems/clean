@@ -1,0 +1,167 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "def_path": "level::Level::is_zero",
+ "role": "the crystal's DESIGNATED width-one target (execution plan \u00a73 Phase A). Recorded here so the gap between the proved module and the emitted one is machine-checked instead of asserted in prose.",
+ "def_index": 17078,
+ "func_id": 4926,
+ "lowered": true,
+ "spliced": true,
+ "instr_count": 28,
+ "unsupported": [],
+ "lineage": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "Recorded EXPLICITLY so a future domain bump is visible by inspection rather than by digest mismatch alone. The digest above is only comparable to another digest minted under the same domain; see `supersedes`, where a v1 -> v2 bump moved this value without changing a single byte of emitted IR.",
+ "calls": {
+  "resolved": 6,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "18 canonical line(s) identical",
+  "markers_exact": false,
+  "markers_detail_head": "markers differ: line 0: built `mk b8.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"clean_kernel::level::LevelArc\", fields: [(\"0\", Adt { name: \"core::option::Option\", fields: [(\"__tag\", Int { width: 64, signed: true }), (\"__v1_0\", Datatype { name: \"alloc::syn` vs derived `<end>`",
+  "markers_exact_fails_NON_vacuously": "Unlike the flipping chain bodies, this body has REAL marker lines that differ \u2014 `markers_detail` carries an actual built-vs-derived diff. Its markers_exact=false is therefore a genuine disagreement, not the empty-sequence comparison that makes markers_exact=true vacuous for 1055 of the 1072 candidates. The -O lifetime-marker gate refuses this body on a real difference. This body is the NEGATIVE witness in markers_channel_witness.json \u2014 the half that shows markers_exact can be false for a substantive reason rather than merely absent.",
+  "markers_detail": "markers differ: line 0: built `mk b8.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"clean_kernel::level::LevelArc\", fields: [(\"0\", Adt { name: \"core::option::Option\", fields: [(\"__tag\", Int { width: 64, signed: true }), (\"__v1_0\", Datatype { name: \"alloc::syn` vs derived `<end>`"
+ },
+ "flip_event": {
+  "fired": false,
+  "did_occurrences_in_log": 0,
+  "why": "DefId(0:17078) occurs 0 times in the build log \u2014 no flip event and no fallback event.",
+  "refusal_diagnosis_is_PRIOR": {
+   "measured": "2026-08-11",
+   "claim": "Two independent fail-closed gates refuse it: the -O lifetime-marker gate (`if tcx.sess.emit_lifetime_markers() && !markers_exact { return; }`, trust/crates/trust-thir-lower/src/flip_registry.rs:425) and the wave-TR thin-reborrow provenance lane.",
+   "status": "CARRIED FORWARD, NOT RE-DERIVED. The 2026-08-13 measurement re-confirms the OBSERVABLE (0 events) and the trigger condition (markers_exact false), but the trust repo moved to HEAD bd36c65a81bf414d2fe820bb5a549f4b598b63ae, so the quoted source line/number is a prior reading of a prior trust tree. Re-derive it from trust HEAD before quoting the file:line."
+  }
+ },
+ "flip_event_logging": {
+  "successful_flip_is_INFO_and_INVISIBLE_BY_DEFAULT": true,
+  "detail": "A successful flip logs at INFO (`trust-ir-flip: compiled from trust-ir, did=\u2026`). At the default log level only the WARN `FALLBACK to built MIR` lines are printed, so a build run WITHOUT `RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info` reports ZERO flip events crate-wide and looks identical to a build where the flip is switched off. Any measurement of `fired` MUST come from a log captured with that env var set; the `build.command` below has it.",
+  "consequence_for_this_fixture": "`fired: false` here is a claim about a log that DID have the INFO level enabled. Read from a default-level log it would be unfalsifiable."
+ },
+ "a0_criteria": {
+  "lowered": "PASS",
+  "spliced": "PASS",
+  "zero_unsupported": "PASS",
+  "DerivedAgreed": "PASS",
+  "bodyful_reachable_closure": "FAIL",
+  "flip_event_observed": "FAIL"
+ },
+ "a0_criteria_recheck": "All six verdicts RE-CHECKED against the 2026-08-13 measurement and all six still hold, unchanged: lowered=true, spliced=true, unsupported=[], derived_mir.verdict=agreed (PASS x4); calls.resolved=6 keeps the reachable closure non-bodyful and did_occurrences_in_log=0 keeps the flip unobserved (FAIL x2). This fixture's CENTRAL CLAIM \u2014 the flip did not fire on the designated target \u2014 is a re-measured fact at this HEAD, not a carried-forward one.",
+ "why_not_transcribed": {
+  "1_closure_is_not_bodyful": "is_zero calls `<LevelArc as Deref>::deref` (recorded verbatim in level_is_zero_deref_callee.trust-ir.txt). That callee is itself derived_mir `unsupported` (\"shim: Call(callee site args not encodable / not concrete-mono)  [RE-MEASURED 2026-08-13: the VERDICT is still `unsupported`, but the REASON changed. The prior reason quoted here (callee return outside the fragment / std::option::Option of a borrowed Level) occurs on ZERO bodies at this HEAD; it is the superseded 2026-08-11 reading.]\"), and ITS callees \u2014 `Option::as_deref` and `Option::expect` \u2014 are declaration-only in the assembled module: there is no body to transcribe for them, so a self-contained transcription of is_zero cannot be written today. This is a T-track BUILD ITEM, not a reason to retarget the proof. Consistent with the fresh `calls: {resolved: 6}` above.",
+  "1_func_ids_are_PRIOR_and_HAVE_SHIFTED": {
+   "measured": "2026-08-11",
+   "prior_claim": "the deref callee is @func.4913; its callees are func 8368 (`Option::as_deref`) and func 7674 (`Option::expect`); the highest local-body func id is 7570 and 1155 of 8726 module entries are declaration-only.",
+   "status": "STALE \u2014 DO NOT REUSE THESE IDS. func ids are positional in the assembled module and they MOVED between the two builds: this body's own func_id went 4924 -> 4925 and its def_index went 17075 -> 17077 (both fact-base values). Every other id in the prior claim must therefore be assumed shifted; none of them was re-derived here, so none is restated as a current number.",
+   "affects_a_sibling_fixture": "`level_is_zero.trust-ir.txt` was recorded at the 2026-08-11 build and contains `call @func.4913`. `crystal_a1_lineage/level_is_zero.rs` asserts on that literal string, so the gate still PASSES \u2014 but it is now checking a 2026-08-11 id against a 2026-08-11 text. Re-record that fixture from this build's dump before treating its func ids as current."
+  },
+  "2_control_flow_differs": "The emitted body is 10 blocks with a 4-case switch plus a default edge carrying the IMax arm, gep at byte offsets 8/16, calls for the deref, and two join blocks taking bool block parameters. The registered ir_lz_* module is 7 blocks with 5 explicit switch cases, an `unreachable` default, ExtractField payload reads, an inline ICmp-ne + Assert standing in for the deref, and a `ret` in each arm.",
+  "2_is_NOT_contradicted": "The 2026-08-13 measurement leaves every shape indicator identical to the prior one \u2014 instr_count 28 and derived_mir detail `18 canonical line(s) identical` are unchanged \u2014 so the recorded CFG description above is consistent with the current build. That is corroboration, not re-derivation: the CFG itself was not re-parsed from a fresh dump."
+ },
+ "supersedes": {
+  "previous_lineage": "sha256:da22664dc52d2b099a53a01aa106485b26d04ea5a46735407eb8b7a1d7adce3a",
+  "previous_lineage_domain": "trust_thir_lower.body_lineage.v1",
+  "previous_measured": "2026-08-11",
+  "previous_trustc": "rustc 1.99.0-dev (94147b34f 2026-08-11) (trustc 0.1.0)",
+  "previous_profile": "release, -C opt-level=3, clean HEAD bba1239ea",
+  "previous_source_artifact": "data/crystal_a0_a6_probe.json",
+  "why_superseded": "Trust commit a59c2960bc (\"fix(lineage): bind body digest to stable definition identity\", 2026-08-11 18:37) bound the per-body lineage digest to the body's stable DefPathHash and CORRECTLY bumped the domain `trust_thir_lower.body_lineage.v1` -> `v2`, exactly as that constant's doc requires. This was a DOCUMENTED, CORRECTLY-VERSIONED scheme change \u2014 not a silent one, not a bug, and NOT evidence that any code changed. The previous digest is a v1 value describing a compiler that no longer exists; it is not comparable to the v2 value pinned above and must not be diffed against it.",
+  "emitted_ir_was_unaffected": {
+   "claim": "12,440 of 13,068 per-body digests moved (95%) while every emitted IR body stayed byte-identical.",
+   "source": "measured in THIS repo and recorded in docs/analysis/derived-mir-mismatches-2026-08-12.md (kd7-vs-kd8 coverage dumps); the figure appears nowhere in trust commit a59c2960bc itself; NOT re-measured here and NOT part of this fixture's fact base."
+  },
+  "why_the_gate_could_not_notice": "`crystal_a1_lineage.rs` RECORDS the lineage digest rather than recomputing it, and it cannot recompute it \u2014 re-deriving a body lineage requires running the trust compiler, which the Rust test suite does not do. So the gate only ever checks the fixture's INTERNAL consistency (and for THIS fixture it is weaker still: `crystal_a1_lineage/level_is_zero.rs` reads def_path, lowered, spliced, unsupported, derived_mir.verdict, both FAIL verdicts in a0_criteria, and flip_event.fired \u2014 it never reads `lineage` at all). A stale digest here is therefore invisible to every test in the repo; only a fresh compiler run can catch it. That is the whole reason this `supersedes` block exists."
+ },
+ "crate_context_2026_08_13": {
+  "note": "Crate-wide numbers from the same flip build, recorded because two of them CONTRADICT what the prior fixtures claimed. Fail-open assumptions about 'the flip only fires in clean-kernel' were wrong.",
+  "crate_totals": {
+   "bodies": 13769,
+   "lowered": 9068,
+   "spliced": 7572,
+   "derived_mir_agreed": 1541,
+   "derived_mir_mismatch": 0,
+   "lineage_rows": 13141
+  },
+  "derived_mir_mismatch_is_now_zero": "clean-kernel has ZERO derived-MIR mismatch bodies at this HEAD. The prior measurement had 5.",
+  "flip_events": {
+   "total_all_crates": 4520,
+   "clean_kernel": 199,
+   "clean_kernel_codegen": 167,
+   "clean_kernel_ctfe": 32,
+   "all_from_clean_kernel": false,
+   "top_other_crates": [
+    [
+     "zerocopy",
+     2586
+    ],
+    [
+     "num_traits",
+     300
+    ],
+    [
+     "syn",
+     294
+    ],
+    [
+     "crypto_common",
+     289
+    ],
+    [
+     "clean_kernel",
+     199
+    ],
+    [
+     "object",
+     171
+    ]
+   ],
+   "CORRECTS_PRIOR_FIXTURES": "The prior fixtures claimed 185 flip events total and `flip_events_all_from_clean_kernel: true`. Both are FALSE at this HEAD: 4520 events fire across all crates and only 199 of them are clean-kernel (167 codegen + 32 CTFE); zerocopy alone accounts for 2586. Any argument that leaned on 'every flip event is a clean-kernel body' must be re-made."
+  },
+  "candidate_selection_recount": {
+   "criteria": "derived-MIR agreed AND markers_exact AND unsupported [] AND spliced",
+   "bodies_satisfying": 1072,
+   "of_those_with_a_clean_kernel_flip_event": 199,
+   "of_those_with_zero_calls": 199,
+   "all_flipped_candidates_have_zero_calls": true,
+   "why_this_body_is_excluded": "is_zero fails the recount criteria on `markers_exact` (false) and would fail the flipped-candidate profile on calls (6 resolved, vs zero for all 199 that flipped). Every body that flipped has zero calls; this one calls out, which is the same wall as `bodyful_reachable_closure: FAIL`."
+  }
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "subject_defid_occurrences_level_Level_is_zero": 0,
+  "HONEST_LIMIT": "The negative control is NON-DISCRIMINATING for this subject. is_zero's DefId occurs 0 times in the flip build AND 0 times in the no-flip build, so the control cannot distinguish the two for this body \u2014 it confirms the harness, not this fixture's claim. The claim `fired: false` rests on the flip build's INFO-level log alone (see `flip_event_logging`)."
+ },
+ "measured": "2026-08-13",
+ "trustc": {
+  "version_string": "rustc 1.99.0-dev (110cc6379 2026-08-13) (trustc 0.1.0)",
+  "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+  "binary_sha256": "ac41b080aaa22f2a96777836cf3874b9afde25d60be7679850e948a238cdae3a",
+  "lineage_domain": "trust_thir_lower.body_lineage.v2"
+ },
+ "trustc_binary_sha256": "8dae2b1278a0d803ba27ecf1b3725527c3aee298a6185048cddc9f5144041f93",
+ "profile": "release, clean HEAD 317117738, trust HEAD bd36c65a81bf414d2fe820bb5a549f4b598b63ae",
+ "build": {
+  "command": "RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info CARGO_TARGET_DIR=<tgt> RUSTC=<stage1>/rustc RUSTFLAGS='-Ztrust-verify=off -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir> -Cdebuginfo=0' <stage1>/cargo build --locked --release -p clean-kernel",
+  "trustc_binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+  "release_shape_proof_row_present": true,
+  "clean_kernel_trust_ir_bin_sha256": "b1359add7e9b1b8737ee3215cf7303dca8d0c97161b555b2472e7055f4485a04",
+  "trust_repo_HEAD": "110cc63792d7fcb9c3f568fa01ef998974231f05",
+  "crate_totals": "bodies 13770 / lowered 9066 / spliced 7570 / derived-MIR agreed 1541 / mismatch 0 / lineage rows 13142",
+  "flip_events_total": 4575,
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_all_from_clean_kernel": false
+ },
+ "source_artifact": "kd10 flip build (clean_kernel.coverage.json + INFO-level build log), consolidated in repin-facts.json (MEASURED 2026-08-13). The prior pin came from data/crystal_a0_a6_probe.json \u2014 see `supersedes`.",
+ "supersedes_chain": [
+  {
+   "lineage": "sha256:52e4417b64cf49333378f71703366704f2e2972152e4c1aa975f20ee6e8e855b",
+   "measured": "2026-08-13",
+   "why": "superseded by the 2026-08-13 RECONCILIATION measurement: every chain fixture in this tree is now pinned on ONE compiler (trustc 110cc6379) with that compiler's identity recorded, after two sessions' fixtures were found to disagree because they were taken on different, partly unrecorded compilers."
+  }
+ ]
+}

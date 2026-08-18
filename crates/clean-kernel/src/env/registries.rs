@@ -618,9 +618,23 @@ impl Environment {
     // ========================================================================
 
     /// Register a simp lemma.
+    ///
+    /// Bumps the environment generation counter: downstream caches (type
+    /// checker caches, the elaborator's per-environment simp lemma-set cache)
+    /// key on `generation()`, and a bare `attribute [simp] foo` mutates the
+    /// observable simp set without any `add_decl`, so it must invalidate them.
     pub fn register_simp_lemma(&mut self, name: Name, priority: SimpPriority) {
         self.simp_lemmas
             .insert(name.clone(), SimpLemmaInfo { name, priority });
+        self.generation += 1;
+        self.simp_registry_revision += 1;
+    }
+
+    /// Revision counter of the simp-lemma registry: bumped only by
+    /// [`Self::register_simp_lemma`] / [`Self::unregister_simp_lemma`],
+    /// never by `add_decl`. See the field doc for the caching contract.
+    pub fn simp_registry_revision(&self) -> u64 {
+        self.simp_registry_revision
     }
 
     /// Check if a declaration is a registered simp lemma.
@@ -645,6 +659,7 @@ impl Environment {
         let removed = self.simp_lemmas.remove(name).is_some();
         if removed {
             self.generation += 1;
+            self.simp_registry_revision += 1;
         }
         removed
     }

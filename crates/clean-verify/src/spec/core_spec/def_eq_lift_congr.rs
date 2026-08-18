@@ -826,15 +826,10 @@ fn instantiate_bvar_at_arg_congr_value() -> String {
 #[cfg(test)]
 mod tests {
     use crate::spec::types::ProofStatus;
-    use crate::test_utils::run_with_stack;
-    use crate::Specification;
 
     #[test]
     fn test_def_eq_respects_lift_at_is_derived_proved() {
-        let spec = run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        });
+        let spec = crate::test_utils::build_substitution_spec_with_stack();
 
         let def = spec
             .definitions()
@@ -864,10 +859,7 @@ mod tests {
     fn test_def_eq_instantiate_arg_congr_at_is_derived_proved() {
         // Substitution-typing pillar promotion: the complete KExpr.rec term is
         // kernel-checked at every spec build; the status flag no longer lags.
-        let spec = run_with_stack(|| {
-            Specification::new_substitution_test_spec()
-                .expect("substitution/WHNF test spec should build")
-        });
+        let spec = crate::test_utils::build_substitution_spec_with_stack();
 
         let def = spec
             .definitions()

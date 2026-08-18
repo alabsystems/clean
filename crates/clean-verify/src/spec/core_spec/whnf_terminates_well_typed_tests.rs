@@ -15,16 +15,13 @@
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec_axiom_closure::{computed_axiom_closure, foundational_rule_names};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec (the
 /// `add_whnf_terminates_well_typed` stage is in the Substitution bundle, right
 /// after `add_whnf_normalizes`; see `bundles.rs`).
 fn build_wt_test_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The whole ladder registers.

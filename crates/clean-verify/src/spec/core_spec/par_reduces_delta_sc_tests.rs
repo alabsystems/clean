@@ -7,13 +7,10 @@
 //! registered, kernel-checked, DerivedProved, and carry zero axiom_deps.
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 fn build_delta_sc_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The δ-substitution tower bricks are DerivedProved with zero axiom deps.

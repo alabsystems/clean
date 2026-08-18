@@ -84,17 +84,26 @@ fn evalir_scratchpad_candidates_elaborate() {
             }
         };
         let desc = "evalir scratchpad candidate — not a registered spec declaration";
+        // Per-candidate wall clock, printed with the verdict. Not decoration:
+        // on 2026-08-13 a chain sat unregistered for a day on "ir_br_exact has
+        // been running 3.5 minutes and nothing shows that it terminates", and
+        // what settled it was a per-declaration timing that showed the cost was
+        // NOT in the declaration anyone suspected. A run that prints only
+        // PASS/FAIL cannot tell "slow" from "hung" from "cheap", and the three
+        // want different responses.
+        let started = std::time::Instant::now();
         let result = match kind {
             "inductive" => spec.add_inductive(source, desc),
             _ => spec.add_recursive_def(source, desc),
         };
+        let secs = started.elapsed().as_secs_f64();
         match result {
             Ok(()) => {
                 passed += 1;
-                eprintln!("evalir scratchpad PASS  [{idx}] {name}");
+                eprintln!("evalir scratchpad PASS  [{idx}] {secs:8.3}s {name}");
             }
             Err(e) => {
-                eprintln!("evalir scratchpad FAIL  [{idx}] {name}\n    {e}");
+                eprintln!("evalir scratchpad FAIL  [{idx}] {secs:8.3}s {name}\n    {e}");
                 failures.push(format!("[{idx}] {name}: {e}"));
             }
         }

@@ -80,6 +80,12 @@ pub(super) enum UndoRecord {
         old_value: u64,
     },
     /// A level constraint was added (legacy map)
+    /// A level equation was POSTPONED (pushed onto the deferred queue).
+    ///
+    /// On undo: pop it. The queue must not survive a rolled-back speculative
+    /// branch, or a constraint from an abandoned path would be drained — and
+    /// fail — against a state that never produced it.
+    LevelPostpone,
     LevelConstraint {
         /// The parameter name
         name: Name,

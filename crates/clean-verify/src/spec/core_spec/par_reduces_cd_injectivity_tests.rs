@@ -6,7 +6,6 @@
 //! (`par_reduces_cd_injectivity.rs`).
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 
 /// Build the substitution subset of the spec. The cd-injectivity tower is in the
@@ -15,9 +14,7 @@ use crate::Specification;
 /// during spec construction, so an ill-typed or faked term would have failed
 /// `new_substitution_test_spec()` before any assertion ran.
 fn build_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// Every cd-relation pi/lam/sort shape-inversion + injectivity lemma is a

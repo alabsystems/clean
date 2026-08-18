@@ -184,7 +184,8 @@ pub(crate) fn validate_source_artifacts(paths: &[&'static str]) -> Result<(), Re
     Ok(())
 }
 
-/// Runs one kernel-soundness lane and returns its combined stdout+stderr.
+/// Runs one gate lane (kernel-soundness or DENY_SORRY) and returns its
+/// combined stdout+stderr.
 ///
 /// Injectable so tests can drive the lane-verdict logic without spawning a
 /// nested `cargo` (which would deadlock on the build lock).
@@ -347,13 +348,72 @@ pub(crate) fn generate_kernel_soundness_launch_evidence_with(
     Ok(artifact)
 }
 
+/// Decide one DENY_SORRY lane's verdict by executing it. Fails closed on any
+/// mismatch: an exit-0 run that did not report the expected libtest count is
+/// not evidence (the exact shape a filter typo produces).
+pub(crate) fn evaluate_deny_sorry_lane(
+    lane: &DenySorryLaneExpectation,
+    runner: KernelSoundnessLaneRunner<'_>,
+) -> Result<DenySorryLaunchLaneEvidence, ReplacementError> {
+    let matched_expected_count = match lane.command {
+        // The lint and ratchet lanes run in-process before the lane loop;
+        // reaching here means validate_sorry_bypass_lint and
+        // validate_unchecked_decl_ratchet already returned Ok.
+        None => true,
+        Some(command) => {
+            let output =
+                runner(command).map_err(|message| ReplacementError::StaleTrustCoreArtifact {
+                    message: format!("DENY_SORRY lane `{}` failed: {message}", lane.id),
+                })?;
+            lane.expected_tests
+                .is_none_or(|expected| output_reports_passing_tests(&output, expected))
+        }
+    };
+
+    if !matched_expected_count {
+        return Err(ReplacementError::StaleTrustCoreArtifact {
+            message: format!(
+                "DENY_SORRY lane `{}` ran but did not match its expectation \
+                 (matched_expected_count=false)",
+                lane.id
+            ),
+        });
+    }
+
+    Ok(DenySorryLaunchLaneEvidence {
+        id: lane.id.to_string(),
+        expected_tests: lane.expected_tests,
+        matched_expected_count,
+        status: "passed".to_string(),
+    })
+}
+
 pub(crate) fn generate_deny_sorry_launch_evidence(
     generated_at: &str,
+) -> Result<DenySorryLaunchEvidenceArtifact, ReplacementError> {
+    generate_deny_sorry_launch_evidence_with(generated_at, &run_kernel_soundness_lane_command)
+}
+
+pub(crate) fn generate_deny_sorry_launch_evidence_with(
+    generated_at: &str,
+    runner: KernelSoundnessLaneRunner<'_>,
 ) -> Result<DenySorryLaunchEvidenceArtifact, ReplacementError> {
     validate_binary_matches_head()?;
     validate_sorry_bypass_lint()?;
     let ratchet = load_unchecked_decl_ratchet()?;
     validate_unchecked_decl_ratchet(&ratchet)?;
+    // Fail fast before spawning any cargo lane: an open ratchet can never
+    // yield passing DENY_SORRY evidence (validate_deny_sorry_launch_evidence
+    // re-checks this on the finished artifact), so refuse before the
+    // expensive lanes rather than after them. Same message either way.
+    if ratchet.add_decl_structural_count != 0 || ratchet.add_decl_unchecked_count != 0 {
+        return Err(ReplacementError::StaleTrustCoreArtifact {
+            message: format!(
+                "current ratchet is not closed at 0/0: structural={}, unchecked={}",
+                ratchet.add_decl_structural_count, ratchet.add_decl_unchecked_count
+            ),
+        });
+    }
 
     let mut source_sha256 = BTreeMap::new();
     for path in [TRUST_CORE_RUST_SOURCE_PATH, UNCHECKED_DECL_RATCHET_PATH] {
@@ -385,13 +445,8 @@ pub(crate) fn generate_deny_sorry_launch_evidence(
         source_sha256,
         lanes: DENY_SORRY_EXPECTED_LANES
             .iter()
-            .map(|lane| DenySorryLaunchLaneEvidence {
-                id: lane.id.to_string(),
-                expected_tests: lane.expected_tests,
-                matched_expected_count: true,
-                status: "passed".to_string(),
-            })
-            .collect(),
+            .map(|lane| evaluate_deny_sorry_lane(lane, runner))
+            .collect::<Result<Vec<_>, _>>()?,
     };
     validate_deny_sorry_launch_evidence(&artifact, &ratchet)
         .map_err(|message| ReplacementError::StaleTrustCoreArtifact { message })?;

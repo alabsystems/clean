@@ -219,6 +219,35 @@ impl<'a> ElabCtx<'a> {
                         .get_const(&Name::from_string("OfNat.ofNat"))
                         .is_some()
                 {
+                    // ACTUALLY project when the dictionary is HIDING a carrier
+                    // construction, rather than only naming the projection in a
+                    // comment. `instOfNatUInt8` reduces to
+                    // `OfNat.mk UInt8 n (UInt8.ofNat n)`, so the projection is
+                    // `UInt8.ofNat n` — the canonical carrier constructor, which
+                    // is what downstream reduction and the kernel expect to see.
+                    // Leaving `@OfNat.ofNat UInt8 n (instOfNatUInt8 n)` in the
+                    // term instead is what regressed when B95 seeded `OfNat` as a
+                    // class: before that, `is_class("OfNat")` was false, Step 1
+                    // never ran for these carriers, and they took the Step-2
+                    // constructor below. B95's engagement-gate note ("nothing that
+                    // previously resolved changes") did not hold for them.
+                    //
+                    // The guard is what keeps this narrow, and it is not
+                    // cosmetic. `instOfNatNat` reduces to `OfNat.mk Nat n n` —
+                    // its value field IS the numeral, so projecting would rewrite
+                    // every `Nat` literal from `@OfNat.ofNat Nat k inst` to a bare
+                    // literal. The ring/linarith surface reads that exact form
+                    // (see `tactic/ring_literals.rs`), so `Nat` must keep the
+                    // dictionary. Projecting only when the field DIFFERS from the
+                    // numeral separates "the instance reveals a constructor" from
+                    // "the instance is the identity on the literal".
+                    //
+                    // Definitional transparency: the projection is a δ/ι-redex of
+                    // the term it replaces, so this changes the SHAPE the
+                    // elaborator emits, never the meaning.
+                    if let Some(projected) = self.project_ofnat_carrier_value(&inst_expr) {
+                        return projected;
+                    }
                     let ofnat_ofnat_levels = self
                         .env
                         .get_const(&Name::from_string("OfNat.ofNat"))
@@ -542,6 +571,45 @@ impl<'a> ElabCtx<'a> {
     /// and the emitted term is kernel-re-checked like any other; a spurious
     /// application would be rejected rather than passing silently. No kernel/TCB
     /// code is touched.
+    /// Project `OfNat.mk`'s value field out of a resolved `OfNat` instance, when
+    /// that field is a carrier CONSTRUCTION rather than the numeral itself.
+    ///
+    /// `Some(value)` means "the dictionary was hiding a constructor, emit that
+    /// instead"; `None` means "keep `@OfNat.ofNat α n inst`".
+    ///
+    /// The literal-value guard is the whole of the scoping, so it is worth
+    /// stating precisely. Every builtin `instOfNat*` is `is_reducible`, so
+    /// reducibility cannot separate these cases:
+    ///
+    /// * `instOfNatUInt8 n` reduces to `OfNat.mk UInt8 n (UInt8.ofNat n)`. The
+    ///   value field is an APPLICATION — the carrier constructor — and the
+    ///   dictionary is the only thing standing between the term and it.
+    /// * `instOfNatNat n` reduces to `OfNat.mk Nat n n`. The value field is the
+    ///   NUMERAL, so projecting would rewrite every `Nat` literal to a bare
+    ///   `Lit`, and the ring/linarith surface matches `@OfNat.ofNat α k inst`
+    ///   verbatim (`tactic/ring_literals.rs`).
+    ///
+    /// Returning `None` on a literal field therefore keeps `Nat` byte-identical
+    /// while letting the width-specific carriers reach their constructor.
+    fn project_ofnat_carrier_value(&self, inst_expr: &Expr) -> Option<Expr> {
+        let reduced = self.whnf(inst_expr);
+        let ExprKind::Const(head_name, _) = reduced.get_app_fn().kind() else {
+            return None;
+        };
+        if *head_name != Name::from_string("OfNat.mk") {
+            return None;
+        }
+        // `OfNat.mk (α : Type u) (n : Nat) (ofNat : α) : OfNat α n` — the value
+        // is the third explicit argument. A partially-applied `OfNat.mk` is not
+        // a projectable dictionary, so a shorter arg list declines.
+        let args = reduced.get_app_args();
+        let value = args.get(2)?;
+        if matches!(value.kind(), ExprKind::Lit(_)) {
+            return None;
+        }
+        Some((*value).clone())
+    }
+
     fn try_coerce_builtin_numeric(&self, expr: &Expr, from: &Expr, to: &Expr) -> Option<Expr> {
         let from_head = crate::coercion::head_type_name(from)?;
         let to_head = crate::coercion::head_type_name(to)?;

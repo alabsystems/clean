@@ -1,19 +1,66 @@
 {
  "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
  "def_path": "mode::CleanMode::has_cubical_layer",
- "lineage": "sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119",
+ "def_index": 17971,
+ "func_id": 5247,
+ "instr_count": 10,
+ "lowered": true,
+ "spliced": true,
+ "lineage": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
  "derived_mir": {
   "verdict": "agreed",
   "detail": "7 canonical line(s) identical",
-  "markers_exact": true
+  "markers_exact": true,
+  "markers_detail": "0 marker line(s) identical"
  },
  "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
  "flip_event": {
   "fired": true,
-  "lineage": "sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119",
+  "seam": "codegen",
+  "lineage": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
   "matches_artifact_lineage": true,
-  "raw": "rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17897 ~ clean_kernel[c15e]::mode::{impl#0}::has_cubical_layer), asserts=0, lineage=sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119, flipped_so_far=36"
+  "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17971 ~ clean_kernel[348e]::mode::{impl#0}::has_cubical_layer), asserts=0, lineage=sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a, flipped_so_far=41",
+  "flip_events_crate_wide": 4520,
+  "capture_note": "A SUCCESSFUL flip logs at INFO and is INVISIBLE by default \u2014 only the WARN `FALLBACK to built MIR` lines show. The measurement command below sets RUSTC_LOG accordingly; without it this build reports zero flip events and the evidence cannot be taken at all."
  },
- "trustc": "rustc 1.99.0-dev (2634d314d 2026-08-10) (trustc 0.1.0)",
- "measured": "2026-08-11"
+ "build": {
+  "trust_repo_HEAD": "110cc63792d7fcb9c3f568fa01ef998974231f05",
+  "clean_repo_HEAD": "6f9767d83618a6243664378ecbb284f8ee673090",
+  "command": "RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info CARGO_TARGET_DIR=<tgt> RUSTC=<stage1>/rustc RUSTFLAGS='-Ztrust-verify=off -Ztrust-ir-lower=on -Ztrust-dump=ir:<dir> -Cdebuginfo=0' <stage1>/cargo build --locked --release -p clean-kernel",
+  "emitted_body_unchanged_since_v1_pin": "the trust-ir body is STRUCTURALLY identical to the 2026-08-10 measurement; only the `#loc` FILE INDEX moved (396 -> 399) because clean-kernel gained modules, which renumbers the file table. `Module::stable_digest` excludes spans, so that shift alone never moves the digest.",
+  "clean_kernel_trust_ir_bin_sha256": "b1359add7e9b1b8737ee3215cf7303dca8d0c97161b555b2472e7055f4485a04",
+  "crate_totals": "bodies 13770 / lowered 9066 / spliced 7570 / derived-MIR agreed 1541 / mismatch 0 / lineage rows 13142",
+  "flip_events_total": 4575,
+  "flip_events_clean_kernel": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_all_from_clean_kernel": false
+ },
+ "trustc": {
+  "version_string": "rustc 1.99.0-dev (110cc6379 2026-08-13) (trustc 0.1.0)",
+  "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
+  "binary_sha256": "ac41b080aaa22f2a96777836cf3874b9afde25d60be7679850e948a238cdae3a",
+  "lineage_domain": "trust_thir_lower.body_lineage.v2"
+ },
+ "supersedes": {
+  "lineage": "sha256:b06ffd67210a1daf19307b752c2afe5741a344566524c1441c0a8f1c7abce119",
+  "measured": "2026-08-11",
+  "trustc": "rustc 1.99.0-dev (2634d314d 2026-08-10) (trustc 0.1.0)",
+  "why": "That digest was minted under lineage domain `...body_lineage.v1`. Trust commit a59c2960bc (`fix(lineage): bind body digest to stable definition identity`, 2026-08-11 18:37) bound the digest to the body's stable `DefPathHash` and correctly bumped the domain to v2, which moved 12,440 of 13,068 per-body digests (95%) while every emitted IR body stayed byte-identical. The v1 value therefore describes a compiler that no longer exists \u2014 it was never wrong, it is simply superseded.",
+  "why_the_gate_did_not_notice": "`crystal_a1_lineage.rs` RECORDS this digest rather than recomputing it from the artifact (it cannot: re-deriving needs the trust compiler). It gates the fixture's INTERNAL consistency \u2014 artifact lineage == flip-event lineage \u2014 so a stale-but-self-consistent fixture stays green. Detecting supersession is a re-measurement duty, not something this gate can discharge; `lineage_domain` is recorded here so at least a DOMAIN bump is visible by inspection."
+ },
+ "measured": "2026-08-13",
+ "supersedes_chain": [
+  {
+   "lineage": "sha256:333bc8ff6f32e0c1053a2e32c898378e7980e3fe79976966b8be364d9ee4574e",
+   "measured": "2026-08-13",
+   "why": "superseded by the 2026-08-13 RECONCILIATION measurement: every chain fixture in this tree is now pinned on ONE compiler (trustc 110cc6379) with that compiler's identity recorded, after two sessions' fixtures were found to disagree because they were taken on different, partly unrecorded compilers."
+  }
+ ]
 }

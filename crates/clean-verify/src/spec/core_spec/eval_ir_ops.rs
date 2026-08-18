@@ -24,7 +24,15 @@ impl Specification {
     /// kernel-check.
     pub(super) fn add_eval_ir_ops(&mut self) -> Result<(), SpecError> {
         self.add_eval_ir_coercions()?;
+        // The binary64 value domain, BEFORE the arithmetic that dispatches into
+        // it. Registered 2026-08-15 as the build item the eighth chain needed:
+        // until then every float arm here was the single blanket verdict
+        // `ir_float_fault`, which that module now owns and bounds.
+        self.add_eval_ir_float()?;
         self.add_eval_ir_arith()?;
+        // The float witnesses run THROUGH `ir_binop_eval`, so they can only be
+        // registered once the arithmetic stage has declared it.
+        self.add_eval_ir_float_witnesses()?;
         self.add_eval_ir_compare()?;
         self.add_eval_ir_cast()
     }
@@ -235,15 +243,67 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            r"def ir_const_value (c : IRConst) : IRScalar := match c with
-| IRConst.int_ n => IRScalar.int_ n
-| IRConst.bool_ b => IRScalar.bool_ b
-| IRConst.unit_ => IRScalar.unit_
-| IRConst.null_ => IRScalar.nullptr_
-| IRConst.undef_ => IRScalar.undef_
-| IRConst.float_ n => IRScalar.float_ n
-| IRConst.func_ f => IRScalar.fnptr_ f",
-            "Materialize a constant as a value. Total: every IRConst constructor has a value.",
+            r"def ir_ty_is_agg (t : IRTy) : Bool := match t with
+| IRTy.bool_ => Bool.false
+| IRTy.int_ w => Bool.false
+| IRTy.uint_ w => Bool.false
+| IRTy.float_ w => Bool.false
+| IRTy.ptr_ => Bool.false
+| IRTy.ref_ p => Bool.false
+| IRTy.refmut_ p => Bool.false
+| IRTy.rawconst_ p => Bool.false
+| IRTy.rawmut_ p => Bool.false
+| IRTy.rc_ p => Bool.false
+| IRTy.fatptr_ p => Bool.false
+| IRTy.unit_ => Bool.false
+| IRTy.never_ => Bool.false
+| IRTy.tuple_ n => Bool.true
+| IRTy.array_ e n => Bool.true
+| IRTy.struct_ n => Bool.true
+| IRTy.enum_ n => Bool.true
+| IRTy.func_ n => Bool.false",
+            "Is this type one whose values are aggregates — a tuple, array, struct or enum? The \
+             four ID-named aggregate forms, and only those. `func_` is a FUNCTION type, not an \
+             aggregate; the pointer-like family is thin- or fat-pointer-shaped. Used by \
+             ir_const_agg_eval to reject `const u8 { 0 }`, which the producer never emits and \
+             which the semantics must not silently accept.",
+        )?;
+
+        // Recursive, and it has to be: `aggv`'s element spine is a chain of
+        // `IRConst`s. An explicit `IRConst.rec` rather than a `match`, because
+        // the spine constructors call back into the family and `match` in this
+        // surface syntax is single-scrutinee non-recursive dispatch — the same
+        // reason `ir_vals_get` / `ir_vals_len` are explicit `IRScalar.rec`s.
+        // The seven scalar minors compute exactly what the previous `match`
+        // computed, arm for arm.
+        self.add_recursive_def(
+            concat!(
+                "def ir_const_value (c : IRConst) : IRScalar := ",
+                "IRConst.rec (fun (_ : IRConst) => IRScalar) ",
+                "(fun (n : Nat) => IRScalar.int_ n) ",
+                "(fun (b : Bool) => IRScalar.bool_ b) ",
+                "IRScalar.unit_ ",
+                "IRScalar.nullptr_ ",
+                "IRScalar.undef_ ",
+                "(fun (n : Nat) => IRScalar.float_ n) ",
+                "(fun (f : Nat) => IRScalar.fnptr_ f) ",
+                "(fun (_sp : IRConst) (ih : IRScalar) => IRScalar.aggv ih) ",
+                "IRScalar.vnil ",
+                "(fun (_a : IRConst) (_b : IRConst) (iha : IRScalar) (ihb : IRScalar) => ",
+                "IRScalar.vcons iha ihb) ",
+                "c",
+            ),
+            "Materialize a constant as a value. Total: every IRConst constructor has a value. \
+             The aggregate form maps constructor-for-constructor onto IRScalar's inline payload \
+             spine — `IRConst.aggv sp` becomes `IRScalar.aggv` of the materialized spine, and \
+             the `vnil`/`vcons` chain becomes IRScalar's — so an enum constant \
+             `aggv (vcons (int_ k) vnil)` materializes to exactly `ir_var k ir_sp0`, the value \
+             the tag-at-slot-0 convention already gives a loaded enum. NO width canonicalization \
+             is applied to elements, and that is a stated limit rather than an oversight: IRTy \
+             names aggregates by ID, so an aggregate type carries no element types to \
+             canonicalize against. For every aggregate constant the emitted fragment produces \
+             (discriminants 0..10 in a u8 tag lane) the residue is the identity, so nothing in \
+             the modelled fragment observes the difference.",
         )?;
 
         self.add_recursive_def(
@@ -259,6 +319,24 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
+            concat!(
+                "def ir_const_agg_eval (t : IRTy) (sp : IRConst) : IRStepResult := ",
+                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "(IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) ",
+                "(IRStepResult.value (IRScalar.aggv (ir_const_value sp))) ",
+                "(ir_ty_is_agg t)",
+            ),
+            "Materialize an AGGREGATE constant at its declared type. The IRTy is semantic input, \
+             not decoration, exactly as it is for ir_const_int_eval: an aggregate constant at a \
+             scalar or pointer type is `type_error not_agg` rather than a silently accepted \
+             value. At an aggregate type the result is `IRScalar.aggv` of the materialized \
+             element spine — for an enum constant that is the producer's tag-at-element-0 \
+             convention (`trust-ir/src/interpret.rs:1712-1766`), so it lands on exactly the \
+             `ir_var tag fields` shape a loaded enum has and ExtractField reads it with no \
+             special case.",
+        )?;
+
+        self.add_recursive_def(
             r"def ir_const_eval (t : IRTy) (c : IRConst) : IRStepResult := match c with
 | IRConst.int_ n => ir_const_int_eval t n
 | IRConst.bool_ b => IRStepResult.value (IRScalar.bool_ b)
@@ -266,9 +344,17 @@ impl Specification {
 | IRConst.null_ => IRStepResult.value IRScalar.nullptr_
 | IRConst.undef_ => IRStepResult.value IRScalar.undef_
 | IRConst.float_ n => IRStepResult.value (IRScalar.float_ n)
-| IRConst.func_ f => IRStepResult.value (IRScalar.fnptr_ f)",
+| IRConst.func_ f => IRStepResult.value (IRScalar.fnptr_ f)
+| IRConst.aggv sp => ir_const_agg_eval t sp
+| IRConst.vnil => IRStepResult.fault (IROutcome.type_error IRFault.not_agg)
+| IRConst.vcons a b => IRStepResult.fault (IROutcome.type_error IRFault.not_agg)",
             "The Const instruction's typed evaluator. Integer constants are canonicalized modulo \
-             2^w; every other constant retains its exact value-domain constructor.",
+             2^w; every other scalar constant retains its exact value-domain constructor; an \
+             `aggv` is materialized at its declared aggregate type by ir_const_agg_eval. The \
+             last two arms are the fail-closed reading of the inline spine's junk inhabitants: a \
+             BARE `vnil` / `vcons` is an element-list node, not a constant of any type, so it is \
+             `type_error not_agg` — the same verdict an aggregate constant gets at a scalar \
+             type, and reached by the same reasoning.",
         )?;
 
         Ok(())
@@ -298,14 +384,11 @@ impl Specification {
             "Remainder with the same zero-divisor UB check.",
         )?;
 
-        self.add_recursive_def(
-            concat!(
-                "def ir_float_fault : IRStepResult := ",
-                "IRStepResult.fault (IROutcome.unmodelled IRFault.float_domain)",
-            ),
-            "The verdict for every float-domain operation: there is no float value domain, so \
-             the result is a tagged unmodelled outcome rather than an invented number.",
-        )?;
+        // `ir_float_fault` used to be declared here. It moved to
+        // `super::eval_ir_float` on 2026-08-15, unchanged, when float stopped
+        // being a blanket refusal and became a value domain with a boundary —
+        // it is now the verdict OUTSIDE that boundary rather than the verdict
+        // for the whole domain, and it belongs beside the boundary.
 
         self.add_recursive_def(
             concat!(
@@ -496,10 +579,10 @@ impl Specification {
 | IRBinOp.sdiv => ir_int2_width_result ir_sdiv_bits t a b
 | IRBinOp.urem => ir_uint2 ir_rem_checked t a b
 | IRBinOp.srem => ir_int2_width_result ir_srem_bits t a b
-| IRBinOp.fadd => ir_float_fault
-| IRBinOp.fsub => ir_float_fault
-| IRBinOp.fmul => ir_float_fault
-| IRBinOp.fdiv => ir_float_fault
+| IRBinOp.fadd => ir_float_binop ir_f64_add t a b
+| IRBinOp.fsub => ir_float_binop ir_f64_sub t a b
+| IRBinOp.fmul => ir_float_binop ir_f64_mul t a b
+| IRBinOp.fdiv => ir_float_binop ir_f64_div t a b
 | IRBinOp.frem => ir_float_fault
 | IRBinOp.fmin => ir_float_fault
 | IRBinOp.fmax => ir_float_fault
@@ -512,7 +595,12 @@ impl Specification {
             "BinOp semantics, 20/20 arms. Typed Add/Sub/Mul use exact modulo-2^w machine \
              arithmetic; signed/unsigned division and remainder, And/Or/Xor, and all three shifts \
              match trust-ir's executable bit-pattern semantics. Division by zero, MIN/-1, and an \
-             amount greater than or equal to the width are explicit UB outcomes.",
+             amount greater than or equal to the width are explicit UB outcomes. \
+             \n\nfadd/fsub/fmul/fdiv COMPUTE as of 2026-08-15 (super::eval_ir_float): binary64, \
+             on the fragment where IEEE 754 fixes the answer from the operands' classification \
+             alone, and the tagged unmodelled outcome elsewhere. Contrast udiv, one line above: a \
+             zero divisor there is `ub div_zero` and here it is a signed infinity. frem/fmin/fmax \
+             remain blanket refusals — no body in clean-kernel emits them.",
         )?;
 
         self.add_recursive_def(
@@ -731,6 +819,126 @@ impl Specification {
              width-w bit patterns, and signed ordering interprets the same patterns as exact \
              two's-complement values. Equality for bools, unit, and pointer-shaped values remains \
              exact; unsupported comparable domains retain their existing tagged decline.",
+        )?;
+
+        // ── The six integer icmp arms, restated in WALK vocabulary ──────
+        //
+        // `ir_div_go_guard`'s analogue at the other site the folding lemma is
+        // cashed in — and the one that matters for a concrete `ir_eval`, since
+        // every `icmp` a chained body emits comes through here. Each says: the
+        // instruction this machine executes, on integer operands at a declared
+        // width, answers exactly what the PAIRED UNARY WALK answers on the two
+        // canonical residues. One `ir_eq_cong` each over the three agreement
+        // theorems; the widths and operands stay universally quantified, so
+        // nothing here forces a residue and none of them costs anything to
+        // check.
+        //
+        // Without these, "the comparison folds and still means `<`" would be
+        // read off two definitions. With them it is kernel-checked at the
+        // instruction, not only at the primitive.
+        self.add_recursive_def(
+            concat!(
+                "def ir_icmp_ult_walk (w : Nat) (x : Nat) (y : Nat) : ",
+                "Eq IRStepResult ",
+                "(ir_icmp_eval IRICmpOp.ult (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
+                "(IRStepResult.value (IRScalar.bool_ ",
+                "(ir_nat_ltb_walk (ir_wrap w x) (ir_wrap w y)))) := ",
+                "ir_eq_cong Bool IRStepResult ",
+                "(fun (g : Bool) => IRStepResult.value (IRScalar.bool_ g)) ",
+                "(ir_nat_ltb (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_ltb_walk (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_ltb_walk_eq (ir_wrap w x) (ir_wrap w y))",
+            ),
+            "icmp ult at any width answers the paired unary walk on the two canonical residues \
+             — the instruction-level statement of the less-than folding lemma. This is the arm \
+             every condbr-carrying chain in the program goes through (is_valid_char's three \
+             comparisons and expr_bvar_in_range's four are all ult). DerivedProved, zero \
+             axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_icmp_ugt_walk (w : Nat) (x : Nat) (y : Nat) : ",
+                "Eq IRStepResult ",
+                "(ir_icmp_eval IRICmpOp.ugt (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
+                "(IRStepResult.value (IRScalar.bool_ ",
+                "(ir_nat_ltb_walk (ir_wrap w y) (ir_wrap w x)))) := ",
+                "ir_eq_cong Bool IRStepResult ",
+                "(fun (g : Bool) => IRStepResult.value (IRScalar.bool_ g)) ",
+                "(ir_nat_ltb (ir_wrap w y) (ir_wrap w x)) ",
+                "(ir_nat_ltb_walk (ir_wrap w y) (ir_wrap w x)) ",
+                "(ir_nat_ltb_walk_eq (ir_wrap w y) (ir_wrap w x))",
+            ),
+            "icmp ugt is ult with the operands exchanged, and the exchange is visible in the \
+             statement rather than hidden in a lambda. DerivedProved, zero axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_icmp_ule_walk (w : Nat) (x : Nat) (y : Nat) : ",
+                "Eq IRStepResult ",
+                "(ir_icmp_eval IRICmpOp.ule (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
+                "(IRStepResult.value (IRScalar.bool_ ",
+                "(ir_nat_leb_walk (ir_wrap w x) (ir_wrap w y)))) := ",
+                "ir_eq_cong Bool IRStepResult ",
+                "(fun (g : Bool) => IRStepResult.value (IRScalar.bool_ g)) ",
+                "(ir_nat_leb (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_leb_walk (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_leb_walk_eq (ir_wrap w x) (ir_wrap w y))",
+            ),
+            "icmp ule answers the walk-worded less-or-equal — both of its disjuncts folded, \
+             through ir_nat_leb_walk_eq. DerivedProved, zero axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_icmp_uge_walk (w : Nat) (x : Nat) (y : Nat) : ",
+                "Eq IRStepResult ",
+                "(ir_icmp_eval IRICmpOp.uge (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
+                "(IRStepResult.value (IRScalar.bool_ ",
+                "(ir_nat_leb_walk (ir_wrap w y) (ir_wrap w x)))) := ",
+                "ir_eq_cong Bool IRStepResult ",
+                "(fun (g : Bool) => IRStepResult.value (IRScalar.bool_ g)) ",
+                "(ir_nat_leb (ir_wrap w y) (ir_wrap w x)) ",
+                "(ir_nat_leb_walk (ir_wrap w y) (ir_wrap w x)) ",
+                "(ir_nat_leb_walk_eq (ir_wrap w y) (ir_wrap w x))",
+            ),
+            "icmp uge is ule with the operands exchanged. DerivedProved, zero axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_icmp_eq_walk (w : Nat) (x : Nat) (y : Nat) : ",
+                "Eq IRStepResult ",
+                "(ir_icmp_eval IRICmpOp.eq_ (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
+                "(IRStepResult.value (IRScalar.bool_ ",
+                "(ir_nat_eqb_walk (ir_wrap w x) (ir_wrap w y)))) := ",
+                "ir_eq_cong Bool IRStepResult ",
+                "(fun (g : Bool) => IRStepResult.value (IRScalar.bool_ g)) ",
+                "(ir_nat_eqb (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_eqb_walk (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_eqb_walk_eq (ir_wrap w x) (ir_wrap w y))",
+            ),
+            "icmp eq at any width answers the paired unary walk on the two canonical residues \
+             — the instruction-level statement of the equality folding lemma, and the one that \
+             decides expr_bvar_in_range's u32 sentinel test. DerivedProved, zero axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_icmp_ne_walk (w : Nat) (x : Nat) (y : Nat) : ",
+                "Eq IRStepResult ",
+                "(ir_icmp_eval IRICmpOp.ne_ (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
+                "(IRStepResult.value (IRScalar.bool_ (Bool.not ",
+                "(ir_nat_eqb_walk (ir_wrap w x) (ir_wrap w y))))) := ",
+                "ir_eq_cong Bool IRStepResult ",
+                "(fun (g : Bool) => IRStepResult.value (IRScalar.bool_ (Bool.not g))) ",
+                "(ir_nat_eqb (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_eqb_walk (ir_wrap w x) (ir_wrap w y)) ",
+                "(ir_nat_eqb_walk_eq (ir_wrap w x) (ir_wrap w y))",
+            ),
+            "icmp ne is the negation of eq, and the Bool.not is carried through the same \
+             ir_eq_cong rather than assumed to commute. DerivedProved, zero axiom_deps.",
         )?;
 
         self.add_recursive_def(
@@ -1022,6 +1230,56 @@ impl Specification {
             "ReifyFnPointer: identity on a function pointer.",
         )?;
 
+        // ── the TENTH chain's build item: the SAME-WIDTH INTEGER bitcast ──
+        //
+        // `IRCastOp.bitcast` was `ir_width_fault` for every operand, with a
+        // stated reason that is still correct for the cases it was written
+        // about: *"bitcast and transmute are REPRESENTATION-level
+        // reinterpretations; a cell-addressed model has no representation to
+        // reinterpret"*. What that reason does NOT cover is a bitcast between
+        // two INTEGER types of the SAME width, which is the only bitcast the
+        // shipped kernel emits: `IRScalar.int_ n` already IS the canonical
+        // width-w bit pattern (that is what makes `ir_sext_value` and
+        // `ir_wrap` mean anything), so `i32 -> u32` reinterprets nothing and
+        // is the identity on it.
+        //
+        // The refusal is therefore NARROWED, not lifted, and every case the
+        // original reason names stays refused:
+        //   * a width MISMATCH is `ir_width_fault` (`ir_nat_eqb sw dw`);
+        //   * a non-integer type on either side is `ir_width_fault`, because
+        //     `ir_ty_int_width` declines float/ptr/aggregate — so
+        //     `bitcast f64 -> u64` is exactly as refused as it was;
+        //   * `IRCastOp.transmute` is a DIFFERENT constructor and is untouched,
+        //     so `transmute::<f64, u64>` — the counterexample the original
+        //     comment names by name — is still the tagged unmodelled outcome.
+        self.add_recursive_def(
+            concat!(
+                "def ir_bitcast_int (sw : Nat) (dw : Nat) (a : IRScalar) : IRStepResult := ",
+                "Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(ir_int1 (fun (x : Nat) => IRStepResult.value ",
+                "(IRScalar.int_ (ir_wrap dw x))) a) (ir_nat_eqb sw dw)",
+            ),
+            "Bitcast between two integer types at DECIDED widths: the identity on the canonical \
+             width-w bit pattern when the widths agree, and ir_width_fault when they do not. The \
+             destination canonicalization is not decoration -- an out-of-range Nat carrier must \
+             not survive a reinterpretation that claims to preserve the pattern.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_bitcast_eval (src : IRTy) (dst : IRTy) (a : IRScalar) : IRStepResult := ",
+                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ir_width_fault ",
+                "(fun (sw : Nat) => IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "ir_width_fault (fun (dw : Nat) => ir_bitcast_int sw dw a) (ir_ty_int_width dst)) ",
+                "(ir_ty_int_width src)",
+            ),
+            "Typed Bitcast: integer-to-integer at the same width is the identity on the bit \
+             pattern; EVERY other bitcast keeps the tagged unmodelled width_bounded verdict, \
+             including a width mismatch and including a float or pointer on either side. \
+             ir_ty_int_width is what enforces the second half -- it declines IRTy.float_ -- so \
+             bitcast f64 -> u64 is refused for the same reason it always was.",
+        )?;
+
         self.add_recursive_def(
             r"def ir_cast_eval (op : IRCastOp) (src : IRTy) (dst : IRTy) (a : IRScalar) : IRStepResult := match op with
 | IRCastOp.trunc => ir_trunc_eval src dst a
@@ -1036,15 +1294,19 @@ impl Specification {
 | IRCastOp.ptrtoint => ir_ptrtoint_eval dst a
 | IRCastOp.inttoptr => ir_width_fault
 | IRCastOp.ptrtoptr => ir_ptrcast_eval a
-| IRCastOp.bitcast => ir_width_fault
+| IRCastOp.bitcast => ir_bitcast_eval src dst a
 | IRCastOp.transmute => ir_width_fault
 | IRCastOp.reifyfnpointer => ir_reifyfn_eval a
 | IRCastOp.fptosisat => ir_float_fault
 | IRCastOp.fptouisat => ir_float_fault",
-            "Cast semantics, 17/17 arms. bitcast and transmute are REPRESENTATION-level \
-             reinterpretations; a cell-addressed model has no representation to reinterpret, so \
-             they are the tagged `unmodelled width_bounded` outcome rather than a silent \
-             identity that would be wrong for e.g. transmute::<f64, u64>.",
+            "Cast semantics, 17/17 arms. transmute is a REPRESENTATION-level reinterpretation and \
+             a cell-addressed model has no representation to reinterpret, so it stays the tagged \
+             `unmodelled width_bounded` outcome rather than a silent identity that would be wrong \
+             for e.g. transmute::<f64, u64>. bitcast was the same blanket refusal until 2026-08-16 \
+             and is now decided on EXACTLY the fragment that reason does not cover -- two integer \
+             types of the SAME width, where IRScalar.int_ already is the canonical bit pattern and \
+             nothing is reinterpreted. Every other bitcast (width mismatch, float or pointer on \
+             either side) is still ir_width_fault; see ir_bitcast_eval.",
         )?;
 
         self.add_recursive_def(
@@ -1073,6 +1335,34 @@ impl Specification {
             "def ir_inttoptr_fails_closed : Eq IRStepResult (ir_cast_eval IRCastOp.inttoptr ir_u4 IRTy.ptr_ (IRScalar.int_ Nat.zero)) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
             "Kernel-executed negative witness: integer zero does not manufacture a dereferenceable \
              pointer in the abstract provenance model.",
+        )?;
+
+        // ── the bitcast fragment, pinned from BOTH sides by execution ────
+        self.add_recursive_def(
+            "def ir_exact_bitcast_same_width_is_identity (n : Nat) : Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) (IRScalar.int_ n)) (IRStepResult.value (IRScalar.int_ (ir_wrap 32 n))) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_wrap 32 n)))",
+            "Kernel-executed bitcast witness, for EVERY bit pattern: i32 -> u32 is the canonical \
+             width-32 pattern, i.e. the identity on an already-canonical operand. This is the \
+             fragment the tenth chain needed and the whole of what was added.",
+        )?;
+
+        self.add_recursive_def(
+            "def ir_bitcast_width_mismatch_fails_closed (a : IRScalar) : Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 64) a) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "FAIL-CLOSED, for EVERY scalar: a bitcast between different widths is still the tagged \
+             unmodelled width_bounded outcome. The refusal was NARROWED, not lifted.",
+        )?;
+
+        self.add_recursive_def(
+            "def ir_bitcast_float_still_refused (a : IRScalar) : Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.float_ 64) (IRTy.uint_ 64) a) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "FAIL-CLOSED, for EVERY scalar: bitcast f64 -> u64 is still refused, at the SAME width, \
+             because ir_ty_int_width declines IRTy.float_. This is the case the original blanket \
+             refusal's stated reason is about, and it is unchanged.",
+        )?;
+
+        self.add_recursive_def(
+            "def ir_transmute_still_refused (a : IRScalar) : Eq IRStepResult (ir_cast_eval IRCastOp.transmute (IRTy.float_ 64) (IRTy.uint_ 64) a) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "FAIL-CLOSED, for EVERY scalar: transmute::<f64, u64> -- the counterexample the cast \
+             module's own comment names -- is a DIFFERENT IRCastOp constructor and is entirely \
+             untouched by the bitcast fragment.",
         )?;
 
         Ok(())

@@ -127,9 +127,16 @@ impl Parser {
     ) -> Result<SurfaceDecl, ParseError> {
         let name = self.qualified_ident()?;
 
+        // Track the namespace for parse-time scoped custom notation: a
+        // `scoped infixl` inside the block is tagged with (and active in)
+        // this path; `open` activations made inside die at `end`.
+        let open_mark = self.enter_notation_namespace(&name);
+
         // Parse declarations until `end` or end of file
         // In Lean 4, `namespace` without `end` is valid - the namespace ends at file end
         let decls = self.scoped_block_decls();
+
+        self.exit_notation_namespace(open_mark);
 
         // `end` is optional - namespace can end at EOF
         if self.eat(&TokenKind::End) {
@@ -166,7 +173,11 @@ impl Parser {
 
         // Parse declarations until `end` or end of file
         // In Lean 4, `section` without `end` is valid - the section ends at file end
+        // An `open` / `open scoped` inside the section activates scoped
+        // custom notation WITHIN the section only.
+        let open_mark = self.open_scoped_notation_mark();
         let decls = self.scoped_block_decls();
+        self.truncate_open_scoped_notation(open_mark);
 
         // `end` is optional - section can end at EOF
         if self.eat(&TokenKind::End) {
@@ -340,9 +351,28 @@ impl Parser {
             }
         }
 
+        // Activate scoped custom notation for the opened namespaces (Lean
+        // `elabOpen`: only the SIMPLE forms — `open Foo` / `open scoped Foo`
+        // — activate scoped declarations; `(only)` / `hiding` / `renaming`
+        // import names without activating). For `open … in`, the activation
+        // is bounded to the body parsed below.
+        let scoped_mark = self.open_scoped_notation_mark();
+        for open_path in &paths {
+            if open_path.names.is_empty()
+                && open_path.hiding.is_empty()
+                && open_path.renaming.is_empty()
+            {
+                self.activate_open_scoped_notation_path(&open_path.path);
+            }
+        }
+
         // Check for `in` followed by body
         let body = if self.eat(&TokenKind::In) {
-            Some(Box::new(self.decl()?))
+            let inner = self.decl();
+            // Truncate on the error path too, so a malformed body does not
+            // leave the activation in force for the rest of the file.
+            self.truncate_open_scoped_notation(scoped_mark);
+            Some(Box::new(inner?))
         } else {
             None
         };

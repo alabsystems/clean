@@ -31,8 +31,7 @@ use clean_verify::axiom_refutation_gate::{
     check_statement_for_definitional_disagreement, run_gate,
 };
 use clean_verify::spec::ProofStatus;
-use clean_verify::test_utils::run_with_stack;
-use clean_verify::Specification;
+use clean_verify::test_utils::{build_spec_with_stack, run_with_stack};
 
 /// The two FALSE statements that were retired in `11e047bd`, reconstructed
 /// verbatim (the universally-quantified equations between computable terms).
@@ -49,7 +48,7 @@ const OLD_FALSE_MICRO_WHNF_IDEMPOTENT: &str =
 #[test]
 fn gate_detects_both_retired_micro_whnf_definitional_disagreements() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
 
         // ── micro_whnf_beta (FALSE form) ─────────────────────────────────
         let beta = check_statement_for_definitional_disagreement(
@@ -107,7 +106,7 @@ fn gate_detects_both_retired_micro_whnf_definitional_disagreements() {
 #[test]
 fn gate_accepts_the_definitionally_equal_single_step_replacements() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
 
         let true_beta = check_statement_for_definitional_disagreement(
             &spec,
@@ -150,7 +149,7 @@ fn gate_accepts_the_definitionally_equal_single_step_replacements() {
 #[test]
 fn live_spec_gate_passes_and_accounts_for_every_axiom() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
         let report = run_gate(&spec);
         eprintln!("{}", report.report());
 
@@ -203,7 +202,7 @@ fn live_spec_gate_passes_and_accounts_for_every_axiom() {
 #[test]
 fn kernel_to_micro_instantiate_is_proved_and_survives() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
 
         // (1) It is no longer an admitted axiom — it is a proved theorem.
         let def = spec
@@ -262,7 +261,7 @@ fn kernel_to_micro_instantiate_is_proved_and_survives() {
 #[test]
 fn kexpr_quantified_true_unfolding_survives() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
         let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "kapp_fn_app_probe",
@@ -294,7 +293,7 @@ fn kexpr_quantified_true_unfolding_survives() {
 #[test]
 fn arg_swapped_kexpr_instantiate_has_definitional_disagreement() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
         let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "kexpr_instantiate_app_argswap_FALSE",
@@ -327,7 +326,7 @@ fn arg_swapped_kexpr_instantiate_has_definitional_disagreement() {
 #[test]
 fn micro_def_eq_refl_probe_is_in_scope_and_agrees_definitionally() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
         let outcome = check_statement_for_definitional_disagreement(
             &spec,
             "micro_def_eq_refl_probe",
@@ -365,7 +364,7 @@ fn micro_def_eq_refl_probe_is_in_scope_and_agrees_definitionally() {
 #[test]
 fn kernel_to_micro_def_eq_bridge_is_refuted_and_deleted() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec builds");
+        let spec = build_spec_with_stack();
 
         // (1) The false bridge must be GONE from the live env axiom census. (The
         //     name ratchet is subset-only, so a re-admission would NOT be caught

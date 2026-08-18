@@ -17,7 +17,7 @@ tactic, compiler, Lake, and LSP implementations. Those surrounding surfaces do
 not yet have Lean-wide parity, and several official replacement-evidence lanes
 are missing or stubbed. This README carries the public summary. In the full
 development tree, the commit-pinned source assessment is
-`docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md`.
+`docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md`.
 
 ## Why Clean?
 
@@ -27,7 +27,9 @@ system, not only an interactive editor session.
 - **Rust-native integration.** Call the checker and source pipeline as a
   library, or use structured CLI/JSON-RPC surfaces. No REPL scraping is needed.
 - **Inspectable trust.** Axiom closures, `sorry` markers, import confidence,
-  solver reconstruction, and evidence freshness are explicit and fail closed.
+  solver reconstruction, and evidence presence/stub state are explicit.
+  Freshness is commit-pinned in some lanes and remains an explicit gap in
+  others; the strict replacement gate fails closed.
 - **Proof-carrying automation.** Supported tactics and solver fragments produce
   terms for kernel checking; unsupported strict fragments reject rather than
   silently becoming trusted proofs.
@@ -57,7 +59,7 @@ means that row's scoped evidence file is present and non-stub; it is not a
 fraction of Lean and not a launch certificate. The command without
 `--informational` is the fail-closed replacement gate.
 
-At source baseline `48350cc11` audited on 2026-07-22:
+At source baseline `e8cf70b2d` audited on 2026-07-23:
 
 | Area | What is implemented | Honest boundary |
 |---|---|---|
@@ -68,7 +70,7 @@ At source baseline `48350cc11` audited on 2026-07-22:
 | Compiler/runtime | Substantial C, Rust, TrustIR, linking, and runtime machinery; object emission is feature-gated through external TrustCg | Official replacement evidence is one C-emission smoke; entry shapes and external/runtime coverage are bounded |
 | Lake and Cake | Clean-owned bounded Lake init/build/run/test paths; Cake project descriptors and verification/graduation | Lake still relies on Lean toolchain artifacts for important libraries; Cake's native backend does not yet build projects |
 | LSP/InfoView | A real LSP with completion, navigation, symbols, semantic tokens, actions, and more | Several behaviors are approximate and the parity artifact is a stub |
-| Self-verification | Three-foundational-axiom reflected metatheory with confluence, inference-soundness, and a ten-rung recursor/SN program | The reflected fragment is not the literal production calculus; the recursive Rust checker and binary are not end-to-end proved |
+| Self-verification | Three-foundational-axiom reflected metatheory with confluence, typed-context preservation/inference soundness, and a ten-rung recursor/SN program | Contextual theorems are conditional on explicit candidate/environment interfaces; constant level instantiation, projection/literal typing, and the Rust-state-to-context refinement bridge remain open |
 
 There is deliberately no single “percent complete.” The rows have different
 denominators, and source size or test count is not semantic parity.
@@ -209,11 +211,21 @@ results remain conditional on the explicitly named `CandModel` hypothesis, and
 not every represented constructor has been connected to every production
 typing/reduction rule.
 
-Adversarial proof-farm work at this checkpoint also found that a dependent
-preservation statement shared by three guide models was false without a
-well-formed-context (`WfCtx`) premise. Corrected guides were resubmitted, but
-guide elaboration is not counted as proof and this adjacent finding does not
-change the live 11-item spec census.
+Adversarial proof-farm work found the missing well-formed-context (`WfCtx`)
+obligation in three preservation guides. The proof-irrelevance guide now
+formally refutes its own unrestricted theorem with a checked existential
+counterexample. All three repaired preservation bodies are hole-free and
+materially use `WfCtx`; their signatures retain the pre-existing semantic
+parameters `PiInj` (proof irrelevance) or `Confl` (the two λΠ guides).
+Foundational-only axiom closure does not discharge those theorem parameters.
+
+The live contextual model was repaired at the same root. Conversion now
+requires the target type to inhabit a sort; contexts are semantically checked;
+type validity, subject reduction, and `bootstrap_infer_sound` consume those
+witnesses; and a conversion-closed SN theorem exposes the candidate model's
+typed conversion-stability law. The older context-free `Typing`/`has_type` and
+state-shaped accept relations are explicitly fenced as legacy raw models and
+cannot occur in contextual flagship dependency closures.
 
 **Layer 2** must prove that the literal Rust implementation and compiled binary
 refine that model. Bounded differential gates and default-on translation
@@ -306,7 +318,7 @@ that survive that projection. Full development checkouts additionally contain:
 
 | Topic | Document |
 |---|---|
-| Current Lean 4 replacement audit | `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md` |
+| Current Lean 4 replacement audit | `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md` |
 | Soundness gate and TCB | `docs/SOUNDNESS_CERTIFICATE.md` |
 | Self-verification claim ledger | `docs/SELF_VERIFICATION_CERTIFICATE.md` |
 | Self-verification architecture | `docs/SELF_VERIFICATION_PROGRAM.md` |

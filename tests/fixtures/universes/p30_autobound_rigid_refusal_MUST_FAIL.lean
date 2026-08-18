@@ -1,0 +1,29 @@
+-- P30 — p06's body with the `.{u}` declaration REMOVED. Must FAIL identically.
+--
+-- p06 (`def bad.{u} : Sort u := Nat`) is FAIL-pinned: `u` is DECLARED, hence
+-- rigid, so `add_level_constraint` (unify/meta_state/levels.rs:51-55) refuses
+-- to solve it and the mismatch is reported loudly.
+--
+-- Here `u` is UNDECLARED. It is auto-bound at infer/elab_core.rs, and the only
+-- difference from p06 should be how the parameter got its name.
+--
+-- THE BUG THIS PROBE WAS ADDED TO CATCH (measured 2026-08-14, fixed same day):
+-- auto-binding pushed the name into `universe_params` but NOT into the rigid
+-- set — `set_rigid_level_params` was reachable only via
+-- `set_decl_universe_params`, fed from the DECLARED list. So the rigid refusal
+-- never fired here and `u` was free to solve. It solved to 1, the parameter
+-- VANISHED, and this file registered a monomorphic `Sort 1`:
+--
+--   * `@badAuto.{0}` reported
+--     `UniverseLevelMismatch { name: "badAuto", expected: 0, actual: 1 }`
+--     — zero universe parameters survived;
+--   * `def asType : Type := badAuto` typechecked, confirming the collapse.
+--
+-- Lean rejects this declaration; Clean accepted it. The battery could not see
+-- it because p02, the rigid twin, writes `universe u` and takes the declared
+-- path.
+--
+-- The fix makes auto-bound universe NAMES rigid, like declared ones. Level
+-- HOLES (`Type _`) are deliberately unaffected: they route through
+-- `fresh_universe_param` and must stay solvable.
+def badAuto : Sort u := Nat

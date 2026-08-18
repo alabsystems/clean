@@ -104,7 +104,31 @@ const B: &str = "KernelInferAccepts";
 /// none of these means adding it here — otherwise the firewall reports clean on
 /// a relation it never looked at, which is the one failure mode this whole file
 /// is built to rule out.
-const MUST_PASS_EXACT: &[&str] = &["KernelInfers"];
+const MUST_PASS_EXACT: &[&str] = &[
+    "KernelInfers",
+    // The THIRD complete chain's reflected ARGUMENT type
+    // (`CleanMode::from_source_system`). Named exactly, because it starts with
+    // "S" and matches no prefix in the list below — the same shape of miss
+    // `ExprRep` and `ImplScoped` are documented for. An empty `SourceSystemR`
+    // would make `ir_fs_correct` vacuously true with an impeccable axiom
+    // closure, since that theorem quantifies over it.
+    "SourceSystemR",
+    // The FOURTH chain's reflected ARGUMENT type (`FlatFlags::contains`). Named
+    // exactly for the same reason as `SourceSystemR` and with the same failure
+    // mode: it starts with "F", matches no prefix below, and would be reached by
+    // nothing. `ir_fc_correct` quantifies over it, so an empty `FlatFlagsR`
+    // would make that theorem — and both of its A5 corollaries — vacuously true
+    // with an impeccable axiom closure.
+    "FlatFlagsR",
+    // The SEVENTH chain's reflected ARGUMENT type
+    // (`<tc::ExprPathStep as Clone>::clone`). Named exactly for the third time
+    // and for the third identical reason: it starts with "E", and the "Encodes"
+    // prefix below matches `EncodesExprPathStep` but NOT `ExprPathStepR`.
+    // `ir_ep_correct` quantifies over it and `ir_ep_machine_sound_step`
+    // CONCLUDES an equation in it, so an empty `ExprPathStepR` would make the
+    // clone contract vacuously true with an impeccable axiom closure.
+    "ExprPathStepR",
+];
 const MUST_PASS_PREFIXES: &[&str] = &[
     "ImplInfer",
     "ImplExpr",
@@ -558,12 +582,114 @@ fn every_generated_relation_passes_the_firewall() {
         // at any prefix until they became Full-bundle stages.
         "EncodesLevelArc",
         "EncodesLiveLevelRef",
+        // The SECOND complete width-one chain's representation relation
+        // (`Level::kind_ord`). Named explicitly for the same reason as the
+        // others, and it matters more here than for the A2 pair: this relation
+        // is deliberately WEAKER — the payload spine is universally quantified
+        // — so it is precisely the kind of premise that could be weakened one
+        // step too far into emptiness, and an empty `EncodesLevelKindCell`
+        // would make `ir_ko_correct` vacuously true with an impeccable axiom
+        // closure. Relying on the "Encodes" prefix alone would leave that
+        // guarded by a list nobody is required to keep matching.
+        "EncodesLevelKindCell",
+        // The THIRD complete width-one chain's representation relation
+        // (`CleanMode::from_source_system`). Named explicitly for the same
+        // reason as the others, and it is the weakest premise of the three:
+        // it constrains NO memory at all (the emitted body takes its argument
+        // by value and performs no load) and universally quantifies the
+        // payload spine. A premise that constrains almost nothing is exactly
+        // the kind that could be weakened one step further into emptiness, and
+        // an empty `EncodesSourceSystemVal` would make `ir_fs_correct`,
+        // `ir_fs_machine_sound` and the cross-chain `ir_fs_machine_sound_cubical`
+        // all vacuously true.
+        "EncodesSourceSystemVal",
+        "SourceSystemR",
+        // The FOURTH and FIFTH chains' representation relations
+        // (`FlatFlags::contains`, `expr::bvar_in_range`), registered 2026-08-13.
+        // Named explicitly for the same reason as every entry above, and for the
+        // sharpest version of it: `EncodesFlatFlags` is spine-agnostic past
+        // field 0, and `EncodesU32Val` is the THINNEST premise in the whole
+        // program — three by-value integers, no memory, no aggregate — so there
+        // is almost nothing left to remove before either says nothing at all. An
+        // empty one would make `ir_fc_correct` / `ir_br_correct` and every one of
+        // their corollaries vacuously true with an impeccable axiom closure.
+        "EncodesFlatFlags",
+        "FlatFlagsR",
+        "EncodesU32Val",
+        // The SIXTH and SEVENTH chains' representation relations
+        // (`is_valid_char`, `<ExprPathStep as Clone>::clone`), registered
+        // 2026-08-14. `EncodesU64Val` ties the thinnest-premise record with
+        // `EncodesU32Val` — one by-value integer, no memory, no aggregate — and
+        // is deliberately NOT a reuse of it, because that relation is named for
+        // a width and this body is at another. `EncodesExprPathStep` is a HEAP
+        // premise (the clone body loads through `&self`) and is spine-agnostic
+        // past field 0. An empty one would make `ir_vc_correct` / `ir_ep_correct`
+        // and every one of their corollaries — including the clone contract —
+        // vacuously true with an impeccable axiom closure.
+        "EncodesU64Val",
+        "EncodesExprPathStep",
+        "ExprPathStepR",
+        // The EIGHTH chain's representation relation
+        // (`reduce_float_div::{closure#0}`), registered 2026-08-15. Named
+        // explicitly for the same reason as every entry above, and it is the
+        // one whose NAME does the most work: `EncodesF64Val` and
+        // `EncodesU64Val` are the same shape at the same width, and swapping
+        // them makes `ir_fd_correct` FALSE rather than merely misnamed, because
+        // `ir_as_float` declines `IRScalar.int_`. An empty one would make
+        // `ir_fd_correct`, the division-by-zero A5 and the refusal-boundary
+        // theorem all vacuously true with an impeccable axiom closure.
+        "EncodesF64Val",
+        // The finite binary64 fragment's one new inductive, registered
+        // 2026-08-16. It is a DATA type — a remainder and a quotient — not a
+        // relation, so it has no premise and nothing to be vacuous about, and
+        // it is listed for the one reason every name above is listed: the
+        // "IR" prefix is what reaches it today, and a prefix list that stops
+        // matching turns this gate into a no-op silently. The standing rule is
+        // that the firewall runs on EVERYTHING generated and nothing may be
+        // excluded; a two-field record is the cheapest possible case of that
+        // rule and therefore the one most easily left out by accident.
+        "IRDivMod",
     ] {
         assert!(
             targets.iter().any(|t| t == required),
             "{required} must be among the audited targets — it is a live bridge relation, and a \
              prefix list that stops matching it turns this gate into a no-op for it. \
              Found: {targets:?}"
+        );
+    }
+    // ── the two 2026-08-13 chains: registered AND audited ──────────────
+    //
+    // The two-sided invariant is kept as a standing check rather than deleted
+    // once it went green. Listing a name that is not registered is a red gate
+    // about the wrong thing; registering a relation this gate does not audit is
+    // the silent-no-op mode. Both directions stay asserted, so unregistering
+    // either stage without removing its name — or the reverse — fails loudly
+    // here instead of quietly reducing the firewall's coverage.
+    for pending in [
+        "EncodesFlatFlags",
+        "FlatFlagsR",
+        "EncodesU32Val",
+        "EncodesU64Val",
+        "EncodesExprPathStep",
+        "ExprPathStepR",
+        "EncodesF64Val",
+        // The finite binary64 fragment's one new inductive, registered
+        // 2026-08-16. It is a DATA type — a remainder and a quotient — not a
+        // relation, so it has no premise and nothing to be vacuous about, and
+        // it is listed for the one reason every name above is listed: the
+        // "IR" prefix is what reaches it today, and a prefix list that stops
+        // matching turns this gate into a no-op silently. The standing rule is
+        // that the firewall runs on EVERYTHING generated and nothing may be
+        // excluded; a two-field record is the cheapest possible case of that
+        // rule and therefore the one most easily left out by accident.
+        "IRDivMod",
+    ] {
+        assert_eq!(
+            env_knows(spec.env(), pending),
+            targets.iter().any(|t| t == pending),
+            "{pending} must be on the audited-targets list exactly when it is registered: a \
+             registered relation that this gate does not audit is the silent-no-op mode, and a \
+             listed relation that is not registered is a red gate about the wrong thing"
         );
     }
     assert!(

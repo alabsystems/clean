@@ -8,6 +8,579 @@
     "type_differing": 405,
     "bare_spelled": 129
   },
+  "bare_spelled_by_family": {
+    "Array": {
+      "count": 3,
+      "entries": [
+        {
+          "name": "Array.back",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Array.foldl",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Array.foldr",
+          "lean_kind": "Definition"
+        }
+      ]
+    },
+    "Fin": {
+      "count": 5,
+      "entries": [
+        {
+          "name": "Fin.casesOn",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Fin.isLt",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Fin.mk",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Fin.rec",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Fin.recOn",
+          "lean_kind": "Definition"
+        }
+      ]
+    },
+    "Float": {
+      "count": 2,
+      "entries": [
+        {
+          "name": "Float.decLe",
+          "lean_kind": "Opaque"
+        },
+        {
+          "name": "Float.decLt",
+          "lean_kind": "Opaque"
+        }
+      ]
+    },
+    "Int": {
+      "count": 35,
+      "entries": [
+        {
+          "name": "Int.add_assoc",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_comm",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_le_add_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_le_add_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_neg_cancel_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_sub_add_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_sub_add_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.add_zero",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Int.decLt",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Int.le_antisymm",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.le_of_lt",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.le_refl",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.le_total",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.le_trans",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.lt_irrefl",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.lt_of_le_of_lt",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.lt_of_lt_of_le",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.lt_trichotomy",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.max_def",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.min_def",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.mul_le_mul_of_nonneg_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.mul_one",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.mul_zero",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.negOfNat_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.negSucc_mul_subNatNat",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.neg_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.neg_neg",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.ofNat_mul_subNatNat",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.one_mul",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.subNatNat_add_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.subNatNat_self",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.sub_eq_add_neg",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.sub_self",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Int.zero_add",
+          "lean_kind": "Theorem"
+        }
+      ]
+    },
+    "List": {
+      "count": 6,
+      "entries": [
+        {
+          "name": "List.Perm.mem_iff",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "List.append_nil",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "List.length_append",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "List.length_cons",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "List.length_nil",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "List.not_mem_nil",
+          "lean_kind": "Theorem"
+        }
+      ]
+    },
+    "Nat": {
+      "count": 68,
+      "entries": [
+        {
+          "name": "Nat.add_assoc",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_comm",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_le_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_le_add_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_le_add_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_left_cancel",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_lt_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_lt_add_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_lt_add_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_right_cancel",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_sub_cancel",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.add_zero",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.ble_eq_true_of_le",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Nat.decLt",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "Nat.div_add_mod",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.le_add_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.le_max_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.le_max_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.le_min",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.le_of_ble_eq_true",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.le_of_succ_le_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.left_distrib",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.lt_asymm",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.lt_irrefl",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.lt_of_succ_lt_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.lt_succ_iff",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.lt_trichotomy",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.max_le",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.min_le_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.min_le_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mod_lt",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_assoc",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_comm",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_le_mul",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_le_mul_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_le_mul_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_lt_mul_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_lt_mul_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_one",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.mul_zero",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.not_succ_le_zero",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.one_mul",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.pow_le_pow_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.pred_le",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.pred_le_pred",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.right_distrib",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_le",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_le_sub_left",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_le_sub_right",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_lt",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_one",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_self",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.sub_zero",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.succ_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.succ_le_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.succ_lt_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.succ_mul",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.succ_sub_succ",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.testBit_and",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.testBit_or",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.testBit_xor",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.zero_add",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.zero_le",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.zero_mul",
+          "lean_kind": "Theorem"
+        },
+        {
+          "name": "Nat.zero_sub",
+          "lean_kind": "Theorem"
+        }
+      ]
+    },
+    "UInt16": {
+      "count": 2,
+      "entries": [
+        {
+          "name": "UInt16.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "UInt16.decLt",
+          "lean_kind": "Definition"
+        }
+      ]
+    },
+    "UInt32": {
+      "count": 2,
+      "entries": [
+        {
+          "name": "UInt32.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "UInt32.decLt",
+          "lean_kind": "Definition"
+        }
+      ]
+    },
+    "UInt64": {
+      "count": 2,
+      "entries": [
+        {
+          "name": "UInt64.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "UInt64.decLt",
+          "lean_kind": "Definition"
+        }
+      ]
+    },
+    "UInt8": {
+      "count": 2,
+      "entries": [
+        {
+          "name": "UInt8.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "UInt8.decLt",
+          "lean_kind": "Definition"
+        }
+      ]
+    },
+    "USize": {
+      "count": 2,
+      "entries": [
+        {
+          "name": "USize.decLe",
+          "lean_kind": "Definition"
+        },
+        {
+          "name": "USize.decLt",
+          "lean_kind": "Definition"
+        }
+      ]
+    }
+  },
   "collisions": [
     {
       "name": "Acc.intro",

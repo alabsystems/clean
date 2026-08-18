@@ -45,6 +45,326 @@ fn test_wp_assignment() {
 }
 
 #[test]
+fn test_compound_assignment_updates_scalar_wp_instead_of_skipping() {
+    let mut vcgen = VCGen::new();
+    let func = FuncDef {
+        is_noreturn: false,
+        name: "compound".into(),
+        return_type: CType::int(),
+        params: vec![FuncParam::new("x", CType::int())],
+        body: Box::new(CStmt::Expr(CExpr::binop(
+            BinOp::AddAssign,
+            CExpr::var("x"),
+            CExpr::int(1),
+        ))),
+        variadic: false,
+        storage: StorageClass::Auto,
+    };
+    let spec = FuncSpec {
+        ensures: vec![Spec::eq(Spec::var("x"), Spec::int(7))],
+        ..Default::default()
+    };
+
+    let vcs = vcgen.gen_function(&func, &spec);
+    let post = vcs
+        .iter()
+        .find(|vc| vc.kind == VCKind::Postcondition)
+        .expect("function postcondition VC");
+    assert_eq!(
+        post.obligation,
+        Spec::implies(
+            Spec::True,
+            Spec::eq(
+                Spec::binop(BinOp::Add, Spec::var("x"), Spec::int(1)),
+                Spec::int(7),
+            ),
+        ),
+        "x += 1 must substitute the post-write x + 1 value into Q"
+    );
+    assert!(
+        vcs.iter().any(|vc| vc.kind == VCKind::NoUB),
+        "compound addition must emit the implicit operation's overflow VC"
+    );
+}
+
+#[test]
+fn test_narrow_compound_assignment_materializes_promotions_and_store_conversion() {
+    let mut vcgen = VCGen::new();
+    let func = FuncDef {
+        is_noreturn: false,
+        name: "narrow_compound".into(),
+        return_type: CType::int(),
+        params: vec![FuncParam::new("x", CType::char())],
+        body: Box::new(CStmt::Expr(CExpr::binop(
+            BinOp::AddAssign,
+            CExpr::var("x"),
+            CExpr::int(1),
+        ))),
+        variadic: false,
+        storage: StorageClass::Auto,
+    };
+    let spec = FuncSpec {
+        ensures: vec![Spec::eq(Spec::var("x"), Spec::int(7))],
+        ..Default::default()
+    };
+
+    let vcs = vcgen.gen_function(&func, &spec);
+    let post = vcs
+        .iter()
+        .find(|vc| vc.kind == VCKind::Postcondition)
+        .expect("function postcondition VC");
+    let Spec::Implies(_, consequence) = &post.obligation else {
+        panic!("expected implication, got {:?}", post.obligation);
+    };
+    let Spec::BinOp {
+        op: BinOp::Eq,
+        left,
+        ..
+    } = consequence.as_ref()
+    else {
+        panic!("expected equality consequence, got {consequence:?}");
+    };
+    let Spec::Expr(CExpr::Cast { ty, expr }) = left.as_ref() else {
+        panic!("narrowing store conversion missing from {left:?}");
+    };
+    assert_eq!(
+        ty,
+        &CType::char(),
+        "result must convert back to signed char"
+    );
+    let CExpr::BinOp {
+        op: BinOp::Add,
+        left: promoted_left,
+        ..
+    } = expr.as_ref()
+    else {
+        panic!("expected promoted addition, got {expr:?}");
+    };
+    assert!(
+        matches!(
+            promoted_left.as_ref(),
+            CExpr::Cast { ty, .. } if ty == &CType::int()
+        ),
+        "signed char old value must undergo integer promotion before addition"
+    );
+}
+
+#[test]
+fn test_aliased_volatile_and_side_effecting_compound_assignments_fail_closed() {
+    let cases = [
+        (
+            "aliased",
+            CType::int(),
+            CStmt::Block(vec![
+                CStmt::decl_init(
+                    "p",
+                    CType::ptr(CType::int()),
+                    CExpr::addr_of(CExpr::var("x")),
+                ),
+                CStmt::Expr(CExpr::binop(
+                    BinOp::AddAssign,
+                    CExpr::var("x"),
+                    CExpr::int(1),
+                )),
+            ]),
+        ),
+        (
+            "complex_lvalue",
+            CType::int(),
+            CStmt::Expr(CExpr::binop(
+                BinOp::AddAssign,
+                CExpr::deref(CExpr::addr_of(CExpr::var("x"))),
+                CExpr::int(1),
+            )),
+        ),
+        (
+            "volatile",
+            CType::with_qualifiers(CType::int(), false, true, false),
+            CStmt::Expr(CExpr::binop(
+                BinOp::AddAssign,
+                CExpr::var("x"),
+                CExpr::int(1),
+            )),
+        ),
+        (
+            "aliased_rhs",
+            CType::int(),
+            CStmt::Block(vec![
+                CStmt::decl_init(
+                    "p",
+                    CType::ptr(CType::int()),
+                    CExpr::addr_of(CExpr::var("y")),
+                ),
+                CStmt::Expr(CExpr::binop(
+                    BinOp::AddAssign,
+                    CExpr::var("x"),
+                    CExpr::var("y"),
+                )),
+            ]),
+        ),
+        (
+            "side_effect",
+            CType::int(),
+            CStmt::Expr(CExpr::binop(
+                BinOp::AddAssign,
+                CExpr::var("x"),
+                CExpr::assign(CExpr::var("x"), CExpr::int(2)),
+            )),
+        ),
+    ];
+
+    for (name, ty, body) in cases {
+        let mut vcgen = VCGen::new();
+        let mut params = vec![FuncParam::new("x", ty)];
+        if name == "aliased_rhs" {
+            params.push(FuncParam::new("y", CType::int()));
+        }
+        let func = FuncDef {
+            is_noreturn: false,
+            name: name.into(),
+            return_type: CType::int(),
+            params,
+            body: Box::new(body),
+            variadic: false,
+            storage: StorageClass::Auto,
+        };
+        let vcs = vcgen.gen_function(&func, &FuncSpec::default());
+        assert!(
+            vcs.iter().any(|vc| vc.kind == VCKind::Unsupported),
+            "{name} compound assignment must fail closed: {vcs:#?}"
+        );
+    }
+}
+
+#[test]
+fn test_plain_complex_and_nested_assignments_fail_closed() {
+    let cases = [
+        CStmt::Expr(CExpr::assign(CExpr::deref(CExpr::var("p")), CExpr::int(1))),
+        CStmt::Expr(CExpr::assign(
+            CExpr::var("x"),
+            CExpr::assign(CExpr::var("y"), CExpr::int(2)),
+        )),
+    ];
+    for body in cases {
+        let mut vcgen = VCGen::new();
+        let func = FuncDef {
+            is_noreturn: false,
+            name: "assignment_refusal".into(),
+            return_type: CType::int(),
+            params: vec![
+                FuncParam::new("x", CType::int()),
+                FuncParam::new("y", CType::int()),
+                FuncParam::new("p", CType::ptr(CType::int())),
+            ],
+            body: Box::new(body),
+            variadic: false,
+            storage: StorageClass::Auto,
+        };
+        let vcs = vcgen.gen_function(&func, &FuncSpec::default());
+        assert!(
+            vcs.iter().any(|vc| vc.kind == VCKind::Unsupported),
+            "unmodeled assignment effect must fail closed: {vcs:#?}"
+        );
+    }
+}
+
+#[test]
+fn test_signed_edge_ub_rows_are_emitted_from_typed_functions() {
+    let cases = [
+        (
+            "neg",
+            CStmt::return_stmt(Some(CExpr::unary(UnaryOp::Neg, CExpr::var("x")))),
+            "Signed unary negation excludes the minimum value",
+        ),
+        (
+            "div",
+            CStmt::return_stmt(Some(CExpr::binop(
+                BinOp::Div,
+                CExpr::var("x"),
+                CExpr::int(-1),
+            ))),
+            "Signed division/remainder excludes MIN divided by -1",
+        ),
+        (
+            "mod",
+            CStmt::return_stmt(Some(CExpr::binop(
+                BinOp::Mod,
+                CExpr::var("x"),
+                CExpr::int(-1),
+            ))),
+            "Signed division/remainder excludes MIN divided by -1",
+        ),
+        (
+            "shl",
+            CStmt::return_stmt(Some(CExpr::binop(
+                BinOp::Shl,
+                CExpr::var("x"),
+                CExpr::int(1),
+            ))),
+            "Signed left-shift result is representable",
+        ),
+        (
+            "inc",
+            CStmt::Expr(CExpr::unary(UnaryOp::PreInc, CExpr::var("x"))),
+            "Signed arithmetic does not overflow",
+        ),
+        (
+            "dec",
+            CStmt::Expr(CExpr::unary(UnaryOp::PostDec, CExpr::var("x"))),
+            "Signed arithmetic does not overflow",
+        ),
+    ];
+
+    for (name, body, description) in cases {
+        let mut vcgen = VCGen::new();
+        let func = FuncDef {
+            is_noreturn: false,
+            name: name.into(),
+            return_type: CType::int(),
+            params: vec![FuncParam::new("x", CType::int())],
+            body: Box::new(body),
+            variadic: false,
+            storage: StorageClass::Auto,
+        };
+        let vcs = vcgen.gen_function(&func, &FuncSpec::default());
+        assert!(
+            vcs.iter()
+                .any(|vc| vc.kind == VCKind::NoUB && vc.description == description),
+            "{name} must emit `{description}`: {vcs:#?}"
+        );
+    }
+}
+
+#[test]
+fn test_complex_increment_and_terminates_clause_fail_closed() {
+    let mut vcgen = VCGen::new();
+    let func = FuncDef {
+        is_noreturn: false,
+        name: "complex_inc".into(),
+        return_type: CType::int(),
+        params: vec![FuncParam::new("p", CType::ptr(CType::int()))],
+        body: Box::new(CStmt::Expr(CExpr::unary(
+            UnaryOp::PostInc,
+            CExpr::deref(CExpr::var("p")),
+        ))),
+        variadic: false,
+        storage: StorageClass::Auto,
+    };
+    let spec = FuncSpec {
+        terminates: Some(Spec::True),
+        ..Default::default()
+    };
+    let vcs = vcgen.gen_function(&func, &spec);
+    assert!(
+        vcs.iter()
+            .filter(|vc| vc.kind == VCKind::Unsupported)
+            .count()
+            >= 2,
+        "both complex increment state and unlinked termination authority must fail closed: {vcs:#?}"
+    );
+}
+
+#[test]
 fn test_wp_if() {
     let mut vcgen = VCGen::new();
     let stmt = CStmt::if_stmt(
@@ -150,6 +470,120 @@ fn test_loop_invariant_vc() {
     assert!(vcs
         .iter()
         .any(|vc| vc.kind == VCKind::LoopVariantNonNegative));
+}
+
+/// The `LoopVariantDecreases` obligation must relate the variant's value AFTER
+/// the body to its value BEFORE the body. Asserting the VC's *content*, not
+/// merely its kind: the previous encoding compared the variant against a free
+/// variable that nothing ever bound (`n - i < variant_1`), which is vacuous —
+/// it establishes nothing about termination and is satisfied by any loop.
+#[test]
+fn test_loop_variant_decrease_vc_relates_post_body_to_head_value() {
+    let mut vcgen = VCGen::new();
+
+    // /*@ loop invariant i <= n; loop variant n - i; */
+    // while (i < n) { i = i + 1; }
+    let variant = Spec::binop(BinOp::Sub, Spec::var("n"), Spec::var("i"));
+    let loop_spec = LoopSpec {
+        invariant: vec![Spec::le(Spec::var("i"), Spec::var("n"))],
+        variant: Some(variant.clone()),
+        ..Default::default()
+    };
+    let while_stmt = CStmt::While {
+        cond: CExpr::binop(BinOp::Lt, CExpr::var("i"), CExpr::var("n")),
+        body: Box::new(CStmt::Expr(CExpr::assign(
+            CExpr::var("i"),
+            CExpr::add(CExpr::var("i"), CExpr::int(1)),
+        ))),
+    };
+
+    vcgen.wp_stmt(&while_stmt, &Spec::True, Some(&loop_spec));
+
+    let vc = vcgen
+        .get_vcs()
+        .iter()
+        .find(|vc| vc.kind == VCKind::LoopVariantDecreases)
+        .expect("should emit a LoopVariantDecreases obligation");
+
+    // (i <= n ∧ i < n) → (n - (i + 1) < n - i)
+    //                     ^^^^^^^^^^^^^   ^^^^^
+    //                     post-body       value at the loop head
+    let expected = Spec::implies(
+        Spec::and(vec![
+            Spec::le(Spec::var("i"), Spec::var("n")),
+            Spec::lt(Spec::var("i"), Spec::var("n")),
+        ]),
+        Spec::lt(
+            Spec::binop(
+                BinOp::Sub,
+                Spec::var("n"),
+                Spec::binop(BinOp::Add, Spec::var("i"), Spec::int(1)),
+            ),
+            variant.clone(),
+        ),
+    );
+    assert_eq!(
+        vc.obligation, expected,
+        "variant decrease obligation must compare the post-body variant to its \
+         value at the loop head"
+    );
+}
+
+/// The snapshot of the variant at the loop head is internal scaffolding: it
+/// must never survive into an emitted obligation as a FREE variable. A free
+/// variable there is exactly what made the old encoding vacuous, and is
+/// invisible to any test that only checks the VC's kind.
+#[test]
+fn test_loop_variant_snapshot_never_escapes_free_into_any_vc() {
+    let mut vcgen = VCGen::new();
+
+    // A nested loop is the interesting case: the inner loop's exit obligation
+    // is stated in a state where the head snapshot is a rigid unknown, so it
+    // has to be universally quantified rather than substituted away.
+    let loop_spec = LoopSpec {
+        invariant: vec![Spec::ge(Spec::var("i"), Spec::int(0))],
+        variant: Some(Spec::binop(BinOp::Sub, Spec::var("n"), Spec::var("i"))),
+        ..Default::default()
+    };
+    let inner = CStmt::While {
+        cond: CExpr::binop(BinOp::Lt, CExpr::var("j"), CExpr::var("n")),
+        body: Box::new(CStmt::Expr(CExpr::assign(
+            CExpr::var("j"),
+            CExpr::add(CExpr::var("j"), CExpr::int(1)),
+        ))),
+    };
+    let outer = CStmt::While {
+        cond: CExpr::binop(BinOp::Lt, CExpr::var("i"), CExpr::var("n")),
+        body: Box::new(CStmt::Block(vec![
+            inner,
+            CStmt::Expr(CExpr::assign(
+                CExpr::var("i"),
+                CExpr::add(CExpr::var("i"), CExpr::int(1)),
+            )),
+        ])),
+    };
+
+    vcgen.wp_stmt(&outer, &Spec::True, Some(&loop_spec));
+
+    // Every name the generator could have minted for a snapshot, including the
+    // `variant_N` names the old (vacuous) encoding left dangling. `spec_mentions_var`
+    // is shadowing-aware, so an occurrence under a binder is correctly not a
+    // free occurrence.
+    let scaffolding: Vec<String> = (1..=8)
+        .flat_map(|k| [format!("{SNAPSHOT_BASE}_{k}"), format!("variant_{k}")])
+        .collect();
+
+    for vc in vcgen.get_vcs() {
+        for name in &scaffolding {
+            assert!(
+                !vcgen.spec_mentions_var(&vc.obligation, name),
+                "scaffolding variable `{name}` escaped FREE into a {:?} obligation, \
+                 which therefore constrains nothing: {:?}",
+                vc.kind,
+                vc.obligation
+            );
+        }
+    }
 }
 
 #[test]

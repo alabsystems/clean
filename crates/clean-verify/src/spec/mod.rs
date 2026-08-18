@@ -60,7 +60,14 @@ use clean_kernel::Environment;
 use std::collections::HashMap;
 
 /// The complete kernel specification
-#[derive(Debug)]
+///
+/// `Clone` is a deep copy of every owned map: the term DAG underneath is
+/// immutable (`Arc<Expr>` children, interned `Arc` name components, no interior
+/// mutability anywhere in `clean-kernel`), so a clone shares structure but
+/// cannot observe another clone's registrations or `proof_status` edits. That
+/// is what lets `test_utils` build the specification once per process and hand
+/// every caller an independent copy instead of rebuilding it ~700 times.
+#[derive(Debug, Clone)]
 pub struct Specification {
     /// Environment with specification definitions
     env: Environment,

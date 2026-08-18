@@ -931,8 +931,7 @@ mod tests {
     /// exactly the substrate kexpr_beq needs — without wiring into the shared
     /// stage list (zero collision with the active confluence lane).
     fn build_kexpr_beq_spec() -> Specification {
-        let mut spec = Specification::new_substitution_test_spec()
-            .expect("substitution-test spec (foundation + expr_model + rec_env) should build");
+        let mut spec = crate::test_utils::build_substitution_spec_with_stack();
         spec.add_kexpr_beq()
             .expect("kexpr_beq decls should elaborate and kernel-check");
         spec

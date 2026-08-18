@@ -1,0 +1,148 @@
+{
+ "schema": "clean.crystal.markers_vacuity.v1",
+ "date": "2026-08-13",
+ "lane": "lane 1",
+ "what": "Vacuity split of the markers_exact population in clean-kernel, and of the bodies whose codegen flip it gates.",
+ "definition": {
+  "vacuous": "markers_exact: true AND markers_detail == '0 marker line(s) identical' -- two EMPTY marker sequences compared",
+  "non_vacuous": "markers_exact: true AND markers_detail == 'N marker line(s) identical' with N > 0",
+  "note": "Matching emptiness is honest agreement and is NOT a gate malfunction. It carries no fidelity content."
+ },
+ "markers_exact_population": {
+  "at_the_1082_record": {
+   "markers_exact": 1082,
+   "vacuous": 1055,
+   "non_vacuous": 27,
+   "source": "trust/scratchpad/mfclose/wc-subject/dump_O3",
+   "reproduced_in_dumps": 6,
+   "total_canonical_lines_compared": 3572
+  },
+  "at_head_rmfz_subject": {
+   "markers_exact": 1084,
+   "vacuous": 1057,
+   "non_vacuous": 27,
+   "source": "trust/scratchpad/rmfz/wc-rsub/dump_O3",
+   "note": "the +2 over 1,082 are BOTH vacuous; non-vacuous stayed 27"
+  },
+  "marker_line_distribution_non_vacuous": {
+   "2": 18,
+   "4": 4,
+   "6": 2,
+   "8": 1,
+   "12": 1,
+   "21": 1
+  },
+  "total_marker_lines_compared": 105,
+  "canonical_line_distribution": {
+   "3": 882,
+   "4": 162,
+   "5": 13,
+   "6": 10,
+   "7": 5,
+   "8": 1,
+   "9": 5,
+   "10": 4,
+   "16": 1,
+   "17": 1
+  },
+  "total_canonical_lines_compared": 3580,
+  "rows_with_zero_canonical_lines": 0,
+  "non_vacuous_rows": {
+   "expr::bvar_in_range": 21,
+   "env::native_reducers_char::is_valid_char": 12,
+   "flat::types::FlatFlags::contains": 8,
+   "flat::types::FlatFlags::with": 6,
+   "tc::heartbeat_profiler::types::SourcePos::new": 6,
+   "env::native_reducers_float::reduce_float_add::{closure#0}": 4,
+   "env::native_reducers_float::reduce_float_sub::{closure#0}": 4,
+   "env::native_reducers_float::reduce_float_mul::{closure#0}": 4,
+   "env::native_reducers_float::reduce_float_div::{closure#0}": 4,
+   "bitvec_compute::BvNames::new": 2,
+   "cert::builder::state::NodeId::index": 2,
+   "env::persistent_ext::ExtensionIdx::index": 2,
+   "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}": 2,
+   "env::Environment::set_lean4_core_strict_monads": 2,
+   "env::Environment::set_cumulative": 2,
+   "expr::types::FVarId::new": 2,
+   "memory_model::AllocationId::new": 2,
+   "memory_model::AllocationId::is_null": 2,
+   "memory_model::MemoryRegion::is_empty": 2,
+   "sem_memory_model::Address::new": 2,
+   "sem_memory_model::Address::is_null": 2,
+   "sem_memory_model::MemoryValue::new": 2,
+   "<sem_memory_model::MemoryValue as std::convert::From<u8>>::from": 2,
+   "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries": 2,
+   "tc::TypeChecker::<'env>::set_allow_unsafe": 2,
+   "tc::TypeChecker::<'env>::set_allow_partial": 2,
+   "tc::TypeChecker::<'env>::set_cumulative": 2
+  },
+  "total_canonical_lines_compared_note": "3,580 is the later 1,084-row dump; 3,572 at the 1,082 record"
+ },
+ "wave_gains": {
+  "baseline_2026_08_12": {
+   "markers_exact": 1058,
+   "vacuous": 1052,
+   "non_vacuous": 6,
+   "rows": {
+    "env::Environment::set_lean4_core_strict_monads": 2,
+    "env::Environment::set_cumulative": 2,
+    "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries": 2,
+    "tc::TypeChecker::<'env>::set_allow_unsafe": 2,
+    "tc::TypeChecker::<'env>::set_allow_partial": 2,
+    "tc::TypeChecker::<'env>::set_cumulative": 2
+   },
+   "total_marker_lines": 12,
+   "source": "trust/scratchpad/wave-tr-fix/dump_ck_rel"
+  },
+  "head": {
+   "markers_exact": 1082,
+   "vacuous": 1055,
+   "non_vacuous": 27,
+   "total_marker_lines": 105
+  },
+  "delta": {
+   "markers_exact": 24,
+   "vacuous": 3,
+   "non_vacuous": 21,
+   "non_vacuous_lost": 0,
+   "verdict": "of the +24 markers_exact rows the waves added, 21 are NON-vacuous and 3 are vacuous; total marker lines compared went 12 -> 105"
+  }
+ },
+ "codegen_flips": {
+  "O3_deployed": {
+   "codegen": 177,
+   "codegen_marker_split": {
+    "non_vacuous": 27,
+    "vacuous": 150
+   },
+   "codegen_canonical_lines_backing": 813,
+   "ctfe": 32,
+   "ctfe_marker_split": {
+    "vacuous": 32
+   },
+   "ctfe_canonical_lines_backing": 117,
+   "verdict": "150 of the 177 codegen flips rest on a VACUOUS marker comparison; 27 do not. All 32 CTFE flips are vacuous. Every one of the 209 is backed by a NON-zero canonical-line comparison."
+  },
+  "O0": {
+   "codegen": 191,
+   "codegen_marker_split": {
+    "vacuous": 150,
+    "markers_exact_false": 14,
+    "non_vacuous": 27
+   },
+   "note": "14 more bodies flip at -O0 than at -O3; those 14 are exactly the ones markers_exact REFUSES at -O3. None is ADMITTED-WRONG: 13 are `refused` (built emitted markers, derived said `<end>`) and 1 is a `marker channel(built)` skip. The gate's refusal power is real and measurable.",
+   "refusal_classes_of_the_14": {
+    "refused": 13,
+    "marker_channel_skip": 1,
+    "ADMITTED_WRONG": 0
+   }
+  }
+ },
+ "what_this_does_not_invalidate": [
+  "No markers_exact row is uncompared: all carry >= 3 canonical lines (3,572 at the 1,082 record; 3,580 at the later 1,084 dump).",
+  "The three completed five-link chains are marker-vacuous but carry 7 / 10 / 17 canonical lines, real lineage digests and real flip events.",
+  "The marker waves gained real fidelity content: 21 of the 24 rows they added are non-vacuous, and none was lost.",
+  "The gate's refusals are real: 14 bodies at -O3, plus 459 agreed & !markers_exact rows."
+ ],
+ "reproduced_by": "scratchpad lane1/{measure,flipjoin,nvdiff,census}.py over the committed dumps listed above; 6 independent dumps agree on 177/150/27"
+}

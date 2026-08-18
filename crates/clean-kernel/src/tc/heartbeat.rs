@@ -106,6 +106,20 @@ impl<'env> TypeChecker<'env> {
         self.heartbeat_limit != 0 && self.heartbeat_counter.get() == 0
     }
 
+    /// Public probe: has the current heartbeat budget been fully spent?
+    ///
+    /// `false` when heartbeat checking is disabled (`limit == 0`). Elaboration-
+    /// side callers that run WHNF under a budget (discr-tree index-key builds)
+    /// use this after the call to learn whether the result may be under-reduced
+    /// — e.g., to discard the checker's caches instead of storing partially
+    /// reduced entries back into an unbudgeted cache pool. Read-only: never
+    /// changes checker state or verdicts.
+    #[inline]
+    #[must_use]
+    pub fn heartbeat_spent(&self) -> bool {
+        self.heartbeat_exhausted()
+    }
+
     /// Decrement heartbeat counter without checking (WHNF category).
     ///
     /// Called from `whnf_impl` which returns non-Result types. The counter is

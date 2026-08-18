@@ -1,0 +1,7 @@
+rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {
+    ; #producer: trust
+    ; #names: %1="a", %2="b"
+bb0(%0: ptr, %1: f64, %2: f64):
+    %3 = fdiv f64 %1, %2  ; #loc: 354 222 33
+    ret %3  ; #loc: 354 222 38
+}

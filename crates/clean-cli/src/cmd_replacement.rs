@@ -36,6 +36,7 @@ mod report_validation;
 mod report_validators;
 mod reviewer_deck;
 mod rows;
+mod rust_first_evidence;
 mod sorry_bypass_lint;
 mod sorry_bypass_syntax;
 mod tactic_count_artifact;
@@ -99,6 +100,7 @@ pub(crate) use self::report_validation::*;
 pub(crate) use self::report_validators::*;
 pub(crate) use self::reviewer_deck::*;
 pub(crate) use self::rows::*;
+pub(crate) use self::rust_first_evidence::*;
 pub(crate) use self::sorry_bypass_lint::*;
 pub(crate) use self::tactic_count_artifact::*;
 // 2026-07-31: no production caller re-exports through here — the module's own

@@ -469,6 +469,33 @@ impl OleanExporter {
                 self.write_u64(out_level_params_ptr);
                 self.offset_to_ptr(offset)
             }
+            ParsedExtensionEntry::Simp(simp) => {
+                // A decoded real-Lean `@[simp]` entry. Clean's exporter cannot
+                // reproduce Lean's own `SimpTheorem` layout (the DiscrTree
+                // keys / `levelParams` / `proof : Expr` fields are not
+                // retained at parse), so — exactly like the `Instance` arm
+                // above — re-export it as a plain `(Name × DataValue)` pair:
+                // lemma name × tagged-scalar priority, which re-imports as
+                // `Named { name, Scalar(priority) }`. Before the typed decoder
+                // existed these entries were dropped at parse and never
+                // reached export at all, so this loses nothing relative to
+                // the prior round-trip and keeps the region pointer-free and
+                // valid.
+                let name_offset = self.write_name(&simp.lemma_name);
+                let name_ptr = self.offset_to_ptr(name_offset);
+
+                // Tagged scalar encoding: (value << 1) | 1. Clamp to the
+                // representable 63-bit range so a pathological priority can
+                // never overflow the shift.
+                let data_ptr = (simp.priority.min(u64::MAX >> 1) << 1) | 1;
+
+                self.align8();
+                let offset = self.current_offset();
+                self.write_header(0, 2, 0);
+                self.write_u64(name_ptr);
+                self.write_u64(data_ptr);
+                self.offset_to_ptr(offset)
+            }
         }
     }
 }

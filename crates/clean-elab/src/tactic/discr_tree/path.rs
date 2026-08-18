@@ -88,6 +88,16 @@ fn is_generic_key(key: &DiscrKey) -> bool {
     matches!(key, DiscrKey::Star | DiscrKey::Other)
 }
 
+/// One more than the longest path any consumer will accept (see
+/// `MAX_INDEX_PATH_KEYS` in `query.rs`). `push_expr` recurses once per
+/// expression node with a WHNF at every node, so without this cap a
+/// structurally huge (post-WHNF) imported lemma or goal overflows the stack
+/// while the path is still being BUILT — before any consumer-side length
+/// check can run. Emission freezes at cap+1 keys: the final over-long length
+/// makes both the insert and the query side refuse the path outright, so a
+/// capped path is never mistaken for a complete one.
+pub(crate) const MAX_PATH_EMIT_KEYS: usize = 513;
+
 fn push_expr(
     state: &ProofState,
     goal: &Goal,
@@ -95,6 +105,9 @@ fn push_expr(
     mode: IndexMode,
     keys: &mut Vec<DiscrKey>,
 ) {
+    if keys.len() >= MAX_PATH_EMIT_KEYS {
+        return;
+    }
     // Canonicalize a genuine Nat-zero literal leaf to its constructor key BEFORE
     // WHNF, so it fires only for literals already spelled in the goal/pattern.
     // See `nat_literal_canonical_keys` for the soundness argument.
@@ -103,7 +116,10 @@ fn push_expr(
         return;
     }
 
-    let reduced = state.whnf(goal, expr);
+    // Budgeted WHNF: one pathological lemma statement in a 10k-lemma imported
+    // registry must degrade to a less-specific key, never OOM the process.
+    // See `ProofState::whnf_indexing` for the measured Int16 bomb this guards.
+    let reduced = state.whnf_indexing(goal, expr);
     let head = reduced.get_app_fn();
     let args = reduced.get_app_args();
 

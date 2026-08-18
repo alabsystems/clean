@@ -1,0 +1,149 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "measured": "2026-08-16",
+ "build": {
+  "clean_repo_HEAD": "6e56720c5",
+  "trust_repo_rev_of_sealed_compiler": "2d7e094f2224994b112e06fdab49123d469c6b43",
+  "trustc": "$HOME/trust-lane8/.lane8/seal-lane8/tc (SEALED snapshot, unique dylib leaf; `seal_driver.sh verify` OK and `guard` PASS immediately before EVERY one of the four builds, from inside the wrapper as well)",
+  "trustc_dylib_sha256": "c8746c54263d3f8da7354cbd071467f268c54c428c071fe2bc9842a7624a30d2",
+  "trustc_rustc_main_sha256": "f76dafc1fae352268f01cdfdb2199108d5233506691c2c731c13f9febeed6f8e",
+  "compiler_identified_by_behaviour_not_stamp": "NOT identified by `trustc -vV`, whose stamp still reads 94147b34f (2026-08-11) and is pinned by the build script rather than by source. `seal_driver.sh selftest` cannot discriminate this driver either -- its ten perturbation classes are the same list every driver in the range registers, which is exactly the UNPROVEN verdict that helper reports. Identification is BY OUTPUT: this lane's coverage.json, trust-ir.txt and trust-ir.bin hash to a59cc78f... / e02c3422... / 1b946a35..., which are byte for byte the three digests data/crystal_flip_census_lane8_2026-08-15.json records for its subject driver.",
+  "command": "TRUSTC=<sealed tc> TRUST_IR_BUILD_DUMP=<dir> TRUST_IR_BUILD_TARGET_DIR=<own target dir> scripts/trust_ir_build.sh --print-only",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build -- only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
+  "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -Cdebug-assertions=off PINNED IN THE ARGV -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "release_shape_proof": "the build's own profile assertion passed: `release-only inference spine present (6/6)`, so debug_assertions was OFF and the DEPLOYED cfg-split bodies were compiled rather than their debug twins",
+  "crate_totals": "bodies 13774 / lowered 9067 / spliced 7571 / derived-MIR agreed 1543 / mismatch 0 / markers_exact 1085 (27 NON-vacuous) / lineage rows 13146",
+  "flip_events_clean_kernel": 210,
+  "flip_events_codegen": 178,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_zero_calls": 210
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "e9e472eabd89cb933000a045e64268c1c3ddb097c7a2945b44d5b64a5fdb8d42",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_txt_sha256": "0e3b0e1ca27fad616ca7b48c1a996b4b5e0e40dd21a48b1aeb2095cb3a8f5e9d",
+  "trust_ir_bin_sha256": "7a787a14a7541092e898d01334a432ea65ff7d091a8ec8e121b8a6f3e590e3de",
+  "note": "Four builds in four separate CARGO_TARGET_DIRs: three flip builds and the negative control. All four emit a byte-identical coverage.json and trust-ir dump, so `lineage` is a measurement rather than one observation. This set was taken at 6e56720c5; an earlier set of four was taken at e2e732f7a and reproduced the 2026-08-15 lane-8 census digests byte for byte, which is what identifies the compiler."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "event_for_this_body_present": false
+ },
+ "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+ "def_index": 14930,
+ "func_id": 4302,
+ "instr_count": 2,
+ "lowered": true,
+ "spliced": true,
+ "symbolic": false,
+ "lineage": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "5 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "2 marker line(s) identical"
+ },
+ "interpreter_differential": {
+  "verdict": "agreed",
+  "samples": 5,
+  "detail": "THIR-trust-ir == MIR-trust-ir on 5 sampled input(s) (differential interpretation; 1 proven-never-read opaque param(s) as placeholders)"
+ },
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "asserts": 0,
+  "flipped_so_far": 196,
+  "lineage": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+  "matches_artifact_lineage": true,
+  "raw": " INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:14930 ~ clean_kernel[4676]::env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}), asserts=0, lineage=sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589, flipped_so_far=196"
+ },
+ "candidate_selection": {
+  "source": "data/crystal_flip_census_lane8_2026-08-15.json -> unclaimed_ground_recorded_not_chained.cast",
+  "re_derived_by_this_lane": true,
+  "markers_exact_rows_total": 1085,
+  "markers_exact_rows_that_are_NON_vacuous": 27,
+  "codegen_flips": 178,
+  "operator_census_over_every_codegen_flip": {
+   "const": 116,
+   "extractfield": 37,
+   "insertfield": 22,
+   "load": 15,
+   "icmp": 11,
+   "zext": 2,
+   "trunc": 1,
+   "and": 1,
+   "or": 1,
+   "fadd": 1,
+   "fsub": 1,
+   "fmul": 1,
+   "fdiv": 1
+  },
+  "operator_census_note": "Independently re-derived by this lane's own parser over this lane's own dump, and it reproduces the float lane's census exactly. A `trunc` is the only one of its kind in the whole chainable set.",
+  "measured_at_two_clean_HEADs": "First at e2e732f7a (13,771 bodies / 177 codegen flips / markers_exact 1084), then again at 6e56720c5 after clean-kernel gained three bodies (13,774 / 178 / 1085). What moved for all THREE cast bodies: def_index and flipped_so_far. What did NOT move: the emitted body text, byte for byte; the derived-MIR verdict, detail and marker count; the interpreter verdict and sample count; the call counts; and THE LINEAGE DIGEST. The per-operator census is identical at both HEADs. That sharpens rather than contradicts the standing rule that a lineage digest is a per-BUILD artifact identity: it moves when the crate DISAMBIGUATOR moves, and across this change clean_kernel[4676] did not.",
+  "chosen_on": "CONTENT: information LOSS. A zero extension is an injective embedding whose refinement theorem says the value is unchanged; a trunc u64 -> u32 is n mod 2^32, so distinct inputs collapse and the theorem has to be exact about which information survives.",
+  "note": "The lane-8 census recorded three cast-carrying flipped bodies. All three were re-derived here from this lane's own whole-crate dump rather than inherited. Two of the three are ZEXT and are the SAME BODY TWICE, instruction for instruction; the third is the crate's only TRUNC and is the only one of the three whose interpreter differential ran."
+ },
+ "the_other_two_cast_bodies": {
+  "cert::builder::state::NodeId::index": {
+   "def_index": 1787,
+   "func_id": 593,
+   "instr_count": 3,
+   "cast": "zext u32 %1 to usize",
+   "emitted": "bb0(%0: struct.317): %1 = extractfield u32 %0, 0 / %2 = zext u32 %1 to usize / ret %2",
+   "derived_mir": "agreed, 4 canonical line(s) identical, markers_exact true over 2 REAL marker lines",
+   "interpreter": "not-run -- non-scalar parameter type is non-interpretable (coverage-only skip)",
+   "calls": "0 resolved / 0 extern / 0 unresolved, deferred_to_seam false",
+   "lineage": "sha256:8a8aa6ba1b9903461934d613a555b7155ca39eea75edeed80c2f6db79a475dec",
+   "flipped_so_far": 62
+  },
+  "env::persistent_ext::ExtensionIdx::index": {
+   "def_index": 13453,
+   "func_id": 4024,
+   "instr_count": 3,
+   "cast": "zext u32 %1 to usize",
+   "emitted": "bb0(%0: struct.848): %1 = extractfield u32 %0, 0 / %2 = zext u32 %1 to usize / ret %2",
+   "derived_mir": "agreed, 4 canonical line(s) identical, markers_exact true over 2 REAL marker lines",
+   "interpreter": "not-run -- non-scalar parameter type is non-interpretable (coverage-only skip)",
+   "calls": "0 resolved / 0 extern / 0 unresolved, deferred_to_seam false",
+   "lineage": "sha256:b4dfec7cb414f992f0e53bbdd7520dfb5761b0c9c122d0b88bc7d96c5a8d8a9c",
+   "flipped_so_far": 50
+  },
+  "they_are_the_same_body_twice": true,
+  "note": "Identical instruction sequence, identical instr count, identical canonical-line count, identical marker count, identical zero call counts. They differ in their struct id (struct.317 vs struct.848), their def_index and their digest -- and in nothing a theorem about them could see. Chaining one would be chaining one of a duplicated pair.",
+  "what_a_later_lane_still_owes": "the transcription, and a decision about `usize`. The CFG type lane normalizes `usize` to the loud `?usize` rather than assuming a width, and asserts that neither side of a cast carries an unresolved type -- so a zext chain fails closed there until someone decides what width `usize` is on the measured target. The EVALUATOR is already registered: ir_gc_zext_is_an_embedding states exactly what the semantics computes for this opcode and width direction."
+ },
+ "cast_semantics_wall": {
+  "question": "Is a CAST expressible in EvalIR, or is this a build item like the float arms were?",
+  "answer": "EXPRESSIBLE, EXACTLY, AND ALREADY BUILT. No build item was needed on the semantics side.",
+  "what_already_existed": "IRInst.cast : IRCastOp -> IRTy -> IRTy -> Nat -> IRInst in eval_ir_syntax; IRCastOp with 17/17 of trust_ir::CastOp in declaration order; ir_cast_eval dispatching all seventeen arms in eval_ir_ops; the exact typed evaluators ir_trunc_eval / ir_zext_eval / ir_sext_eval; and the machine's own case -- `IRInst.cast op sr ds a => ir_bind_result s rs (ir_cast_eval op sr ds (ir_getd s a))` in eval_ir_machine.",
+  "what_WAS_the_build_item": "the CFG GATE. Before this chain a cast was in NO lane of tests/crystal_a1_lineage/emitted_cfg.rs, so a body whose entire content is `trunc` + `ret` parsed to an EMPTY Cfg on both sides -- and two empty CFGs compare equal. The `casts` and `cast_tys` lanes are this lane's build item, and they are the same class of hole the eighth chain found with binop_tys and rets.",
+  "both_widths_are_semantic_and_both_are_compared": {
+   "destination": "ir_trunc_int returns ir_wrap dw x, so trunc u64 -> u32 and trunc u64 -> u8 are different functions of the same operand (ir_gc_dest_width_is_semantic, for every n)",
+   "source": "the guard is ir_nat_leb dw sw, so trunc u8 -> u32 is ir_width_fault where trunc u64 -> u32 is a value -- the source width decides FAULT versus VALUE and is NOT implied by the operand (ir_gc_source_width_is_semantic, for every scalar)",
+   "opcode": "zext requires sw <= dw, so zext u64 -> u32 at this chain's own widths is ir_width_fault where its trunc answers (ir_gc_opcode_is_semantic, for every scalar)",
+   "why_this_check_was_run_first": "the eighth chain found that `fdiv f32` and `fdiv f64` differed in NO lane the gate had. A cast has TWO types, so the same hole was looked for on both before the lane was trusted."
+  },
+  "exactness": "The trunc is EXACT: ir_wrap dw x is the canonical low-dw residue, with no rounding, no saturation and no refusal. The zext is EXACT: ir_wrap dw (ir_wrap sw x) canonicalizes at the source width and embeds. Unlike the float lane there is no partial fragment and no tagged `unmodelled` arm -- a truncation to a narrower integer is TOTAL, which is exactly the difference between a residue and a rounding.",
+  "refused_and_why": {
+   "unconditional periodicity": "ir_wrap 32 (n + 2^32) = ir_wrap 32 n for EVERY n is NOT proved. It needs ir_nat_rem periodicity, which nobody in this program has earned, and buying it with the kernel-native Nat.div/Nat.mod would add ACCELERATED CONSTANTS whose declared bodies the kernel never consults -- speed bought with trust, which the float lane refused on exactly this ground for finite-plus-finite. What is proved generally is the CONDITIONAL form (equal low words give equal outcomes, ir_gc_high_word_is_discarded) and the collapse itself is EXECUTED at 7 and 2^32 + 7.",
+   "usize": "left unresolved rather than decided at an assumed width -- see the_other_two_cast_bodies.",
+   "bitcast / transmute / inttoptr": "still the tagged unmodelled width_bounded outcome; no body in clean-kernel flips one, so a semantics for them would be modelling with no artifact to be about."
+  },
+  "accelerated_constants_added": 0,
+  "new_trust_added": "none -- ir_wrap, ir_nat_rem, ir_nat_leb and ir_ty_int_width were all already relied on by the integer arithmetic lane"
+ }
+}

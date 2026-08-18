@@ -14,6 +14,7 @@
 //! - Code completion
 //! - Lean4-compatible RPC endpoints for infoview (`$/lean/rpc/*`)
 //! - Direct goal methods (`$/lean/plainGoal`, `$/lean/plainTermGoal`)
+//! - File processing progress notifications (`$/lean/fileProgress`)
 //!
 //! # Architecture
 //!
@@ -35,6 +36,7 @@
 pub mod backend;
 pub mod diagnostics;
 pub mod document;
+pub mod file_progress;
 pub mod report_validation;
 pub mod rpc;
 
@@ -50,6 +52,9 @@ pub mod cli;
 
 pub use backend::CleanBackend;
 pub use document::Document;
+pub use file_progress::{
+    LeanFileProgress, LeanFileProgressKind, LeanFileProgressParams, LeanFileProgressProcessingInfo,
+};
 pub use rpc::{
     PlainGoalParams, PlainGoalResponse, PlainTermGoalParams, PlainTermGoalResponse, RpcCallParams,
     RpcConnectParams, RpcConnected, RpcKeepAliveParams, RpcReleaseParams, RpcSessionManager,
@@ -61,8 +66,12 @@ pub use document::TypeError as LspTypeError;
 
 use tower_lsp::{LspService, Server};
 
-/// Build the LSP service with Lean4 RPC custom methods
-fn build_service() -> (LspService<CleanBackend>, tower_lsp::ClientSocket) {
+/// Build the LSP service with Lean4 RPC custom methods.
+///
+/// Server-to-client Lean notifications (`$/lean/fileProgress`) need no
+/// registration here: they flow outward through the tower-lsp `Client`
+/// (see [`file_progress::LeanFileProgress`]).
+pub(crate) fn build_service() -> (LspService<CleanBackend>, tower_lsp::ClientSocket) {
     LspService::build(CleanBackend::new)
         // $/lean/rpc/connect - Start RPC session
         .custom_method("$/lean/rpc/connect", |backend: &CleanBackend, params| {

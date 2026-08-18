@@ -34,6 +34,9 @@ struct LocalScopeSnapshot {
     match_dependent_motive_indices: usize,
     match_index_discriminating_punit: Option<Level>,
     universe_params: Vec<String>,
+    /// Moves WITH `universe_params`: auto-binding grows the rigid set during
+    /// elaboration, so a failed term that minted `u` must not leave it rigid.
+    rigid_level_params: std::collections::HashSet<Name>,
     pending_level_assigns: Vec<(Name, Level)>,
     hole_names: HashMap<MetaId, String>,
 }
@@ -52,6 +55,7 @@ impl<'a> ElabCtx<'a> {
             match_dependent_motive_indices: self.match_dependent_motive_indices,
             match_index_discriminating_punit: self.match_index_discriminating_punit.clone(),
             universe_params: self.universe_params.clone(),
+            rigid_level_params: self.metas.rigid_level_params_snapshot(),
             pending_level_assigns: self.pending_level_assigns.borrow().clone(),
             hole_names: self.hole_names.clone(),
         }
@@ -75,6 +79,8 @@ impl<'a> ElabCtx<'a> {
             // declaration's ordered parameter packet and pending assignments
             // must be exactly the entry state.
             self.universe_params = snapshot.universe_params;
+            self.metas
+                .restore_rigid_level_params(snapshot.rigid_level_params);
             self.pending_level_assigns
                 .replace(snapshot.pending_level_assigns);
             self.hole_names = snapshot.hole_names;

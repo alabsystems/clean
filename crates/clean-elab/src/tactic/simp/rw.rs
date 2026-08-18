@@ -7,10 +7,9 @@
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, Level};
 
+use super::cache::collect_simp_lemmas_cached;
 use super::expr::{extract_eq_sides, simp_expr};
-use super::lemmas::{
-    collect_simp_lemmas, extract_local_equality_template, mk_local_proof_template,
-};
+use super::lemmas::{extract_local_equality_template, mk_local_proof_template};
 use super::types::{SimpConfig, SimpIndexMode, SimpLemma};
 use crate::tactic::discr_tree::{mk_path, query_path_is_too_generic, IndexMode};
 use crate::tactic::{
@@ -122,7 +121,7 @@ pub fn simp_rw(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
 
     let mut simp_config = SimpConfig::new();
     simp_config.aesop_simp_lemmas = collect_local_rw_simp_lemmas(state, &goal, &lemmas)?;
-    let simp_lemmas = collect_simp_lemmas(state, &simp_config);
+    let simp_lemmas = collect_simp_lemmas_cached(state, &simp_config);
 
     while steps < simp_config.max_steps {
         let simp_result = simp_expr(state, &goal, &current_target, &simp_lemmas, &simp_config);

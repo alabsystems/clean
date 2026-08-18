@@ -68,6 +68,35 @@ def main(argv: list[str]) -> int:
             f"{len(live_bare)} rows are flagged bare_spelled"
         )
 
+    # Per-family breakdown (bare_spelled_by_family): validate when present —
+    # it must be exactly the derivation of the listed rows (family = head
+    # namespace, entries = name + discarded Lean kind). Absent only in
+    # pre-breakdown artifacts, which the census test regenerates away.
+    breakdown = census.get("bare_spelled_by_family")
+    if breakdown is not None:
+        bd_names: list[str] = []
+        for family, fam in breakdown.items():
+            entries = fam.get("entries", [])
+            if fam.get("count") != len(entries):
+                sys.exit(
+                    f"FAIL: {CENSUS.name} family {family!r}: count={fam.get('count')} "
+                    f"but {len(entries)} entries listed"
+                )
+            for entry in entries:
+                entry_name = entry.get("name", "")
+                if entry_name.split(".", 1)[0] != family:
+                    sys.exit(
+                        f"FAIL: {CENSUS.name} family {family!r}: entry "
+                        f"{entry_name!r} is not in that head namespace"
+                    )
+                bd_names.append(entry_name)
+        if sorted(bd_names) != live_bare:
+            sys.exit(
+                f"FAIL: {CENSUS.name} bare_spelled_by_family names do not match "
+                f"the bare_spelled rows (breakdown {len(bd_names)}, rows "
+                f"{len(live_bare)}). Regenerate the census; never hand-edit it."
+            )
+
     if "--update" in argv:
         ratchet.update(
             {

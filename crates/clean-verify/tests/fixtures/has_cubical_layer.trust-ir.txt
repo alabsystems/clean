@@ -2,18 +2,18 @@ rustcc fn @mode::CleanMode::has_cubical_layer(functy.0) {
     ; #producer: trust
     ; #names: %0="self"
 bb0(%0: ptr):
-    %2 = load enum.13, ptr %0  ; #loc: 396 312 8
-    %3 = extractfield u8 %2, 0  ; #loc: 396 312 8
-    switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 396 312 8
+    %2 = load enum.13, ptr %0  ; #loc: 399 312 8
+    %3 = extractfield u8 %2, 0  ; #loc: 399 312 8
+    switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 399 312 8
 bb1:
-    %4 = const bool true  ; #loc: 396 312 8
-    br bb4(%4)  ; #loc: 396 312 8
+    %4 = const bool true  ; #loc: 399 312 8
+    br bb4(%4)  ; #loc: 399 312 8
 bb2:
-    %5 = const bool true  ; #loc: 396 312 8
-    br bb4(%5)  ; #loc: 396 312 8
+    %5 = const bool true  ; #loc: 399 312 8
+    br bb4(%5)  ; #loc: 399 312 8
 bb3:
-    %6 = const bool false  ; #loc: 396 312 8
-    br bb4(%6)  ; #loc: 396 312 8
+    %6 = const bool false  ; #loc: 399 312 8
+    br bb4(%6)  ; #loc: 399 312 8
 bb4(%1: bool):
-    ret %1  ; #loc: 396 313 5
+    ret %1  ; #loc: 399 313 5
 }

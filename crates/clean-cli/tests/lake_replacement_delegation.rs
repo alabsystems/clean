@@ -71,4 +71,61 @@ fn replacement_scorecard_blocks_lake_workflow_while_delegation_remains() {
         lake_row.contains("must not delegate project semantics to Lean4"),
         "Lake workflow replacement blocker must make Lean4 process delegation visible"
     );
+    assert!(
+        lake_row.contains("clean lake smoke --report reports/lake-replacement-smoke.json"),
+        "Lake workflow row's gate command must be the smoke generator that emits the row's \
+         evidence artifact"
+    );
+    assert!(
+        lake_row.contains("reports/lake-replacement-smoke.json\","),
+        "Lake workflow row must keep naming reports/lake-replacement-smoke.json as its evidence \
+         artifact"
+    );
+}
+
+/// #3707 evidence-generator guard: `clean lake smoke` (src/cmd_lake/smoke.rs)
+/// must stay clean-owned (no `lean`/`lake` subprocess) and must record the
+/// self-describing artifact schema the lake-workflow row consumes:
+/// schema version, per-step verdicts, generating commit, the no-delegation
+/// posture, and explicit non-claims.
+#[test]
+fn lake_smoke_generator_is_clean_owned_and_schema_complete() {
+    let source = read_cli_source("src/cmd_lake/smoke.rs");
+
+    assert!(
+        !source.contains("Command::new(\"lean\")"),
+        "the smoke generator must not spawn the Lean4 `lean` binary"
+    );
+    assert!(
+        !source.contains("Command::new(\"lake\")"),
+        "the smoke generator must not spawn the Lean4 `lake` binary"
+    );
+    assert!(
+        source.contains("clean-lake-replacement-smoke-v1"),
+        "the smoke artifact must carry a stable schema version"
+    );
+    assert!(
+        source.contains("\"lake-workflow\"") && source.contains("3707"),
+        "the smoke artifact must name the replacement row and issue it backs"
+    );
+    assert!(
+        source.contains("generated_at_commit"),
+        "the smoke artifact must record the generating commit"
+    );
+    assert!(
+        source.contains("steps"),
+        "the smoke artifact must record per-step results"
+    );
+    assert!(
+        source.contains("no_lean4_delegation"),
+        "the smoke artifact must record the no-Lean4-delegation posture"
+    );
+    assert!(
+        source.contains("non_claims"),
+        "the smoke artifact must record explicit non-claims"
+    );
+    assert!(
+        source.contains("tests/lake_replacement_delegation.rs"),
+        "the smoke artifact must cite this source-level delegation gate"
+    );
 }

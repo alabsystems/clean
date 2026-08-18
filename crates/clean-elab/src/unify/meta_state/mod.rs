@@ -108,6 +108,17 @@ pub struct MetaState {
     /// per declaration.
     pub(super) rigid_level_params: std::collections::HashSet<Name>,
 
+    /// Level equations DEFERRED because they are undetermined: at least one
+    /// side still mentions a solvable (non-rigid) level parameter, so a later
+    /// assignment may settle them.
+    ///
+    /// FAIL-CLOSED CONTRACT. Postponing is not accepting. Every entry must be
+    /// drained by `drain_postponed_levels` at the declaration boundary, and any
+    /// entry that still does not solve there is an ERROR. A definite conflict
+    /// (both sides param-free and unequal) is never postponed — it fails
+    /// immediately, exactly as before.
+    pub(super) postponed_levels: Vec<(Level, Level)>,
+
     // Undo trail fields (Part of #383)
     /// Trail of changes for backtracking. Records are pushed when modifications
     /// are made and replayed in reverse when `pop_scope()` is called.
@@ -132,6 +143,7 @@ impl MetaState {
             historical_local_fvars: std::collections::HashSet::new(),
             next_id: 0,
             level_constraints: HashMap::new(),
+            postponed_levels: Vec::new(),
             level_parent: HashMap::new(),
             level_concrete: HashMap::new(),
             level_bound: HashMap::new(),
@@ -149,6 +161,45 @@ impl MetaState {
     /// previous set outright, so callers set it once at declaration entry.
     pub(crate) fn set_rigid_level_params<I: IntoIterator<Item = Name>>(&mut self, names: I) {
         self.rigid_level_params = names.into_iter().collect();
+    }
+
+    /// Add ONE rigid universe parameter, keeping the ones already declared.
+    ///
+    /// This is the auto-bound path's entry point. `set_rigid_level_params`
+    /// replaces the set outright, which suits declaration entry (`.{u, v}` is
+    /// known all at once) but not auto-binding, where an undeclared universe
+    /// name is discovered mid-elaboration and must join the existing set rather
+    /// than clear it.
+    ///
+    /// SOUNDNESS: an auto-bound universe NAME is a genuine parameter of the
+    /// declaration, exactly like a declared one — Lean treats `def f (α : Type u)`
+    /// and `universe u; def f (α : Type u)` identically. Leaving it assignable
+    /// let `def badAuto : Sort u := Nat` solve `u := 1` and register MONOMORPHIC
+    /// with empty `level_params`, while its declared twin
+    /// (`tests/fixtures/universes/p06_rigid_refusal_MUST_FAIL.lean`) was
+    /// correctly rejected. Level HOLES (`Type _`) are different and must stay
+    /// solvable: they go through `fresh_universe_param`, which deliberately does
+    /// NOT come here.
+    pub(crate) fn add_rigid_level_param(&mut self, name: Name) {
+        self.rigid_level_params.insert(name);
+    }
+
+    /// Snapshot the rigid set, for rollback alongside `universe_params`.
+    ///
+    /// Needed because [`Self::add_rigid_level_param`] made the set grow DURING
+    /// elaboration rather than only at declaration entry. A term that
+    /// auto-binds `u` and then fails must not leave `u` rigid for the rest of
+    /// the declaration: `ElabCtx::restore_local_scope` already rewinds
+    /// `universe_params` for exactly that reason, and the rigid set has to move
+    /// with it or the two disagree.
+    #[must_use]
+    pub(crate) fn rigid_level_params_snapshot(&self) -> std::collections::HashSet<Name> {
+        self.rigid_level_params.clone()
+    }
+
+    /// Restore a set captured by [`Self::rigid_level_params_snapshot`].
+    pub(crate) fn restore_rigid_level_params(&mut self, set: std::collections::HashSet<Name>) {
+        self.rigid_level_params = set;
     }
 
     /// Whether `name` is a rigid declared universe parameter (never assignable).

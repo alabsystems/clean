@@ -17,9 +17,10 @@
 //! embedders that want to drive Lake without going through clap or the unified
 //! binary.
 //!
-//! The full advertised contract lives in [`super::FEATURES`] (24 leaf verbs,
-//! including `new`, `resolve`, `script {list,run,doc}`, `cache {get,put,add}`,
-//! `lint`, `check-{build,test,lint}`, `pack`, `unpack`, `upload`). The `clean`
+//! The full advertised contract lives in [`super::FEATURES`] (28 leaf verbs,
+//! including `new`, `resolve`, `serve`, `script {list,run,doc}`,
+//! `cache {get,put,add}`, `lint`, `check-{build,test,lint}`, `pack`,
+//! `unpack`, `upload`, `verify-fresh`, `goodness`, `smoke`). The `clean`
 //! binary does **not** route through [`run_lake`]; it parses the
 //! [`super::LakeCommands`] clap tree and dispatches every advertised verb
 //! through `clean_cli::cmd_lake::handle_lake_command`, whose handlers own the
@@ -80,7 +81,8 @@ pub(super) fn lake_build(args: &BuildArgs) -> LakeResult<String> {
         .with_jobs(args.jobs)
         .with_verbose(args.verbose)
         .with_force(args.force)
-        .with_check_only(args.check_only);
+        .with_check_only(args.check_only)
+        .with_permissive_imports(args.permissive_imports);
 
     let mut ctx = BuildContext::new(ws).with_options(options);
     let result = ctx.build_all()?;

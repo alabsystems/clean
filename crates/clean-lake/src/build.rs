@@ -46,6 +46,9 @@ pub struct BuildOptions {
     pub force: bool,
     /// Only check types, don't generate code
     pub check_only: bool,
+    /// Warn and continue when a stdlib or local-dependency `.olean` import
+    /// fails to load, instead of failing the module build (fail-closed default)
+    pub permissive_imports: bool,
 }
 
 impl BuildOptions {
@@ -80,6 +83,13 @@ impl BuildOptions {
     #[must_use]
     pub fn with_check_only(mut self, check_only: bool) -> Self {
         self.check_only = check_only;
+        self
+    }
+
+    /// Warn and continue on import load failures instead of failing the build
+    #[must_use]
+    pub fn with_permissive_imports(mut self, permissive_imports: bool) -> Self {
+        self.permissive_imports = permissive_imports;
         self
     }
 }
@@ -575,10 +585,22 @@ impl BuildContext {
                         }
                     }
                     Err(e) => {
-                        if self.options.verbose {
-                            eprintln!("  Warning: failed to load stdlib {imp}: {e}");
+                        // Fail-closed by default: a module must not "build"
+                        // against a silently incomplete environment. The
+                        // explicit --permissive-imports opt-out restores the
+                        // legacy warn-and-continue behavior.
+                        if !self.options.permissive_imports {
+                            return Err(LakeError::BuildFailed {
+                                module: module.to_string(),
+                                reason: format!(
+                                    "failed to load stdlib import '{imp}': {e} \
+                                     (pass --permissive-imports to warn and continue)"
+                                ),
+                            });
                         }
-                        // Continue - might still succeed if the import isn't critical
+                        eprintln!("  Warning: failed to load stdlib {imp}: {e}");
+                        // Permissive mode: continue - might still succeed if
+                        // the import isn't critical
                     }
                 }
             }
@@ -599,11 +621,20 @@ impl BuildContext {
                         }
                     }
                     Err(e) => {
-                        if self.options.verbose {
-                            eprintln!("  Warning: failed to load {dep}.olean: {e}");
+                        // Fail-closed by default (see the stdlib branch above).
+                        if !self.options.permissive_imports {
+                            return Err(LakeError::BuildFailed {
+                                module: module.to_string(),
+                                reason: format!(
+                                    "failed to load dependency '{dep}' from {}: {e} \
+                                     (pass --permissive-imports to warn and continue)",
+                                    olean_path.display()
+                                ),
+                            });
                         }
-                        // Continue - the elaboration may still succeed if the dep
-                        // isn't actually used, or we can fall back to stub definitions
+                        eprintln!("  Warning: failed to load {dep}.olean: {e}");
+                        // Permissive mode: continue - the elaboration may still
+                        // succeed if the dep isn't actually used
                     }
                 }
             } else if self.options.verbose {
@@ -1355,5 +1386,194 @@ lean_lib DepTest where
                 "{name} should be available after loading payload olean"
             );
         }
+    }
+
+    /// Fixture: a project whose single module imports a stdlib module that
+    /// cannot exist in any toolchain's search paths.
+    fn stdlib_import_project() -> TempDir {
+        use std::fs;
+        use std::io::Write;
+
+        let tmp = TempDir::new().unwrap();
+
+        let mut lakefile = fs::File::create(tmp.path().join("lakefile.lean")).unwrap();
+        writeln!(
+            lakefile,
+            r#"
+package stdfail where
+  name := "stdfail"
+  version := "0.1.0"
+
+lean_lib StdFail where
+  roots := #[`StdFail]
+"#
+        )
+        .unwrap();
+
+        fs::create_dir_all(tmp.path().join("StdFail")).unwrap();
+        fs::write(
+            tmp.path().join("StdFail/Uses.lean"),
+            "import Init.NoSuchCleanLakeModule\ndef usesVal : Type 1 := Type\n",
+        )
+        .unwrap();
+
+        tmp
+    }
+
+    #[test]
+    fn test_build_missing_stdlib_import_fails_closed_by_default() {
+        let tmp = stdlib_import_project();
+        let ws = Workspace::load(tmp.path()).unwrap();
+        let mut ctx = BuildContext::new(ws);
+
+        let result = ctx.build_all().expect("build_all should return a result");
+
+        assert!(
+            result.built.is_empty(),
+            "no module may 'build' against a silently incomplete environment: {:?}",
+            result.built
+        );
+        assert_eq!(
+            result.failed.len(),
+            1,
+            "expected exactly one failed module: {:?}",
+            result.failed
+        );
+        let (module, reason) = &result.failed[0];
+        assert_eq!(module, "StdFail.Uses");
+        assert!(
+            reason.contains("Init.NoSuchCleanLakeModule"),
+            "failure must name the missing import: {reason}"
+        );
+        assert!(
+            reason.contains("--permissive-imports"),
+            "failure must name the opt-out flag: {reason}"
+        );
+    }
+
+    #[test]
+    fn test_build_missing_stdlib_import_permissive_warns_and_continues() {
+        let tmp = stdlib_import_project();
+        let ws = Workspace::load(tmp.path()).unwrap();
+        let mut ctx = BuildContext::new(ws).with_options(BuildOptions {
+            permissive_imports: true,
+            ..Default::default()
+        });
+
+        let result = ctx.build_all().expect("build_all should return a result");
+
+        assert!(
+            result.failed.is_empty(),
+            "permissive mode must warn and continue: {:?}",
+            result.failed
+        );
+        assert!(
+            result.built.contains(&"StdFail.Uses".to_string()),
+            "module should still build under --permissive-imports: {:?}",
+            result.built
+        );
+    }
+
+    /// Fixture: two-module project where Top imports Base but does not use its
+    /// constants, built once so both .olean artifacts exist, then Base.olean is
+    /// corrupted and Top.olean removed so only Top rebuilds against the corrupt
+    /// dependency artifact.
+    fn corrupt_dep_project() -> TempDir {
+        use std::fs;
+        use std::io::Write;
+
+        let tmp = TempDir::new().unwrap();
+
+        let mut lakefile = fs::File::create(tmp.path().join("lakefile.lean")).unwrap();
+        writeln!(
+            lakefile,
+            r#"
+package depfail where
+  name := "depfail"
+  version := "0.1.0"
+
+lean_lib DepFail where
+  roots := #[`DepFail]
+"#
+        )
+        .unwrap();
+
+        fs::create_dir_all(tmp.path().join("DepFail")).unwrap();
+        fs::write(
+            tmp.path().join("DepFail/Base.lean"),
+            "def baseVal : Type 1 := Type\n",
+        )
+        .unwrap();
+        fs::write(
+            tmp.path().join("DepFail/Top.lean"),
+            "import DepFail.Base\ndef topVal : Type 1 := Type\n",
+        )
+        .unwrap();
+
+        let ws = Workspace::load(tmp.path()).unwrap();
+        let mut ctx = BuildContext::new(ws);
+        let first = ctx.build_all().expect("initial build should run");
+        assert!(
+            first.failed.is_empty(),
+            "initial build should succeed: {:?}",
+            first.failed
+        );
+
+        // Corrupt the dependency artifact (its fresh mtime keeps Base skipped)
+        // and drop Top's artifact so only Top rebuilds.
+        let lib_dir = tmp.path().join(".lake/build/lib");
+        fs::write(lib_dir.join("DepFail/Base.olean"), b"not an olean").unwrap();
+        fs::remove_file(lib_dir.join("DepFail/Top.olean")).unwrap();
+
+        tmp
+    }
+
+    #[test]
+    fn test_build_corrupt_dependency_olean_fails_closed_by_default() {
+        let tmp = corrupt_dep_project();
+        let ws = Workspace::load(tmp.path()).unwrap();
+        let mut ctx = BuildContext::new(ws);
+
+        let result = ctx.build_all().expect("build_all should return a result");
+
+        assert_eq!(
+            result.failed.len(),
+            1,
+            "expected exactly one failed module: {:?}",
+            result.failed
+        );
+        let (module, reason) = &result.failed[0];
+        assert_eq!(module, "DepFail.Top");
+        assert!(
+            reason.contains("DepFail.Base"),
+            "failure must name the unloadable dependency: {reason}"
+        );
+        assert!(
+            reason.contains("--permissive-imports"),
+            "failure must name the opt-out flag: {reason}"
+        );
+    }
+
+    #[test]
+    fn test_build_corrupt_dependency_olean_permissive_continues() {
+        let tmp = corrupt_dep_project();
+        let ws = Workspace::load(tmp.path()).unwrap();
+        let mut ctx = BuildContext::new(ws).with_options(BuildOptions {
+            permissive_imports: true,
+            ..Default::default()
+        });
+
+        let result = ctx.build_all().expect("build_all should return a result");
+
+        assert!(
+            result.failed.is_empty(),
+            "permissive mode must warn and continue past the corrupt dep: {:?}",
+            result.failed
+        );
+        assert!(
+            result.built.contains(&"DepFail.Top".to_string()),
+            "Top should still build under --permissive-imports: {:?}",
+            result.built
+        );
     }
 }

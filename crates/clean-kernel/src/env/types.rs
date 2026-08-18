@@ -465,10 +465,15 @@ pub enum EnvError {
         sort: crate::level::Level,
     },
     /// Declaration contains free variables (FVar), which must not appear in the environment
-    #[error("Declaration {name} contains free variables")]
+    #[error("Declaration {name} contains free variables (fvar ids {fvars:?})")]
     ContainsFreeVar {
         /// Name of the declaration
         name: Name,
+        /// The distinct FVar ids found (bounded sample, diagnostic only). The
+        /// id range classifies the leak at a glance: elaborator-scope locals
+        /// are minted low, tactic-created FVars sit at or above the tactic
+        /// `fvar_base`.
+        fvars: Vec<u64>,
     },
     /// Declaration contains metavariables (expression or universe level), which must not
     /// appear in the environment. Matches Lean 4's check_no_metavar.
@@ -593,4 +598,33 @@ pub enum EnvError {
         /// What differed (level-param arity or the type itself).
         detail: String,
     },
+}
+
+/// Collect a bounded, deduplicated sample of the FVar ids occurring in the
+/// given expressions — the diagnostic payload for
+/// [`EnvError::ContainsFreeVar`]. The id VALUES classify a leak at a glance
+/// (elaborator-scope locals are minted low; tactic-created FVars sit at or
+/// above the tactic `fvar_base`), which is what makes a "contains free
+/// variables" rejection actionable without a debugger. Runs only on the
+/// error path; capped at 8 ids.
+pub fn collect_fvar_ids_for_diagnostics(exprs: &[&Expr]) -> Vec<u64> {
+    use crate::expr::visitor::ExprVisitor;
+    struct Collector(Vec<u64>);
+    impl ExprVisitor for Collector {
+        type Result = ();
+        fn combine(&self, _a: (), _b: ()) {}
+        fn visit_fvar(&mut self, id: crate::expr::FVarId) {
+            if self.0.len() < 8 && !self.0.contains(&id.0) {
+                self.0.push(id.0);
+            }
+        }
+    }
+    let mut collector = Collector(Vec::new());
+    for expr in exprs {
+        if expr.has_fvar_quick() {
+            collector.visit_expr(expr);
+        }
+    }
+    collector.0.sort_unstable();
+    collector.0
 }

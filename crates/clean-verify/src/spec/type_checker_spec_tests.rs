@@ -8,7 +8,6 @@ use clean_kernel::TypeChecker;
 
 use super::TypeCheckerSpec;
 use crate::spec::types::ProofStatus;
-use crate::spec::Specification;
 use crate::test_utils::{build_spec_with_stack, run_with_stack};
 
 #[test]
@@ -101,7 +100,7 @@ fn test_tc_check_completeness_is_modulo_def_eq() {
 #[test]
 fn test_tc_def_eq_transitivity_refl_sort_case() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let proof = spec
             .elaborate_source(
                 "tc_def_eq_transitivity (KExpr.sort Level.zero) (KExpr.sort Level.zero) \
@@ -131,7 +130,7 @@ fn test_tc_def_eq_transitivity_refl_sort_case() {
 #[test]
 fn test_tc_subject_reduction_refl_sort_case() {
     run_with_stack(|| {
-        let spec = Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         // tc_subject_reduction is FORWARD subject reduction over the directed
         // whnf_to relation and carries a RedEnvFaithful the_red_env hypothesis
         // (#2859). We exercise its application under abstracted hypotheses

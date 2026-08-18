@@ -17,7 +17,9 @@
 //! per-file cap: core verbs (`build`, `new`, `clean`, `init`, `fetch`,
 //! `update`, `env`, `run`, `resolve`, `exe`, `test`) live here in
 //! [`FEATURES_CORE`]; the remainder (`script`, `cache`, `lint`, `check-*`,
-//! `pack`, `unpack`, `upload`) live in [`super::features_ext::FEATURES_EXT`].
+//! `pack`, `unpack`, `upload`, `verify-fresh`, `goodness`, `smoke`, `serve`)
+//! live in
+//! [`super::features_ext::FEATURES_EXT`].
 //! [`FEATURES`] is the concatenation, materialized at compile time via a
 //! `const fn`.
 
@@ -33,7 +35,9 @@ pub(super) const FEATURES_CORE: &[FeatureDescriptor] = &[
         path: &["lake", "build"],
         summary: "Build the project's Lean targets",
         description: "Compile every target declared in `lakefile.lean`, or a single target if provided. \
-                      Honors the shared `--dir` flag and selects a parallel job count with `--jobs` (0 = auto).",
+                      Honors the shared `--dir` flag and selects a parallel job count with `--jobs` (0 = auto). \
+                      Import loading is fail-closed: a stdlib or local-dependency `.olean` that fails to \
+                      load fails the module build unless `--permissive-imports` is passed.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[
@@ -333,6 +337,8 @@ mod tests {
             &["lake", "upload"],
             &["lake", "verify-fresh"],
             &["lake", "goodness"],
+            &["lake", "smoke"],
+            &["lake", "serve"],
         ];
         assert_eq!(FEATURES.len(), expected.len());
         for want in expected {

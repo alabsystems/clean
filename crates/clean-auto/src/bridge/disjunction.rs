@@ -15,11 +15,22 @@ use clean_kernel::{BinderInfo, Expr};
 
 /// Build the type of a right-associative Or chain from a slice of propositions.
 ///
+/// `[]` → `False`
 /// `[P₀]` → `P₀`
 /// `[P₀, P₁]` → `Or P₀ P₁`
 /// `[P₀, P₁, P₂]` → `Or P₀ (Or P₁ P₂)`
+///
+/// The empty chain is the empty disjunction, i.e. `False`. This makes the
+/// function total: reconstruction paths that reach it with an empty tail
+/// (e.g. a pivot in last position, or an empty resolvent) build a
+/// `False`-typed candidate instead of aborting the whole process — the
+/// kernel re-check then accepts or rejects that one declaration. This
+/// replaced a production `assert!` that a Mathlib `clean check` run tripped
+/// (SIGABRT on `Mathlib/Data/Subtype.lean`, SRCELAB gate 2026-08-10).
 pub(crate) fn or_chain_type(props: &[Expr]) -> Expr {
-    assert!(!props.is_empty(), "or_chain_type: empty props");
+    if props.is_empty() {
+        return Expr::const_(Name::from_string("False"), vec![]);
+    }
     if props.len() == 1 {
         props[0].clone()
     } else {

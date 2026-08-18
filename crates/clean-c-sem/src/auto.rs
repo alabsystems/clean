@@ -280,8 +280,17 @@ impl VCProver {
             return ProofStatus::Unknown;
         }
 
+        // Fold only closed boolean / integer-literal terms before lowering.
+        // The broader convenience simplifier also assumes reflexivity of
+        // symbolic comparisons, which is not valid for an untyped symbol that
+        // may denote a floating NaN; it is deliberately NOT used in this
+        // authority path.
+        let simplified = simplify_closed_literals(&vc.obligation);
+        if Self::contains_untyped_reflexive_comparison(&simplified) {
+            return ProofStatus::Unknown;
+        }
         // Translate Spec to clean Expr
-        let Some(lean_expr) = self.spec_to_expr(&vc.obligation) else {
+        let Some(lean_expr) = self.spec_to_expr(&simplified) else {
             return ProofStatus::Unknown;
         };
 
@@ -291,7 +300,11 @@ impl VCProver {
 
     /// Try to prove a Spec directly
     pub fn prove_spec(&mut self, spec: &Spec) -> ProofStatus {
-        let Some(lean_expr) = self.spec_to_expr(spec) else {
+        let simplified = simplify_closed_literals(spec);
+        if Self::contains_untyped_reflexive_comparison(&simplified) {
+            return ProofStatus::Unknown;
+        }
+        let Some(lean_expr) = self.spec_to_expr(&simplified) else {
             return ProofStatus::Unknown;
         };
         self.prove_expr(&lean_expr, &VCKind::Assertion)
@@ -315,7 +328,9 @@ impl VCProver {
             Spec::Implies(p, q) => self.is_trivially_false(p) || self.is_trivially_true(q),
             Spec::BinOp { op, left, right }
                 // Check for reflexive comparisons
-                if left == right => {
+                if left == right
+                    && crate::simplify::reflexivity_is_authoritative(left) =>
+            {
                     matches!(op, BinOp::Eq | BinOp::Le | BinOp::Ge)
                 }
             _ => false,
@@ -329,7 +344,9 @@ impl VCProver {
             Spec::Or(specs) => specs.iter().all(|s| self.is_trivially_false(s)),
             Spec::BinOp { op, left, right }
                 // Check for obviously false comparisons
-                if left == right => {
+                if left == right
+                    && crate::simplify::reflexivity_is_authoritative(left) =>
+            {
                     matches!(op, BinOp::Ne | BinOp::Lt | BinOp::Gt)
                 }
             _ => false,
@@ -340,6 +357,88 @@ impl VCProver {
     fn spec_to_expr(&self, spec: &Spec) -> Option<Expr> {
         let mut ctx = crate::translate::TranslationContext::new();
         Some(ctx.translate_spec(spec))
+    }
+
+    /// Detect comparisons whose translation would silently replace C/ACSL
+    /// floating comparison semantics with kernel-level reflexivity.  The scan
+    /// is intentionally context-independent: even a negatively occurring atom
+    /// can become an unsound success through `Not`/`Implies` and the structural
+    /// fallback (notably `!(x != x)` for NaN).
+    fn contains_untyped_reflexive_comparison(spec: &Spec) -> bool {
+        match spec {
+            Spec::BinOp { op, left, right } => {
+                (left == right
+                    && matches!(op, BinOp::Eq | BinOp::Ne | BinOp::Le | BinOp::Ge)
+                    && !crate::simplify::reflexivity_is_authoritative(left))
+                    || Self::contains_untyped_reflexive_comparison(left)
+                    || Self::contains_untyped_reflexive_comparison(right)
+            }
+            Spec::Old(inner)
+            | Spec::Not(inner)
+            | Spec::Valid(inner)
+            | Spec::ValidRead(inner)
+            | Spec::Fresh(inner)
+            | Spec::Freeable(inner)
+            | Spec::BlockLength(inner)
+            | Spec::Offset(inner)
+            | Spec::BaseAddr(inner)
+            | Spec::UnaryOp { operand: inner, .. } => {
+                Self::contains_untyped_reflexive_comparison(inner)
+            }
+            Spec::At { expr, .. }
+            | Spec::Forall { body: expr, .. }
+            | Spec::Exists { body: expr, .. }
+            | Spec::Member { object: expr, .. } => {
+                Self::contains_untyped_reflexive_comparison(expr)
+            }
+            Spec::Implies(left, right)
+            | Spec::Iff(left, right)
+            | Spec::Index {
+                base: left,
+                index: right,
+            } => {
+                Self::contains_untyped_reflexive_comparison(left)
+                    || Self::contains_untyped_reflexive_comparison(right)
+            }
+            Spec::And(items) | Spec::Or(items) | Spec::Separated(items) => items
+                .iter()
+                .any(Self::contains_untyped_reflexive_comparison),
+            Spec::ValidRange { ptr, lo, hi } => {
+                Self::contains_untyped_reflexive_comparison(ptr)
+                    || Self::contains_untyped_reflexive_comparison(lo)
+                    || Self::contains_untyped_reflexive_comparison(hi)
+            }
+            Spec::Let { value, body, .. } => {
+                Self::contains_untyped_reflexive_comparison(value)
+                    || Self::contains_untyped_reflexive_comparison(body)
+            }
+            Spec::If {
+                cond,
+                then_spec,
+                else_spec,
+            } => {
+                Self::contains_untyped_reflexive_comparison(cond)
+                    || Self::contains_untyped_reflexive_comparison(then_spec)
+                    || Self::contains_untyped_reflexive_comparison(else_spec)
+            }
+            Spec::Call { args, .. } => args.iter().any(Self::contains_untyped_reflexive_comparison),
+            Spec::Sum { lo, hi, body, .. }
+            | Spec::Product { lo, hi, body, .. }
+            | Spec::Min { lo, hi, body, .. }
+            | Spec::Max { lo, hi, body, .. }
+            | Spec::NumOf { lo, hi, body, .. } => {
+                Self::contains_untyped_reflexive_comparison(lo)
+                    || Self::contains_untyped_reflexive_comparison(hi)
+                    || Self::contains_untyped_reflexive_comparison(body)
+            }
+            Spec::Expr(_)
+            | Spec::True
+            | Spec::False
+            | Spec::Result
+            | Spec::Null
+            | Spec::Int(_)
+            | Spec::Var(_) => false,
+        }
     }
 
     /// Core proving logic using clean-auto.
@@ -706,6 +805,86 @@ pub fn verify_and_report(vcs: &[VC]) -> VerificationSummary {
     summary
 }
 
+/// Authority-safe normalization for proof input.  It folds only closed terms
+/// whose operands already identify their exact boolean/integer values; it
+/// never uses reflexivity or algebraic identities over symbolic/untyped terms.
+fn simplify_closed_literals(spec: &Spec) -> Spec {
+    match spec {
+        Spec::And(items) => {
+            let items: Vec<_> = items.iter().map(simplify_closed_literals).collect();
+            if items.iter().any(|item| matches!(item, Spec::False)) {
+                Spec::False
+            } else {
+                let remaining: Vec<_> = items
+                    .into_iter()
+                    .filter(|item| !matches!(item, Spec::True))
+                    .collect();
+                match remaining.as_slice() {
+                    [] => Spec::True,
+                    [only] => only.clone(),
+                    _ => Spec::And(remaining),
+                }
+            }
+        }
+        Spec::Or(items) => {
+            let items: Vec<_> = items.iter().map(simplify_closed_literals).collect();
+            if items.iter().any(|item| matches!(item, Spec::True)) {
+                Spec::True
+            } else {
+                let remaining: Vec<_> = items
+                    .into_iter()
+                    .filter(|item| !matches!(item, Spec::False))
+                    .collect();
+                match remaining.as_slice() {
+                    [] => Spec::False,
+                    [only] => only.clone(),
+                    _ => Spec::Or(remaining),
+                }
+            }
+        }
+        Spec::Not(inner) => match simplify_closed_literals(inner) {
+            Spec::True => Spec::False,
+            Spec::False => Spec::True,
+            other => Spec::Not(Box::new(other)),
+        },
+        Spec::Implies(premise, conclusion) => {
+            let premise = simplify_closed_literals(premise);
+            let conclusion = simplify_closed_literals(conclusion);
+            match (&premise, &conclusion) {
+                (Spec::False, _) | (_, Spec::True) => Spec::True,
+                (Spec::True, _) => conclusion,
+                _ => Spec::Implies(Box::new(premise), Box::new(conclusion)),
+            }
+        }
+        Spec::BinOp { op, left, right } => {
+            let left = simplify_closed_literals(left);
+            let right = simplify_closed_literals(right);
+            if let (Spec::Int(a), Spec::Int(b)) = (&left, &right) {
+                let folded = match op {
+                    BinOp::Eq => Some(*a == *b),
+                    BinOp::Ne => Some(*a != *b),
+                    BinOp::Lt => Some(*a < *b),
+                    BinOp::Le => Some(*a <= *b),
+                    BinOp::Gt => Some(*a > *b),
+                    BinOp::Ge => Some(*a >= *b),
+                    _ => None,
+                };
+                if let Some(value) = folded {
+                    return if value { Spec::True } else { Spec::False };
+                }
+            }
+            Spec::BinOp {
+                op: *op,
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        }
+        // Deliberately no recursive rewriting under typed/quantified/stateful
+        // constructs: closure and evaluation domain are not established here.
+        _ => spec.clone(),
+    }
+}
+
 pub use crate::simplify::simplify_spec;
 
 #[cfg(test)]
@@ -941,8 +1120,9 @@ mod tests {
     #[test]
     fn test_structural_proof_reflexive_eq() {
         let mut prover = VCProver::new();
-        // x = x should be proved
-        let spec = Spec::eq(Spec::var("x"), Spec::var("x"));
+        // Closed integer reflexivity is inside the authority lane.
+        let term = Spec::binop(BinOp::Add, Spec::int(1), Spec::int(2));
+        let spec = Spec::eq(term.clone(), term);
         let status = prover.prove_spec(&spec);
         assert!(
             status.is_established(),
@@ -953,8 +1133,8 @@ mod tests {
     #[test]
     fn test_structural_proof_reflexive_le() {
         let mut prover = VCProver::new();
-        // x ≤ x should be proved
-        let spec = Spec::le(Spec::var("x"), Spec::var("x"));
+        let term = Spec::binop(BinOp::Mul, Spec::int(3), Spec::int(4));
+        let spec = Spec::le(term.clone(), term);
         let status = prover.prove_spec(&spec);
         assert!(
             status.is_established(),

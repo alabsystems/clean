@@ -1821,9 +1821,10 @@ pub use aesop::{AesopIndexMode, AesopRule, AesopRuleBuilder, AesopRulePhase, Aes
 // Core types - extracted for organization (see #1161)
 mod types;
 pub use types::{
-    ConstantInfo, ConstantKind, Declaration, EnvError, EnvExtensionEntry, EnvExtensionEntryData,
-    KernelClassInfo, KernelInstanceInfo, PersistentEnvExtensionState, Reducibility, SimpLemmaInfo,
-    SimpPriority, TransparencyMode, DEFAULT_INSTANCE_PRIORITY, LEAN_DEFAULT_INSTANCE_PRIORITY,
+    collect_fvar_ids_for_diagnostics, ConstantInfo, ConstantKind, Declaration, EnvError,
+    EnvExtensionEntry, EnvExtensionEntryData, KernelClassInfo, KernelInstanceInfo,
+    PersistentEnvExtensionState, Reducibility, SimpLemmaInfo, SimpPriority, TransparencyMode,
+    DEFAULT_INSTANCE_PRIORITY, LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
 
 // Bounded-memory closure loading: elide never-unfolded proof VALUES from a
@@ -3202,6 +3203,12 @@ pub struct Environment {
     // ========================================================================
     /// Registered simp lemmas by name
     simp_lemmas: HashMap<Name, SimpLemmaInfo>,
+    /// Bumped ONLY by simp-lemma register/unregister (never by `add_decl`),
+    /// so consumers that cache derived simp structures (the elaborator's
+    /// per-env `SimpLemmaSet`) can key on it and survive append-only
+    /// declaration growth, while any registry mutation — including a
+    /// count-and-content-neutral remove/re-add cycle — forces a rebuild.
+    simp_registry_revision: u64,
     /// Extern bindings (declaration -> C function name)
     extern_bindings: HashMap<Name, String>,
     /// @[implemented_by] bindings (declaration -> implementing function name).
@@ -4499,6 +4506,7 @@ impl Environment {
             instances: HashMap::with_capacity(capacity / 16),
             instance_names: hashbrown::HashSet::with_capacity(capacity / 8),
             simp_lemmas: HashMap::with_capacity(capacity / 16),
+            simp_registry_revision: 0,
             param_names: HashMap::with_capacity(capacity / 4),
             persistent_extensions: HashMap::with_capacity(32),
             extern_bindings: HashMap::with_capacity(capacity / 32),
@@ -5038,10 +5046,12 @@ impl Environment {
 
     /// Monotonically increasing generation counter (#1279).
     ///
-    /// Bumped on every mutation (add_decl, add_inductive, register_instance, etc.).
-    /// Used by the type checker cache to detect environment changes even when
-    /// the constant count stays the same (e.g., remove + add).
-    pub(crate) fn generation(&self) -> u64 {
+    /// Bumped on every mutation (add_decl, add_inductive, register_instance,
+    /// register_simp_lemma, etc.). Used by the type checker cache — and by the
+    /// elaborator's per-environment simp lemma-set cache — to detect
+    /// environment changes even when the constant count stays the same
+    /// (e.g., remove + add).
+    pub fn generation(&self) -> u64 {
         self.generation
     }
 

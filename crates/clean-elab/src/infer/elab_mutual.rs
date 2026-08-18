@@ -120,7 +120,7 @@ impl<'a> ElabCtx<'a> {
                     ty,
                     ..
                 } => {
-                    self.universe_params = universe_params.clone();
+                    self.set_decl_universe_params(universe_params);
 
                     let ty_expr = if let Some(ty_surface) = ty {
                         self.elab_axiom_type(binders, ty_surface)?
@@ -159,7 +159,7 @@ impl<'a> ElabCtx<'a> {
                     ty,
                     ..
                 } => {
-                    self.universe_params = universe_params.clone();
+                    self.set_decl_universe_params(universe_params);
 
                     let ty_expr = self.elab_axiom_type(binders, ty)?;
                     let ty_expr = self.metas.instantiate(&ty_expr);
@@ -203,7 +203,7 @@ impl<'a> ElabCtx<'a> {
                     ..
                 } => {
                     let entry = &entries[entry_idx];
-                    self.universe_params = universe_params.clone();
+                    self.set_decl_universe_params(universe_params);
 
                     let (ty_expr, val_expr) = self.elab_def_body(binders, ty.as_deref(), val)?;
 
@@ -244,7 +244,7 @@ impl<'a> ElabCtx<'a> {
                     ..
                 } => {
                     let entry = &entries[entry_idx];
-                    self.universe_params = universe_params.clone();
+                    self.set_decl_universe_params(universe_params);
 
                     let (ty_expr, proof_expr) = self.elab_def_body(binders, Some(ty), proof)?;
 

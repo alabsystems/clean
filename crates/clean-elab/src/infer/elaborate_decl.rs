@@ -31,6 +31,35 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
+    /// Activate the scoped notations of the namespaces named by an `open` /
+    /// `open scoped` command (Lean `elabOpen`: only the SIMPLE forms activate
+    /// scoped declarations — `open Foo (x)` / `hiding` / `renaming` import
+    /// names only). Candidate resolutions are the path as written plus each
+    /// current-namespace prefix qualification (mirroring Lean's
+    /// `resolveNamespace` candidates); activating a namespace that declared
+    /// no scoped notation is a no-op.
+    fn activate_open_scoped_notation(&mut self, paths: &[clean_parser::OpenPath]) {
+        for path in paths {
+            if !(path.names.is_empty() && path.hiding.is_empty() && path.renaming.is_empty()) {
+                continue;
+            }
+            let ns = path.path.join(".");
+            if ns.is_empty() {
+                continue;
+            }
+            let mut candidates = vec![ns.clone()];
+            if !self.namespace_prefix.is_empty() {
+                let segments: Vec<&str> = self.namespace_prefix.split('.').collect();
+                for i in 1..=segments.len() {
+                    candidates.push(format!("{}.{ns}", segments[..i].join(".")));
+                }
+            }
+            for candidate in candidates {
+                self.macro_ctx.activate_scoped_namespace(&candidate);
+            }
+        }
+    }
+
     fn elab_namespace(
         &mut self,
         name: &str,
@@ -56,24 +85,71 @@ impl<'a> ElabCtx<'a> {
         // scope-immune (`insert_alias_unscoped`), mirroring Lean's permanent
         // env alias table.
         self.namespace_state.push_scope();
+        // Scoped-notation gate: the block's namespace (and its ancestors)
+        // implicitly activate their `scoped notation`s while current; `open`
+        // activations made inside the block die at `end` with the frame.
+        self.macro_ctx.push_scoped_activation_frame();
+        self.macro_ctx.set_current_namespace(&self.namespace_prefix);
+        // Namespace-scoped `variable` binders: Lean scopes `variable` to the
+        // enclosing namespace exactly as to a section (`Mathlib/Data/Subtype`:
+        // `namespace Subtype` + `variable {p q : α → Prop}` + decls USING p).
+        // Mirror `elab_section`'s discipline — accumulate Variable binders,
+        // prepend the USED closure to each subsequent declaration, truncate
+        // on every exit path so the variables die with the namespace.
+        let saved_section_binders = self.section_binder_stack.len();
         let mut results = Vec::new();
         for inner in decls {
-            let result = match self.elab_decl(inner) {
+            let processed = if matches!(inner, SurfaceDecl::Variable { .. }) {
+                // Chained `variable` lines: hand validation the accumulated
+                // telescope (the preprocess Variable arm prepends the
+                // context's current variables; the throwaway FileContext's
+                // accumulation is discarded).
+                if self.section_binder_stack.is_empty() {
+                    None
+                } else {
+                    let mut fc = crate::FileContext::new();
+                    fc.add_variables(&self.section_binder_stack.clone());
+                    Some(crate::preprocess::preprocess_decl_with_context(
+                        inner, &mut fc,
+                    ))
+                }
+            } else {
+                let used = used_section_binders(&self.section_binder_stack, inner);
+                if used.is_empty() {
+                    None
+                } else {
+                    let mut fc = crate::FileContext::new();
+                    fc.add_variables(&used);
+                    Some(crate::preprocess::preprocess_decl_with_context(
+                        inner, &mut fc,
+                    ))
+                }
+            };
+            let result = match self.elab_decl(processed.as_ref().unwrap_or(inner)) {
                 Ok(r) => r,
                 Err(e) => {
+                    self.section_binder_stack.truncate(saved_section_binders);
                     self.namespace_state.pop_scope();
                     self.namespace_state.exit_namespace();
                     self.namespace_prefix = prev_prefix;
+                    self.macro_ctx.pop_scoped_activation_frame();
+                    self.macro_ctx.set_current_namespace(&self.namespace_prefix);
                     return Err(e);
                 }
             };
+            if let SurfaceDecl::Variable { binders, .. } = inner {
+                self.section_binder_stack.extend(binders.iter().cloned());
+            }
             if !matches!(result, ElabResult::Skipped) {
                 results.push(result);
             }
         }
+        self.section_binder_stack.truncate(saved_section_binders);
         self.namespace_state.pop_scope();
         self.namespace_state.exit_namespace();
         self.namespace_prefix = prev_prefix;
+        self.macro_ctx.pop_scoped_activation_frame();
+        self.macro_ctx.set_current_namespace(&self.namespace_prefix);
         Ok(ElabResult::Multiple(results))
     }
 
@@ -419,7 +495,7 @@ impl<'a> ElabCtx<'a> {
                 modifiers,
                 ..
             } => {
-                self.universe_params = universe_params.clone();
+                self.set_decl_universe_params(universe_params);
                 let qname = self.qualify_name(name);
                 self.elab_inductive(
                     &qname,
@@ -528,7 +604,7 @@ impl<'a> ElabCtx<'a> {
                 modifiers,
                 ..
             } => {
-                self.universe_params = universe_params.clone();
+                self.set_decl_universe_params(universe_params);
                 let qname = name.as_ref().map(|n| self.qualify_name(n));
                 self.elab_instance(
                     qname.as_deref(),
@@ -585,24 +661,31 @@ impl<'a> ElabCtx<'a> {
             } => {
                 // `scoped notation` (Lean: active only when the declaring
                 // namespace is opened / current — `Lean/Elab/Notation.lean`
-                // attrKind `scoped`) has no honest implementation in the main
-                // elaborate path: the macro registry has no namespace gating,
-                // so registering it globally would ACTIVATE it in scopes where
-                // Lean says it is invisible, and DROPPING it silently made its
-                // token auto-bind at the use site (gap sweep B13,
-                // namespaces_scoping/p10). Reject loudly — and thereby COUNT
-                // it as a failed declaration — rather than silently dropping
-                // it. (`open scoped Foo` remains a tolerated no-op: it merely
-                // activates a namespace's scoped notations, of which clean
-                // honors none, so it hides nothing and stays faithful to the
-                // valid Lean program `open scoped Foo`.)
+                // attrKind `scoped`) registers against the CURRENT namespace
+                // and stays out of the live registry until that namespace is
+                // active (current, an ancestor of the current namespace, or
+                // activated by `open Ns` / `open scoped Ns`). At root Lean
+                // rejects the `scoped` modifier ("scoped attributes must be
+                // used inside namespaces"), so we fail closed there rather
+                // than registering a notation that could never be gated
+                // honestly (gap sweep B13, namespaces_scoping/p10).
                 if *scope == clean_parser::DeclScope::Scoped {
-                    return Err(ElabError::Unsupported {
-                        feature: "scoped notation (namespace-gated notation is not yet \
-                                  implemented; the declaration cannot be honored honestly, so \
-                                  it is rejected loudly rather than silently dropped)"
-                            .to_string(),
-                    });
+                    if self.namespace_prefix.is_empty() {
+                        return Err(ElabError::MacroError(
+                            "scoped notation must be declared inside a namespace".to_string(),
+                        ));
+                    }
+                    let namespace = self.namespace_prefix.clone();
+                    self.macro_ctx
+                        .register_scoped_notation(
+                            &namespace,
+                            *kind,
+                            *precedence,
+                            pattern,
+                            expansion,
+                        )
+                        .map_err(|e| ElabError::MacroError(e.to_string()))?;
+                    return Ok(ElabResult::Skipped);
                 }
                 // `local notation` and plain `notation` both register in the
                 // macro context; section/namespace blocks snapshot-restore the
@@ -641,12 +724,16 @@ impl<'a> ElabCtx<'a> {
                 // the `body` check, so `open scoped X in theorem t : T := prf` returned `Skipped`
                 // WITHOUT elaborating `t` at all — the theorem silently vanished (no error, no
                 // `Failed` leaf, never kernel-checked, never registered). The body must be
-                // elaborated regardless of scoped-ness: `open scoped` affects only scoped
-                // notations/attributes (which clean does not model), so for a scoped open the
-                // body is elaborated WITHOUT bringing names into scope; a plain `open … in`
-                // additionally opens the names for the body, as before.
+                // elaborated regardless of scoped-ness: `open scoped` activates the namespace's
+                // scoped notations (namespace-gated in the macro registry), so for a scoped
+                // open the body is elaborated with those notations active but WITHOUT bringing
+                // names into scope; a plain `open … in` additionally opens the names for the
+                // body, and activates scoped notations too (Lean `elabOpen`: the simple form
+                // calls `activateScoped`).
                 if let Some(inner) = body {
                     self.namespace_state.push_scope();
+                    self.macro_ctx.push_scoped_activation_frame();
+                    self.activate_open_scoped_notation(paths);
                     let open_result = if *scoped {
                         Ok(())
                     } else {
@@ -656,9 +743,11 @@ impl<'a> ElabCtx<'a> {
                             })
                     };
                     let result = open_result.and_then(|()| self.elab_decl_inner(inner));
+                    self.macro_ctx.pop_scoped_activation_frame();
                     self.namespace_state.pop_scope();
                     return result;
                 }
+                self.activate_open_scoped_notation(paths);
                 if *scoped {
                     return Ok(ElabResult::Skipped);
                 }
@@ -841,6 +930,79 @@ impl<'a> ElabCtx<'a> {
 /// Returns `None` for declaration kinds that never receive section-variable
 /// binders (mirroring which kinds `preprocess` prepends variables to:
 /// `Def`/`Theorem`/`Example`/`Instance`).
+/// Whether [`decl_free_surface_idents`] can see every identifier in `decl`.
+///
+/// Mirrors that function's traversal, asking
+/// [`crate::where_desugar_ext::free_idents_are_complete`] of each expression it
+/// visits. Any `false` makes the whole declaration unanalyzable, which
+/// `used_section_binders` treats as "include every section binder".
+fn decl_free_idents_complete(decl: &SurfaceDecl) -> bool {
+    use crate::where_desugar_ext::free_idents_are_complete;
+    let binders_ok = |binders: &[clean_parser::SurfaceBinder]| {
+        binders
+            .iter()
+            .all(|b| b.ty.as_ref().is_none_or(|ty| free_idents_are_complete(ty)))
+    };
+    match decl {
+        SurfaceDecl::Def {
+            binders,
+            ty,
+            val,
+            where_decls,
+            ..
+        } => {
+            binders_ok(binders)
+                && ty.as_ref().is_none_or(|t| free_idents_are_complete(t))
+                && free_idents_are_complete(val)
+                && where_decls.iter().all(|w| {
+                    binders_ok(&w.binders)
+                        && w.ret_ty
+                            .as_ref()
+                            .is_none_or(|t| free_idents_are_complete(t))
+                        && free_idents_are_complete(&w.body)
+                })
+        }
+        SurfaceDecl::Theorem {
+            binders,
+            ty,
+            proof,
+            where_decls,
+            ..
+        } => {
+            binders_ok(binders)
+                && free_idents_are_complete(ty)
+                && free_idents_are_complete(proof)
+                && where_decls.iter().all(|w| {
+                    binders_ok(&w.binders)
+                        && w.ret_ty
+                            .as_ref()
+                            .is_none_or(|t| free_idents_are_complete(t))
+                        && free_idents_are_complete(&w.body)
+                })
+        }
+        SurfaceDecl::Example {
+            binders, ty, val, ..
+        } => {
+            binders_ok(binders)
+                && ty.as_ref().is_none_or(|t| free_idents_are_complete(t))
+                && free_idents_are_complete(val)
+        }
+        SurfaceDecl::Instance {
+            binders,
+            class_type,
+            fields,
+            ..
+        } => {
+            binders_ok(binders)
+                && free_idents_are_complete(class_type)
+                && fields.iter().all(|f| free_idents_are_complete(&f.val))
+        }
+        // Anything else is not a prepend site; `used_section_binders` already
+        // returns empty for it via `decl_free_surface_idents`.
+        _ => true,
+    }
+}
+
 fn decl_free_surface_idents(
     decl: &SurfaceDecl,
 ) -> Option<(
@@ -935,13 +1097,37 @@ fn decl_free_surface_idents(
 /// their TYPE mentions an included variable (so `variable {α} [Add α]` adds
 /// `[Add α]` to any decl that uses `α`). A decl binder with the same name
 /// shadows the section variable.
-fn used_section_binders(
+pub(crate) fn used_section_binders(
     section_binders: &[clean_parser::SurfaceBinder],
     decl: &SurfaceDecl,
 ) -> Vec<clean_parser::SurfaceBinder> {
     use crate::where_desugar_ext::collect_free_idents;
     if section_binders.is_empty() {
         return Vec::new();
+    }
+    // FAIL CLOSED when the use-analysis cannot see everything.
+    //
+    // `collect_free_idents` documents itself as "may undercount edges, never
+    // overcount": its final match arm silently ignores constructs it does not
+    // model (`Proj`, `Do`, `StructLit`, `ByTactic`, `Explicit`, `NamedArg`,
+    // `InterpolatedStr`, ...). Undercounting is sound for the dependency
+    // analysis it was written for; it is NOT sound HERE, where a missed
+    // identifier means a section `variable` is not prepended and the
+    // declaration registers with the WRONG ARITY.
+    //
+    // Measured regression this guards: `variable {α : Type} (p : α × α)` with
+    // `def f : α × α := (p.2, p.1)` dropped `p`, because `p` occurs only as a
+    // `Proj` receiver. `f` then took no explicit argument and every later
+    // application failed with `TooManyArguments`
+    // (`lean4_corpus_tests::test_r90_discovery_lock`, snippet
+    // `sectvar_transitive_incl`).
+    //
+    // Where the analysis IS complete, the Lean-faithful used-closure still
+    // applies and keeps the Mathlib win it was introduced for. Where it is not,
+    // including every in-scope binder is the previous, over-inclusive but
+    // CORRECT behavior — the safe direction to be wrong in.
+    if !decl_free_idents_complete(decl) {
+        return section_binders.to_vec();
     }
     let Some((mut used, own_binders)) = decl_free_surface_idents(decl) else {
         return Vec::new();

@@ -10,6 +10,9 @@ pub(crate) mod analysis;
 mod code_actions;
 mod document_ops;
 mod helpers;
+#[cfg(test)]
+mod import_loading_tests;
+mod imports;
 mod language_server;
 mod links;
 mod navigation;
@@ -23,7 +26,14 @@ mod type_hierarchy;
 pub(crate) mod warnings;
 
 use crate::document::{Document, ElaboratedDecl};
-use crate::rpc::{PanelWidgetInstance, Range as RpcRange, RpcSessionManager, WidgetSource};
+use crate::rpc::{
+    PanelWidgetInstance, PositionedInteractiveGoals, PositionedTermGoal, Range as RpcRange,
+    RpcSessionManager, WidgetSource,
+};
+use clean_elab::interactive_goals::{
+    interactive_goal_from_rendered, InteractiveGoals, InteractiveHypothesisBundle,
+    InteractiveTermGoal,
+};
 use dashmap::DashMap;
 use std::sync::Arc;
 use tower_lsp::lsp_types::*;
@@ -224,6 +234,7 @@ impl CleanBackend {
         params: crate::rpc::RpcConnectParams,
     ) -> tower_lsp::jsonrpc::Result<crate::rpc::RpcConnected> {
         self.refresh_infoview_widgets(&params.uri);
+        self.refresh_infoview_goals(&params.uri);
         self.rpc_sessions
             .connect(params)
             .map_err(|e| tower_lsp::jsonrpc::Error {
@@ -240,6 +251,7 @@ impl CleanBackend {
         params: crate::rpc::RpcCallParams,
     ) -> tower_lsp::jsonrpc::Result<serde_json::Value> {
         self.refresh_infoview_widgets(&params.text_document.uri);
+        self.refresh_infoview_goals(&params.text_document.uri);
         self.rpc_sessions
             .call(params)
             .map_err(|e| tower_lsp::jsonrpc::Error {
@@ -431,6 +443,98 @@ impl CleanBackend {
 
         self.rpc_sessions
             .replace_panel_widgets(uri.clone(), widgets);
+    }
+
+    /// Refresh the structured goal state for `uri` in the RPC goal registry.
+    ///
+    /// Sources the same live data as `$/lean/plainGoal` / `$/lean/plainTermGoal`:
+    /// range-local tactic goal snapshots (parsed back into structured
+    /// [`InteractiveGoals`]) and hole contexts / declaration types recorded
+    /// during elaboration (as [`InteractiveTermGoal`] entries). Term-goal
+    /// entries are pushed narrowest-first — holes (innermost first) before
+    /// enclosing declarations — because the registry lookup is first-match.
+    fn refresh_infoview_goals(&self, uri: &Url) {
+        let doc_is_elaborated = self
+            .documents
+            .get(uri)
+            .is_some_and(|doc| doc.elaborated.is_some());
+
+        let goal_entries = if doc_is_elaborated && self.has_live_tactic_goal_state() {
+            self.tactic_goal_snapshots
+                .get(uri)
+                .map(|snapshots| {
+                    snapshots
+                        .value()
+                        .iter()
+                        .map(|snapshot| PositionedInteractiveGoals {
+                            range: RpcRange {
+                                start: snapshot.range.start,
+                                end: snapshot.range.end,
+                            },
+                            goals: InteractiveGoals {
+                                goals: snapshot
+                                    .goals
+                                    .iter()
+                                    .map(|goal| interactive_goal_from_rendered(goal))
+                                    .collect(),
+                            },
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let term_entries = self
+            .documents
+            .get(uri)
+            .and_then(|doc| {
+                let elab = doc.elaborated.as_ref()?;
+                let mut holes: Vec<&crate::document::HoleContext> = elab.holes.iter().collect();
+                // Innermost (narrowest) hole first, matching the
+                // `plainTermGoal` innermost-hole preference.
+                holes.sort_by_key(|hole| hole.end.saturating_sub(hole.start));
+                let mut entries: Vec<PositionedTermGoal> = holes
+                    .into_iter()
+                    .map(|hole| PositionedTermGoal {
+                        range: RpcRange {
+                            start: doc.offset_to_position(hole.start),
+                            end: doc.offset_to_position(hole.end),
+                        },
+                        goal: InteractiveTermGoal {
+                            hyps: hole
+                                .local_bindings
+                                .iter()
+                                .map(|(name, ty)| InteractiveHypothesisBundle {
+                                    names: vec![name.clone()],
+                                    type_: ty.clone(),
+                                    is_instance: false,
+                                    is_inserted: false,
+                                })
+                                .collect(),
+                            type_: hole.expected_type.clone(),
+                        },
+                    })
+                    .collect();
+                entries.extend(elab.declarations.iter().map(|decl| PositionedTermGoal {
+                    range: RpcRange {
+                        start: doc.offset_to_position(decl.start),
+                        end: doc.offset_to_position(decl.end),
+                    },
+                    goal: InteractiveTermGoal {
+                        hyps: Vec::new(),
+                        type_: decl.type_str.clone(),
+                    },
+                }));
+                Some(entries)
+            })
+            .unwrap_or_default();
+
+        self.rpc_sessions
+            .replace_interactive_goals(uri.clone(), goal_entries);
+        self.rpc_sessions
+            .replace_term_goals(uri.clone(), term_entries);
     }
 
     /// Handle $/lean/plainGoal

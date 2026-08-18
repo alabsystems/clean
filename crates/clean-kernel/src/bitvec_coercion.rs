@@ -189,13 +189,28 @@ pub mod names {
     /// `bvf_and_cong` / `bvf_xor_cong` — bitwise op congruences (B4 AND/XOR wiring).
     pub const BVF_AND_CONG: &str = "Clean.BVC.bvf_and_cong";
     pub const BVF_XOR_CONG: &str = "Clean.BVC.bvf_xor_cong";
-    /// `bvf_or_cong : ∀ a a' b b', bvfEval a = bvfEval a' → bvfEval b = bvfEval b'
-    /// → bvfEval (Or a b) = bvfEval (Or a' b')` — the GENERAL, two-sided OR
-    /// congruence, sibling of `BVF_AND_CONG` / `BVF_XOR_CONG`.
+    /// `bvf_or_cong : ∀ (a a' b b' : BvF), bvfEval a = bvfEval a' →
+    ///     bvfEval b = bvfEval b' → bvfEval (Or a b) = bvfEval (Or a' b')`
     ///
-    /// Distinct from [`BVF_OR_CONG2`], which fixes the LEFT operand and therefore
-    /// only covers the `Orr Wd, WZR, Ws` register-move wrapper. A user-level `|`
-    /// moves BOTH operands and needs this one.
+    /// The GENERAL two-sided OR congruence, and the sibling of `bvf_and_cong` /
+    /// `bvf_xor_cong` — `bvfEval (Or x y)` reduces to `bvZipOr (eval x)(eval y)`,
+    /// the identical shape.
+    ///
+    /// # Why this was missing, and what its absence cost
+    ///
+    /// [`BVF_OR_CONG2`] is one-sided: it only relates `Or c x` to `Or c x'` for a
+    /// FIXED left operand, which is all the `Orr Wd, WZR, Ws` register-move
+    /// wrapper needs. Every other binary op — and, xor, mul, div, sdiv, shl,
+    /// lshr, ashr — had the general two-sided form, so a machine `Orr` with two
+    /// real operands (a user-level `|`) was the ONE binary shape with no O(1)
+    /// coercion-identity route through `reflect_formula`.
+    ///
+    /// It therefore fell out of that path and back onto bit-blast + SAT + kernel
+    /// re-check. (c) MEASURED before this theorem existed, compiling one function
+    /// through `trust-cg` with `--emit=link`: `(x ^ y) ^ (x & y)` cost 2.76 s and
+    /// **0.99 GB**, while `(x ^ y) | (x & y)` — identical shape, one instruction
+    /// different (`eor` vs `orr`) — cost 20.94 s and **27.41 GB**. At five ops the
+    /// OR form reached **54.78 GB**, past physical memory.
     pub const BVF_OR_CONG: &str = "Clean.BVC.bvf_or_cong";
     /// `bvf_mul_cong : ∀ (a a' b b' : BvF), bvfEval a = bvfEval a' →
     ///     bvfEval b = bvfEval b' → bvfEval (Mul a b) = bvfEval (Mul a' b')`
@@ -268,16 +283,45 @@ pub mod names {
     /// the memory keystone for multi-cell / multi-byte store-load (each byte load skips the later
     /// byte stores via selectStoreDiff and hits its own via selectStoreSame).
     pub const SELECT_STORE_DIFF: &str = "Clean.BVC.selectStoreDiff";
-    /// `selectAddrCong : ∀ m a a', a = a' → bvSelect m a = bvSelect m a'` — the
-    /// address congruence at a FIXED array: two reads of the SAME uninterpreted
-    /// memory at provably-equal addresses are equal.
+    /// `selectAddrCong : ∀ (m : List Bool → List Bool) (a a' : List Bool),
+    ///     a = a' → bvSelect m a = bvSelect m a'`
     ///
-    /// This is what admits a BARE `Select(MEM, a)` — the dereference of a `&T`
-    /// parameter — into the O(1) fragment. Note what it does NOT say: it mentions
-    /// no store, so read-over-write and aliasing remain entirely outside the
-    /// fragment and still need `selectStoreSame` / `selectStoreDiff`, each with
-    /// its own side condition. Proved by congruence at `fun x => bvSelect m x`,
-    /// so its axiom closure is empty.
+    /// THE CALLER-PROVIDED-MEMORY keystone: a congruence over `bvSelect`'s ADDRESS
+    /// argument, at a FIXED array `m`. Two reads of the SAME untouched memory at
+    /// PROVABLY-EQUAL addresses return the same value.
+    ///
+    /// # Why this one is different from `selectStoreSame` / `selectStoreDiff`
+    ///
+    /// Both of those relate a read to a WRITE the term itself performs — they are
+    /// read-over-write laws, and the underlying `m` is never inspected (which is
+    /// why the store-load path can abstract it as a closed dummy array). Neither
+    /// says anything about a read from an OPAQUE PRE-STATE: memory the function
+    /// never wrote, i.e. exactly what a load through a `&T` PARAMETER is. There
+    /// was no lemma for that shape at all, so a bare `bvSelect M a` was stuck and
+    /// the whole obligation fell outside the fragment.
+    ///
+    /// This is the missing law, and it is the WEAKEST one that suffices: it does
+    /// NOT interpret `m`, does not require `m` closed, and asserts nothing about
+    /// aliasing. It only transports an address equality under the read. That is
+    /// enough because the two sides of a machine-vs-IR obligation read the SAME
+    /// pre-state — sound precisely when nothing has written to it (a read-only
+    /// body); the caller enforces that side condition, this lemma does not.
+    ///
+    /// # Shape and non-vacuity
+    ///
+    /// Proven by the same `Eq.subst` shape as the rest of the layer (motive
+    /// `l := bvSelect m a = bvSelect m l`, base `Eq.refl (bvSelect m a)`), so it
+    /// carries an empty domain-axiom closure. The hypothesis is LOAD-BEARING:
+    /// dropping it leaves the FALSE `∀ m a a', bvSelect m a = bvSelect m a'`
+    /// (`bvSelect` genuinely depends on its address — at `m := fun w => w` the two
+    /// sides are `a` and `a'`), which is kernel-REJECTED.
+    ///
+    /// The address argument is second, so this does NOT fit the generated
+    /// `bvf_*_cong` table: those rows are two-hypothesis congruences over a
+    /// `BvF` binary constructor whose `bvfEval` reduces to a `List Bool → List
+    /// Bool → List Bool` op. `bvSelect`'s first argument is an ARRAY
+    /// (`List Bool → List Bool`) and there is no `BvF.Select` constructor, so it
+    /// lives here with the other two memory lemmas instead.
     pub const SELECT_ADDR_CONG: &str = "Clean.BVC.selectAddrCong";
     /// `bvBeqConsFalse : ∀ (h1 h2 : Bool) (t1 t2 : List Bool), Bool.xor h1 h2 = true →
     ///     bvBeq (h1 :: t1) (h2 :: t2) = false`
@@ -2406,9 +2450,14 @@ impl Environment {
         for (thm_name, ctor_name, reduced) in [
             (names::BVF_AND_CONG, "Clean.BVC.BvF.And", names::ZIP_AND),
             (names::BVF_XOR_CONG, "Clean.BVC.BvF.Xor", names::ZIP_XOR),
-            // OR — bvfEval(Or x y) reduces to bvZipOr (eval x)(eval y), the same
-            // per-bit zip shape as And/Xor, so the generic body below proves it
-            // with the same two `Eq.subst`s and no new proof code.
+            // OR — the general two-sided form. `bvfEval (Or x y)` reduces to
+            // `bvZipOr (eval x)(eval y)` exactly as And/Xor reduce to their zips,
+            // so it belongs in this table and needs no separate proof shape. Its
+            // ABSENCE was load-bearing: `bvf_or_cong2` covers only a fixed left
+            // operand (the `Orr Wd, WZR, Ws` move wrapper), so a machine `Orr`
+            // with two real operands had no O(1) coercion-identity route and fell
+            // back to bit-blasting. See [`names::BVF_OR_CONG`] for the measured
+            // cost of that fallback.
             (names::BVF_OR_CONG, "Clean.BVC.BvF.Or", names::ZIP_OR),
             // MUL — bvfEval(Mul x y) reduces to bvMul (eval x)(eval y); same shape.
             (names::BVF_MUL_CONG, "Clean.BVC.BvF.Mul", names::BV_MUL),
@@ -3339,13 +3388,19 @@ impl Environment {
             })?;
 
             // ── selectAddrCong : ∀ m a a', a = a' → bvSelect m a = bvSelect m a' ──
-            // The ARRAY is fixed and never interpreted here; only the ADDRESS
-            // moves. So this is plain congruence at `f := fun x => bvSelect m x`,
-            // and `congrArg`'s conclusion `Eq (f a) (f a')` is beta-defeq to the
-            // goal. It is deliberately weaker than the read-over-write lemmas
-            // above: it mentions no store at all, so aliasing stays out of the
-            // fragment and admitting a bare `Select(MEM, a)` on its strength
-            // still requires the caller's separate no-store side condition.
+            //
+            // THE CALLER-PROVIDED-MEMORY law (see `names::SELECT_ADDR_CONG`). The two
+            // read-over-write lemmas above both relate a read to a write the term
+            // itself performs; NEITHER covers a read from an OPAQUE PRE-STATE — memory
+            // the function never wrote, which is exactly a load through a `&T`
+            // parameter. This transports an address equality under `bvSelect` at a
+            // FIXED array, which is the weakest law that discharges that shape: `m` is
+            // never interpreted, so it holds for an axiom-opaque memory (the caller's),
+            // not just for the closed dummy array the store-load path abstracts to.
+            //
+            // Proof: Eq.subst with motive `l := bvSelect m a = bvSelect m l`, base
+            // `Eq.refl (bvSelect m a)` — the same shape as every other cong in this
+            // layer, so the domain-axiom closure stays empty. NO congrArg redex.
             let ty = {
                 let mut b = EnvDeclBuilder::new();
                 let (m_id, m) = b.fresh_local(arr_ty.clone());
@@ -3366,18 +3421,20 @@ impl Environment {
                 let (ap_id, ap) = b.fresh_local(list_bool());
                 let hty = eq_list(a.clone(), ap.clone());
                 let (h_id, h) = b.fresh_local(hty.clone());
-                // `fun w => bvSelect m w`, with the array captured.
-                let read_at = {
+                // motive l := bvSelect m a = bvSelect m l
+                let motive = {
                     let mut c = EnvDeclBuilder::child_of(&b);
-                    let (w_id, w) = c.fresh_local(list_bool());
-                    c.finish_child(c.mk_lam(
-                        w_id,
-                        BinderInfo::Default,
-                        list_bool(),
-                        sel(m.clone(), w),
-                    ))
+                    let (l_id, l) = c.fresh_local(list_bool());
+                    let body = eq_list(sel(m.clone(), a.clone()), sel(m.clone(), l));
+                    c.finish_child(c.mk_lam(l_id, BinderInfo::Default, list_bool(), body))
                 };
-                let proof = congr_arg_ll(a.clone(), ap.clone(), read_at, h);
+                // base : motive a ≡ (bvSelect m a = bvSelect m a) — refl.
+                let base = eq_refl_list(sel(m.clone(), a.clone()));
+                // Eq.subst {List Bool} motive a a' h base : motive a'.
+                let proof = Expr::apps(
+                    Expr::const_(Name::from_string("Eq.subst"), vec![l1.clone()]),
+                    [list_bool(), motive, a.clone(), ap.clone(), h, base],
+                );
                 let r = b.mk_lam(h_id, BinderInfo::Default, hty, proof);
                 let r = b.mk_lam(ap_id, BinderInfo::Default, list_bool(), r);
                 let r = b.mk_lam(a_id, BinderInfo::Default, list_bool(), r);

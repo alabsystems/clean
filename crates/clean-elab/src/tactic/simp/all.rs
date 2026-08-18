@@ -11,7 +11,7 @@
 
 use std::collections::HashSet;
 
-use super::lemmas::collect_simp_lemmas;
+use super::cache::collect_simp_lemmas_cached;
 use super::types::SimpConfig;
 use super::{is_trivial_equality, is_true_const, simp_at, simp_at_with_lemmas, simp_default};
 use clean_kernel::Expr;
@@ -78,7 +78,7 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
 
     // Keep equality hypotheses stable while they are still needed as rewrite
     // lemmas for the rest of the context and the target.
-    let rewrite_simp_lemmas = collect_simp_lemmas(state, &config);
+    let rewrite_simp_lemmas = collect_simp_lemmas_cached(state, &config);
 
     // Simplify non-equality hypotheses via simp_at_with_lemmas, which uses
     // proper proof terms (fresh fvar + let-binding + Eq.subst/identity cast).
@@ -104,7 +104,7 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
     // After the rest of the context has consumed the original equality proofs,
     // simplify the equality hypotheses themselves with a fresh local-lemma set.
     for hyp_name in &rewrite_hyp_names {
-        let simp_lemmas = collect_simp_lemmas(state, &config);
+        let simp_lemmas = collect_simp_lemmas_cached(state, &config);
         if simp_at_with_lemmas(state, hyp_name, &config, &simp_lemmas).is_ok() {
             made_progress = true;
         }

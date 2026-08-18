@@ -8,26 +8,140 @@
 //! recursive call site generates a proof obligation:
 //!   `measure(rec_arg) < measure(current_arg)`
 //!
-//! This module handles three strategies for discharging these obligations:
+//! The PRODUCTION entry point is [`ElabCtx::discharge_decreasing_goal`]
+//! (first production caller wired 2026-08-10, WF phase 1): a fail-closed
+//! cascade — hypothesis lookup → `Nat.sub_lt` → `omega` → `simp_arith` —
+//! where every candidate is strictly re-checked (`infer_type_full` + def-eq
+//! against the goal, sorry refused) before it is accepted, and failure
+//! returns `None` so the caller rejects the definition loudly. It NEVER
+//! falls back to `sorry` or a metavariable.
 //!
-//! 1. **`decreasing_by` tactic**: User provides an explicit tactic to prove
-//!    all decreasing obligations. The tactic is run on each goal.
-//!
-//! 2. **Default tactic cascade**: When no `decreasing_by` is specified, try
-//!    `simp_arith` then `mathverse` as automatic proof strategies.
-//!
-//! 3. **Unsolved fallback**: If both the default cascade and user tactic fail,
-//!    leave an unresolved proof metavariable for later validation.
+//! The older `solve_decreasing_obligation` scaffold (user `decreasing_by` →
+//! `simp_arith` → `mathverse` → unresolved metavariable) remains staged and
+//! unit-tested but has no production caller — its metavariable fallback is
+//! exactly what the fail-closed contract forbids.
 //!
 //! Reference: Lean 4 `src/Lean/Elab/PreDefinition/WF/Fix.lean`
 //!            (mkDecreasingProof, solveDecreasingGoals)
 
 use clean_kernel::name::Name;
-use clean_kernel::Expr;
+use clean_kernel::{Expr, ExprKind, FVarId};
 use clean_parser::SurfaceTactic;
 
 use super::ElabCtx;
 use crate::ElabError;
+
+impl ElabCtx<'_> {
+    /// Discharge a decreasing obligation `Nat.lt (measure arg) (measure param)`
+    /// against the CURRENT local context (which includes every hypothesis the
+    /// call-site traversal has opened, e.g. a `dite` branch's `h : 0 < n`).
+    ///
+    /// Cascade (first hit wins):
+    /// 1. a hypothesis whose type is already def-eq to the goal;
+    /// 2. `Nat.sub_lt` — the canonical `n - k < n` shape, keyed on a
+    ///    positivity hypothesis in scope;
+    /// 3. tactics: `omega`, then `simp_arith`.
+    ///
+    /// SOUNDNESS: every candidate — including tactic-produced terms — is
+    /// re-checked with STRICT kernel inference (`infer_type_full`, the same
+    /// standard `Environment::add_decl` applies) before being accepted, and
+    /// sorry-carrying terms are refused. `None` means "not discharged": the
+    /// caller fails closed; this function never fabricates a proof.
+    pub(super) fn discharge_decreasing_goal(&mut self, goal: &Expr) -> Option<Expr> {
+        let locals: Vec<(String, FVarId, Expr)> = self.locals.clone();
+
+        // Tier 1: a hypothesis already proves the goal.
+        for (_, fvar, ty) in &locals {
+            if self.is_def_eq(ty, goal) {
+                return Some(Expr::fvar(*fvar));
+            }
+        }
+
+        // Tier 2: `Nat.sub_lt B k h hk` for the `B - k < B` family.
+        if let Some(proof) = self.try_nat_sub_lt_discharge(goal, &locals) {
+            return Some(proof);
+        }
+
+        // Tier 3: tactic cascade.
+        for tactic in ["omega", "simp_arith"] {
+            let tacs = [SurfaceTactic::Named {
+                span: clean_parser::Span::dummy(),
+                name: tactic.to_owned(),
+                args: vec![],
+            }];
+            if let Ok(proof) = self.try_tactic_on_goal(goal, &tacs) {
+                if self.recheck_decreasing_proof(&proof, goal) {
+                    return Some(proof);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Try `Nat.sub_lt B (succ (k-1)) h (Nat.zero_lt_succ (k-1))` for small
+    /// literal `k` and every hypothesis `h` in scope. Wrong candidates are
+    /// weeded out by the strict recheck (a hypothesis that is not a
+    /// `0 < B` proof simply fails inference), so this needs no syntactic
+    /// hypothesis matching — definitional equality does the work, including
+    /// unfolding `HSub.hSub`/`OfNat` sugar in the goal.
+    fn try_nat_sub_lt_discharge(
+        &mut self,
+        goal: &Expr,
+        locals: &[(String, FVarId, Expr)],
+    ) -> Option<Expr> {
+        // The caller constructs the goal as `Nat.lt <m arg> <m param>`;
+        // extract the right-hand side `B := m param`.
+        let ExprKind::App(lhs_fn, rhs) = goal.kind() else {
+            return None;
+        };
+        let ExprKind::App(head, _) = lhs_fn.kind() else {
+            return None;
+        };
+        let nat_lt_name = Name::from_string("Nat.lt");
+        match head.kind() {
+            ExprKind::Const(n, _) if *n == nat_lt_name => {}
+            _ => return None,
+        }
+        let sub_lt_name = Name::from_string("Nat.sub_lt");
+        let zls_name = Name::from_string("Nat.zero_lt_succ");
+        if self.env.get_const(&sub_lt_name).is_none() || self.env.get_const(&zls_name).is_none() {
+            return None;
+        }
+        let sub_lt = Expr::const_(sub_lt_name, vec![]);
+        let zls = Expr::const_(zls_name, vec![]);
+        let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+        let b = Expr::clone(rhs);
+        for (_, fvar, _) in locals {
+            for k in 1..=4u64 {
+                let k_expr = Expr::app(succ.clone(), Expr::nat_lit(k - 1));
+                let k_pos = Expr::app(zls.clone(), Expr::nat_lit(k - 1));
+                let candidate = Expr::apps(
+                    sub_lt.clone(),
+                    [b.clone(), k_expr, Expr::fvar(*fvar), k_pos],
+                );
+                if self.recheck_decreasing_proof(&candidate, goal) {
+                    return Some(candidate);
+                }
+            }
+        }
+        None
+    }
+
+    /// Strict validation of a decreasing-proof candidate: no sorry, and the
+    /// STRICTLY-inferred type (App arguments checked) is def-eq to the goal.
+    /// Terms with unsolved metavariables fail inference (a meta instantiates
+    /// to an unknown fvar) and are therefore refused too.
+    fn recheck_decreasing_proof(&self, proof: &Expr, goal: &Expr) -> bool {
+        if proof.has_sorry() {
+            return false;
+        }
+        match self.infer_type_full(proof) {
+            Ok(ty) => self.is_def_eq(&ty, goal),
+            Err(_) => false,
+        }
+    }
+}
 
 /// The strategy used to discharge a decreasing proof obligation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,13 +174,20 @@ pub(crate) struct DecreasingObligation {
     /// The goal type: `rel rec_arg current_arg` (typically `measure(x') < measure(x)`).
     pub(crate) goal_type: Expr,
     /// The recursive argument expression at this call site.
+    // Staged Lean4-parity scaffold, exercised by unit tests only; the live
+    // pipeline reads only `goal_type` until the phase-2 proof builder lands.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) rec_arg: Expr,
     /// The current argument being decreased.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) current_arg: Expr,
 }
 
 impl DecreasingObligation {
     /// Create a new decreasing obligation.
+    // Staged Lean4-parity scaffold, exercised by unit tests only; the live
+    // pipeline builds its obligation goals inline in `call_sites`.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(goal_type: Expr, rec_arg: Expr, current_arg: Expr) -> Self {
         Self {
             goal_type,
@@ -82,6 +203,9 @@ impl DecreasingObligation {
 ///   `Nat.lt (measure rec_arg) (measure current_arg)`
 /// which is:
 ///   `LT.lt.{0} Nat instLTNat (measure rec_arg) (measure current_arg)`
+// Staged Lean4-parity scaffold, exercised by unit tests only; the live
+// pipeline builds its obligation goals inline in `call_sites`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn build_nat_decreasing_goal(
     measure_fn: &Expr,
     rec_arg: &Expr,

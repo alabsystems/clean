@@ -29,6 +29,56 @@ pub struct LakeConfig {
     pub scripts: Vec<LakeScript>,
     /// Default targets
     pub default_targets: Vec<String>,
+    /// Top-level `lakefile.lean` constructs the simplified parser skipped.
+    /// Empty for `lakefile.toml` projects and fully-understood lakefiles.
+    pub diagnostics: Vec<SkippedConstruct>,
+}
+
+/// A top-level `lakefile.lean` construct the simplified parser skipped.
+///
+/// The line scraper in [`LakeConfig::parse`] models Lake's declarative subset
+/// (`package` / `require` / `lean_lib` / `lean_exe` / `lean_test` / `script`);
+/// anything else at top level (e.g. `abbrev`, custom `target` declarations,
+/// meta code) is recorded here instead of vanishing silently.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SkippedConstruct {
+    /// 1-based line number in the lakefile
+    pub line: usize,
+    /// Leading token of the skipped line (e.g. `abbrev`, `target`)
+    pub token: String,
+    /// Full trimmed text of the skipped line
+    pub text: String,
+}
+
+/// How [`LakeConfig::parse_with_mode`] treats unrecognized top-level
+/// constructs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum LakefileParseMode {
+    /// Record skipped constructs in [`LakeConfig::diagnostics`] and continue.
+    #[default]
+    Lenient,
+    /// Fail with [`LakeError::UnrecognizedConstructs`] when any top-level
+    /// construct is not understood, so programmatic lakefiles can never
+    /// silently under-parse.
+    Strict,
+}
+
+impl LakefileParseMode {
+    /// Environment variable selecting strict lakefile.lean parsing.
+    pub const STRICT_ENV: &str = "CLEAN_LAKE_STRICT_LAKEFILE";
+
+    /// Resolve the mode from the process environment: any value of
+    /// [`Self::STRICT_ENV`] other than unset, empty, or `0` selects
+    /// [`Self::Strict`].
+    #[must_use]
+    pub fn from_env() -> Self {
+        match std::env::var(Self::STRICT_ENV) {
+            Ok(value) if !value.is_empty() && value != "0" => Self::Strict,
+            _ => Self::Lenient,
+        }
+    }
 }
 
 /// Package configuration
@@ -131,14 +181,20 @@ pub struct LakeScript {
 }
 
 impl LakeConfig {
-    /// Load configuration from a lakefile.lean file
+    /// Load configuration from a lakefile.lean file (lenient mode)
     pub fn load(lakefile_path: &Path) -> LakeResult<Self> {
+        Self::load_with_mode(lakefile_path, LakefileParseMode::Lenient)
+    }
+
+    /// Load configuration from a lakefile.lean file with an explicit handling
+    /// mode for unrecognized top-level constructs
+    pub fn load_with_mode(lakefile_path: &Path, mode: LakefileParseMode) -> LakeResult<Self> {
         if !lakefile_path.exists() {
             return Err(LakeError::LakefileNotFound(lakefile_path.to_path_buf()));
         }
 
         let content = std::fs::read_to_string(lakefile_path)?;
-        Self::parse(&content)
+        Self::parse_with_mode(&content, mode)
     }
 
     /// Alias for load - load configuration from a lakefile.lean file
@@ -146,8 +202,15 @@ impl LakeConfig {
         Self::load(lakefile_path)
     }
 
-    /// Parse lakefile.lean content
+    /// Parse lakefile.lean content (lenient mode: skipped top-level constructs
+    /// are recorded in [`LakeConfig::diagnostics`])
     pub fn parse(content: &str) -> LakeResult<Self> {
+        Self::parse_with_mode(content, LakefileParseMode::Lenient)
+    }
+
+    /// Parse lakefile.lean content with an explicit handling mode for
+    /// unrecognized top-level constructs
+    pub fn parse_with_mode(content: &str, mode: LakefileParseMode) -> LakeResult<Self> {
         let mut config = LakeConfig::default();
 
         // Parse Lean surface syntax and extract DSL constructs
@@ -167,6 +230,19 @@ impl LakeConfig {
                 || line.starts_with("import")
                 || line.starts_with("open ")
             {
+                i += 1;
+                continue;
+            }
+
+            // Skip block comments (`/- … -/`, including `/--` doc comments and
+            // `/-!` module docs), which may span multiple lines. Nested block
+            // comments are not modeled; lakefiles do not use them in practice.
+            if line.starts_with("/-") {
+                while i < lines.len() && !lines[i].contains("-/") {
+                    i += 1;
+                }
+                // Move past the line carrying the terminator (or the end of
+                // the file when the comment is unterminated).
                 i += 1;
                 continue;
             }
@@ -419,7 +495,37 @@ impl LakeConfig {
                 continue;
             }
 
+            // Unrecognized line: the declarative subset cannot model it.
+            // Account for every skipped TOP-LEVEL construct (column-0 lines
+            // that are not a dangling closing bracket) so nothing is dropped
+            // silently; indented lines are continuations of the construct
+            // already recorded and are skipped without their own entry.
+            let starts_indented = lines[i].starts_with(|c: char| c.is_whitespace());
+            let leading = line.split_whitespace().next().unwrap_or_default();
+            let is_closing_bracket = matches!(leading, "]" | ")" | "}");
+            if !starts_indented && !is_closing_bracket && !leading.is_empty() {
+                config.diagnostics.push(SkippedConstruct {
+                    line: i + 1,
+                    token: leading.to_string(),
+                    text: line.to_string(),
+                });
+            }
             i += 1;
+        }
+
+        // Strict mode: any unrecognized top-level construct is a hard error,
+        // so programmatic lakefiles can no longer silently under-parse.
+        if mode == LakefileParseMode::Strict && !config.diagnostics.is_empty() {
+            let summary = config
+                .diagnostics
+                .iter()
+                .map(|skipped| format!("line {}: `{}`", skipped.line, skipped.token))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(LakeError::UnrecognizedConstructs {
+                count: config.diagnostics.len(),
+                summary,
+            });
         }
 
         // Validate configuration
@@ -1349,6 +1455,142 @@ lean_exe mk_all where
 
         // Check default target
         assert!(config.default_targets.contains(&"Mathlib".to_string()));
+
+        // Every top-level construct in this fixture is modeled, so the
+        // skipped-construct accounting must stay empty.
+        assert!(
+            config.diagnostics.is_empty(),
+            "no top-level construct should be skipped: {:?}",
+            config.diagnostics
+        );
+    }
+
+    #[test]
+    fn test_parse_records_skipped_top_level_constructs() {
+        let content = r"import Lake
+open Lake DSL
+
+package demo
+
+abbrev extraOptions := #[]
+
+lean_lib Demo
+";
+        let config = LakeConfig::parse(content).expect("lenient parse should succeed");
+        assert_eq!(config.package.name, "demo");
+        assert_eq!(config.libs.len(), 1);
+        assert_eq!(
+            config.diagnostics.len(),
+            1,
+            "exactly the abbrev should be skipped: {:?}",
+            config.diagnostics
+        );
+        assert_eq!(config.diagnostics[0].line, 6);
+        assert_eq!(config.diagnostics[0].token, "abbrev");
+        assert_eq!(config.diagnostics[0].text, "abbrev extraOptions := #[]");
+    }
+
+    #[test]
+    fn test_parse_strict_mode_errors_on_unrecognized_construct() {
+        let content = r"import Lake
+open Lake DSL
+
+package demo
+
+target customStep pkg : Unit := do
+  pure ()
+
+lean_lib Demo
+";
+        let result = LakeConfig::parse_with_mode(content, LakefileParseMode::Strict);
+        match result {
+            Err(LakeError::UnrecognizedConstructs { count, summary }) => {
+                assert_eq!(count, 1, "only the target declaration is unrecognized");
+                assert!(
+                    summary.contains("line 6: `target`"),
+                    "summary should name the construct and line: {summary}"
+                );
+            }
+            other => panic!("expected UnrecognizedConstructs, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_strict_mode_accepts_fully_modeled_lakefile() {
+        let content = r"
+import Lake
+open Lake DSL
+
+package test
+lean_lib Test
+";
+        let config = LakeConfig::parse_with_mode(content, LakefileParseMode::Strict)
+            .expect("strict parse of a fully-modeled lakefile should succeed");
+        assert!(config.diagnostics.is_empty(), "no skipped constructs");
+    }
+
+    #[test]
+    fn test_parse_block_comments_produce_no_diagnostics() {
+        let content = r"import Lake
+open Lake DSL
+
+/-!
+## Module docs spanning
+several lines
+-/
+
+/-- Single-line doc comment -/
+package demo
+
+lean_lib Demo
+";
+        let config = LakeConfig::parse_with_mode(content, LakefileParseMode::Strict)
+            .expect("block comments must not count as skipped constructs");
+        assert_eq!(config.package.name, "demo");
+        assert!(config.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn test_parse_indented_continuation_lines_not_double_counted() {
+        // A multi-line skipped construct is accounted once (its head line);
+        // indented continuations and a dangling closing bracket carry no
+        // entries of their own.
+        let content = r"import Lake
+open Lake DSL
+
+package demo
+
+abbrev linters : Array LeanOption := #[
+  first,
+  second
+]
+
+lean_lib Demo
+";
+        let config = LakeConfig::parse(content).expect("lenient parse should succeed");
+        let heads: Vec<(usize, &str)> = config
+            .diagnostics
+            .iter()
+            .map(|skipped| (skipped.line, skipped.token.as_str()))
+            .collect();
+        assert_eq!(
+            heads,
+            vec![(6, "abbrev")],
+            "only the construct head line is recorded"
+        );
+    }
+
+    #[test]
+    fn test_lakefile_parse_mode_from_env() {
+        crate::test_env::with_serialized_env_vars(&[(LakefileParseMode::STRICT_ENV, "1")], || {
+            assert_eq!(LakefileParseMode::from_env(), LakefileParseMode::Strict)
+        });
+        crate::test_env::with_serialized_env_vars(&[(LakefileParseMode::STRICT_ENV, "0")], || {
+            assert_eq!(LakefileParseMode::from_env(), LakefileParseMode::Lenient)
+        });
+        crate::test_env::with_serialized_env_vars(&[(LakefileParseMode::STRICT_ENV, "")], || {
+            assert_eq!(LakefileParseMode::from_env(), LakefileParseMode::Lenient)
+        });
     }
 
     #[test]

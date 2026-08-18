@@ -275,7 +275,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             "Slot 5",
             IssueRef::new(3707, "Lake replacement mode removes Lean4 process delegation"),
             ReplacementStatus::InProgress,
-            "clean lake init replacement-smoke && clean lake build && clean lake test",
+            "clean lake smoke --report reports/lake-replacement-smoke.json",
             "reports/lake-replacement-smoke.json",
             "Generated Lake init/build/test smoke passes without Lean4 delegation; full Lake-compatible workflows still must not delegate project semantics to Lean4 and remain limited to bounded native smoke evidence.",
         ),

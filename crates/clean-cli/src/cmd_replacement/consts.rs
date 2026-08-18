@@ -25,6 +25,11 @@ pub(crate) const REPORT_VALIDATION_SCHEMA_VERSION: &str = "clean-replacement-rep
 pub(crate) const TRUST_BOUNDARY_EXPECTED_TESTS_PATH: &str =
     "scripts/trust_boundary_expected_tests.txt";
 pub(crate) const RELEASE_ISSUE_HYGIENE_SCHEMA_VERSION: &str = "clean-release-issue-hygiene-gate-v0";
+pub(crate) const RUST_FIRST_TOOLING_EVIDENCE_SCHEMA_VERSION: &str =
+    "clean-rust-first-tooling-evidence-v1";
+pub(crate) const RUST_FIRST_TOOLING_EVIDENCE_PATH: &str = "reports/rust-first-tooling.json";
+pub(crate) const RUST_FIRST_TOOLING_GATE_COMMAND: &str =
+    "clean replacement rust-first-tooling --evidence reports/rust-first-tooling.json --json";
 pub(crate) const TARGET_CLAIM: &str =
     "clean + Mathverse fully replace Lean4 for practical theorem-proving workflows";
 pub(crate) const RELEASE_ISSUE_REQUIRED_FIELDS: &[&str] = &[
@@ -186,30 +191,100 @@ pub(crate) const KERNEL_SOUNDNESS_EXPECTED_LANES: &[KernelSoundnessLaneExpectati
         command: Some(ELAB_SOUNDNESS_GATE_LANE_COMMAND),
     },
 ];
+/// Lane argv mirroring `scripts/deny_sorry_gate.sh` step 3. `DENY_SORRY=1` is
+/// applied via `env(1)` exactly as the script does, so the argv stays a plain
+/// string slice the shared lane runner can spawn.
+pub(crate) const DENY_SORRY_KERNEL_GATE_LANE_COMMAND: &[&str] = &[
+    "env",
+    "DENY_SORRY=1",
+    "cargo",
+    "test",
+    "--locked",
+    "--message-format=short",
+    "-p",
+    "clean-kernel",
+    "--test",
+    "deny_sorry_gate",
+];
+/// Lane argv mirroring `scripts/deny_sorry_gate.sh` step 4.
+pub(crate) const DENY_SORRY_LEAN4_PARITY_LANE_COMMAND: &[&str] = &[
+    "env",
+    "DENY_SORRY=1",
+    "cargo",
+    "test",
+    "--locked",
+    "--message-format=short",
+    "-p",
+    "clean-kernel",
+    "--features",
+    "test-utils",
+    "--test",
+    "lean4_parity",
+    "--",
+    "lean4_parity_check",
+];
+/// Lane argv mirroring `scripts/deny_sorry_gate.sh` step 5.
+pub(crate) const DENY_SORRY_ELAB_ACCEPT_LANE_COMMAND: &[&str] = &[
+    "env",
+    "DENY_SORRY=1",
+    "cargo",
+    "test",
+    "--locked",
+    "--message-format=short",
+    "-p",
+    "clean-elab",
+    "--test",
+    "soundness_gate",
+    "--",
+    "--exact",
+    "accept::soundness_gate_accept",
+];
+/// Lane argv mirroring `scripts/deny_sorry_gate.sh` step 6.
+pub(crate) const DENY_SORRY_ELAB_REJECT_LANE_COMMAND: &[&str] = &[
+    "env",
+    "DENY_SORRY=1",
+    "cargo",
+    "test",
+    "--locked",
+    "--message-format=short",
+    "-p",
+    "clean-elab",
+    "--test",
+    "soundness_gate",
+    "--",
+    "--exact",
+    "reject::soundness_gate_reject",
+];
 pub(crate) const DENY_SORRY_EXPECTED_LANES: &[DenySorryLaneExpectation] = &[
     DenySorryLaneExpectation {
         id: "lint_sorry_bypass",
         expected_tests: None,
+        command: None,
     },
     DenySorryLaneExpectation {
         id: "unchecked_decl_ratchet_zero",
         expected_tests: None,
+        command: None,
     },
     DenySorryLaneExpectation {
         id: "kernel_deny_sorry_gate",
         expected_tests: Some(11),
+        command: Some(DENY_SORRY_KERNEL_GATE_LANE_COMMAND),
     },
     DenySorryLaneExpectation {
         id: "kernel_lean4_parity",
         expected_tests: Some(1),
+        command: Some(DENY_SORRY_LEAN4_PARITY_LANE_COMMAND),
     },
     DenySorryLaneExpectation {
         id: "elab_soundness_gate_accept",
         expected_tests: Some(1),
+        command: Some(DENY_SORRY_ELAB_ACCEPT_LANE_COMMAND),
     },
     DenySorryLaneExpectation {
         id: "elab_soundness_gate_reject",
         expected_tests: Some(1),
+        command: Some(DENY_SORRY_ELAB_REJECT_LANE_COMMAND),
     },
 ];
 pub(crate) const AXIOM_AUDIT_EXPECTED_LANES: &[AxiomAuditLaneExpectation] = &[

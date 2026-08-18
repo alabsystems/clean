@@ -7,6 +7,28 @@
 use crate::expr::BinOp;
 use crate::spec::Spec;
 
+/// Whether reflexive comparison of this untyped specification term is known
+/// to follow the source semantics.  `Spec::Var`, `Spec::Result`, and
+/// `Spec::Expr` have lost their C type by this layer and may denote IEEE
+/// floating values, for which `NaN == NaN`, `NaN <= NaN`, and `NaN >= NaN`
+/// are false.  Keep the authoritative reflexivity lane closed unless the term
+/// is built entirely from closed integer arithmetic.
+pub(crate) fn reflexivity_is_authoritative(spec: &Spec) -> bool {
+    match spec {
+        Spec::Int(_) => true,
+        Spec::BinOp {
+            op: BinOp::Add | BinOp::Sub | BinOp::Mul,
+            left,
+            right,
+        } => reflexivity_is_authoritative(left) && reflexivity_is_authoritative(right),
+        Spec::UnaryOp {
+            op: crate::expr::UnaryOp::Neg | crate::expr::UnaryOp::Pos,
+            operand,
+        } => reflexivity_is_authoritative(operand),
+        _ => false,
+    }
+}
+
 fn simplify_and(specs: &[Spec]) -> Spec {
     let simplified: Vec<_> = specs
         .iter()
@@ -71,7 +93,7 @@ fn simplify_binop(op: &BinOp, left: &Spec, right: &Spec) -> Spec {
     let left_simp = simplify_spec(left);
     let right_simp = simplify_spec(right);
 
-    if left_simp == right_simp {
+    if left_simp == right_simp && reflexivity_is_authoritative(&left_simp) {
         match op {
             BinOp::Eq | BinOp::Le | BinOp::Ge => return Spec::True,
             BinOp::Ne | BinOp::Lt | BinOp::Gt => return Spec::False,

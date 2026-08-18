@@ -1,0 +1,359 @@
+{
+ "schema": "crystal-float-chain-v1",
+ "measured_utc_date": "2026-08-16",
+ "local_date": "2026-08-15",
+ "lane": "lane 3",
+ "question": "Chain a FLOAT-ARITHMETIC body end to end, all five links, and establish whether IEEE 754 binary64 arithmetic is expressible in EvalIR.",
+ "candidate": "env::native_reducers_float::reduce_float_div::{closure#0}",
+ "why_this_one_of_the_four": [
+  "It is the ONLY float operator whose semantics contradicts its integer sibling in the same ir_binop_eval: udiv on a zero divisor is IROutcome.ub IRFault.div_zero; fdiv on a zero divisor is a signed infinity. Registering it proves the float lane is not a rename of the integer lane, and both are executed side by side as kernel witnesses.",
+  "It is non-commutative, so operand ORDER is semantically observable - 0.0/1.0 is +0.0 where 1.0/0.0 is +inf, both executed.",
+  "Its exactly-determined fragment is the largest of the four: every one of the 4x4 class combinations has a determined answer except 0/0 and inf/inf (invalid operations) and fin/fin (rounding).",
+  "It is the LAST flip of the crate (flipped_so_far=209)."
+ ],
+ "compiler": {
+  "sealed_snapshot": "$HOME/trust-lane8/.lane8/seal-lane8",
+  "trust_rev": "2d7e094f2224994b112e06fdab49123d469c6b43",
+  "dylib_sha256": "c8746c54263d3f8da7354cbd071467f268c54c428c071fe2bc9842a7624a30d2",
+  "rustc_main_sha256": "f76dafc1fae352268f01cdfdb2199108d5233506691c2c731c13f9febeed6f8e",
+  "guard_verdict": "PASS (scripts/seal_driver.sh guard, --dyld stated, --snapshot-root the seal; run immediately BEFORE the measurement and again inside the driver wrapper on every invocation)",
+  "verify_verdict": "OK",
+  "positive_identification": "Not by `trustc -vV`. Both binaries hash bit-for-bit to the pair data/crystal_flip_census_lane8_2026-08-15.json records as its SUBJECT driver, and this lane reproduced that census's coverage.json BYTE FOR BYTE (sha256:a59cc78f...). Identification by output, not by label."
+ },
+ "reproduction": {
+  "clean_repo_HEAD": "71e1ce8be",
+  "clean_non_incremental_builds": 3,
+  "plus_negative_control": true,
+  "sha256": {
+   "coverage.json": "a59cc78fd54d6c71c2c8ad290a1b391e86002de6c942e55cccf7d32a6369910c",
+   "trust-ir.txt": "e02c342247cd9701d2fe24f364be1447a6931eac6810c94d0ca5e399d0e06c42",
+   "trust-ir.bin": "1b946a35ebdeb751fb1cdab753ccfd307ad71987e5982abe13e5bf94ef026a9f"
+  },
+  "byte_identical_across_all_four": true,
+  "matches_lane8_census_coverage_digest": true,
+  "negative_control_flag": "-Ztrust-ir-flip=no",
+  "negative_control_flip_events": 0,
+  "negative_control_coverage_json_identical": true
+ },
+ "crate_totals_reproduced": {
+  "bodies": 13771,
+  "lowered": 9067,
+  "spliced": 7571,
+  "derived_mir_agreed": 1542,
+  "derived_mir_mismatch": 0,
+  "markers_exact_rows": 1084,
+  "markers_exact_rows_non_vacuous": 27,
+  "lineage_rows": 13143,
+  "flip_events": 209,
+  "flip_events_codegen": 177,
+  "flip_events_ctfe": 32,
+  "flip_events_lineage_mismatch": 0,
+  "flip_events_naming_another_crate": 0,
+  "loud_fallbacks": 19,
+  "release_shape_proof": "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner present as a coverage row, so debug_assertions was OFF"
+ },
+ "coverage_row": {
+  "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+  "def_index": 15288,
+  "func_id": 4415,
+  "instr_count": 2,
+  "lowered": true,
+  "spliced": true,
+  "symbolic": false,
+  "unsupported": [],
+  "calls": {
+   "resolved": 0,
+   "extern_decls": 0,
+   "unresolved": 0
+  },
+  "deferred_to_seam": false,
+  "derived_mir": {
+   "verdict": "agreed",
+   "detail": "6 canonical line(s) identical",
+   "markers_exact": true,
+   "markers_detail": "4 marker line(s) identical"
+  },
+  "interpreter": {
+   "verdict": "agreed",
+   "samples": 64,
+   "detail": "THIR-trust-ir == MIR-trust-ir on 64 sampled input(s) (differential interpretation; 1 proven-never-read opaque param(s) as placeholders)"
+  },
+  "lineage": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+  "flip_event": {
+   "fired": true,
+   "seam": "codegen",
+   "asserts": 0,
+   "flipped_so_far": 209,
+   "lineage_equals_coverage_row": true
+  }
+ },
+ "the_other_three_float_closures_measured_identically": {
+  "reduce_float_add::{closure#0}": {
+   "def_index": 15282,
+   "lineage": "sha256:21501d78053d7cc053554ffa9aa1d83770c3610fccf394aed4da3caffb2b5421",
+   "flipped_so_far": 206
+  },
+  "reduce_float_sub::{closure#0}": {
+   "def_index": 15284,
+   "lineage": "sha256:b0d6fcaf121ac2459eaf02f220648452fc67068e7e8dac3cc103544682181d7f",
+   "flipped_so_far": 207
+  },
+  "reduce_float_mul::{closure#0}": {
+   "def_index": 15286,
+   "lineage": "sha256:f36d43f7059eaf1e333aad3a426f0511caf654eaa019c2e1884d106898371287",
+   "flipped_so_far": 208
+  },
+  "all_share": "lowered, spliced, 2 instrs, unsupported [], agreed over 6 canonical lines, markers_exact true over 4 REAL marker lines, interpreter agreed on 64 samples, 0 calls, deferred_to_seam false, codegen flip with lineage == coverage row"
+ },
+ "float_closures_not_chainable": {
+  "reduce_float_neg::{closure#0}": "derived_mir unsupported: `shim: UnOp(FNeg) on F64`",
+  "reduce_float_beq::{closure#0}": "derived_mir unsupported: `shim: Inst::FCmp`",
+  "reduce_float_blt::{closure#0}": "derived_mir unsupported: `shim: Inst::FCmp`",
+  "reduce_float_ble::{closure#0}": "derived_mir unsupported: `shim: Inst::FCmp`"
+ },
+ "IS_FLOAT_ARITHMETIC_EXPRESSIBLE_IN_EVALIR": {
+  "answer": "PARTLY. A real evaluation case exists and is registered; a total one is refused, and each refusal has a distinct reason.",
+  "build_item_delivered": "crates/clean-verify/src/spec/core_spec/eval_ir_float.rs - the binary64 VALUE DOMAIN: IRF64Class (nan_/inf_/zero_/fin_), ir_f64_class over a sign/magnitude split, the four classified operation tables ir_f64_{add,sub,mul,div}_at, and the typed dispatcher ir_float_binop. ir_binop_eval's fadd/fsub/fmul/fdiv arms now compute instead of returning the blanket ir_float_fault. IRFault gained `not_float` (APPENDED, no constructor position moves) so an ill-formed operand (type_error) stays distinguishable from a well-formed input this semantics declines (unmodelled).",
+  "modelled": [
+   "x / 0 = +-inf at the XOR sign (IEEE 754-2019 7.3 divideByZero: an EXACT infinity)",
+   "0 / x, x / inf = +-0 at the XOR sign; inf / x = +-inf",
+   "inf * x and x * inf (x nonzero) = +-inf; 0 * x and x * 0 (x not inf) = +-0",
+   "inf + x, x + inf (finite or same-signed inf) = that infinity",
+   "x +- 0 and 0 +- x for finite x (adding a zero is exact, subnormals included)",
+   "(-0)+(-0) = -0 and every other zero pair = +0 (6.3 roundTiesToEven)",
+   "x + (-x) for finite x = +0 (6.3: an exact zero sum is +0) - the only finite+finite case the standard fixes without rounding"
+  ],
+  "refused_with_reasons": {
+   "any NaN result": "The payload of a quiet NaN is IMPLEMENTATION-DEFINED (6.2.3 says `should`). A wall in the STANDARD, not in the model: no bit pattern is determined, so there is nothing to return.",
+   "inf - inf, 0 * inf, 0/0, inf/inf": "invalid operations -> a NaN -> the same wall",
+   "finite (+,-,*,/) finite, except the exact-zero sum": "needs round-to-nearest-even over a 53-bit significand. NOT AFFORDABLE: aligning and renormalising walks values of magnitude 2^53 and every ir_nat_* is a unary Nat.rec walk. Buying it with the kernel-native Nat.div/Nat.mod/Nat.beq would add ACCELERATED CONSTANTS whose declared bodies the kernel never consults - speed bought with trust - which eval_ir_state already refuses for ir_nat_rem.",
+   "any binary format but binary64": "binary32/binary16 have different exponent fields and different boundary constants. IRTy.float_ w carries w and ir_float_binop decides only w = 64; every other width is the tagged unmodelled verdict."
+  },
+  "what_made_it_affordable": "Every classification test is ir_nat_ltb / ir_nat_eqb / ir_nat_pos, and those comparisons are FOLDED: one native BigNat Nat.sub plus one iota step, with ir_nat_ltb_walk_eq and ir_nat_eqb_walk_eq proving each is the same predicate as the paired unary walk it replaced. Through the walk, deciding the sign of an infinity would peel 9.2e18 Nat.rec layers.",
+  "accelerated_constants_added": 0,
+  "new_trust_added": "none - Nat.add and Nat.sub were already relied on by ir_nat_pow2 and ir_nat_rem",
+  "measured_costs_seconds_EvalIR_bundle": {
+   "ir_f64_class at 0x3FF0000000000000 (1.0)": 0.003,
+   "ir_f64_class at 0x7FF0000000000000 (+inf)": 0.003,
+   "ir_f64_class at 0x7FF8000000000000 (a quiet NaN)": 0.003,
+   "ir_binop_eval fdiv f64 (1.0, +0.0) -> +inf": 0.025,
+   "ir_binop_eval fdiv f64 (1.0, -0.0) -> -inf": 0.025,
+   "ir_binop_eval fdiv f64 (-0.0, +inf) -> -0.0": 0.024,
+   "ir_binop_eval fdiv f64 (inf, inf) -> unmodelled": 0.02,
+   "ir_binop_eval fdiv f64 (2.0, 1.0) -> unmodelled": 0.024,
+   "ir_binop_eval fdiv f32 (1.0, +0.0) -> unmodelled": 0.012,
+   "ir_binop_eval fdiv f64 on INTEGER operands -> type_error not_float": 0.02,
+   "ir_binop_eval fadd f64 (-0.0, -0.0) -> -0.0": 0.03,
+   "ir_binop_eval fadd f64 (-0.0, +0.0) -> +0.0": 0.036,
+   "ir_binop_eval fsub f64 (-0.0, +0.0) -> -0.0": 0.038,
+   "ir_binop_eval fadd f64 (1.0, -1.0) -> +0.0": 0.045,
+   "ir_binop_eval fadd f64 (+inf, -inf) -> unmodelled": 0.026,
+   "ir_binop_eval fmul f64 (0.0, inf) -> unmodelled": 0.039,
+   "ir_binop_eval fmul f64 (-1.0, +inf) -> -inf": 0.049,
+   "ir_binop_eval udiv u8 (1, 0) -> ub div_zero (the CONTRAST)": 0.009
+  },
+  "note_on_costs": "25 of 25 candidates elaborated and kernel-checked against one EvalIR-bundle spec build (13.7 s). Not one exceeds 0.05 s, which is the whole point: the same declarations through ir_nat_ltb would be unreachable by a factor of about a billion."
+ },
+ "what_is_NOT_claimed": "ir_f64_div is NOT proved to be f64::div. It is IEEE 754 on the classified fragment by construction and by reading, and a tagged refusal elsewhere. The gap is the same SHAPE as the one env_is_valid_char states (a u64-level specification, not the Unicode predicate) and it is LARGER, because a float format has more structure than an interval test.",
+ "new_cfg_lanes": {
+  "binop_tys": "block -> ordered (op, result, normalized type) for binops. `fdiv f32` and `fdiv f64` differed in NO lane and are different operations.",
+  "icmp_tys": "the same for comparisons. The three earlier chains' u8/u32/u64 comparison widths were equally uncompared; both lanes are in assert_lanes and apply to every chain.",
+  "rets": "block -> ordered returned value ids. Nothing in emitted_cfg.rs had ever looked at what a body RETURNS: `ret %1` instead of `ret %3` returns the DIVIDEND and agreed with every pre-existing lane, on every chain.",
+  "supporting": "Clean-side type names resolve through the registered `def ... : IRTy := ...` declarations across core_spec; the ir_dK numeral convention the resolver depends on is re-derived from the registered numeral chain by numeral_names_carry_their_values rather than assumed.",
+  "deliberately_not_a_lane": "the ENTRY block's parameter list. On the emitted side bb0(%0: ptr, %1: f64, %2: f64) IS the function signature; on the Clean side those ids live in IRFunc. param_blocks excludes bb0 on both sides and the signature is compared explicitly instead. MEASURED: a mutation adding a block parameter to bb0 ran green, which is why that perturbation case was replaced by one over IRFunc and the gap written down rather than left implicit."
+ },
+ "theorem_shape": {
+  "A4": "ir_fd_correct - TOTAL over a PARTIAL domain. For every pair of bit patterns, every environment pointer, every heap, every next-address counter and every fuel >= 2, ir_eval returns exactly ir_fd_res (env_reduce_float_div a b): the value where the fragment is modelled and IROutcome.unmodelled IRFault.float_domain where it is not. The FIRST chain whose A4 conclusion is not an IROutcome.ret.",
+  "A5": "ir_fd_machine_sound (inversion off the returned float), ir_fd_machine_sound_divzero (reaching THE ARGUMENTS: a finite dividend over a zero divisor answers the infinity at the XOR sign - the fact that makes float division a different operation from integer division, stated about the artifact).",
+  "corollaries": "ir_fd_returns_iff_modelled (the refusal boundary as an equality of Bools, so neither direction can be weakened) and ir_fd_never_traps (no UB, no type error, no stuck state, no exhaustion, on ANY pair of bit patterns including invalid f64 encodings).",
+  "new_machinery": "ir_run_le_ret is stated for IROutcome.ret and cannot be widened in place - the unconditional monotonicity form is FALSE because a run that exhausts at f may halt at succ f. ir_fd_run_succ / ir_fd_run_le are the same induction at the ir_fd_res image, with ir_fd_fuelout_absurd (by IROption.rec, through a new fuel_out != unmodelled discriminator and the existing fuel_out != ret one) showing that image never contains fuel_out."
+ },
+ "witnesses_kernel_executed": {
+  "answering": [
+   "1.0 / +0.0 = +inf",
+   "1.0 / -0.0 = -inf",
+   "-1.0 / +0.0 = -inf",
+   "1.0 / +inf = +0.0",
+   "-0.0 / +inf = -0.0",
+   "0.0 / 1.0 = +0.0 (operand order observable)"
+  ],
+  "refusing": [
+   "+inf / +inf",
+   "0.0 / 0.0",
+   "2.0 / 1.0 (the EMBARRASSING one - the answer is exactly 2.0 and this semantics still declines; registering it is the difference between a stated boundary and a hidden one)",
+   "a quiet NaN operand"
+  ],
+  "fail_closed": [
+   "an INTEGER operand at f64 -> type_error not_float",
+   "the same operands at binary32 -> unmodelled"
+  ],
+  "contrast": "udiv u8 (1, 0) -> ub div_zero, in the same ir_binop_eval, one arm away from the fdiv that answers +inf on the same divisor"
+ },
+ "perturbations": {
+  "cases": 34,
+  "expected_outcomes": 69,
+  "unexpected": 0,
+  "script": "scripts/crystal_perturb_float_div.sh",
+  "rebuild_required": false,
+  "required_by_the_lane_task": {
+   "fixture deleted (must fail CLOSED)": "P15",
+   "markers_detail zeroed": "P18",
+   "the float operation perturbed (add/sub/mul)": "P1 (fdiv->fmul), P2 (fdiv->fadd), P14 (artifact side fdiv->fsub)"
+  },
+  "a_defect_this_battery_found_in_itself": "The first run had an ambiguous revert anchor (IRTy.float_ 32 matched two declaration lines), the substitution failed SILENTLY, and 32 subsequent cases ran against a still-mutated tree. That is exactly the false negative the script exists to rule out, so a failed substitution is now FATAL rather than reported."
+ },
+ "gates": {
+  "measured_at": "2026-08-16T06:57-08:34Z, on the committed tree, sequentially in one lane-owned CARGO_TARGET_DIR",
+  "axiom_ratchet": {
+   "result": "ok. 3 passed; 0 failed",
+   "wall_seconds": 1613.45,
+   "census": 11
+  },
+  "vacuity_firewall": {
+   "result": "ok. 4 passed; 0 failed",
+   "wall_seconds": 1408.35,
+   "EncodesF64Val": "19 name(s) visited, 0 strict, 0 premise-only",
+   "IRF64Class": "0 name(s) visited, 0 strict, 0 premise-only (the documented legitimate case for a closed enum of nullary constructors - IRBinOp, IRFault, IRICmpOp, IRUnOp, IRCastOp, IROverflowOp all report 0 for the same reason)",
+   "findings": "the five pinned KernelInferAccepts arms and nothing else",
+   "note": "EncodesF64Val is on the EXPLICIT required-names list in BOTH directions - it must be audited exactly when it is registered - so an unregistered stage or an unaudited relation fails loudly rather than silently reducing coverage."
+  },
+  "premise_witness_gate": {
+   "result": "ok. 1 passed; 0 failed",
+   "wall_seconds": 1394.77,
+   "blessed_into_the_ratchet": 0,
+   "data_premise_witness_ratchet_json": "UNTOUCHED - encodesf64val_witness and irf64class_witness conclude the two new predicates with real terms instead"
+  },
+  "proof_status_invariants": {
+   "result": "ok. 4 passed; 0 failed",
+   "wall_seconds": 1396.71
+  },
+  "crystal_a1_lineage": {
+   "result": "ok. 35 passed; 0 failed (28 before this lane)"
+  },
+  "eval_ir": {
+   "result": "ok. 8 passed; 0 failed"
+  },
+  "clean_verify_lib_float_units": {
+   "result": "ok. 15 passed; 0 failed"
+  },
+  "paragon_ratchet": {
+   "result": "PASS - files_over_500 1410 -> 1410, all four metrics +0"
+  },
+  "clippy": "-D warnings clean on -p clean-verify --all-targets",
+  "fmt": "cargo fmt --check clean",
+  "perturbation_batteries_all_five": {
+   "float_div": "69/69",
+   "computing_chains": "44/44",
+   "branching_and_derived": "49/49",
+   "from_source": "21/21",
+   "markers_channel": "17/17",
+   "total_expected_outcomes": 200,
+   "unexpected": 0
+  },
+  "re_measured_after_the_merge_with_the_folding_lane": {
+   "why": "d11d2cb77 (perf(evalir): fold the ir_nat_ltb / ir_nat_eqb guards) landed on main while this lane was measuring, and this lane briefly clobbered three of its files by building a commit-tree over a newer base with older file contents. Restored by three-way merge; the value domain was re-targeted onto the folded guards (ir_nat_ltb_sub no longer exists because ir_nat_ltb IS that definition now, and ir_f64_mag_eqb became a plain ir_nat_eqb).",
+   "axiom_ratchet": {
+    "result": "ok. 3 passed; 0 failed",
+    "wall_seconds": 1443.89,
+    "census": 11
+   },
+   "vacuity_firewall": {
+    "result": "ok. 4 passed; 0 failed",
+    "wall_seconds": 1436.68,
+    "EncodesF64Val": "19 name(s) visited, 0 strict, 0 premise-only",
+    "IRF64Class": "0 name(s) visited, 0 strict, 0 premise-only"
+   },
+   "crystal_a1_lineage": "ok. 36 passed; 0 failed",
+   "eval_ir": "ok. 8 passed; 0 failed, including the folding lane own ir_wrap test",
+   "perturbations": "200 expected outcomes, 0 unexpected across all five batteries",
+   "clippy_fmt_paragon": "clean / clean / PASS",
+   "premise_witness_gate": {
+    "result": "ok. 1 passed; 0 failed",
+    "wall_seconds": 1433.22,
+    "blessed_into_the_ratchet": 0
+   },
+   "proof_status_invariants": {
+    "result": "ok. 4 passed; 0 failed",
+    "wall_seconds": 1427.91
+   }
+  }
+ },
+ "chainable_set_operator_census": {
+  "population": "177 codegen-flipping bodies meeting every chainability criterion (lowered, spliced, unsupported [], derived_mir agreed, markers_exact, 0 calls, not seam-deferred)",
+  "instr_count_histogram": {
+   "1": 106,
+   "2": 28,
+   "3": 8,
+   "4": 10,
+   "5": 1,
+   "6": 3,
+   "7": 2,
+   "8": 4
+  },
+  "every_one_instruction_body_is_a_bare_ret": true,
+  "operators": {
+   "const": 116,
+   "extractfield": 37,
+   "insertfield": 22,
+   "load": 15,
+   "icmp": 11,
+   "zext": 2,
+   "trunc": 1,
+   "fadd": 1,
+   "fsub": 1,
+   "fmul": 1,
+   "fdiv": 1,
+   "and": 1,
+   "or": 1
+  },
+  "reading": "reduce_float_div::{closure#0} is NOT the smallest chainable body - 106 are smaller and every one of them is a bare ret. What is rare is the OPERATOR: float arithmetic is FOUR instructions in the entire chainable set, one per closure. The three casts (zext x2, trunc x1) are the other half of the lane-8 census unclaimed ground and remain unclaimed.",
+  "corrects": "an earlier draft of this lane claimed \"the smallest chainable body in clean-kernel\", which is false and was caught by measuring rather than by review"
+ },
+ "level_is_zero_did_not_move": {
+  "def_index": 17078,
+  "instr_count": 28,
+  "lowered": true,
+  "spliced": true,
+  "unsupported": [],
+  "calls": {
+   "resolved": 6,
+   "extern_decls": 0,
+   "unresolved": 0
+  },
+  "deferred_to_seam": true,
+  "derived_mir": {
+   "verdict": "agreed",
+   "detail": "18 canonical line(s) identical",
+   "markers_exact": false
+  },
+  "flip_events": 0,
+  "note": "Re-measured in this lane\u2019s own dump rather than transcribed. The designated width-one target still fails A0 on bodyful reachable closure (6 calls, deferred_to_seam) and on markers_exact, and produces no flip event and no fallback event."
+ },
+ "spec_build_cost": {
+  "method": "tests/spec_scratchpad.rs with the stage temporarily disabled \u2014 all 45 declarations of eval_ir_float_div.rs elaborated and kernel-checked against ONE full Specification::new(), each reported independently",
+  "declarations": 45,
+  "passed": 45,
+  "full_spec_build_seconds": 1619.4,
+  "sum_of_declaration_seconds": 1.24,
+  "most_expensive": {
+   "ir_fd_machine_sound": 0.139,
+   "ir_fd_correct": 0.125,
+   "ir_fd_machine_sound_divzero": 0.095,
+   "ir_fd_run_succ": 0.08
+  },
+  "ten_concrete_ir_eval_witnesses_each_seconds": "0.026 - 0.037",
+  "note": "The whole eighth chain costs about 1.2 s of a 27-minute spec build. That is the payoff of deciding the classification through the FOLDED comparisons: through the paired unary walk a single infinity witness would not terminate in this universe."
+ },
+ "the_one_real_error": {
+  "what": "re-declaring ir_nl3 / ir_vl3, which eval_ir_bvar_range.rs (the FIFTH chain, also three parameters) already registers",
+  "why_it_survived_every_fast_gate": "the EvalIR bundle does not carry that stage, so the duplicate elaborated cleanly there and failed only in the full Specification::new()",
+  "cost": "one 27-minute axiom_ratchet cycle to detect, one 27-minute spec_scratchpad cycle to diagnose all 45 declarations at once",
+  "fixed_by": "reusing the existing builders; a systematic duplicate-name scan over all 87 names this lane introduces found no others"
+ },
+ "the_clobber_and_its_lesson": {
+  "what_happened": "The eighth-chain commit was built with git commit-tree over a tree read from origin/main AFTER that ref advanced to d11d2cb77, but with file contents from a worktree based on 71e1ce8be. Three of the 19 staged paths carried newer content and were silently reverted.",
+  "why_the_check_did_not_catch_it": "The push script verified that exactly the 19 intended paths DIFFER from the base. That is a path-set check, not a diff-path-by-path check: it is silent about content you overwrote, precisely because those paths are the ones you meant to change.",
+  "the_check_that_would_have": "for every path staged, either it is new, or its blob in the push base equals its blob at the commit the worktree was built from",
+  "fixed_in": "69d224c9e, by three-way merge (base 71e1ce8be, ours the eighth chain, theirs d11d2cb77) - all three merged cleanly - plus the re-targeting above, re-verified by the merged-tree gate run recorded here"
+ }
+}

@@ -8,7 +8,7 @@ use super::{AyProofBackend, AyProofQuality, AyProofResult};
 use crate::bridge::ay_backend::{AyError, AyResult};
 use ay::executor::Executor;
 use ay::{parse, ProofQuality};
-use ay_proof::{check_proof_with_quality, export_alethe_with_problem_scope};
+use ay_proof::check_proof_with_quality;
 
 impl AyProofBackend {
     /// Check satisfiability and optionally extract proof
@@ -118,9 +118,34 @@ impl AyProofBackend {
                         );
                     })
                     .ok();
-                let assertions = &self.executor.context().assertions;
-                let alethe = export_alethe_with_problem_scope(raw_proof, terms, assertions);
-                (Some(alethe), quality)
+                // `context().assertions` is the LIVE, POST-PREPROCESSING stack —
+                // NOT the authored premise scope. When preprocessing folds an
+                // authored assertion to `false` it OVERWRITES that slot, so the
+                // authored term is absent under every spelling and the exporter
+                // refuses the proof (`reachable assume tN uses non-problem term
+                // tM`) via the INFALLIBLE wrapper: a loud stderr line plus an
+                // `(error ...)` s-expression handed back as if it were a proof.
+                // ay's own accessor supplies `proof_export_scope_assertions()`
+                // (problem assertions + originals + recorded raw rebuilds +
+                // assumptions, minus an unauthored `false`) and is fallible, so
+                // a refusal stays a refusal instead of becoming a fake document.
+                // The premise set is NOT widened: membership is still exact
+                // `TermId` identity, and every preprocessing-derived formula
+                // that is not an authored premise is still rejected.
+                let alethe = self
+                    .executor
+                    .try_export_last_proof_alethe_for_problem_scope()
+                    .and_then(|export| {
+                        export
+                            .inspect_err(|error| {
+                                tracing::debug!(
+                                    %error,
+                                    "ay declined to render an Alethe certificate for this proof"
+                                );
+                            })
+                            .ok()
+                    });
+                (alethe, quality)
             }
             None => (None, None),
         }

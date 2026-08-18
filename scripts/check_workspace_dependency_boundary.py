@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
 
-"""Fail closed if Clean crosses Trust or floats its TrustIr contract pin."""
+"""Fail closed if Clean crosses a workspace boundary or floats TrustIr."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ except ModuleNotFoundError:  # Python 3.10 and older.
 
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_MANIFEST = ROOT / "Cargo.toml"
+ROOT_LOCK = ROOT / "Cargo.lock"
 AUTOFORM_MANIFEST = ROOT / "crates/clean-autoform/Cargo.toml"
 AUTOFORM_SOURCE = ROOT / "crates/clean-autoform/src"
 CONTRACT_NAME = "trust-ir-contract"
@@ -28,6 +29,10 @@ ANY_CONTRACT_DECLARATION = re.compile(
     rf"(?m)^[ \t]*{re.escape(CONTRACT_NAME)}[ \t]*="
 )
 EXACT_REVISION = re.compile(r"[0-9a-f]{40}")
+TRUST_IR_LOCK_SOURCE = re.compile(
+    r"^git\+https://github\.com/alabsystems/trust-ir\.git"
+    r"\?rev=([0-9a-f]{40})#([0-9a-f]{40})$"
+)
 FORBIDDEN_DEPENDENCIES = ("trust-types", "trust-verifier-api")
 FORBIDDEN_CRATE_NAMES = ("trust_types", "trust_verifier_api")
 PATH_DECLARATION = re.compile(r"\bpath\s*=\s*[\"']([^\"']+)[\"']")
@@ -53,6 +58,16 @@ def workspace_manifest_paths() -> list[Path]:
     return sorted(manifests)
 
 
+def tracked_lock_paths() -> list[Path]:
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*Cargo.lock"],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    )
+    return sorted(ROOT / name for name in result.stdout.decode().split("\0") if name)
+
+
 def path_points_into_trust(manifest: Path, declared_path: str, root: Path) -> bool:
     candidate = (manifest.parent / declared_path).resolve()
     trust_root = (root.parent / "trust").resolve()
@@ -61,6 +76,15 @@ def path_points_into_trust(manifest: Path, declared_path: str, root: Path) -> bo
     except ValueError:
         return False
     return True
+
+
+def path_escapes_workspace(manifest: Path, declared_path: str, root: Path) -> bool:
+    candidate = (manifest.parent / declared_path).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return True
+    return False
 
 
 def check_manifest_boundaries(manifests: dict[Path, str], root: Path) -> None:
@@ -84,13 +108,24 @@ def check_manifest_boundaries(manifests: dict[Path, str], root: Path) -> None:
                     f"{relative} declares forbidden Trust dependency {dependency}"
                 )
 
-        for match in PATH_DECLARATION.finditer(text):
-            declared_path = match.group(1)
-            if path_points_into_trust(manifest, declared_path, root):
-                raise BoundaryViolation(
-                    f"{relative} path dependency points into the Trust workspace: "
-                    f"{declared_path}"
-                )
+        # A committed path outside this repository makes Cargo.lock depend on
+        # mutable sibling state. Inspect declaration lines rather than comments
+        # (several manifests document rejected external paths in comments).
+        for line in text.splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            for match in PATH_DECLARATION.finditer(line):
+                declared_path = match.group(1)
+                if path_points_into_trust(manifest, declared_path, root):
+                    raise BoundaryViolation(
+                        f"{relative} path dependency points into the Trust workspace: "
+                        f"{declared_path}"
+                    )
+                if path_escapes_workspace(manifest, declared_path, root):
+                    raise BoundaryViolation(
+                        f"{relative} path dependency escapes the Clean workspace: "
+                        f"{declared_path}"
+                    )
 
 
 def check_contract_declaration(root_manifest: str, autoform_present: bool) -> None:
@@ -127,6 +162,106 @@ def check_contract_declaration(root_manifest: str, autoform_present: bool) -> No
             "workspace trust-ir-contract must contain only the canonical "
             f"{CONTRACT_REPOSITORY} URL and an exact lowercase 40-hex rev"
         )
+
+
+def check_contract_lock_revision(
+    root_manifest: str, autoform_present: bool, lock_revision: str | None
+) -> None:
+    """Bind the normal workspace contract to its lock without breaking bootstrap."""
+
+    if not autoform_present:
+        return
+    try:
+        contract_revision = tomllib.loads(root_manifest)["workspace"]["dependencies"][
+            CONTRACT_NAME
+        ]["rev"]
+    except (KeyError, TypeError, tomllib.TOMLDecodeError) as error:
+        raise BoundaryViolation(
+            "workspace trust-ir-contract revision is not valid TOML"
+        ) from error
+    if lock_revision != contract_revision:
+        raise BoundaryViolation(
+            "Cargo.lock TrustIR revision does not match trust-ir-contract: "
+            f"lock={lock_revision}, contract={contract_revision}"
+        )
+
+
+def check_trust_ir_lock_source(lock_text: str, context: str, required: bool) -> str | None:
+    """Require one exact TrustIR Git universe within a Cargo lock graph."""
+
+    try:
+        lock = tomllib.loads(lock_text)
+    except tomllib.TOMLDecodeError as error:
+        raise BoundaryViolation(f"{context} is not valid TOML") from error
+    packages = lock.get("package")
+    if not isinstance(packages, list):
+        raise BoundaryViolation(f"{context} has no package inventory")
+    trust_ir_packages = [
+        package
+        for package in packages
+        if isinstance(package, dict)
+        and isinstance(package.get("name"), str)
+        and (
+            package["name"] == "trust-ir"
+            or package["name"].startswith("trust-ir-")
+        )
+    ]
+    if not trust_ir_packages:
+        if required:
+            raise BoundaryViolation(f"{context} has no TrustIR package source")
+        return None
+
+    revisions: set[str] = set()
+    for package in trust_ir_packages:
+        source = package.get("source")
+        match = TRUST_IR_LOCK_SOURCE.fullmatch(source) if isinstance(source, str) else None
+        if match is None:
+            raise BoundaryViolation(
+                f"{context} package {package['name']} does not use the canonical "
+                "exact TrustIR Git source"
+            )
+        query, resolved = match.groups()
+        if query != resolved:
+            raise BoundaryViolation(
+                f"{context} package {package['name']} resolves {resolved} "
+                f"but requests {query}"
+            )
+        revisions.add(query)
+    if len(revisions) != 1:
+        raise BoundaryViolation(
+            f"{context} resolves multiple TrustIR Git revisions: "
+            + ", ".join(sorted(revisions))
+        )
+    return next(iter(revisions))
+
+
+def check_trust_ir_lock_inventory(
+    lock_texts: dict[str, str], required_context: str | None
+) -> str | None:
+    """Require one TrustIR revision across every tracked lock graph."""
+
+    if required_context is not None and required_context not in lock_texts:
+        raise BoundaryViolation(f"required lock {required_context} is not tracked")
+    resolved: dict[str, str] = {}
+    for context, lock_text in sorted(lock_texts.items()):
+        revision = check_trust_ir_lock_source(
+            lock_text,
+            context,
+            context == required_context,
+        )
+        if revision is not None:
+            resolved[context] = revision
+    revisions = set(resolved.values())
+    if len(revisions) > 1:
+        detail = ", ".join(
+            f"{context}={revision}" for context, revision in sorted(resolved.items())
+        )
+        raise BoundaryViolation(
+            f"tracked lockfiles resolve multiple TrustIR Git revisions: {detail}"
+        )
+    if required_context is not None:
+        return resolved.get(required_context)
+    return next(iter(revisions), None)
 
 
 def regression_self_test() -> None:
@@ -166,6 +301,16 @@ def regression_self_test() -> None:
             },
             "dependency table",
         ),
+        (
+            {
+                root_manifest: "[workspace]\n",
+                nested_manifest: (
+                    "[patch.\"https://github.com/alabsystems/ty.git\"]\n"
+                    'tla-core = { path = "../../../ty/crates/tla-core" }\n'
+                ),
+            },
+            "mutable sibling path",
+        ),
     )
 
     for manifests, description in fixtures:
@@ -195,6 +340,14 @@ def regression_self_test() -> None:
         autoform_present=True,
     )
     check_contract_declaration("[workspace.dependencies]\n", autoform_present=False)
+    check_contract_lock_revision(canonical, True, exact_revision)
+    check_contract_lock_revision("[workspace.dependencies]\n", False, None)
+    try:
+        check_contract_lock_revision(canonical, True, "2" * 40)
+    except BoundaryViolation:
+        pass
+    else:
+        raise AssertionError("contract/lock revision mismatch was not rejected")
 
     invalid_contracts = (
         (
@@ -234,6 +387,89 @@ def regression_self_test() -> None:
         else:
             raise AssertionError(f"{description} regression was not rejected")
 
+    def lock_source(revision: str, resolved: str | None = None) -> str:
+        resolved = revision if resolved is None else resolved
+        return (
+            "git+https://github.com/alabsystems/trust-ir.git"
+            f"?rev={revision}#{resolved}"
+        )
+
+    def lock_fixture(rows: tuple[tuple[str, str | None], ...]) -> str:
+        blocks = ['version = 4\n']
+        for name, source in rows:
+            block = f'[[package]]\nname = "{name}"\nversion = "0.4.0"\n'
+            if source is not None:
+                block += f'source = "{source}"\n'
+            blocks.append(block)
+        return "\n".join(blocks)
+
+    revision_a = "a" * 40
+    revision_b = "b" * 40
+    coherent_lock = lock_fixture(
+        (
+            ("trust-ir", lock_source(revision_a)),
+            ("trust-ir-contract", lock_source(revision_a)),
+        )
+    )
+    unrelated_lock = lock_fixture((("serde", "registry+https://example.invalid/index"),))
+    assert check_trust_ir_lock_source(coherent_lock, "fixture.lock", True) == revision_a
+    assert check_trust_ir_lock_source(unrelated_lock, "optional.lock", False) is None
+    assert (
+        check_trust_ir_lock_inventory(
+            {
+                "Cargo.lock": coherent_lock,
+                "nested/Cargo.lock": lock_fixture(
+                    (("trust-ir", lock_source(revision_a)),)
+                ),
+                "unrelated/Cargo.lock": unrelated_lock,
+            },
+            "Cargo.lock",
+        )
+        == revision_a
+    )
+
+    invalid_locks = (
+        (
+            lock_fixture(
+                (
+                    ("trust-ir", lock_source(revision_a)),
+                    ("trust-ir-contract", lock_source(revision_b)),
+                )
+            ),
+            True,
+            "split TrustIR revisions",
+        ),
+        (
+            lock_fixture((("trust-ir", lock_source(revision_a, revision_b)),)),
+            True,
+            "query/resolved mismatch",
+        ),
+        (lock_fixture((("trust-ir", None),)), True, "path TrustIR source"),
+        (unrelated_lock, True, "missing required TrustIR source"),
+    )
+    for lock_text, required, description in invalid_locks:
+        try:
+            check_trust_ir_lock_source(lock_text, "fixture.lock", required)
+        except BoundaryViolation:
+            pass
+        else:
+            raise AssertionError(f"{description} regression was not rejected")
+
+    try:
+        check_trust_ir_lock_inventory(
+            {
+                "Cargo.lock": coherent_lock,
+                "nested/Cargo.lock": lock_fixture(
+                    (("trust-ir", lock_source(revision_b)),)
+                ),
+            },
+            "Cargo.lock",
+        )
+    except BoundaryViolation:
+        pass
+    else:
+        raise AssertionError("cross-lock TrustIR split regression was not rejected")
+
 
 def main() -> int:
     regression_self_test()
@@ -260,6 +496,32 @@ def main() -> int:
         autoform_manifest,
     ):
         fail("clean-autoform must consume trust-ir-contract from the workspace")
+
+    try:
+        lock_paths = tracked_lock_paths()
+        if ROOT_LOCK not in lock_paths:
+            raise BoundaryViolation("Cargo.lock is not tracked")
+        lock_texts = {
+            str(lock_path.relative_to(ROOT)): lock_path.read_text()
+            for lock_path in lock_paths
+        }
+        trust_ir_revision = check_trust_ir_lock_inventory(
+            lock_texts,
+            str(ROOT_LOCK.relative_to(ROOT)) if autoform_manifest else None,
+        )
+        check_contract_lock_revision(
+            root_manifest,
+            bool(autoform_manifest),
+            trust_ir_revision,
+        )
+    except (
+        OSError,
+        KeyError,
+        TypeError,
+        subprocess.CalledProcessError,
+        BoundaryViolation,
+    ) as error:
+        fail(str(error))
 
     for source in AUTOFORM_SOURCE.rglob("*.rs") if autoform_manifest else ():
         text = source.read_text()
@@ -289,7 +551,10 @@ def main() -> int:
         sys.stderr.write(result.stderr)
         fail("locked root metadata did not close")
 
-    print("Clean dependency boundary is closed through trust-ir-contract")
+    print(
+        "Clean dependency boundary is closed through trust-ir-contract; "
+        f"one TrustIR lock source={trust_ir_revision or 'absent'}"
+    )
     return 0
 
 

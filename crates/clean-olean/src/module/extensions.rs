@@ -9,7 +9,7 @@
 
 use super::{
     ParsedAttrKind, ParsedClassEntry, ParsedExtension, ParsedExtensionEntry,
-    ParsedExtensionEntryData, ParsedInstanceEntry,
+    ParsedExtensionEntryData, ParsedInstanceEntry, ParsedSimpEntry, ParsedSimpEntryKind,
 };
 use crate::error::{OleanError, OleanResult};
 use crate::region::{is_ptr, tags, CompactedRegion};
@@ -21,6 +21,12 @@ pub(crate) const LEAN_INSTANCE_EXTENSION: &str = "Lean.Meta.instanceExtension";
 /// The persisted name of Lean 4's type-class declaration extension
 /// (`Lean/Class.lean`, registered via `builtin_initialize classExtension`).
 pub(crate) const LEAN_CLASS_EXTENSION: &str = "Lean.classExtension";
+
+/// The persisted name of Lean 4's default simp set extension
+/// (`Lean/Meta/Tactic/Simp/Attr.lean`, registered via
+/// `builtin_initialize simpExtension : SimpExtension ← registerSimpAttr \`simp …`,
+/// whose extension name is the declaration name via `decl_name%`).
+pub(crate) const LEAN_SIMP_EXTENSION: &str = "Lean.Meta.simpExtension";
 
 /// Number of object (pointer) slots in a Lean 4 v4.x `ClassEntry`:
 /// `name : Name`, `outParams : Array Nat`, `outLevelParams : Array Nat`
@@ -37,6 +43,32 @@ const INSTANCE_ENTRY_OBJ_FIELDS: u8 = 5;
 /// Byte offset of the `attrKind` scalar inside an `InstanceEntry` object:
 /// 8-byte header + 5 object slots.
 const INSTANCE_ENTRY_ATTR_KIND_OFFSET: usize = 8 + (INSTANCE_ENTRY_OBJ_FIELDS as usize) * 8;
+
+/// Number of object (pointer) slots in a Lean 4 v4.x `SimpTheorem`:
+/// `keys : Array SimpTheoremKey`, `levelParams : Array Name`, `proof : Expr`,
+/// `priority : Nat`, `origin : Origin`
+/// (`Lean/Meta/Tactic/Simp/SimpTheorems.lean:143-165`). The trailing
+/// `post`/`perm`/`rfl` fields are `Bool` (uint8) scalars stored after the
+/// object slots, in declaration order. Layout verified byte-level against the
+/// pinned v4.30.0-rc2 `Init/SimpLemmas.olean` (tag 0, 5 object fields,
+/// `cs_sz` 56, scalars at offsets 48/49/50).
+const SIMP_THEOREM_OBJ_FIELDS: u8 = 5;
+
+/// Byte offset of the `post : Bool` scalar inside a `SimpTheorem` object:
+/// 8-byte header + 5 object slots.
+const SIMP_THEOREM_POST_OFFSET: usize = 8 + (SIMP_THEOREM_OBJ_FIELDS as usize) * 8;
+
+/// Lean 4's default simp-lemma priority (`eval_prio default` = 1000,
+/// `SimpTheorem.priority`'s default). Reported for `toUnfold`/`toUnfoldThms`
+/// entries, which persist no priority of their own.
+const LEAN_DEFAULT_SIMP_PRIORITY: u32 = 1000;
+
+/// Byte offset of the `inv : Bool` scalar inside an `Origin.decl` object:
+/// 8-byte header + 1 object slot (`declName : Name`) + 1 byte (`post : Bool`).
+/// (`Origin.decl (declName : Name) (post := true) (inv := false)`,
+/// `Lean/Meta/Tactic/Simp/SimpTheorems.lean:57-79`; verified: tag 0,
+/// 1 object field, `cs_sz` 24.)
+const ORIGIN_DECL_INV_OFFSET: usize = 8 + 8 + 1;
 
 impl<'a> CompactedRegion<'a> {
     /// Read the entries array: Array (Name × Array (Name × DataValue))
@@ -104,6 +136,8 @@ impl<'a> CompactedRegion<'a> {
             self.read_instance_entry_array(entries_ptr)?
         } else if extension_name == LEAN_CLASS_EXTENSION {
             self.read_class_entry_array(entries_ptr)?
+        } else if extension_name == LEAN_SIMP_EXTENSION {
+            self.read_simp_entry_array(entries_ptr)?
         } else {
             (self.read_extension_entry_array(entries_ptr)?, 0)
         };
@@ -256,6 +290,221 @@ impl<'a> CompactedRegion<'a> {
             attr_kind,
             scope_ns,
             synth_order,
+        }))
+    }
+
+    /// Read a `Lean.Meta.simpExtension` entry array with the real Lean 4
+    /// layout: each element is a `ScopedEnvExtension.Entry SimpEntry`.
+    ///
+    /// Returns the decoded entries plus a count of elements that did not
+    /// match the expected layout. As with [`Self::read_instance_entry_array`],
+    /// failed elements are *inert* — absent from the result, exactly as the
+    /// generic `(Name × DataValue)` heuristic dropped every one of them before
+    /// this decoder existed — but the count keeps the loss observable
+    /// (`ParsedExtension::undecoded_entries`).
+    fn read_simp_entry_array(&self, ptr: u64) -> OleanResult<(Vec<ParsedExtensionEntry>, usize)> {
+        if !is_ptr(ptr) {
+            return Ok((Vec::new(), 0));
+        }
+
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+
+        if header.tag != tags::ARRAY && header.tag != tags::STRUCT_ARRAY {
+            return Ok((Vec::new(), 0));
+        }
+
+        let size = self.read_usize_at(offset + 8, "Simp entry array")?;
+        self.validate_array_bounds(offset, size)?;
+        let mut entries = Vec::with_capacity(size);
+        let mut undecoded = 0usize;
+
+        for i in 0..size {
+            let elem_offset = self.array_elem_offset(offset, i, "Simp entry array")?;
+            let elem_ptr = self.read_u64_at(elem_offset)?;
+            match self.read_scoped_simp_entry(elem_ptr) {
+                Ok(Some(entry)) => entries.push(ParsedExtensionEntry::Simp(entry)),
+                // Unexpected layout or unreadable object: degrade to the
+                // pre-decoder behavior (entry absent) but count it — loud,
+                // never silently wrong.
+                Ok(None) | Err(_) => undecoded += 1,
+            }
+        }
+
+        Ok((entries, undecoded))
+    }
+
+    /// Decode one `ScopedEnvExtension.Entry SimpEntry` element.
+    ///
+    /// Layout (`Lean/ScopedEnvExtension.lean:17-19`):
+    /// - tag 0 `global (v : SimpEntry)` — exactly 1 object field
+    /// - tag 1 `scoped (ns : Name) (v : SimpEntry)` — exactly 2 object fields
+    ///
+    /// The arity gates are EXACT: a `(Name × DataValue)` Prod pair (tag 0,
+    /// 2 fields — the shape Clean's own exporter re-emits decoded entries as)
+    /// must NOT pass as `Entry.global`, or its first field (a `Name` object)
+    /// would be mis-decoded as a `SimpEntry`.
+    ///
+    /// Returns `Ok(None)` for any shape mismatch so the caller can count the
+    /// element as undecoded without failing the whole module parse.
+    fn read_scoped_simp_entry(&self, ptr: u64) -> OleanResult<Option<ParsedSimpEntry>> {
+        if !is_ptr(ptr) {
+            return Ok(None);
+        }
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+        if !header.is_constructor() {
+            return Ok(None);
+        }
+
+        let (scope_ns, entry_ptr) = match header.tag {
+            0 if header.other == 1 => (None, self.read_u64_at(offset + 8)?),
+            1 if header.other == 2 => {
+                let ns_ptr = self.read_u64_at(offset + 8)?;
+                let ns = self.resolve_name_ptr(ns_ptr)?;
+                (Some(ns), self.read_u64_at(offset + 16)?)
+            }
+            _ => return Ok(None),
+        };
+
+        self.read_simp_entry(entry_ptr, scope_ns)
+    }
+
+    /// Decode a Lean 4 `SimpEntry` object
+    /// (`Lean/Meta/Tactic/Simp/SimpTheorems.lean:449-453`):
+    /// - tag 0 `thm (SimpTheorem)` — exactly 1 object field
+    /// - tag 1 `toUnfold (Name)` — exactly 1 object field
+    /// - tag 2 `toUnfoldThms (Name) (Array Name)` — exactly 2 object fields
+    ///   (only the declaration name is retained; Clean reconstructs equation
+    ///   lemmas from the environment, never from serialized bytes)
+    ///
+    /// The arity gates are EXACT so no other constructor-shaped object (e.g.
+    /// a `Name.str`, tag 1 with 2 object fields) can pass as a `SimpEntry`.
+    ///
+    /// Returns `Ok(None)` for an unknown constructor tag (a future Lean
+    /// `SimpEntry` variant) so the entry is counted rather than guessed at.
+    fn read_simp_entry(
+        &self,
+        ptr: u64,
+        scope_ns: Option<String>,
+    ) -> OleanResult<Option<ParsedSimpEntry>> {
+        if !is_ptr(ptr) {
+            return Ok(None);
+        }
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+        if !header.is_constructor() {
+            return Ok(None);
+        }
+
+        match header.tag {
+            0 if header.other == 1 => {
+                let thm_ptr = self.read_u64_at(offset + 8)?;
+                self.read_simp_theorem(thm_ptr, scope_ns)
+            }
+            1 if header.other == 1 => {
+                let name_ptr = self.read_u64_at(offset + 8)?;
+                let lemma_name = self.resolve_name_ptr(name_ptr)?;
+                Ok(Some(ParsedSimpEntry {
+                    lemma_name,
+                    priority: u64::from(LEAN_DEFAULT_SIMP_PRIORITY),
+                    post: true,
+                    kind: ParsedSimpEntryKind::ToUnfold,
+                    scope_ns,
+                }))
+            }
+            2 if header.other == 2 => {
+                let name_ptr = self.read_u64_at(offset + 8)?;
+                let lemma_name = self.resolve_name_ptr(name_ptr)?;
+                Ok(Some(ParsedSimpEntry {
+                    lemma_name,
+                    priority: u64::from(LEAN_DEFAULT_SIMP_PRIORITY),
+                    post: true,
+                    kind: ParsedSimpEntryKind::ToUnfoldThms,
+                    scope_ns,
+                }))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Decode a Lean 4 `SimpTheorem` object
+    /// (`Lean/Meta/Tactic/Simp/SimpTheorems.lean:143-165`).
+    ///
+    /// Object slots in declaration order: `keys : Array SimpTheoremKey` (0,
+    /// skipped), `levelParams : Array Name` (1, skipped), `proof : Expr` (2,
+    /// skipped — the statement is reconstructed from the kernel-checked
+    /// environment constant, never from serialized bytes), `priority : Nat`
+    /// (3), `origin : Origin` (4); then the `post`/`perm`/`rfl` `Bool` scalars.
+    ///
+    /// Only `Origin.decl` (tag 0) origins are decodable by name; `fvar`/`stx`/
+    /// `other` origins carry no environment declaration to resolve (and Lean's
+    /// own `exportEntry?` never persists them — `Lean/Meta/Tactic/Simp/
+    /// SimpTheorems.lean:660-676` marks them `unreachable!`). An `inv := true`
+    /// origin (`@[simp ←]`) rewrites right-to-left, a direction the by-name
+    /// re-registration cannot represent — decoding it forward would flip the
+    /// rewrite, so it is counted as undecoded instead of misregistered.
+    ///
+    /// Returns `Ok(None)` when the object does not match this layout (e.g. a
+    /// different toolchain's field set) — the entry is then counted as
+    /// undecoded rather than guessed at.
+    fn read_simp_theorem(
+        &self,
+        ptr: u64,
+        scope_ns: Option<String>,
+    ) -> OleanResult<Option<ParsedSimpEntry>> {
+        if !is_ptr(ptr) {
+            return Ok(None);
+        }
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+        // Layout gate: exactly the v4.x field set (5 object slots) AND an
+        // object size that covers the trailing `post` scalar byte.
+        if !header.is_constructor()
+            || header.tag != 0
+            || header.other != SIMP_THEOREM_OBJ_FIELDS
+            || (header.cs_sz as usize) <= SIMP_THEOREM_POST_OFFSET
+        {
+            return Ok(None);
+        }
+
+        // Slot 3: priority : Nat (tagged scalar or mpz pointer).
+        let priority_ptr = self.read_u64_at(offset + 8 + 24)?;
+        let priority = self.read_nat_value(priority_ptr)?;
+
+        // Slot 4: origin : Origin. Only `.decl` (tag 0, 1 object slot +
+        // `post`/`inv` Bool scalars) names an environment declaration.
+        let origin_ptr = self.read_u64_at(offset + 8 + 32)?;
+        if !is_ptr(origin_ptr) {
+            return Ok(None);
+        }
+        let origin_offset = self.ptr_to_offset(origin_ptr)?;
+        let origin_header = self.read_header_at(origin_offset)?;
+        if !origin_header.is_constructor()
+            || origin_header.tag != 0
+            || origin_header.other != 1
+            || (origin_header.cs_sz as usize) <= ORIGIN_DECL_INV_OFFSET
+        {
+            return Ok(None);
+        }
+        // `inv := true` (`@[simp ←]`): the persisted direction is
+        // right-to-left; registering the constant forward would flip it.
+        // Count as undecoded, never misregister.
+        if self.bytes_at(origin_offset + ORIGIN_DECL_INV_OFFSET, 1)?[0] != 0 {
+            return Ok(None);
+        }
+        let name_ptr = self.read_u64_at(origin_offset + 8)?;
+        let lemma_name = self.resolve_name_ptr(name_ptr)?;
+
+        // Trailing scalar: post : Bool (uint8).
+        let post = self.bytes_at(offset + SIMP_THEOREM_POST_OFFSET, 1)?[0] != 0;
+
+        Ok(Some(ParsedSimpEntry {
+            lemma_name,
+            priority,
+            post,
+            kind: ParsedSimpEntryKind::Theorem,
+            scope_ns,
         }))
     }
 

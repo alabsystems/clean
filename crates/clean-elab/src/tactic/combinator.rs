@@ -377,10 +377,27 @@ pub(crate) fn try_tactic_preserving_state<F>(state: &mut ProofState, tactic: F) 
 where
     F: FnOnce(&mut ProofState) -> TacticResult,
 {
+    /// Heartbeat budget per speculative attempt. Legitimate closer attempts
+    /// (rfl/assumption/tauto/omega on real fixture goals) measure in the
+    /// tens-to-hundreds of real-reduction ticks. The pathological class
+    /// (full-delta WHNF walking fixed-width-integer WF machinery under
+    /// `import Init`, the 2026-08-13 OOM wall) allocates up to ~1 MB PER TICK
+    /// (65536-wide `UInt16`/`Fin` structures), and the closer fan re-fires
+    /// the same bomb once per attempt — a 20K budget was measured to still
+    /// stack multi-GB spikes to a 20 GB kill. 1K holds a bombed attempt to
+    /// ~1 GB transient worst-case while staying an order of magnitude above
+    /// legitimate attempt-scope use. Exhaustion fails only the attempt
+    /// (fail-closed): the state is restored and the next strategy runs.
+    const SPECULATIVE_ATTEMPT_BUDGET: u32 = 1_000;
+
     let saved_goals = state.goals.clone();
     state.metas_mut().push_scope();
 
-    if tactic(state).is_ok() {
+    let previous_budget = super::core::set_speculative_tc_budget(SPECULATIVE_ATTEMPT_BUDGET);
+    let attempt = tactic(state);
+    super::core::set_speculative_tc_budget(previous_budget);
+
+    if attempt.is_ok() {
         state.metas_mut().commit();
         true
     } else {

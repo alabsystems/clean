@@ -30,11 +30,18 @@ For each row the test runs `clean_parser::parse_expr(input)` and classifies:
   failure class the existing phase-1/PutnamBench gates (which only score
   `parse == Ok`) are structurally blind to.
 
-**The test passes iff SILENT-DIVERGENT = 0 modulo the pinned allowlist.** It
-prints a per-family scoreboard so coverage progress is measurable as Brick 3
-lands.
+**The test passes iff SILENT-DIVERGENT = 0 modulo the pinned allowlist, every
+family's MATCH count equals its pinned `MATCH_FLOORS` entry, and the scoreboard
+block below matches the measured board.** It prints the per-family scoreboard
+on every run so coverage progress is measurable as Brick 3 lands.
 
 ## Scoreboard at HEAD (post-Brick-3 surface expansion)
+
+The fenced block below is **asserted, not prose**: `parse_parity.rs` renders
+the measured board with the same formatter on every run and fails on any byte
+difference, so this block can never go stale. Each family's MATCH count is
+additionally pinned by the two-way `MATCH_FLOORS` ratchet in the test. To
+update after a legitimate change, paste the block the failing test prints.
 
 ```
 family      match   loud  divergent  total
@@ -142,7 +149,13 @@ glossary is in the `parse_parity.rs` header). The test ratchets in **both** dire
 - a divergent probe **not** on the allowlist fails the test — a new silent
   misparse or over-acceptance regressed;
 - an allowlist entry that is **no longer** divergent fails the test — its brick
-  landed, so the entry is stale and must be deleted.
+  landed, so the entry is stale and must be deleted;
+- a family whose MATCH count differs from its `MATCH_FLOORS` pin (in
+  `parse_parity.rs`) fails the test — below the floor is a MATCH→LOUD
+  regression (which the allowlist alone cannot see), above it is progress that
+  must bump the floor;
+- a scoreboard block above that differs from the measured board fails the test
+  — the README can never silently go stale.
 
 **Normal rule: the allowlist only shrinks.** An entry is removed only by fixing
 the parser so its probe flips to MATCH (or LOUD) — never by editing the fixture
@@ -164,7 +177,8 @@ set-builder, and `×ˢ` rows are that explicit exception.
    write it to the row's `lean_tree`. (The clean side is normalized by the same
    `render.rs`; a row is MATCH when the two skeletons coincide.)
 3. Re-run `cargo test -p clean-parser --test parse_parity -- --nocapture` and
-   reconcile the scoreboard / allowlist.
+   reconcile the scoreboard block, `MATCH_FLOORS`, and the allowlist (the test
+   prints the measured board and floor table on any mismatch).
 
 The `.mathverse`-style shard rule does not apply here — this fixture is small,
 deterministic, and checked in.

@@ -13,16 +13,13 @@
 
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec_axiom_closure::{computed_axiom_closure, foundational_rule_names};
-use crate::test_utils::run_with_stack;
 use crate::Specification;
 use clean_kernel::{ConstantKind, Name, Reducibility, TypeChecker};
 
 /// Build the substitution subset of the spec (the `add_whnf_progress` stage is
 /// in the Substitution bundle, right after `add_beta_bd_sn`; see `bundles.rs`).
 fn build_progress_test_spec() -> Specification {
-    run_with_stack(|| {
-        Specification::new_substitution_test_spec().expect("substitution test spec should build")
-    })
+    crate::test_utils::build_substitution_spec_with_stack()
 }
 
 /// The three inductives (const-free unit, stuck-head predicate, progress

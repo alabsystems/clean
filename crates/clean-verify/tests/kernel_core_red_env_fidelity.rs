@@ -22,7 +22,7 @@ use clean_verify::red_env_reflect::{
     COMMITTED_DEF_SCRIPT, COMMITTED_INTERNING_TSV, COMMITTED_SKIP_LEDGER, REFLECT_DEFS,
     REFLECT_INDUCTIVES,
 };
-use clean_verify::test_utils::run_with_stack;
+use clean_verify::test_utils::{build_spec_with_stack, run_with_stack};
 
 /// THE FIDELITY GATE: regenerating the reflection from the live kernel env
 /// must reproduce the committed def script, interning table, and skip
@@ -99,7 +99,7 @@ fn test_fidelity_gate_regenerated_reflection_matches_committed_artifacts() {
 #[test]
 fn test_fidelity_gate_field_for_field_against_kernel_recursors() {
     run_with_stack(|| {
-        let spec = clean_verify::Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let env = spec.env();
         let reflection = reflect_foundation_core(env);
         for rec in &reflection.recs {
@@ -190,7 +190,7 @@ fn test_fidelity_gate_field_for_field_against_kernel_recursors() {
 #[test]
 fn test_interning_table_injective() {
     run_with_stack(|| {
-        let spec = clean_verify::Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let reflection = reflect_foundation_core(spec.env());
         assert!(
             reflection.interning_injective(),
@@ -213,7 +213,7 @@ fn test_interning_table_injective() {
 #[test]
 fn test_kernel_core_red_env_registered_census_neutral() {
     run_with_stack(|| {
-        let spec = clean_verify::Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let def = spec
             .definitions()
             .get("kernel_core_red_env")
@@ -268,7 +268,7 @@ fn test_kernel_core_red_env_registered_census_neutral() {
 #[test]
 fn test_one_rfl_probe_checker_folds_evaluate_over_reflected_env() {
     run_with_stack(|| {
-        let spec = clean_verify::Specification::new().expect("spec should build");
+        let spec = build_spec_with_stack();
         let tc = TypeChecker::new(spec.env());
         for (checker, proj) in [
             ("rec_env_closed_b", "red_rec"),

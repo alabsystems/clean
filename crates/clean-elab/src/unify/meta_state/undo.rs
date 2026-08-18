@@ -222,6 +222,9 @@ impl MetaState {
             UndoRecord::NextId { old_value } => {
                 self.next_id = old_value;
             }
+            UndoRecord::LevelPostpone => {
+                self.postponed_levels.pop();
+            }
             UndoRecord::LevelConstraint { name, old_value } => {
                 if let Some(val) = old_value {
                     self.level_constraints.insert(name, val);

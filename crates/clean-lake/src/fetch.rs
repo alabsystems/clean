@@ -6,8 +6,10 @@
 //!
 //! Fetches git dependencies for Lake projects.
 
+use crate::config::{Dependency, LakeConfig};
 use crate::error::{LakeError, LakeResult};
-use crate::manifest::{GitPackage, LakeManifest, ManifestPackage};
+use crate::manifest::{GitPackage, LakeManifest, ManifestPackage, PathPackage};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -454,49 +456,170 @@ pub struct ResolvedPackage {
     pub input_rev: Option<String>,
     /// Path (if path dependency)
     pub path: Option<String>,
+    /// Whether this package was transitively inherited from another
+    /// package's requires (Lake manifest key: `inherited`)
+    pub inherited: bool,
+}
+
+/// Maximum transitive `require` depth followed during dependency resolution.
+///
+/// Real dependency graphs (Mathlib and its closure) are only a handful of
+/// levels deep; hitting this bound indicates a runaway or malformed
+/// transitive require chain and is reported as a loud per-dependency error.
+const MAX_RESOLVE_DEPTH: usize = 64;
+
+/// Mutable state threaded through recursive dependency resolution.
+struct ResolveCtx {
+    /// Package names already resolved (first-wins conflict policy, like Lake)
+    visited: BTreeSet<String>,
+    /// Names currently being expanded, for cycle detection
+    stack: Vec<String>,
+    /// Successfully resolved packages, in first-encounter order
+    resolved: Vec<ResolvedPackage>,
+    /// Per-dependency resolution errors `(name, message)`
+    errors: Vec<(String, String)>,
 }
 
 impl FetchManager {
-    /// Resolve dependencies declared in the lakefile to concrete revisions.
-    /// This clones/fetches each git dependency to determine its commit SHA.
-    pub fn resolve_dependencies(
-        &self,
-        dependencies: &[crate::config::Dependency],
-    ) -> LakeResult<ResolveResult> {
-        let mut resolved = vec![];
-        let mut errors = vec![];
+    /// Resolve dependencies declared in the lakefile to concrete revisions,
+    /// following each fetched package's own requires transitively.
+    ///
+    /// After fetching each git/path dependency this opens the dependency's
+    /// own lakefile (`lakefile.toml` preferred, `lakefile.lean` fallback) and
+    /// resolves its requires into the same result, so the full transitive
+    /// closure lands in the manifest (as real Lake does for Mathlib-shaped
+    /// projects). Name conflicts are first-wins (matching Lake), require
+    /// cycles are detected and reported, and expansion is bounded by
+    /// [`MAX_RESOLVE_DEPTH`]. Failures are collected per dependency in
+    /// [`ResolveResult::errors`] rather than aborting the whole resolution.
+    pub fn resolve_dependencies(&self, dependencies: &[Dependency]) -> LakeResult<ResolveResult> {
+        let mut ctx = ResolveCtx {
+            visited: BTreeSet::new(),
+            stack: Vec::new(),
+            resolved: Vec::new(),
+            errors: Vec::new(),
+        };
 
         for dep in dependencies {
-            match self.resolve_single_dependency(dep) {
-                Ok(pkg) => resolved.push(pkg),
-                Err(e) => errors.push((dep.name.clone(), e.to_string())),
-            }
+            self.resolve_recursive(&mut ctx, dep, &self.root, 0);
         }
 
-        Ok(ResolveResult { resolved, errors })
+        Ok(ResolveResult {
+            resolved: ctx.resolved,
+            errors: ctx.errors,
+        })
     }
 
-    /// Resolve a single dependency to a concrete revision
+    /// Resolve one dependency and recurse into the fetched package's own
+    /// requires. `base_dir` is the directory of the package that declared
+    /// `dep` (path requires are relative to their declaring package).
+    fn resolve_recursive(
+        &self,
+        ctx: &mut ResolveCtx,
+        dep: &Dependency,
+        base_dir: &Path,
+        depth: usize,
+    ) {
+        if depth > MAX_RESOLVE_DEPTH {
+            let err = LakeError::DependencyDepthExceeded {
+                name: dep.name.clone(),
+                limit: MAX_RESOLVE_DEPTH,
+            };
+            ctx.errors.push((dep.name.clone(), err.to_string()));
+            return;
+        }
+
+        // Cycle detection: a require chain re-entering a package that is
+        // still being expanded is a genuine dependency cycle.
+        if ctx.stack.contains(&dep.name) {
+            let mut chain = ctx.stack.clone();
+            chain.push(dep.name.clone());
+            let err = LakeError::CircularDependency(chain.join(" -> "));
+            ctx.errors.push((dep.name.clone(), err.to_string()));
+            return;
+        }
+
+        // First-wins conflict policy (matching Lake): an earlier require
+        // already resolved this package name.
+        if ctx.visited.contains(&dep.name) {
+            return;
+        }
+
+        let (mut pkg, pkg_dir) = match self.resolve_single_dependency(dep, base_dir) {
+            Ok(ok) => ok,
+            Err(e) => {
+                ctx.errors.push((dep.name.clone(), e.to_string()));
+                return;
+            }
+        };
+        pkg.inherited = depth > 0;
+        ctx.visited.insert(dep.name.clone());
+        ctx.resolved.push(pkg);
+
+        // Open the fetched package's own lakefile (toml preferred, lean
+        // fallback) and resolve ITS requires into the same result set.
+        match LakeConfig::load_from_dir(&pkg_dir) {
+            Err(LakeError::LakefileNotFound(_)) => {
+                // Leaf package: no lakefile means no further requires.
+            }
+            Err(e) => {
+                ctx.errors.push((
+                    dep.name.clone(),
+                    format!("failed to load lakefile of fetched package: {e}"),
+                ));
+            }
+            Ok(sub_config) => {
+                ctx.stack.push(dep.name.clone());
+                for sub in &sub_config.package.dependencies {
+                    self.resolve_recursive(ctx, sub, &pkg_dir, depth + 1);
+                }
+                ctx.stack.pop();
+            }
+        }
+    }
+
+    /// Resolve a single dependency to a concrete revision. Returns the
+    /// resolved package (with `inherited` unset) and the on-disk directory
+    /// of the fetched package, for transitive lakefile inspection.
     fn resolve_single_dependency(
         &self,
-        dep: &crate::config::Dependency,
-    ) -> LakeResult<ResolvedPackage> {
-        // Handle path dependencies
+        dep: &Dependency,
+        base_dir: &Path,
+    ) -> LakeResult<(ResolvedPackage, PathBuf)> {
+        // Handle path dependencies (relative to the declaring package's dir)
         if let Some(path) = &dep.path {
-            let full_path = self.root.join(path);
+            let full_path = base_dir.join(path);
             if !full_path.exists() {
                 return Err(LakeError::PackageNotFound {
                     name: dep.name.clone(),
                     path: full_path,
                 });
             }
-            return Ok(ResolvedPackage {
-                name: dep.name.clone(),
-                url: None,
-                rev: String::new(),
-                input_rev: None,
-                path: Some(path.to_string_lossy().to_string()),
-            });
+            let stored_path = if base_dir == self.root.as_path() {
+                path.to_string_lossy().to_string()
+            } else {
+                // Transitive path requires are declared relative to their
+                // parent package; re-express them relative to the workspace
+                // root so the manifest entry is meaningful from the root.
+                match (full_path.canonicalize(), self.root.canonicalize()) {
+                    (Ok(canon), Ok(root)) => canon
+                        .strip_prefix(&root)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| canon.to_string_lossy().to_string()),
+                    _ => full_path.to_string_lossy().to_string(),
+                }
+            };
+            return Ok((
+                ResolvedPackage {
+                    name: dep.name.clone(),
+                    url: None,
+                    rev: String::new(),
+                    input_rev: None,
+                    path: Some(stored_path),
+                    inherited: false,
+                },
+                full_path,
+            ));
         }
 
         // Handle git dependencies
@@ -517,19 +640,23 @@ impl FetchManager {
         // Get the actual commit SHA
         let rev = self.get_git_rev(&pkg_dir)?;
 
-        Ok(ResolvedPackage {
-            name: dep.name.clone(),
-            url: Some(url.clone()),
-            rev,
-            input_rev,
-            path: None,
-        })
+        Ok((
+            ResolvedPackage {
+                name: dep.name.clone(),
+                url: Some(url.clone()),
+                rev,
+                input_rev,
+                path: None,
+                inherited: false,
+            },
+            pkg_dir,
+        ))
     }
 
     /// Resolve dependencies and generate a manifest
     pub fn resolve_to_manifest(
         &self,
-        dependencies: &[crate::config::Dependency],
+        dependencies: &[Dependency],
     ) -> LakeResult<(LakeManifest, ResolveResult)> {
         let result = self.resolve_dependencies(dependencies)?;
 
@@ -541,12 +668,13 @@ impl FetchManager {
                     url: url.clone(),
                     rev: pkg.rev.clone(),
                     input_rev: pkg.input_rev.clone(),
+                    inherited: Some(pkg.inherited),
                     ..Default::default()
                 }));
             } else if let Some(path) = &pkg.path {
-                manifest.upsert_package(ManifestPackage::Path(crate::manifest::PathPackage::new(
-                    &pkg.name, path,
-                )));
+                let mut path_pkg = PathPackage::new(&pkg.name, path);
+                path_pkg.inherited = Some(pkg.inherited);
+                manifest.upsert_package(ManifestPackage::Path(path_pkg));
             }
         }
 
@@ -557,7 +685,6 @@ impl FetchManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Dependency;
     use std::path::PathBuf;
 
     #[test]
@@ -593,6 +720,7 @@ mod tests {
             rev: "abc123def456".to_string(),
             input_rev: Some("main".to_string()),
             path: None,
+            inherited: false,
         };
         assert_eq!(pkg.name, "std");
         assert!(pkg.url.is_some(), "git package should have url");
@@ -607,6 +735,7 @@ mod tests {
             rev: String::new(),
             input_rev: None,
             path: Some("../local-pkg".to_string()),
+            inherited: false,
         };
         assert_eq!(pkg.name, "local");
         assert!(pkg.url.is_none(), "path package should not have url");
@@ -659,5 +788,300 @@ mod tests {
         assert!(result.resolved.is_empty());
         assert_eq!(result.errors.len(), 1);
         assert!(result.errors[0].1.contains("neither git nor path"));
+    }
+
+    /// Write a minimal `lakefile.toml` package into `dir`, with the given
+    /// path-form requires (each relative to `dir`, as Lake declares them).
+    fn write_lakefile_toml(dir: &Path, name: &str, path_requires: &[(&str, &str)]) {
+        std::fs::create_dir_all(dir).unwrap();
+        let mut content = format!("name = \"{name}\"\n");
+        for (rname, rpath) in path_requires {
+            let req = format!("\n[[require]]\nname = \"{rname}\"\npath = \"{rpath}\"\n");
+            content.push_str(&req);
+        }
+        std::fs::write(dir.join("lakefile.toml"), content).unwrap();
+    }
+
+    /// Run a git subcommand in `dir`, panicking with stderr on failure.
+    fn git(dir: &Path, args: &[&str]) {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .expect("git should be runnable in the test environment");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// Turn `dir` into a single-commit git repo on branch `main`, so it can
+    /// serve as a local "remote" for clone-based fetch tests (no network).
+    fn git_init_commit(dir: &Path) {
+        git(dir, &["init", "-q", "-b", "main"]);
+        git(dir, &["add", "-A"]);
+        git(
+            dir,
+            &[
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "user.name=Test",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "-m",
+                "init",
+            ],
+        );
+    }
+
+    fn path_dep(name: &str, path: &str) -> Dependency {
+        Dependency {
+            name: name.to_string(),
+            git: None,
+            rev: None,
+            path: Some(PathBuf::from(path)),
+            version: None,
+        }
+    }
+
+    /// Transitive closure over path deps: root requires B, B's own lakefile
+    /// requires C — the manifest must list BOTH B and C, with C re-expressed
+    /// relative to the workspace root and flagged as inherited.
+    #[test]
+    fn test_resolve_transitive_path_deps_lists_full_closure() {
+        use tempfile::tempdir;
+
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let packages_dir = root.join(".lake/packages");
+        // B requires C relative to B's own directory, as Lake declares it.
+        write_lakefile_toml(&root.join("depB"), "depB", &[("depC", "../depC")]);
+        write_lakefile_toml(&root.join("depC"), "depC", &[]);
+
+        let fm = FetchManager::new(root, &packages_dir);
+        let (manifest, result) = fm
+            .resolve_to_manifest(&[path_dep("depB", "depB")])
+            .expect("resolution should succeed");
+
+        assert!(
+            result.errors.is_empty(),
+            "unexpected errors: {:?}",
+            result.errors
+        );
+        let names: Vec<&str> = result.resolved.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["depB", "depC"]);
+        assert!(!result.resolved[0].inherited, "direct dep is not inherited");
+        assert!(result.resolved[1].inherited, "transitive dep is inherited");
+        // C's path was declared as "../depC" relative to depB; the manifest
+        // entry must be meaningful from the workspace root.
+        assert_eq!(result.resolved[1].path.as_deref(), Some("depC"));
+
+        let b = manifest
+            .get_package("depB")
+            .expect("B listed in manifest")
+            .as_path()
+            .expect("B is a path package");
+        assert_eq!(b.inherited, Some(false));
+        let c = manifest
+            .get_package("depC")
+            .expect("transitive C listed in manifest")
+            .as_path()
+            .expect("C is a path package");
+        assert_eq!(c.path, "depC");
+        assert_eq!(c.inherited, Some(true));
+    }
+
+    /// Transitive closure over git deps using local repos as "remotes" (no
+    /// network): root requires git package B, whose lakefile requires git
+    /// package C — the manifest must pin concrete commit SHAs for BOTH.
+    #[test]
+    fn test_resolve_transitive_git_deps_pins_revs() {
+        use tempfile::tempdir;
+
+        let temp = tempdir().unwrap();
+        let remotes = temp.path().join("remotes");
+
+        // Leaf repo C.
+        let repo_c = remotes.join("depC");
+        write_lakefile_toml(&repo_c, "depC", &[]);
+        git_init_commit(&repo_c);
+
+        // Repo B requires C via a git URL (a local path works with git clone).
+        let repo_b = remotes.join("depB");
+        std::fs::create_dir_all(&repo_b).unwrap();
+        std::fs::write(
+            repo_b.join("lakefile.toml"),
+            format!(
+                "name = \"depB\"\n\n[[require]]\nname = \"depC\"\ngit = \"{}\"\n",
+                repo_c.display()
+            ),
+        )
+        .unwrap();
+        git_init_commit(&repo_b);
+
+        let proj = temp.path().join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let packages_dir = proj.join(".lake/packages");
+        let fm = FetchManager::new(&proj, &packages_dir);
+
+        let dep = Dependency {
+            name: "depB".to_string(),
+            git: Some(repo_b.display().to_string()),
+            rev: None,
+            path: None,
+            version: None,
+        };
+
+        let (manifest, result) = fm
+            .resolve_to_manifest(&[dep])
+            .expect("resolution should succeed");
+        assert!(
+            result.errors.is_empty(),
+            "unexpected errors: {:?}",
+            result.errors
+        );
+        assert_eq!(result.resolved.len(), 2, "closure must contain B and C");
+
+        for pkg_name in ["depB", "depC"] {
+            let git_pkg = manifest
+                .get_package(pkg_name)
+                .unwrap_or_else(|| panic!("{pkg_name} listed in manifest"))
+                .as_git()
+                .unwrap_or_else(|| panic!("{pkg_name} is a git package"));
+            assert_eq!(git_pkg.rev.len(), 40, "{pkg_name} rev is a full SHA");
+            assert!(
+                git_pkg.rev.chars().all(|c| c.is_ascii_hexdigit()),
+                "{pkg_name} rev is hex: {}",
+                git_pkg.rev
+            );
+        }
+        assert_eq!(
+            manifest
+                .get_package("depB")
+                .unwrap()
+                .as_git()
+                .unwrap()
+                .inherited,
+            Some(false)
+        );
+        assert_eq!(
+            manifest
+                .get_package("depC")
+                .unwrap()
+                .as_git()
+                .unwrap()
+                .inherited,
+            Some(true)
+        );
+    }
+
+    /// First-wins conflict policy (matching Lake): when the root requires C
+    /// directly and B also requires C, the first resolution wins and C is
+    /// listed exactly once.
+    #[test]
+    fn test_resolve_dedup_first_wins() {
+        use tempfile::tempdir;
+
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let packages_dir = root.join(".lake/packages");
+        write_lakefile_toml(&root.join("depB"), "depB", &[("depC", "../depC")]);
+        write_lakefile_toml(&root.join("depC"), "depC", &[]);
+
+        let fm = FetchManager::new(root, &packages_dir);
+        let result = fm
+            .resolve_dependencies(&[path_dep("depC", "depC"), path_dep("depB", "depB")])
+            .expect("resolution should succeed");
+
+        assert!(
+            result.errors.is_empty(),
+            "unexpected errors: {:?}",
+            result.errors
+        );
+        let names: Vec<&str> = result.resolved.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["depC", "depB"], "C listed once, first-wins");
+        assert!(
+            !result.resolved[0].inherited,
+            "the direct C resolution won over B's transitive require"
+        );
+    }
+
+    /// A require cycle (B -> C -> B) must be detected and reported loudly
+    /// instead of looping; the acyclic part of the closure still resolves.
+    #[test]
+    fn test_resolve_cycle_reports_circular_error() {
+        use tempfile::tempdir;
+
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let packages_dir = root.join(".lake/packages");
+        write_lakefile_toml(&root.join("depB"), "depB", &[("depC", "../depC")]);
+        write_lakefile_toml(&root.join("depC"), "depC", &[("depB", "../depB")]);
+
+        let fm = FetchManager::new(root, &packages_dir);
+        let result = fm
+            .resolve_dependencies(&[path_dep("depB", "depB")])
+            .expect("resolution itself should not abort");
+
+        let names: Vec<&str> = result.resolved.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["depB", "depC"], "acyclic part still resolves");
+        assert_eq!(result.errors.len(), 1, "the cycle is reported");
+        assert_eq!(result.errors[0].0, "depB");
+        assert!(
+            result.errors[0].1.contains("circular dependency"),
+            "error names the cycle: {}",
+            result.errors[0].1
+        );
+        assert!(
+            result.errors[0].1.contains("depB -> depC -> depB"),
+            "error shows the require chain: {}",
+            result.errors[0].1
+        );
+    }
+
+    /// A require chain deeper than MAX_RESOLVE_DEPTH stops with a loud
+    /// depth-bound error instead of expanding forever.
+    #[test]
+    fn test_resolve_depth_bound_reports_loud_error() {
+        use tempfile::tempdir;
+
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let packages_dir = root.join(".lake/packages");
+
+        let n = MAX_RESOLVE_DEPTH + 5;
+        for i in 0..=n {
+            let dir = root.join(format!("pkg{i}"));
+            let name = format!("pkg{i}");
+            if i < n {
+                let next = format!("pkg{}", i + 1);
+                let rel = format!("../{next}");
+                write_lakefile_toml(&dir, &name, &[(next.as_str(), rel.as_str())]);
+            } else {
+                write_lakefile_toml(&dir, &name, &[]);
+            }
+        }
+
+        let fm = FetchManager::new(root, &packages_dir);
+        let result = fm
+            .resolve_dependencies(&[path_dep("pkg0", "pkg0")])
+            .expect("resolution itself should not abort");
+
+        assert_eq!(
+            result.resolved.len(),
+            MAX_RESOLVE_DEPTH + 1,
+            "packages up to the bound still resolve"
+        );
+        assert_eq!(result.errors.len(), 1, "the depth overflow is reported");
+        assert!(
+            result.errors[0].1.contains("maximum depth"),
+            "error names the depth bound: {}",
+            result.errors[0].1
+        );
     }
 }

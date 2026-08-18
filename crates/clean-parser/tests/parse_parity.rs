@@ -29,6 +29,19 @@
 //! fail immediately. The scoreboard (per family: match/loud/divergent) prints on
 //! every run so coverage progress is measurable.
 //!
+//! Two further ratchets make the whole board load-bearing, not just the
+//! divergent column:
+//!
+//! - **MATCH floors** — every family's MATCH count must equal its pinned
+//!   [`MATCH_FLOORS`] entry, two-way: below the floor is a MATCH→LOUD
+//!   regression (LOUD alone is always "acceptable", so without floors such a
+//!   regression passed silently); above the floor is progress that must bump
+//!   the floor. The failure message prints the measured table to paste.
+//! - **README pinning** — the scoreboard block in
+//!   `tests/fixtures/parser_parity/README.md` (`## Scoreboard at HEAD`) must
+//!   byte-match the board generated on the run, so the published numbers can
+//!   never go stale.
+//!
 //! The comparison skeleton and its normalizations are documented in
 //! `parse_parity_support/render.rs`; the fixture format and the ratchet rule are
 //! documented in `tests/fixtures/parser_parity/README.md`.
@@ -68,6 +81,42 @@ include!("parse_parity_support/render.rs");
 //   * `B3-getelem-postfix-ws` — `xs[1] !` / `xs[1] ?` consumed by clean's
 //                           general postfix leniency; Lean rejects.
 include!("parse_parity_support/allowlist.rs");
+
+/// The eight probe families, in scoreboard order.
+const FAMILIES: [&str; 8] = [
+    "bigop",
+    "getelem",
+    "monadic",
+    "brace",
+    "binder",
+    "lowprec",
+    "rewrite",
+    "freqsweep",
+];
+
+// Per-family MATCH floors — the scoreboard ratchet's second axis. The
+// [`ALLOWLIST`] pins the DIVERGENT set exactly, but on its own a probe
+// regressing MATCH→LOUD passes silently (LOUD is always an acceptable class).
+// These floors pin each family's MATCH count, two-way, mirroring the
+// `data/*ratchet*` discipline (regressions fail; improvements fail until the
+// pin is advanced, so the pinned number always states the measured truth):
+//
+//   * MATCH below the floor fails — probe(s) regressed MATCH→LOUD/DIVERGENT;
+//   * MATCH above the floor fails — progress landed; bump the floor (the
+//     failure message prints the measured table to paste over this one).
+//
+// Seeded 2026-08-10 from the verified scoreboard (the README block, asserted
+// against the measured board by this test on every run).
+const MATCH_FLOORS: &[(&str, usize)] = &[
+    ("bigop", 5),
+    ("getelem", 25),
+    ("monadic", 31),
+    ("brace", 25),
+    ("binder", 38),
+    ("lowprec", 24),
+    ("rewrite", 13),
+    ("freqsweep", 24),
+];
 
 /// Expected outcome kind, from the fixture's `expected_kind` column.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -109,6 +158,75 @@ fn parse_kind(s: &str, lineno: usize) -> ExpectedKind {
 fn fixture_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/parser_parity/ground_truth.tsv")
+}
+
+fn readme_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/parser_parity/README.md")
+}
+
+/// Look up a family's pinned MATCH floor.
+fn match_floor(family: &str) -> usize {
+    match MATCH_FLOORS.iter().find(|(f, _)| *f == family) {
+        Some((_, floor)) => *floor,
+        None => panic!("family {family:?} has no MATCH_FLOORS entry"),
+    }
+}
+
+/// Render the per-family scoreboard table — the exact text pinned in the
+/// fixture README's `## Scoreboard at HEAD` fenced block.
+fn scoreboard_block(board: &std::collections::BTreeMap<&str, [usize; 3]>) -> String {
+    let mut out = format!(
+        "{:10} {:>6} {:>6} {:>10} {:>6}\n",
+        "family", "match", "loud", "divergent", "total"
+    );
+    let mut tot = [0usize; 3];
+    for f in FAMILIES {
+        let s = board[f];
+        for k in 0..3 {
+            tot[k] += s[k];
+        }
+        out.push_str(&format!(
+            "{:10} {:>6} {:>6} {:>10} {:>6}\n",
+            f,
+            s[0],
+            s[1],
+            s[2],
+            s[0] + s[1] + s[2]
+        ));
+    }
+    out.push_str(&format!(
+        "{:10} {:>6} {:>6} {:>10} {:>6}\n",
+        "TOTAL",
+        tot[0],
+        tot[1],
+        tot[2],
+        tot[0] + tot[1] + tot[2]
+    ));
+    out
+}
+
+/// Extract the fenced scoreboard block that follows the `## Scoreboard at
+/// HEAD` heading in the fixture README.
+fn readme_scoreboard_block(readme: &str) -> String {
+    let mut lines = readme.lines();
+    lines
+        .by_ref()
+        .find(|l| l.starts_with("## Scoreboard at HEAD"))
+        .expect("README lost its `## Scoreboard at HEAD` heading");
+    lines
+        .by_ref()
+        .find(|l| l.trim() == "```")
+        .expect("README scoreboard heading has no fenced block after it");
+    let mut block = String::new();
+    for line in lines {
+        if line.trim() == "```" {
+            return block;
+        }
+        block.push_str(line);
+        block.push('\n');
+    }
+    panic!("README scoreboard fenced block never closes");
 }
 
 fn load_rows() -> Vec<Row> {
@@ -167,18 +285,8 @@ fn parse_parity_no_unpinned_silent_divergence() {
     );
 
     // Per-family tallies for the scoreboard.
-    let families = [
-        "bigop",
-        "getelem",
-        "monadic",
-        "brace",
-        "binder",
-        "lowprec",
-        "rewrite",
-        "freqsweep",
-    ];
     let mut board: std::collections::BTreeMap<&str, [usize; 3]> =
-        families.iter().map(|f| (*f, [0usize; 3])).collect();
+        FAMILIES.iter().map(|f| (*f, [0usize; 3])).collect();
 
     let mut unpinned: Vec<String> = Vec::new();
     // Track which allowlist rows actually fired, to catch stale entries.
@@ -216,35 +324,11 @@ fn parse_parity_no_unpinned_silent_divergence() {
         }
     }
 
-    // Scoreboard (prints with --nocapture).
+    // Scoreboard (prints with --nocapture). The same block is pinned in the
+    // fixture README and asserted against below.
+    let board_block = scoreboard_block(&board);
     println!("\nparse-parity scoreboard (clean-parser @ HEAD vs Lean v4.30.0-rc2)");
-    println!(
-        "{:10} {:>6} {:>6} {:>10} {:>6}",
-        "family", "match", "loud", "divergent", "total"
-    );
-    let mut tot = [0usize; 3];
-    for f in families {
-        let s = board[f];
-        for k in 0..3 {
-            tot[k] += s[k];
-        }
-        println!(
-            "{:10} {:>6} {:>6} {:>10} {:>6}",
-            f,
-            s[0],
-            s[1],
-            s[2],
-            s[0] + s[1] + s[2]
-        );
-    }
-    println!(
-        "{:10} {:>6} {:>6} {:>10} {:>6}",
-        "TOTAL",
-        tot[0],
-        tot[1],
-        tot[2],
-        tot[0] + tot[1] + tot[2]
-    );
+    print!("{board_block}");
     println!(
         "allowlist: {} pinned divergences (each cites its Brick-3 fix)\n",
         ALLOWLIST.len()
@@ -272,5 +356,53 @@ fn parse_parity_no_unpinned_silent_divergence() {
          brick landed). Remove them from ALLOWLIST to advance the ratchet:\n{}",
         stale.len(),
         stale.join("\n")
+    );
+
+    // MATCH-floor ratchet (two-way). The ALLOWLIST pins the divergent set, but
+    // without floors a probe regressing MATCH→LOUD passes silently. Every
+    // family's MATCH count must equal its pinned floor.
+    assert_eq!(
+        MATCH_FLOORS.len(),
+        FAMILIES.len(),
+        "MATCH_FLOORS must pin every family exactly once"
+    );
+    let mut floor_breaks: Vec<String> = Vec::new();
+    let mut measured = String::new();
+    for f in FAMILIES {
+        let floor = match_floor(f);
+        let actual = board[f][0];
+        measured.push_str(&format!("    (\"{f}\", {actual}),\n"));
+        if actual < floor {
+            floor_breaks.push(format!(
+                "{f}: MATCH {actual} fell below floor {floor} — probe(s) regressed \
+                 MATCH→LOUD/DIVERGENT"
+            ));
+        } else if actual > floor {
+            floor_breaks.push(format!(
+                "{f}: MATCH {actual} rose above floor {floor} — progress landed; bump the \
+                 floor to advance the ratchet"
+            ));
+        }
+    }
+    assert!(
+        floor_breaks.is_empty(),
+        "{} MATCH-floor break(s):\n{}\nMeasured per-family MATCH counts — MATCH_FLOORS \
+         must read exactly (fix regressions in the parser; paste only genuine rises):\n{}",
+        floor_breaks.len(),
+        floor_breaks.join("\n"),
+        measured
+    );
+
+    // Scoreboard pinning: the README's `## Scoreboard at HEAD` fenced block
+    // must equal the board measured on this run — the published numbers can
+    // never go stale. On a legitimate change, paste the block printed above.
+    let readme = std::fs::read_to_string(readme_path())
+        .expect("read tests/fixtures/parser_parity/README.md");
+    let pinned_block = readme_scoreboard_block(&readme);
+    assert!(
+        pinned_block == board_block,
+        "STALE README scoreboard — the `## Scoreboard at HEAD` fenced block in \
+         tests/fixtures/parser_parity/README.md does not match the board measured on \
+         this run. Replace the fenced block's contents with:\n{board_block}"
     );
 }

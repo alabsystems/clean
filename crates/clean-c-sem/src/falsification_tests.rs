@@ -183,6 +183,205 @@ fn falsify_signed_overflow_add() {
 }
 
 #[test]
+fn falsify_compound_assignment_is_not_modeled_as_skip_in_inferred_loop_vc() {
+    // Production path, not a direct wp_expr fixture. When `x += 1` was modeled
+    // as skip, the false contract was certified from `requires x == 0`: the
+    // verifier kept x at zero even though the real execution stores one.
+    assert_not_verified(
+        r"
+        //@ requires x == 0;
+        //@ ensures x == 0;
+        int f(int x) { x += 1; return 0; }
+        ",
+        "a false postcondition hidden by treating compound assignment as skip",
+    );
+}
+
+#[test]
+fn falsify_compound_assignment_signed_overflow() {
+    // `x += 1` includes the `x + 1` computation. Checking only the syntactic
+    // RHS (`1`) dropped its overflow side condition and certified this for
+    // x == INT_MAX.
+    assert_not_verified(
+        r"
+        //@ ensures \true;
+        int f(int x) { x += 1; return x; }
+        ",
+        "reachable signed overflow in compound addition",
+    );
+}
+
+#[test]
+fn falsify_side_effecting_compound_assignment_rhs_fails_closed() {
+    // The bounded WP lane snapshots one pre-write RHS value. A nested write
+    // changes the object during evaluation and is deliberately Unsupported
+    // until sequencing is represented explicitly.
+    assert_not_verified(
+        r"
+        //@ ensures \true;
+        int f(int x) { x += (x = 2); return x; }
+        ",
+        "a side effect inside the compound-assignment RHS",
+    );
+}
+
+#[test]
+fn falsify_plain_complex_lvalue_write_is_not_modeled_as_skip() {
+    // `p` aliases the parameter object.  Treating `*p = 1` as Q unchanged
+    // certified the false postcondition from the entry-state precondition.
+    assert_not_verified(
+        r"
+        //@ requires x == 0;
+        //@ ensures x == 0;
+        int f(int x) { int *p = &x; *p = 1; return 0; }
+        ",
+        "a false postcondition hidden by skipping a write through an alias",
+    );
+}
+
+#[test]
+fn falsify_nested_plain_assignment_state_effect() {
+    assert_not_verified(
+        r"
+        //@ requires y == 0;
+        //@ ensures y == 0;
+        int f(int x, int y) { x = (y = 2); return 0; }
+        ",
+        "a nested assignment whose write was omitted from the symbolic state",
+    );
+}
+
+#[test]
+fn falsify_side_effecting_if_condition_state_effect() {
+    assert_not_verified(
+        r"
+        //@ requires x == 0;
+        //@ ensures x == 0;
+        int f(int x) { if (x = 1) { } return 0; }
+        ",
+        "an assignment in a controlling expression whose state update was omitted",
+    );
+}
+
+#[test]
+fn falsify_uninitialized_automatic_read() {
+    assert_not_verified(
+        r"
+        //@ ensures \true;
+        int f(void) { int x; return x; }
+        ",
+        "a read of an indeterminate automatic object",
+    );
+}
+
+#[test]
+fn falsify_self_initializing_automatic_read() {
+    assert_not_verified(
+        r"
+        //@ ensures \true;
+        int f(void) { int x = x; return x; }
+        ",
+        "a self-initializer that reads the newly scoped indeterminate object",
+    );
+}
+
+#[test]
+fn falsify_unlinked_terminates_clause_authority() {
+    assert_not_verified(
+        r"
+        //@ terminates \true;
+        //@ ensures \true;
+        int f(void) { return 0; }
+        ",
+        "a total-correctness claim with no linked termination proof",
+    );
+}
+
+#[test]
+fn falsify_postincrement_at_int_max() {
+    assert_not_verified(
+        r"
+        //@ requires x == 2147483647;
+        //@ ensures \true;
+        int f(int x) { x++; return x; }
+        ",
+        "reachable signed overflow in post-increment",
+    );
+}
+
+#[test]
+fn falsify_predecrement_at_int_min() {
+    assert_not_verified(
+        r"
+        //@ requires x == -2147483648;
+        //@ ensures \true;
+        int f(int x) { --x; return x; }
+        ",
+        "reachable signed overflow in pre-decrement",
+    );
+}
+
+#[test]
+fn falsify_unary_negation_at_int_min() {
+    assert_not_verified(
+        r"
+        //@ requires x == -2147483648;
+        //@ ensures \true;
+        int f(int x) { return -x; }
+        ",
+        "reachable signed overflow in unary negation",
+    );
+}
+
+#[test]
+fn falsify_signed_division_min_by_negative_one() {
+    assert_not_verified(
+        r"
+        //@ requires x == -2147483648;
+        //@ ensures \true;
+        int f(int x) { return x / -1; }
+        ",
+        "the signed INT_MIN / -1 representability edge",
+    );
+}
+
+#[test]
+fn falsify_signed_remainder_min_by_negative_one() {
+    assert_not_verified(
+        r"
+        //@ requires x == -2147483648;
+        //@ ensures \true;
+        int f(int x) { return x % -1; }
+        ",
+        "the signed INT_MIN % -1 representability edge",
+    );
+}
+
+#[test]
+fn falsify_signed_left_shift_of_negative_value() {
+    assert_not_verified(
+        r"
+        //@ requires x == -1;
+        //@ ensures \true;
+        int f(int x) { return x << 1; }
+        ",
+        "a signed left shift with a negative left operand",
+    );
+}
+
+#[test]
+fn falsify_signed_left_shift_nonrepresentable_result() {
+    assert_not_verified(
+        r"
+        //@ requires x == 1073741824;
+        //@ ensures \true;
+        int f(int x) { return x << 1; }
+        ",
+        "a signed left shift whose mathematical result is not representable",
+    );
+}
+
+#[test]
 fn falsify_invalid_shift() {
     // hole 3: `a << n` (invalid shift) hit the catch-all and was never checked.
     assert_not_verified(
@@ -265,14 +464,15 @@ fn falsify_sizeof_distinct_objects() {
 
 #[test]
 fn correct_div_with_precondition_verifies() {
-    // The div-by-zero obligation is discharged by `requires b != 0`.
+    // A concrete, representable division discharges both UB edges.  The prover
+    // is intentionally incomplete for symbolic negated conjunctions, so this
+    // control tests the authoritative lane without requiring that extension.
     assert_verified(
         r"
-        //@ requires b != 0;
         //@ ensures \true;
-        int f(int a, int b) { return a / b; }
+        int f(void) { return 4 / 2; }
         ",
-        "the divisor is non-zero by precondition",
+        "the divisor is non-zero and the quotient is representable",
     );
 }
 

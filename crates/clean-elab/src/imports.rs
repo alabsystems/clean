@@ -155,6 +155,23 @@ pub fn process_imports_with_search_paths_shared(
     Ok(())
 }
 
+/// One-shot batch variant of [`process_imports_with_search_paths_shared`] that
+/// owns the shared `visited` set for a single load event.
+///
+/// Callers that load a document's entire import header as one unit — e.g. the
+/// LSP editor path, which caches the resulting environment process-wide — get
+/// the read-each-`.olean`-once behavior of the shared loader without threading
+/// a `hashbrown` set through their own API surface. Semantics are identical to
+/// [`process_imports_with_search_paths_shared`] with a fresh `visited` set.
+pub fn process_import_batch_with_search_paths(
+    env: &mut clean_kernel::Environment,
+    paths: &[Vec<String>],
+    extra_search_paths: &[PathBuf],
+) -> Result<(), ElabError> {
+    let mut visited = hashbrown::HashSet::new();
+    process_imports_with_search_paths_shared(env, paths, extra_search_paths, &mut visited)
+}
+
 /// Apply the shared per-import outcome policy: register the surface prelude on
 /// a successful `.olean` load, honor the `UnsupportedModule` → built-in prelude
 /// fallback, and otherwise (load error, or `None` = no search paths) fall back

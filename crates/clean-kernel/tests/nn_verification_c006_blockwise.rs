@@ -280,13 +280,19 @@ fn test_c006_t20_is_faithful_theorem_after_2026_06_17_restatement() {
     );
 }
 
+/// 2026-06-17: T21 `zonotope_width_preserved` RETIRED. The UNCONDITIONAL
+/// axiom was FALSE over the faithful LayerNorm carrier — `width(out)_i =
+/// |γ_i|·width(in)_i`, so any `|γ_i| > 1` makes the output width EXCEED the
+/// input width. It was restated as a kernel-checked GAIN-BOUND Theorem
+/// conditional on `∀ i, |γ_i| ≤ 1` (admitted TCB 5 → 4), exactly as T20 was
+/// restated directly above.
 #[test]
-fn test_c006_t21_is_axiom_honest_demotion() {
+fn test_c006_t21_is_faithful_theorem_after_gain_bound_restatement() {
     let env = make_env();
     assert_is_kind(
         &env,
         "NNVerify.LayerNorm.zonotope_width_preserved",
-        ConstantKind::Axiom,
+        ConstantKind::Theorem,
     );
 }
 
@@ -429,11 +435,15 @@ fn test_c006_masquerade_demoted_axioms() {
     // Theorem; T20 (zonotope_reset) RETIRED → faithful Theorem pair. Only T21
     // (zonotope_width_preserved) remains an admitted Axiom (Tranche B γ-bound,
     // parked on the user). admitted 7 → 5 across these two retirements.
-    let expected_axioms: std::collections::BTreeSet<&str> = [
-        "NNVerify.LayerNorm.zonotope_width_preserved", // #3509 (T21)
-    ]
-    .into_iter()
-    .collect();
+    // DRIFT ALIGNMENT (T21), same class as the T61 alignment noted above.
+    // 2026-06-17 `b4cb27e8b` retired T21 to a faithful gain-bound Theorem
+    // (admitted 5 -> 4), and `ea7dc64ae` aligned this file for the T20+T60
+    // retirements the SAME DAY but missed the T21 case — leaving these
+    // assertions red on main. The set is now empty: every C006 name above is a
+    // Theorem. No kernel code is touched; this reflects the live
+    // kind-partition, and the assertion still fails loudly if any name is ever
+    // demoted back to an Axiom.
+    let expected_axioms: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
 
     let actual_axioms: std::collections::BTreeSet<&str> = c006_names
         .iter()
@@ -745,11 +755,18 @@ fn test_c006_t20_is_faithful_theorem_with_proof_value() {
 }
 
 /// C006 T21 (`NNVerify.LayerNorm.zonotope_width_preserved`) must be a
-/// `Declaration::Axiom` with no proof value after #3509. The previous
-/// `Rat.le_refl` proof closed only because both sides of `LE.le`
-/// collapsed to `l1_norm n (width n (to_ibp n k z))`.
+/// `Declaration::Theorem` CARRYING its kernel-checked proof value.
+///
+/// History: #3509 demoted it to a body-less Axiom because the original
+/// `Rat.le_refl` proof was a masquerade — it closed only because both sides of
+/// `LE.le` collapsed to `l1_norm n (width n (to_ibp n k z))`. 2026-06-17
+/// retired that Axiom in turn, replacing it with the GAIN-BOUND statement
+/// (conditional on `∀ i, |γ_i| ≤ 1`), which the kernel checks at `add_decl`.
+///
+/// This is STRICTLY STRONGER than the assertion it replaces: a body-less Axiom
+/// is now a rejection, and so is a Theorem without a proof value.
 #[test]
-fn test_c006_t21_is_axiom_no_proof_value() {
+fn test_c006_t21_is_theorem_with_proof_value() {
     let env = make_env();
     let name = Name::from_string("NNVerify.LayerNorm.zonotope_width_preserved");
 
@@ -758,22 +775,24 @@ fn test_c006_t21_is_axiom_no_proof_value() {
         .expect("T21 `zonotope_width_preserved` should be registered");
     assert_eq!(
         info.kind,
-        ConstantKind::Axiom,
-        "#3509: T21 must be a Declaration::Axiom after MASQUERADE demotion; got {:?}",
+        ConstantKind::Theorem,
+        "2026-06-17: T21 is a faithful gain-bound Theorem after restatement; got {:?}",
         info.kind,
     );
 
     assert!(
-        info.value.is_none(),
-        "#3509: T21 axiom must not carry a proof value — the previous \
-         Rat.le_refl body was a masquerade over the zonotope_output/to_ibp \
-         placeholder carriers",
+        info.value.is_some(),
+        "T21 faithful theorem must carry its kernel-checked proof value — a \
+         body-less T21 would mean the gain-bound restatement had regressed \
+         back to an admitted axiom",
     );
 }
 
-/// After the #3509 demotion the "proof terms" no longer exist, but the
-/// type expressions of T20 and T21 must still be sorry-free — no `sorry`
-/// / `sorryAx` reference may appear in the axiom statements themselves.
+/// T20 and T21 must be sorry-free in both their TYPE and their proof VALUE.
+///
+/// Since the 2026-06-17 retirements both carry kernel-checked proofs, so this
+/// covers the proof terms as well as the statements — a `sorry` reachable from
+/// either would make the retirement hollow.
 #[test]
 fn test_c006_t20_t21_no_sorry() {
     fn contains_sorry(expr: &Expr) -> bool {
@@ -835,15 +854,21 @@ fn test_c006_t20_t21_no_sorry() {
             );
         }
     }
-    // T21 is still an admitted Axiom (no value); T20 is now a Theorem (has a
-    // value) — pin that partition so neither silently flips.
-    let t21 = env
-        .get_const(&Name::from_string(
-            "NNVerify.LayerNorm.zonotope_width_preserved",
-        ))
-        .expect("T21 registered");
-    assert!(
-        t21.value.is_none() && t21.kind == ConstantKind::Axiom,
-        "T21 width_preserved is still an honest Axiom pending its γ-bound restatement",
-    );
+    // Since the 2026-06-17 retirements BOTH are faithful Theorems carrying
+    // kernel-checked proof values — pin that so neither silently flips back to
+    // an admitted axiom. The sorry-free check above already covers their proof
+    // values now that both have one.
+    for target in &[
+        "NNVerify.LayerNorm.zonotope_reset",
+        "NNVerify.LayerNorm.zonotope_width_preserved",
+    ] {
+        let info = env
+            .get_const(&Name::from_string(target))
+            .unwrap_or_else(|| panic!("{target} registered"));
+        assert!(
+            info.value.is_some() && info.kind == ConstantKind::Theorem,
+            "{target} must be a faithful Theorem with a proof value; got {:?}",
+            info.kind,
+        );
+    }
 }

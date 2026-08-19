@@ -1,0 +1,58 @@
+{
+  "enum_layout_descriptors": {
+    "Direct": 87,
+    "Niche": 115,
+    "Untagged": 2,
+    "carry_descriptor": 204,
+    "carry_none": 4,
+    "carry_none_names": [
+      "SumTree(103)",
+      "Option(139)",
+      "Option(143)",
+      "Option(148)"
+    ],
+    "descriptor_bearing_whose_canonical_size_align_differs": 121,
+    "enum_defs": 208,
+    "note": "the TEXT form prints no enum layout descriptor at all, which is why a grep over the .txt returns 0; these come from the BINARY form",
+    "supersedes": "the '0 of 209' alarm in trust designs/2026-08-18-pointer-param-sampling.md (text-format artifact) and the '203 of 209' correction in trust reports/enum-payload-offset-agreement-2026-08-17.md (different clean HEAD)"
+  },
+  "measured_utc_date": "2026-08-18",
+  "provenance": {
+    "clean_rev": "407d3bd2689fa33f5de27c0c48a2ed570968c434",
+    "trust_rev": "a3c7b63c1c36e64944af862c800898f9b6e0eb39"
+  },
+  "schema": "clean.crystal.layout-divergence.2026-08-18.v1",
+  "source": "dump_O3/clean_kernel.trust-ir.bin, decoded through trust_ir::binary::deserialize_module",
+  "struct_class": {
+    "BRACKET": [
+      163,
+      200
+    ],
+    "carry_at_least_one_offset": 1017,
+    "carry_offsets_on_every_field": 744,
+    "distinct_names": 1223,
+    "field_offsets_compared": 4826,
+    "field_offsets_that_differ": 1787,
+    "mechanism": "interpret::struct_layout calls aggregate_layout over field TYPES in declaration order and ignores FieldDef::offset entirely, while the producer fills FieldDef::offset from rustc's reorder-aware layout.fields.offset",
+    "methods": {
+      "A_all_offset_structs": 185,
+      "B_any_offset_structs": 189,
+      "C_all_offset_ge2_fields": 185,
+      "D_any_offset_or_size_align": 200,
+      "E_distinct_names": 163
+    },
+    "quote_guidance": "quote the bracket with the method named, or the method-free field-level 1787 of 4826; never a bare struct count",
+    "struct_defs": 1267
+  },
+  "why_harmless_today": {
+    "bodies_emitting_a_GEP": 1274,
+    "both_are": "enum-interior and descriptor-bearing, i.e. inside the class that IS gated (wave-NRF presence + wave-DA agreement)",
+    "conclusion": "held out of the shipping lane by a COVERAGE skip, not by a soundness argument; a coverage skip is not a gate",
+    "flipped_names": [
+      "env::types::Reducibility::height",
+      "env::types::SimpPriority::value"
+    ],
+    "of_those_that_flip": 2,
+    "ungated_struct_interior_GEP_bodies_that_flip": 0
+  }
+}

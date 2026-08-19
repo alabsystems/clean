@@ -120,20 +120,60 @@ fn is_cacheable(state: &ProofState, config: &SimpConfig) -> bool {
 
 fn cache_key(state: &ProofState, config: &SimpConfig) -> SimpSetCacheKey {
     let env = state.env();
-    let mut simp_lemma_count = 0usize;
-    let mut simp_registry_fingerprint = 0u64;
-    for info in env.get_simp_lemmas() {
-        simp_lemma_count += 1;
-        let mut hasher = DefaultHasher::new();
-        info.name.hash(&mut hasher);
-        info.priority.value().hash(&mut hasher);
-        simp_registry_fingerprint = simp_registry_fingerprint.wrapping_add(hasher.finish());
+    let revision = env.simp_registry_revision();
+    let count = env.simp_lemma_count();
+    let generation = env.generation();
+
+    // The fingerprint walk is O(L) (~10k entries under real imports) and used
+    // to run on EVERY cacheable call — including hits — dominating bare-simp
+    // probe time at import scale. The registry is immutable while
+    // (generation, revision) stand still, so memoize per thread on that pair
+    // (+ count as a cheap divergence tripwire). A cross-env collision on the
+    // full triple would at worst produce a mismatched fingerprint and a cache
+    // MISS-and-rebuild or a wrong-set hit whose rewrites remain kernel-checked
+    // — the same completeness-only exposure the fingerprint itself guards
+    // (see the module doc's soundness note).
+    // First-iterated-entry hash as an O(1) content probe: two environments
+    // with identical counters but different registries (fresh test envs,
+    // clone divergence) differ here, so the memo invalidates. A collision
+    // requires equal counters AND an equal first entry — and since the
+    // fingerprint is a pure content function, identical-content collisions
+    // are exactly the harmless case.
+    let probe = env
+        .get_simp_lemmas()
+        .next()
+        .map(|info| {
+            let mut hasher = DefaultHasher::new();
+            info.name.hash(&mut hasher);
+            info.priority.value().hash(&mut hasher);
+            hasher.finish()
+        })
+        .unwrap_or(0);
+    thread_local! {
+        static FINGERPRINT_MEMO: std::cell::Cell<(u64, u64, usize, u64, u64)> =
+            const { std::cell::Cell::new((u64::MAX, u64::MAX, usize::MAX, 0, 0)) };
     }
+    let simp_registry_fingerprint = FINGERPRINT_MEMO.with(|memo| {
+        let (m_gen, m_rev, m_count, m_probe, m_fp) = memo.get();
+        if m_gen == generation && m_rev == revision && m_count == count && m_probe == probe {
+            return m_fp;
+        }
+        let mut fp = 0u64;
+        for info in env.get_simp_lemmas() {
+            let mut hasher = DefaultHasher::new();
+            info.name.hash(&mut hasher);
+            info.priority.value().hash(&mut hasher);
+            fp = fp.wrapping_add(hasher.finish());
+        }
+        memo.set((generation, revision, count, probe, fp));
+        fp
+    });
+
     let mut exclude: Vec<String> = config.exclude.iter().cloned().collect();
     exclude.sort_unstable();
     SimpSetCacheKey {
-        simp_registry_revision: env.simp_registry_revision(),
-        simp_lemma_count,
+        simp_registry_revision: revision,
+        simp_lemma_count: count,
         simp_registry_fingerprint,
         exclude,
     }

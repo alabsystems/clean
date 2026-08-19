@@ -31,9 +31,14 @@
 //! That a non-empty lane is genuinely COMPARED. Emptiness is a denominator, not
 //! a proof: a lane could be non-empty on both sides and never asserted. That is
 //! proved by mutation instead — `scripts/crystal_lane_matrix_battery.sh` runs
-//! 155 cases, one per chain x lane cell in each direction, and requires the gate
-//! to go RED for every one. The 2026-08-16 run: 100 artifact mutations and 55
-//! spec mutations, **0 blind**.
+//! 164 cases, one per chain x lane cell in each direction, and requires the gate
+//! to go RED for every one: **100 artifact mutations (`TABLE`) and 64 spec
+//! mutations (`SPEC_TABLE`), 0 blind**, as `7093bb0b7` records at 164/164.
+//!
+//! (Corrected 2026-08-17: this comment read "155 cases ... 100 artifact and 55
+//! spec" after the count had already moved. The rows are countable —
+//! `TABLE` and `SPEC_TABLE` in that script — so a stale number here is a stale
+//! number about a gate, which is the one place it must not be.)
 
 use super::*;
 
@@ -306,7 +311,13 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
     ]
 }
 
-/// THE MATRIX. Ten chains x twenty-three lanes, pinned cell by cell.
+/// THE MATRIX. Ten chains x **twenty-four** lanes, pinned cell by cell.
+///
+/// (Corrected 2026-08-17: this read "twenty-three" while `lanes()` enumerated
+/// twenty-four. The count is not load-bearing here — `every_cfg_field_is_a_named_lane`
+/// proves the enumeration against `Cfg`'s own fields with equal cardinality, so
+/// the GATE was right and only the sentence was wrong — but a wrong number in a
+/// gate's own doc-comment is what a reader quotes.)
 #[test]
 fn the_lane_matrix_is_pinned_for_every_chain() {
     for ch in CHAINS {

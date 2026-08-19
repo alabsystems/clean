@@ -1614,6 +1614,37 @@ impl<'a> ElabCtx<'a> {
                                 .map(|name| Name::from_string(&name)),
                         );
                     }
+                    // A constructor may target at most ONE arm.
+                    //
+                    // Arms are consumed POSITIONALLY here: the i-th arm becomes
+                    // the i-th minor premise. A genuine reordering is fine —
+                    // the names are a permutation and each minor still gets its
+                    // own arm. But a REPEATED constructor means some other
+                    // constructor has no arm of its own and silently inherits a
+                    // body written for a different one, so Clean registers a
+                    // different program than the source:
+                    //
+                    //     match c with
+                    //     | Color.red => 0
+                    //     | Color.red => 1        -- becomes `green`
+                    //     | Color.red => 2        -- becomes `blue`
+                    //
+                    // which made `h Color.green = 1` provable by `rfl` from a
+                    // match that never mentions `green`, and admitted a
+                    // non-exhaustive match as total. `validate_primary_minor_boundary`
+                    // catches this, but only runs under `num_motives > 1`; flat
+                    // single-motive inductives never reached it.
+                    let mut seen: Vec<&Name> = Vec::new();
+                    for name in applied_primary_minor_names.iter().flatten() {
+                        if seen.contains(&name) {
+                            return Err(ElabError::Unsupported {
+                                feature: format!(
+                                    "match on `{type_name}`: constructor `{name}` appears in more than one alternative. Each constructor may target at most one arm — a repeat silently hands another constructor this arm's body."
+                                ),
+                            });
+                        }
+                        seen.push(name);
+                    }
                 }
             } else {
                 // Recursor (`T.rec`) minor premises must appear in constructor

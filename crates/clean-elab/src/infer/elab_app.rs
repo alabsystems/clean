@@ -1397,6 +1397,48 @@ impl<'a> ElabCtx<'a> {
         found
     }
 
+    /// Lambda-argument analog of [`Self::by_block_arg_in_open_slot`] — Lean's
+    /// `propagateExpectedType` for postponable `fun` arguments. An
+    /// UN-annotated lambda in a slot whose domain still carries metavariables
+    /// cannot elaborate its body (the binder's type IS the open meta, so
+    /// `h.symm ▸ …` and dot-notation inside die on "cannot extract type name
+    /// from opaque type variable"); firing the pre-arg unification block pins
+    /// the application's result against the expected type first, so the
+    /// lambda sees a concrete domain. Restricted to lambdas carrying at least
+    /// one UN-annotated binder: `fun (x : T) => …` supplies its own domain and
+    /// needs no pin (narrowness mirrors the 33-codata-test lesson recorded on
+    /// the ctor gate below).
+    fn lambda_arg_in_open_slot(&mut self, func_ty: &Expr, args: &[SurfaceArg]) -> bool {
+        if self.current_expected_type.is_none() {
+            return false;
+        }
+        fn is_unascribed_lambda(e: &SurfaceExpr) -> bool {
+            match e {
+                SurfaceExpr::Paren(_, inner) => is_unascribed_lambda(inner),
+                SurfaceExpr::Lambda(_, binders, _) => binders.iter().any(|b| b.ty.is_none()),
+                SurfaceExpr::PatternMatchLambda(..) => true,
+                _ => false,
+            }
+        }
+        self.metas.push_scope();
+        let mut cur = self.whnf(&self.metas.instantiate(func_ty));
+        let mut found = false;
+        for arg in args {
+            let ExprKind::Pi(_, dom, body) = cur.kind() else {
+                break;
+            };
+            let dom_inst = self.whnf(&self.metas.instantiate(dom));
+            if is_unascribed_lambda(&arg.expr) && self.has_metavars(&dom_inst) {
+                found = true;
+                break;
+            }
+            let meta = self.fresh_meta(dom_inst);
+            cur = self.whnf(&self.metas.instantiate(&body.instantiate(&meta)));
+        }
+        self.metas.pop_scope();
+        found
+    }
+
     /// NARROW re-try of the flex-application-slot gate (see the failed broad
     /// attempt recorded below).
     ///
@@ -2327,6 +2369,7 @@ impl<'a> ElabCtx<'a> {
                 .any(|a| Self::arg_needs_result_type_pinned(&a.expr))
                 || self.bare_nat_literal_in_open_slot(&current_type, remaining_args)
                 || self.by_block_arg_in_open_slot(&current_type, remaining_args)
+                || self.lambda_arg_in_open_slot(&current_type, remaining_args)
                 || self.result_only_implicit_needs_expected(&current_type, remaining_args)
                 // Element coercion (gap A): a concrete-typed arg (`(3:Nat)`, a
                 // variable) in an open type-param slot needs the slot pinned from

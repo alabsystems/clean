@@ -189,7 +189,29 @@ impl<'a> ElabCtx<'a> {
                         5,
                     ),
                 })?;
-            field_updates.insert(idx as usize, field_assign);
+            // A field may be assigned at most ONCE.
+            //
+            // This used to be a bare `insert`, so a repeated field silently
+            // overwrote the earlier binding and the DROPPED assignment was
+            // never elaborated at all. That is a trust hole, not a style issue:
+            //
+            //     def p : P := { x := sorry, x := 1, y := 3 }
+            //
+            // was accepted with NO `sorry axioms:` line and no warning, while
+            // the same `sorry` without the duplicate is correctly refused. An
+            // unresolvable identifier in the dropped slot escaped the same way.
+            // Lean rejects a duplicate field outright, which also removes the
+            // question of which binding wins — `{ }` kept the LAST while
+            // `instance ... where` kept the FIRST, so the two surface forms
+            // disagreed and each leaked through its own discarded slot.
+            if let Some(previous) = field_updates.insert(idx as usize, field_assign) {
+                return Err(ElabError::Unsupported {
+                    feature: format!(
+                        "structure literal assigns field `{}` more than once (also assigned as `{}`). Each field may be given at most one value — a repeat would silently discard an assignment without elaborating it.",
+                        field_assign.name, previous.name
+                    ),
+                });
+            }
         }
 
         if base_val.is_none() {

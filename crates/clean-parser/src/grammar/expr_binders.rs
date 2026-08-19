@@ -60,7 +60,15 @@ impl Parser {
                     // run. `arrow_expr` supports function types (`a b : Nat → Bool`).
                     let shared_ty = if self.check(&TokenKind::Colon) {
                         self.advance();
-                        Some(self.arrow_expr()?)
+                        // The shared binder type must admit the full connective
+                        // ladder: `∀ h : p ∧ q, r h` has a top-level `∧` that
+                        // `arrow_expr` (which sits BELOW and/or/iff in the
+                        // chain) never reaches — four Logic/Basic decls died in
+                        // parse recovery on exactly this. `iff_expr` descends
+                        // through or→and→…→arrow, so `a b : Nat → Bool` still
+                        // parses, and none of those levels consume the comma
+                        // that terminates the quantifier binder.
+                        Some(self.iff_expr()?)
                     } else {
                         None
                     };

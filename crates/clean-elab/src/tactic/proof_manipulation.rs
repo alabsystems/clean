@@ -137,6 +137,114 @@ fn cases_core(
         }
     }
 
+    // HEq mirrors the `Eq` route above (and for the same reason): its casesOn
+    // is an INDEXED eliminator whose motive has arity num_indices+1, a shape
+    // the generic assembly below cannot build — and since `Eq` shortcuts to
+    // `subst`, that generic path has never had a working indexed example.
+    // Route `cases h` on `h : HEq x y` through `HEq.ndrec` directly, exactly
+    // as `subst` uses `Eq.ndrec`:
+    //
+    //   HEq.ndrec.{v,u} {α} {a} {motive : {β : Sort u} → β → Sort v}
+    //                   (minor : motive a) {β} {b} (h : HEq a b) : motive b
+    //
+    // with `motive := fun {β} (z : β) => target[y := z]` and the surviving
+    // goal `target[y := x]` (the `HEq.refl` branch). Requires the RIGHT side
+    // to be an eliminable local fvar; otherwise fall through to the generic
+    // path, which fails closed. The assembled term is kernel-rechecked at
+    // `close_goal`, so a mis-built motive cannot over-accept.
+    if ind_name == Name::from_string("HEq") {
+        if let (Some(hyp_fvar), Some(heq_args)) = (hyp_fvar, Some(&args)) {
+            if heq_args.len() == 4 {
+                let (alpha, a_val, beta, b_val) = (
+                    heq_args[0].clone(),
+                    heq_args[1].clone(),
+                    heq_args[2].clone(),
+                    heq_args[3].clone(),
+                );
+                if let (ExprKind::FVar(b_fvar), ExprKind::FVar(beta_fvar)) =
+                    (b_val.kind(), beta.kind())
+                {
+                    // `HEq.{u}` carries α's universe on its own head; the
+                    // motive's universe is the goal's, which for every case in
+                    // this class is `Prop` (the goal is a proposition). Level
+                    // mismatches fail closed at the kernel re-check.
+                    let u_level = match head.kind() {
+                        ExprKind::Const(_, lvls) if !lvls.is_empty() => lvls[0].clone(),
+                        _ => Level::zero(),
+                    };
+                    let v_level = Level::zero();
+
+                    // A hypothesis whose type mentions the eliminated index
+                    // (`h₁ : HEq f g` with `g : β → γ` in Mathlib's congr_heq)
+                    // must be generalized into the goal and re-introduced per
+                    // branch — Lean's `generalizeIndices`. Not implemented:
+                    // fail CLOSED with the reason rather than assemble a term
+                    // the kernel will reject with an opaque mismatch.
+                    let has_dependents = goal.local_ctx.iter().any(|d| {
+                        d.fvar != hyp_fvar && d.fvar != *b_fvar && d.fvar != *beta_fvar && {
+                            let fvars = crate::tactic::hypothesis::collect_fvars(&d.ty);
+                            fvars.contains(b_fvar) || fvars.contains(beta_fvar)
+                        }
+                    });
+                    if has_dependents {
+                        return Err(TacticError::GoalMismatch(
+                            "cases on `HEq`: a hypothesis depends on the eliminated index; \
+                             generalizing such hypotheses (Lean's generalizeIndices) is not \
+                             implemented — revert them manually first"
+                                .to_string(),
+                        ));
+                    }
+
+                    // motive := fun {β : Sort u} (z : β) => target[b := z][β := β]
+                    let target_abs = goal.target.clone().abstract_fvar(*b_fvar);
+                    let inner = Expr::lam(BinderInfo::Default, beta.clone(), target_abs);
+                    let motive = Expr::lam(
+                        BinderInfo::Implicit,
+                        Expr::sort(u_level.clone()),
+                        inner.abstract_fvar(*beta_fvar),
+                    );
+
+                    // Surviving goal: reverted target with (β, b) specialized
+                    // to (α, a); the reverted dependents come back as its
+                    // leading Pi binders, so they leave the context too.
+                    // Surviving goal: target with (β, b) specialized to (α, a).
+                    let branch_target = goal
+                        .target
+                        .subst_fvar(*b_fvar, &a_val)
+                        .subst_fvar(*beta_fvar, &alpha);
+                    let branch_ctx: Vec<_> = goal
+                        .local_ctx
+                        .iter()
+                        .filter(|d| d.fvar != hyp_fvar && d.fvar != *b_fvar && d.fvar != *beta_fvar)
+                        .cloned()
+                        .collect();
+                    let branch_meta =
+                        state.fresh_meta_in_context(branch_target.clone(), &branch_ctx);
+                    let minor = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(branch_meta)));
+
+                    let mut proof =
+                        Expr::const_(Name::from_string("HEq.ndrec"), vec![v_level, u_level]);
+                    proof = Expr::app(proof, alpha);
+                    proof = Expr::app(proof, a_val);
+                    proof = Expr::app(proof, motive);
+                    proof = Expr::app(proof, minor);
+                    proof = Expr::app(proof, beta);
+                    proof = Expr::app(proof, b_val);
+                    proof = Expr::app(proof, Expr::fvar(hyp_fvar));
+
+                    state.close_goal_assembled(&goal, proof)?;
+                    state.goals.push_back(Goal {
+                        meta_id: branch_meta,
+                        target: branch_target,
+                        local_ctx: branch_ctx,
+                        tag: Some("refl".to_string()),
+                    });
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     let ind_info = state
         .env
         .get_inductive(&ind_name)

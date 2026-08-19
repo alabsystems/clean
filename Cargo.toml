@@ -49,7 +49,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "1.6.0"
+version = "0.1.0"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints

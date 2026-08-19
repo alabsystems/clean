@@ -1,0 +1,124 @@
+{
+  "axes": {
+    "bodies": 13774,
+    "calls_extern_decls": 3210,
+    "calls_resolved": 8151,
+    "calls_unresolved": 3237,
+    "crate": "clean_kernel",
+    "declarations": 1104,
+    "derived_mir_agreed": 1559,
+    "derived_mir_unsupported": 12215,
+    "direct_obligation_capability": "structural-parity-only-v1",
+    "flip_backed_codegen": 163,
+    "flip_backed_ctfe": 41,
+    "flip_backed_total": 204,
+    "flip_events_codegen": 180,
+    "flip_events_ctfe": 41,
+    "flip_events_total": 221,
+    "func_id_rows": 6393,
+    "initializer_bodies": 1810,
+    "instr_count": 396569,
+    "interpreter_agreed": 628,
+    "interpreter_mismatch": 0,
+    "interpreter_not_run": 8454,
+    "interpreter_samples_total": 1734,
+    "interpreter_unsupported": 4692,
+    "lineage_rows": 13146,
+    "lowered": 9055,
+    "markers_exact": 1096,
+    "markers_exact_nonvacuous": 38,
+    "mismatch": 0,
+    "native_verification_requests": false,
+    "proof_authority": false,
+    "schema": "trust.thir-lower.crate-module.coverage.v2",
+    "seam_agreed": 2,
+    "seam_mismatch": 0,
+    "seam_not_run": 7084,
+    "seam_resolved": 7086,
+    "seam_samples_total": 4,
+    "spliced": 6393,
+    "symbolic": 1661,
+    "unsupported": 53147
+  },
+  "bodies_of_interest": {
+    "expr::bvar_in_range": {
+      "def_index": 16576,
+      "flip_event": true,
+      "markers_exact": true,
+      "verdict": "agreed"
+    },
+    "flat::types::FlatFlags::contains": {
+      "def_index": 16846,
+      "flip_event": true,
+      "markers_exact": true,
+      "verdict": "agreed"
+    },
+    "level::Level::is_zero": {
+      "def_index": 17088,
+      "flip_event": false,
+      "markers_exact": false,
+      "verdict": "agreed"
+    },
+    "level::Level::kind_ord": {
+      "def_index": 17094,
+      "flip_event": true,
+      "markers_exact": true,
+      "verdict": "agreed"
+    },
+    "mode::CleanMode::from_source_system": {
+      "def_index": 17976,
+      "flip_event": true,
+      "markers_exact": true,
+      "verdict": "agreed"
+    },
+    "mode::CleanMode::has_cubical_layer": {
+      "def_index": 17981,
+      "flip_event": true,
+      "markers_exact": true,
+      "verdict": "agreed"
+    }
+  },
+  "cross_cfg_agreement": {
+    "O0_bodies": 13774,
+    "O3_bodies": 13774,
+    "totals_identical": true
+  },
+  "flip_asserts": {
+    "codegen_total": 180,
+    "codegen_with_assert": 0,
+    "ctfe_total": 41,
+    "ctfe_with_assert": 30
+  },
+  "invariants": {
+    "flip_events_unjoinable": 0,
+    "foreign_flip_events": 0
+  },
+  "lane": "lane 2 \u2014 consolidation",
+  "measured_utc_date": "2026-08-18",
+  "provenance": {
+    "clean_rev": "407d3bd2689fa33f5de27c0c48a2ed570968c434",
+    "driver": "built from committed source in a detached worktree at trust origin/main with that rev's recorded submodule pins; lane-owned CARGO_TARGET_DIR; no x.py; not the shared stage1-rustc",
+    "perturbation_classes": [
+      "enum-reshape",
+      "enum-case-value",
+      "enum-ctor",
+      "enum-disc-index",
+      "switch-map",
+      "enum-payload",
+      "marker-order",
+      "marker-drop",
+      "agg-field-order",
+      "marker-arm",
+      "payload-tramp"
+    ],
+    "positive_identification": "11 classes; the seed build/<host>/stage1/bin/trustc registers 6 and knows none of the four marker classes",
+    "seal": {
+      "REV": "a3c7b63c1c36e64944af862c800898f9b6e0eb39",
+      "TREE": "clean",
+      "guard": "PASS",
+      "verify": "OK"
+    },
+    "trust_rev": "a3c7b63c1c36e64944af862c800898f9b6e0eb39"
+  },
+  "schema": "clean.crystal.census.2026-08-18.v1"
+}

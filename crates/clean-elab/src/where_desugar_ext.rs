@@ -53,103 +53,47 @@ pub(crate) enum WhereDesugarError {
 /// Conservative approximation — caller intersects with where-clause name set.
 #[must_use]
 pub(crate) fn collect_free_idents(expr: &SurfaceExpr) -> HashSet<String> {
-    let mut free = HashSet::new();
-    let mut bound: Vec<HashSet<String>> = vec![HashSet::new()];
-    collect_free_idents_inner(expr, &mut free, &mut bound);
-    free
+    collect_free_idents_checked(expr).0
 }
 
-/// Whether [`collect_free_idents`] can analyze `expr` COMPLETELY.
+/// Whether [`collect_free_idents`] could analyze `expr` COMPLETELY.
 ///
-/// `collect_free_idents` documents itself as "may undercount edges, never
-/// overcount": its final match arm silently ignores constructs it does not
-/// model (`Proj`, `Do`, `StructLit`, `ByTactic`, `Explicit`, `NamedArg`,
-/// `InterpolatedStr`, `IfLet`, ...), so an identifier occurring only inside one
-/// of those is never reported.
+/// The traversal's final arm silently ignores constructs it does not model, so
+/// an identifier occurring only inside one is never reported. Undercounting is
+/// sound for dependency analysis; it is NOT sound for `used_section_binders`,
+/// where a missed identifier drops a section `variable` and the declaration
+/// registers with the WRONG ARITY (measured: `p` used only as a `Proj`
+/// receiver, `TooManyArguments` on every later application — r90's
+/// `sectvar_transitive_incl`).
 ///
-/// Undercounting is sound for the dependency analysis the collector was written
-/// for. It is NOT sound for callers that must see every use — notably
-/// `used_section_binders`, where a missed identifier means a section `variable`
-/// is not prepended and the declaration registers with the WRONG ARITY.
-/// Measured: `variable {α : Type} (p : α × α)` + `def f : α × α := (p.2, p.1)`
-/// dropped `p` (it appears only as a `Proj` receiver), so `f` took no explicit
-/// argument and every later application failed with `TooManyArguments`.
-///
-/// Such callers must consult this predicate and fall back to including
-/// everything rather than trusting an undercount.
+/// Callers that need completeness consult this and fall back to including
+/// everything.
 #[must_use]
 pub(crate) fn free_idents_are_complete(expr: &SurfaceExpr) -> bool {
-    let mut complete = true;
-    free_idents_complete_inner(expr, &mut complete);
-    complete
+    collect_free_idents_checked(expr).1
 }
 
-fn free_idents_complete_inner(expr: &SurfaceExpr, complete: &mut bool) {
-    if !*complete {
-        return;
-    }
-    match expr {
-        SurfaceExpr::Ident(_, _)
-        | SurfaceExpr::Hole(_)
-        | SurfaceExpr::Lit(_, _)
-        | SurfaceExpr::Universe(_, _)
-        | SurfaceExpr::SyntheticSorry(_) => {}
-        SurfaceExpr::Lambda(_, binders, body)
-        | SurfaceExpr::PatternMatchLambda(_, binders, body)
-        | SurfaceExpr::Pi(_, binders, body) => {
-            for b in binders {
-                if let Some(ty) = &b.ty {
-                    free_idents_complete_inner(ty, complete);
-                }
-            }
-            free_idents_complete_inner(body, complete);
-        }
-        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
-            if let Some(ty) = &binder.ty {
-                free_idents_complete_inner(ty, complete);
-            }
-            free_idents_complete_inner(val, complete);
-            free_idents_complete_inner(body, complete);
-        }
-        SurfaceExpr::App(_, func, args) => {
-            free_idents_complete_inner(func, complete);
-            for arg in args {
-                free_idents_complete_inner(&arg.expr, complete);
-            }
-        }
-        SurfaceExpr::Arrow(_, lhs, rhs) => {
-            free_idents_complete_inner(lhs, complete);
-            free_idents_complete_inner(rhs, complete);
-        }
-        SurfaceExpr::Ascription(_, e, ty) => {
-            free_idents_complete_inner(e, complete);
-            free_idents_complete_inner(ty, complete);
-        }
-        SurfaceExpr::If(_, c, t, e) => {
-            free_idents_complete_inner(c, complete);
-            free_idents_complete_inner(t, complete);
-            free_idents_complete_inner(e, complete);
-        }
-        SurfaceExpr::Match(_, _, scrutinee, arms) => {
-            free_idents_complete_inner(scrutinee, complete);
-            for arm in arms {
-                free_idents_complete_inner(&arm.body, complete);
-            }
-        }
-        SurfaceExpr::Paren(_, inner)
-        | SurfaceExpr::OutParam(_, inner)
-        | SurfaceExpr::SemiOutParam(_, inner) => {
-            free_idents_complete_inner(inner, complete);
-        }
-        // Everything else is exactly what the collector's final arm swallows.
-        _ => *complete = false,
-    }
+/// The single traversal: free identifiers, plus whether it saw everything.
+///
+/// ONE match, deliberately. Completeness used to be computed by a second,
+/// parallel match that had to be kept in step by hand — and a drift in either
+/// direction is silent: teach only the collector and the fallback still fires
+/// (losing the Lean-parity win); teach only the predicate and the arity bug
+/// returns. Adding a variant here now updates both by construction.
+#[must_use]
+pub(crate) fn collect_free_idents_checked(expr: &SurfaceExpr) -> (HashSet<String>, bool) {
+    let mut free = HashSet::new();
+    let mut bound: Vec<HashSet<String>> = vec![HashSet::new()];
+    let mut complete = true;
+    collect_free_idents_inner(expr, &mut free, &mut bound, &mut complete);
+    (free, complete)
 }
 
 fn collect_free_idents_inner(
     expr: &SurfaceExpr,
     free: &mut HashSet<String>,
     bound: &mut Vec<HashSet<String>>,
+    complete: &mut bool,
 ) {
     match expr {
         SurfaceExpr::Ident(_, name) => {
@@ -164,10 +108,10 @@ fn collect_free_idents_inner(
             // Collect from binder types before pushing scope
             for b in binders {
                 if let Some(ty) = &b.ty {
-                    collect_free_idents_inner(ty, free, bound);
+                    collect_free_idents_inner(ty, free, bound, complete);
                 }
                 if let Some(def) = &b.default {
-                    collect_free_idents_inner(def, free, bound);
+                    collect_free_idents_inner(def, free, bound, complete);
                 }
             }
             let mut scope = HashSet::new();
@@ -177,14 +121,14 @@ fn collect_free_idents_inner(
                 }
             }
             bound.push(scope);
-            collect_free_idents_inner(body, free, bound);
+            collect_free_idents_inner(body, free, bound, complete);
             bound.pop();
         }
 
         SurfaceExpr::Pi(_, binders, body) => {
             for b in binders {
                 if let Some(ty) = &b.ty {
-                    collect_free_idents_inner(ty, free, bound);
+                    collect_free_idents_inner(ty, free, bound, complete);
                 }
             }
             let mut scope = HashSet::new();
@@ -194,21 +138,21 @@ fn collect_free_idents_inner(
                 }
             }
             bound.push(scope);
-            collect_free_idents_inner(body, free, bound);
+            collect_free_idents_inner(body, free, bound, complete);
             bound.pop();
         }
 
         SurfaceExpr::Let(_, binder, val, body) => {
             if let Some(ty) = &binder.ty {
-                collect_free_idents_inner(ty, free, bound);
+                collect_free_idents_inner(ty, free, bound, complete);
             }
-            collect_free_idents_inner(val, free, bound);
+            collect_free_idents_inner(val, free, bound, complete);
             let mut scope = HashSet::new();
             if binder.name != "_" {
                 scope.insert(binder.name.clone());
             }
             bound.push(scope);
-            collect_free_idents_inner(body, free, bound);
+            collect_free_idents_inner(body, free, bound, complete);
             bound.pop();
         }
 
@@ -220,38 +164,38 @@ fn collect_free_idents_inner(
             }
             bound.push(scope);
             if let Some(ty) = &binder.ty {
-                collect_free_idents_inner(ty, free, bound);
+                collect_free_idents_inner(ty, free, bound, complete);
             }
-            collect_free_idents_inner(val, free, bound);
-            collect_free_idents_inner(body, free, bound);
+            collect_free_idents_inner(val, free, bound, complete);
+            collect_free_idents_inner(body, free, bound, complete);
             bound.pop();
         }
 
         SurfaceExpr::App(_, func, args) => {
-            collect_free_idents_inner(func, free, bound);
+            collect_free_idents_inner(func, free, bound, complete);
             for arg in args {
-                collect_free_idents_inner(&arg.expr, free, bound);
+                collect_free_idents_inner(&arg.expr, free, bound, complete);
             }
         }
 
         SurfaceExpr::Arrow(_, lhs, rhs) => {
-            collect_free_idents_inner(lhs, free, bound);
-            collect_free_idents_inner(rhs, free, bound);
+            collect_free_idents_inner(lhs, free, bound, complete);
+            collect_free_idents_inner(rhs, free, bound, complete);
         }
 
         SurfaceExpr::Ascription(_, e, ty) => {
-            collect_free_idents_inner(e, free, bound);
-            collect_free_idents_inner(ty, free, bound);
+            collect_free_idents_inner(e, free, bound, complete);
+            collect_free_idents_inner(ty, free, bound, complete);
         }
 
         SurfaceExpr::If(_, cond, then_br, else_br) => {
-            collect_free_idents_inner(cond, free, bound);
-            collect_free_idents_inner(then_br, free, bound);
-            collect_free_idents_inner(else_br, free, bound);
+            collect_free_idents_inner(cond, free, bound, complete);
+            collect_free_idents_inner(then_br, free, bound, complete);
+            collect_free_idents_inner(else_br, free, bound, complete);
         }
 
         SurfaceExpr::Match(_, hyp, scrutinee, arms) => {
-            collect_free_idents_inner(scrutinee, free, bound);
+            collect_free_idents_inner(scrutinee, free, bound, complete);
             for arm in arms {
                 let mut scope = HashSet::new();
                 // The annotated discriminant (`match h : e with`) binds `h`
@@ -261,7 +205,7 @@ fn collect_free_idents_inner(
                 }
                 collect_pattern_bound_names(&arm.pattern, &mut scope);
                 bound.push(scope);
-                collect_free_idents_inner(&arm.body, free, bound);
+                collect_free_idents_inner(&arm.body, free, bound, complete);
                 bound.pop();
             }
         }
@@ -269,7 +213,7 @@ fn collect_free_idents_inner(
         SurfaceExpr::Paren(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner) => {
-            collect_free_idents_inner(inner, free, bound);
+            collect_free_idents_inner(inner, free, bound, complete);
         }
 
         // Leaves: no sub-expressions to traverse
@@ -278,13 +222,44 @@ fn collect_free_idents_inner(
         | SurfaceExpr::Universe(_, _)
         | SurfaceExpr::SyntheticSorry(_) => {}
 
-        // For all other variants, do a best-effort traversal of boxed children.
-        // This covers IfLet, LetPattern, Match, Do, Calc, Tactic, etc.
-        _ => {
-            // Fallback: no special handling — identifiers in complex constructs
-            // are conservatively missed. This is sound for dependency analysis
-            // (may undercount edges, never overcount).
+        // Transparent wrappers: the identifiers are in the sub-term.
+        //
+        // `Proj` is the one that mattered. `p.2` is `Proj(_, p, _)`, and leaving
+        // it to the catch-all meant `p` was never seen — which dropped the
+        // section variable and gave the declaration the wrong arity (r90's
+        // `sectvar_transitive_incl`, `TooManyArguments`). The others here are
+        // the same shape: a boxed sub-term whose free identifiers are the
+        // node's.
+        SurfaceExpr::Proj(_, inner, _)
+        | SurfaceExpr::Explicit(_, inner)
+        | SurfaceExpr::UniverseInst(_, inner, _) => {
+            collect_free_idents_inner(inner, free, bound, complete);
         }
+        SurfaceExpr::StructLit {
+            struct_type,
+            base,
+            fields,
+            ..
+        } => {
+            if let Some(t) = struct_type {
+                collect_free_idents_inner(t, free, bound, complete);
+            }
+            if let Some(b) = base {
+                collect_free_idents_inner(b, free, bound, complete);
+            }
+            for f in fields {
+                collect_free_idents_inner(&f.val, free, bound, complete);
+            }
+        }
+        SurfaceExpr::OpenIn { body, .. } => {
+            collect_free_idents_inner(body, free, bound, complete);
+        }
+        // Everything still unmodelled (`Do`, `ByTactic`, `CalcBlock`,
+        // `IfLet`, `LetPattern`, quotations, `InterpolatedStr`, ...) is
+        // reported as INCOMPLETE rather than silently undercounted. Callers
+        // that need completeness fall back; callers doing dependency analysis
+        // ignore the flag, exactly as before.
+        _ => *complete = false,
     }
 }
 
@@ -334,6 +309,13 @@ fn clause_free_idents(clause: &WhereClause) -> HashSet<String> {
     let mut free = HashSet::new();
     let mut bound: Vec<HashSet<String>> = vec![HashSet::new()];
 
+    // This walk feeds WHERE-CLAUSE DEPENDENCY analysis, which the collector's
+    // contract explicitly serves: missing an identifier can only drop a
+    // dependency edge, never invent one. Completeness is discarded here on
+    // purpose — unlike `used_section_binders`, where an undercount silently
+    // changes a declaration's arity.
+    let mut dep_analysis_tolerates_undercount = true;
+
     // Parameters are bound in the body and return type
     let mut param_scope = HashSet::new();
     for b in &clause.params {
@@ -342,18 +324,33 @@ fn clause_free_idents(clause: &WhereClause) -> HashSet<String> {
         }
         // But parameter types can reference other clauses
         if let Some(ty) = &b.ty {
-            collect_free_idents_inner(ty, &mut free, &mut bound);
+            collect_free_idents_inner(
+                ty,
+                &mut free,
+                &mut bound,
+                &mut dep_analysis_tolerates_undercount,
+            );
         }
     }
 
     bound.push(param_scope);
 
     // Collect from body
-    collect_free_idents_inner(&clause.body, &mut free, &mut bound);
+    collect_free_idents_inner(
+        &clause.body,
+        &mut free,
+        &mut bound,
+        &mut dep_analysis_tolerates_undercount,
+    );
 
     // Collect from return type
     if let Some(ret) = &clause.return_type {
-        collect_free_idents_inner(ret, &mut free, &mut bound);
+        collect_free_idents_inner(
+            ret,
+            &mut free,
+            &mut bound,
+            &mut dep_analysis_tolerates_undercount,
+        );
     }
 
     bound.pop();

@@ -80,7 +80,18 @@ impl<'a> ElabCtx<'a> {
         let class_ty = self
             .metas
             .instantiate_levels(&self.metas.instantiate(&class_ty_expr));
-        let class_ty_whnf = self.whnf(&class_ty);
+        // Mirror the goal-side guard (infer/instance.rs): whnf only when the
+        // head is not ALREADY a registered class application. `DecidableEq α`
+        // is a reducible def whose whnf is the Pi `(a b : α) → Decidable
+        // (a = b)` — unconditional whnf therefore destroyed the class head and
+        // every `instance : DecidableEq T` died with "instance class type must
+        // be a class application" (the 2026-08-17 instance-head class).
+        let class_ty_whnf =
+            if extract_class_app(&class_ty).is_some_and(|(n, _)| self.instances.is_class(&n)) {
+                class_ty.clone()
+            } else {
+                self.whnf(&class_ty)
+            };
 
         // Extract the class name and arguments from the type
         let (class_name, class_args) = extract_class_app(&class_ty_whnf).ok_or_else(|| {
@@ -168,6 +179,35 @@ impl<'a> ElabCtx<'a> {
         // (`MissingStructureFields`). The all-fields-provided common case falls
         // through to the native path unchanged. B12 (`p04` default methods,
         // `p09` `extends` instances).
+        // A field may be assigned at most ONCE.
+        //
+        // Checked BEFORE the set below, which silently dedups, and before the
+        // native/struct-lit branch, so both paths are covered. The native path
+        // resolves fields by name and takes the FIRST match, so a repeat left
+        // the later assignment unelaborated — the mirror image of the structure
+        // literal, which keeps the LAST and dropped the earlier one. Each form
+        // therefore leaked through its own discarded slot:
+        //
+        //     instance i : C T where
+        //       size := 7
+        //       size := sorry        -- never elaborated, no `sorry axioms:`
+        //
+        // was accepted, while the same `sorry` alone is correctly refused.
+        {
+            let mut seen: Vec<&String> = Vec::new();
+            for f in fields {
+                if seen.contains(&&f.name) {
+                    return Err(ElabError::Unsupported {
+                        feature: format!(
+                            "instance assigns field `{}` more than once. Each field may be given at most one value — a repeat would silently discard an assignment without elaborating it.",
+                            f.name
+                        ),
+                    });
+                }
+                seen.push(&f.name);
+            }
+        }
+
         let provided_fields: std::collections::HashSet<_> =
             fields.iter().map(|f| &f.name).collect();
         if field_names

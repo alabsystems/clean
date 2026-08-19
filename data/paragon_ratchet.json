@@ -9,7 +9,7 @@
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)"
   },
   "totals": {
-    "files_over_500": 1416,
+    "files_over_500": 1410,
     "unwrap_expect_production": 1228,
     "bare_pub_non_lib": 13636,
     "allow_dead_code_sites": 57
@@ -178,7 +178,7 @@
       "allow_dead_code_sites": 0
     },
     "clean-verify": {
-      "files_over_500": 227,
+      "files_over_500": 221,
       "unwrap_expect_production": 73,
       "bare_pub_non_lib": 2318,
       "allow_dead_code_sites": 50

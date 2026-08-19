@@ -1199,6 +1199,18 @@ impl ElabCtx<'_> {
     /// innermost binder is abstracted first, so outer metas still present as
     /// tagged FVars inside inner binder types are de Bruijn-adjusted by
     /// `abstract_fvar` when their own turn comes.
+    /// Whether `meta`'s type is a TYPE-CLASS application, i.e. the metavariable
+    /// is an unsolved instance goal rather than an ordinary type hole.
+    ///
+    /// Structural because `MetaVar` carries no instance marker: instantiate the
+    /// recorded type, take the head of its application spine, and ask the
+    /// instance registry whether that head is a registered class.
+    fn meta_is_instance_goal(&self, meta: &crate::unify::MetaVar) -> bool {
+        let ty = self.metas.instantiate(&meta.ty);
+        crate::instances::extract_class_app(&ty)
+            .is_some_and(|(name, _)| self.instances.is_class(&name))
+    }
+
     fn generalize_residual_metas(&self, ty: Expr, val: Expr) -> (Expr, Expr) {
         use crate::unify::MetaState;
 
@@ -1226,7 +1238,26 @@ impl ElabCtx<'_> {
         occurrence.retain(|fv| {
             MetaState::from_fvar(*fv)
                 .and_then(|mid| self.metas.get(mid))
-                .is_some_and(|meta| meta.span.is_none())
+                .is_some_and(|meta| {
+                    // User-written `_` holes belong to the hole-feedback
+                    // contract, not to generalization.
+                    meta.span.is_none()
+                        // An unsolved INSTANCE goal is a synthesis FAILURE, not
+                        // a generalizable parameter. Generalizing it turns
+                        //     def bad := (b : Min) + (a : Sec)     -- no such HAdd
+                        // into `∀ {γ} [HAdd Min Sec γ], γ` — a definition that
+                        // silently typechecks while awaiting an instance that
+                        // does not exist, so a mix with NO instance in either
+                        // direction stops being reported
+                        // (`test_b104_hetero_type_incorrect_mix_stays_loud`).
+                        //
+                        // Lean does not generalize these either: synthesis runs
+                        // BEFORE `abstractMVars` and reports "failed to
+                        // synthesize", which is the behaviour this restores.
+                        // Excluding them here leaves the metas unassigned, so
+                        // the fail-closed residual guard below reports them.
+                        && !self.meta_is_instance_goal(meta)
+                })
         });
         if occurrence.is_empty() {
             return (ty, val);

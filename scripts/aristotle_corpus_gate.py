@@ -126,16 +126,16 @@ GLOBAL_ASSUMPTIONS = {
     "whnf_whnf": "UNDISCHARGED_ORACLE",
     "whnf_reduces": "UNDISCHARGED_ORACLE",
     "whnf_pi": "UNDISCHARGED_ORACLE",
-    "pinj": "UNDISCHARGED",
+    "pinj": "DISCHARGED_BY_KRIPKE_LOGICAL_RELATION",
     "cr": "DISCHARGED_BY_BYTE_IDENTICAL_SIBLING",
     # Found 2026-08-17, when `prop_defs` taught the scanner to see binders whose
     # type is a bare rung-local `Prop`. All four were invisible before: nothing
     # in `HYPOTHESIS_TYPE_HINTS` matches `WfEnv E`, `EnvAcyclic E`, `WCR` or
     # `KComplete`, so a whole assumption could hide behind one capitalised name.
-    "wf": "UNDISCHARGED_SIDE_CONDITION",
-    "ac": "UNDISCHARGED_SIDE_CONDITION",
+    "wf": "BY_DESIGN_PREMISE_PROVED_NECESSARY",
+    "ac": "BY_DESIGN_PREMISE_PROVED_NECESSARY",
     "wcr": "BY_DESIGN_STATEMENT_PREMISE",
-    "hcomp": "UNDISCHARGED",
+    "hcomp": "DISCHARGED_BY_PROOF",
 }
 
 # assumption name -> {rung: the discharge, in one line}. An entry here is a claim
@@ -166,7 +166,52 @@ DEGENERATE_RELATIONS = {
 # from flattening a measured wall into the same "UNDISCHARGED" as an untouched
 # row. Reporting only — like PER_RUNG_DISCHARGE, it never moves a verdict, and an
 # obstruction is NOT a discharge.
-OBSTRUCTIONS = {
+#
+# Currently EMPTY. Its first and only entry, `("pinj", "proof-irrelevance-r4")`,
+# was RETIRED on 2026-08-17 when the obstruction was overcome: the missing
+# ingredient it named — reflection — was built as a Kripke logical relation and
+# `pinj` is now genuinely proved (see PER_RUNG_DISCHARGE). The two cheap routes
+# it recorded as dead are still dead, and still machine-checked in
+# `PiInjObstruction.lean`; that record now lives in the discharge justification.
+# An obstruction is a statement about the CHEAP routes, never about the problem.
+OBSTRUCTIONS: dict[tuple[str, str], str] = {}
+
+# A premise that CANNOT be discharged is not automatically debt — but saying so
+# has to be earned, not asserted. Two things make it honest, and both are
+# machine-checked here: the premises are JOINTLY SATISFIABLE by a non-trivial
+# environment (otherwise every theorem over them is vacuous), and each is
+# PROVABLY NECESSARY (dropping it falsifies the rung's own conclusion).
+# Reporting only; never moves a verdict.
+PREMISE_NECESSITY = {
+    "wf": (
+        "`WfEnv E` — every definition's body has its declared type. NECESSARY: "
+        "`LetDeltaEnvWitness.subject_reduction_fails_E2` exhibits an ACYCLIC but "
+        "ill-typed `E2` where `konst 0 : base` δ-steps to a lambda and no lambda has "
+        "type `base`, so subject reduction fails outright without it. Not implied by "
+        "`ac`. Landed on let-delta-{whnf-conversion, decidable, sn, sr}; every "
+        "witness has an EMPTY axiom closure. "
+        "NAME COLLISION: `dep-bidir-r4` also reports a binder `wf`, but that rung has "
+        "no `WfEnv` at all — its `wf` is `WfCtx Γ` / `HasType Γ T .sort`, a local "
+        "premise of `private` lemmas. One name, two meanings; do not read the rung "
+        "count as four+one of the same thing."
+    ),
+    "ac": (
+        "`EnvAcyclic E` — a rank function strictly decreasing along δ-references. "
+        "NECESSARY: `LetDeltaEnvWitness.not_sn_E1` exhibits a WELL-FORMED but cyclic "
+        "`E1` (`konst 0 := konst 0`) with `¬ SN E1 (konst 0)`, so strong "
+        "normalisation is false without it. Not implied by `wf` — E1 satisfies "
+        "`WfEnv`. Landed on let-delta-{whnf-conversion, decidable, sn}; "
+        "`let-delta-sr` has no `EnvAcyclic` and no `SN`, so only the `wf` half of the "
+        "measurement applies there."
+    ),
+    "wcr": (
+        "`WCR` — local confluence, the premise of Newman's lemma. By design: the "
+        "lemma IS `WCR + SN → CR`. No witness landed; unlike `wf`/`ac` this one has "
+        "not been measured for satisfiability."
+    ),
+}
+
+_RETIRED_OBSTRUCTIONS = {
     ("pinj", "proof-irrelevance-r4"):
         "OPEN, but the frontier has MOVED TWICE. Dead routes (machine-checked): "
         "(1) confluence — `PiInjObstruction.conv_not_bconv`, with `irrel` Conv is not "
@@ -187,10 +232,28 @@ OBSTRUCTIONS = {
 
 PER_RUNG_DISCHARGE = {
     "pinj": {
+        "proof-irrelevance-r4":
+            "proof-irrelevance-r4.KMain.piInj_proved — GENUINELY PROVED, no hypotheses, "
+            "closure [propext, Classical.choice, Quot.sound]. Route: a Kripke logical "
+            "relation with reflection (`KRel`), carrying the SYNTACTIC conversion in every "
+            "clause, whose fundamental theorem `kcomplete` is proved at the identity "
+            "environment — available in every context, junk ones included, because a "
+            "variable is neutral. Subject reduction (`preservation_proved`) and "
+            "`step_conv_proved` follow unconditionally. Historical note, still machine-"
+            "checked in `PiInjObstruction.lean`: the two CHEAP routes are impossible — "
+            "confluence (`conv_not_bconv`: with `irrel`, Conv is not contained in untyped "
+            "β-conversion even between Π-types) and any closed-term PER model "
+            "(`model_pi_codomain_blind`). Reflection was the necessary ingredient, not a "
+            "convenience. Contrast r3 below: that discharge is degeneracy, this one is a proof",
         "proof-irrelevance-r3":
             "proof-irrelevance-r3.pi_injective — PROVED, but BY DEGENERACY: it is "
             "`⟨conv_total .., conv_total ..⟩`. See DEGENERATE_RELATIONS; this is not a "
             "healthy discharge and must not be read as one",
+    },
+    "hcomp": {
+        "proof-irrelevance-r4":
+            "proof-irrelevance-r4.KMain.kcomplete — the fundamental theorem of the Kripke "
+            "relation, proved with no hypotheses; this is what discharges `pinj`",
     },
     "decWH": {
         "whnf-conversion":
@@ -690,12 +753,23 @@ def main() -> int:
         walled = sorted(r for (n, r) in OBSTRUCTIONS if n == name and r in info["rungs"])
         if walled:
             extra += f"  [obstruction proved: {', '.join(walled)}]"
+        if name in PREMISE_NECESSITY:
+            # Only claim a measurement where one actually landed: `wcr` is in the
+            # table as a by-design premise whose satisfiability was NOT measured.
+            extra += ("  [necessity PROVED]" if "NECESSARY:" in PREMISE_NECESSITY[name]
+                      else "  [premise, necessity UNMEASURED]")
         print(f"  {name:14s} {info['status']:38s} {len(info['rungs'])} rungs{extra}")
     if DEGENERATE_RELATIONS:
         print(f"\nDEGENERATE RELATIONS ({len(DEGENERATE_RELATIONS)}) — a theorem over one of "
               f"these says NOTHING:")
         for rung, why in sorted(DEGENERATE_RELATIONS.items()):
             print(f"  {rung}: {why[:96]}…")
+    shown = {n: w for n, w in PREMISE_NECESSITY.items() if n in report["global_assumptions"]}
+    if shown:
+        print(f"\nPREMISE NECESSITY ({len(shown)}) — assumptions that cannot be discharged, "
+              f"and what was measured about them:")
+        for name, why in sorted(shown.items()):
+            print(f"  {name}: {why[:96]}…")
     live = {k: v for k, v in OBSTRUCTIONS.items() if k[1] in report["rungs"]}
     if live:
         print(f"\nPROVED OBSTRUCTIONS ({len(live)}) — open, but the cheap routes are ruled out "

@@ -627,7 +627,7 @@
         "let-delta-sn",
         "let-delta-whnf-conversion"
       ],
-      "status": "UNDISCHARGED_SIDE_CONDITION"
+      "status": "BY_DESIGN_PREMISE_PROVED_NECESSARY"
     },
     "cr": {
       "rungs": [
@@ -685,14 +685,14 @@
       "rungs": [
         "proof-irrelevance-r4"
       ],
-      "status": "UNDISCHARGED"
+      "status": "DISCHARGED_BY_PROOF"
     },
     "pinj": {
       "rungs": [
         "proof-irrelevance-r3",
         "proof-irrelevance-r4"
       ],
-      "status": "UNDISCHARGED"
+      "status": "DISCHARGED_BY_KRIPKE_LOGICAL_RELATION"
     },
     "sn": {
       "rungs": [
@@ -729,7 +729,7 @@
         "let-delta-sr",
         "let-delta-whnf-conversion"
       ],
-      "status": "UNDISCHARGED_SIDE_CONDITION"
+      "status": "BY_DESIGN_PREMISE_PROVED_NECESSARY"
     },
     "whnf_conv": {
       "rungs": [
@@ -775,14 +775,18 @@
     "hA'",
     "hA's",
     "hAs",
+    "hAty",
     "hB",
     "hB'",
     "hB2",
+    "hBty",
     "hC",
     "hEnv",
     "hF",
     "hFbnd",
+    "hJ",
     "hP",
+    "hT",
     "hT'",
     "hTT",
     "hV",
@@ -797,16 +801,26 @@
     "hb",
     "hbc",
     "hbody",
+    "hbty",
     "hc",
+    "hc1",
+    "hc2",
+    "hcA",
+    "hcA'",
     "hcAA'",
     "hcBB'",
     "hcX",
     "hcY",
+    "hcZ",
     "hcod",
     "hcoh",
     "hcomp",
     "hconv",
+    "hcv",
+    "hcvL",
+    "hcvR",
     "hcx",
+    "hcy",
     "hd",
     "hdisj",
     "hdom",
@@ -847,6 +861,7 @@
     "hst",
     "ht",
     "hterm",
+    "hty",
     "hu",
     "hv",
     "hwt",
@@ -857,6 +872,12 @@
     "hyz",
     "hz",
     "ih",
+    "ihA",
+    "ihB",
+    "iha",
+    "ihb",
+    "ihf",
+    "ihk",
     "lc",
     "n",
     "na",
@@ -2183,7 +2204,8 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaDecidable.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaDecidable.lean"
+        "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaDecidable.lean",
+        "proofs/aristotle-whnf-model-guides/let-delta-decidable/solution/LetDeltaEnvWitness.lean"
       ],
       "hypotheses": [
         "ac",
@@ -2204,8 +2226,8 @@
         "n",
         "wf"
       ],
-      "lines": 638,
-      "theorems": 12,
+      "lines": 756,
+      "theorems": 22,
       "vacuity": {}
     },
     "let-delta-sn": {
@@ -2218,8 +2240,9 @@
       "elab_errors": 0,
       "elab_sorries": 0,
       "elaborates": true,
-      "file": "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaSN.lean",
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaEnvWitness.lean",
       "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaEnvWitness.lean",
         "proofs/aristotle-whnf-model-guides/let-delta-sn/solution/LetDeltaSN.lean"
       ],
       "hypotheses": [
@@ -2232,8 +2255,8 @@
         "hkonst",
         "wf"
       ],
-      "lines": 950,
-      "theorems": 54,
+      "lines": 1068,
+      "theorems": 64,
       "vacuity": {}
     },
     "let-delta-sr": {
@@ -2246,8 +2269,9 @@
       "elab_errors": 0,
       "elab_sorries": 0,
       "elaborates": true,
-      "file": "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaSR.lean",
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaEnvWitness.lean",
       "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaEnvWitness.lean",
         "proofs/aristotle-whnf-model-guides/let-delta-sr/solution/LetDeltaSR.lean"
       ],
       "hypotheses": [
@@ -2257,8 +2281,8 @@
         "ht",
         "wf"
       ],
-      "lines": 580,
-      "theorems": 30,
+      "lines": 655,
+      "theorems": 34,
       "vacuity": {}
     },
     "let-delta-whnf-conversion": {
@@ -2271,8 +2295,9 @@
       "elab_errors": 0,
       "elab_sorries": 0,
       "elaborates": true,
-      "file": "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaWhnfConversion.lean",
+      "file": "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaEnvWitness.lean",
       "files": [
+        "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaEnvWitness.lean",
         "proofs/aristotle-whnf-model-guides/let-delta-whnf-conversion/solution/LetDeltaWhnfConversion.lean"
       ],
       "hypotheses": [
@@ -2292,8 +2317,8 @@
         "snb",
         "wf"
       ],
-      "lines": 1186,
-      "theorems": 56,
+      "lines": 1304,
+      "theorems": 66,
       "vacuity": {}
     },
     "level-eq-decidable": {
@@ -2386,10 +2411,26 @@
       "elab_errors": 0,
       "elab_sorries": 0,
       "elaborates": true,
-      "file": "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KFund.lean",
+      "file": "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KApp.lean",
       "files": [
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KApp.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KBuild.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KCodeInv.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KCong.lean",
         "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KFund.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KFundamental.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KIrrel.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KLam.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KLiftInv.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KMain.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KPSub.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KPer.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KRSim.lean",
         "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KRel.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KSem.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KSubLem.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KTr.lean",
+        "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KWeak.lean",
         "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/KWhnf.lean",
         "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjConfluence.lean",
         "proofs/aristotle-whnf-model-guides/proof-irrelevance-r4/solution/PiInjFundamental.lean",
@@ -2412,9 +2453,13 @@
         "h1",
         "h2",
         "hA",
+        "hAty",
         "hB",
+        "hBty",
         "hF",
         "hFbnd",
+        "hJ",
+        "hT",
         "hTT",
         "hV",
         "hX",
@@ -2423,14 +2468,24 @@
         "haa'",
         "hab",
         "hb",
+        "hbty",
         "hc",
+        "hc1",
+        "hc2",
+        "hcA",
+        "hcA'",
         "hcX",
         "hcY",
+        "hcZ",
         "hcod",
         "hcoh",
         "hcomp",
         "hconv",
+        "hcv",
+        "hcvL",
+        "hcvR",
         "hcx",
+        "hcy",
         "hdom",
         "hf",
         "hf'",
@@ -2443,16 +2498,23 @@
         "hs",
         "hst",
         "ht",
+        "hty",
         "hu",
         "hx",
         "hxy",
         "hy",
         "hyy'",
         "ih",
+        "ihA",
+        "ihB",
+        "iha",
+        "ihb",
+        "ihf",
+        "ihk",
         "pinj"
       ],
-      "lines": 6072,
-      "theorems": 400,
+      "lines": 9515,
+      "theorems": 564,
       "vacuity": {}
     },
     "quot-computation": {
@@ -3179,8 +3241,8 @@
     }
   },
   "toolchain": "leanprover/lean4:v4.30.0-rc2",
-  "total_lines": 87254,
-  "total_theorems": 3988,
-  "undischarged_assumption_count": 10,
+  "total_lines": 91126,
+  "total_theorems": 4186,
+  "undischarged_assumption_count": 8,
   "vacuity_debt": 0
 }

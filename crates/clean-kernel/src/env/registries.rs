@@ -652,6 +652,12 @@ impl Environment {
         self.simp_lemmas.values()
     }
 
+    /// O(1) count of registered simp lemmas (cache-key component; avoids the
+    /// O(L) iterator walk on every simp-set cache lookup).
+    pub fn simp_lemma_count(&self) -> usize {
+        self.simp_lemmas.len()
+    }
+
     /// Remove a simp lemma registration.
     ///
     /// Returns `true` if a registration existed and was removed.

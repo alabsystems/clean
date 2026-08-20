@@ -658,6 +658,24 @@ impl Environment {
         self.simp_lemmas.len()
     }
 
+    /// Register an imported `export` alias (`isTrue ↦ Decidable.isTrue`).
+    /// First writer wins, so a repeated/overlapping module load is idempotent.
+    pub fn register_export_alias(&mut self, alias: Name, target: Name) {
+        self.export_aliases.entry(alias).or_insert(target);
+    }
+
+    /// Resolve an imported `export` alias, if one exists.
+    #[must_use]
+    pub fn get_export_alias(&self, alias: &Name) -> Option<&Name> {
+        self.export_aliases.get(alias)
+    }
+
+    /// Number of imported `export` aliases (evidence/diagnostics).
+    #[must_use]
+    pub fn export_alias_count(&self) -> usize {
+        self.export_aliases.len()
+    }
+
     /// Remove a simp lemma registration.
     ///
     /// Returns `true` if a registration existed and was removed.

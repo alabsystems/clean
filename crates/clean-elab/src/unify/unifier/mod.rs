@@ -394,13 +394,104 @@ impl<'a> Unifier<'a> {
                 // Part of #3396.
                 self.propagate_meta_type_levels(&meta_ty, &other);
             }
+
+            // TYPE-GUARDED head projection for FUNCTION-typed metavariables.
+            //
+            // The first-order App decomposition proposes spine-head
+            // projections without ever comparing types: `?f a =?= g b` pairs
+            // `?f := g` positionally. When `g`'s argument is itself an
+            // application, that projection can be TYPE-INCORRECT — the
+            // postponed-lambda `congrArg` shape reaches here as
+            //   `?f (state.scalar name) =?= Ev s n (Value.nat (state.scalar name))`
+            // pairing `?f : Nat → Prop` with `Ev s n : Value → Prop`. The
+            // assignment then poisons every consumer of `?f` (`?a := ?f a₁`
+            // instantiates to the ill-typed `Ev s n a₁`), and the eventual
+            // failure surfaces far away as an opaque shape mismatch with a
+            // mangled expected type (the trust-spec-temporal FiniteModel
+            // `exactScalarVar` regression).
+            //
+            // Lean's assignment path type-checks (`checkTypesAssign`); mirror
+            // the piece of that check this bug class needs: when BOTH the
+            // metavariable's type and the candidate's inferred type are Pis
+            // with META-FREE domains, the domains must be kernel-def-eq.
+            // Returning Stuck (not Failure) leaves the constraint for retry
+            // once the real argument pins the head — exactly Lean's postpone.
+            // Conservative on purpose: any meta in either domain, or a failed
+            // type inference (e.g. `other` mentions elaborator metas the
+            // kernel cannot type), skips the guard and keeps prior behavior.
+            {
+                let tc_cache = self.tc_cache.borrow();
+                if let Some(tc) = tc_cache.as_ref() {
+                    let meta_ty_whnf = tc.whnf(&self.metas.instantiate(&meta_ty));
+                    if let ExprKind::Pi(_, meta_dom, _) = meta_ty_whnf.kind() {
+                        if !Self::expr_mentions_meta(meta_dom) {
+                            if let Ok(other_ty) = tc.infer_type(&other) {
+                                let other_ty_whnf =
+                                    tc.whnf(&self.metas.instantiate(&other_ty));
+                                if let ExprKind::Pi(_, other_dom, _) = other_ty_whnf.kind() {
+                                    // Narrow deliberately: fire ONLY when both
+                                    // domains whnf to DIFFERENTLY-NAMED rigid
+                                    // Const heads that kernel def-eq cannot
+                                    // reconcile (`Nat` vs `Value`). Anything
+                                    // subtler — level metas, local fvars,
+                                    // reducibility-shadowed equalities — keeps
+                                    // the prior permissive behavior, so the
+                                    // do-notation flex-monad projections
+                                    // (`?m ?α =?= StateT σ (Except ε) α`) are
+                                    // untouched.
+                                    let meta_head = tc.whnf(meta_dom);
+                                    let other_head = tc.whnf(other_dom);
+                                    if let (
+                                        ExprKind::Const(meta_name, _),
+                                        ExprKind::Const(other_name, _),
+                                    ) = (
+                                        meta_head.get_app_fn().kind(),
+                                        other_head.get_app_fn().kind(),
+                                    ) {
+                                        if meta_name != other_name
+                                            && !Self::expr_mentions_meta(other_dom)
+                                            && !tc.is_def_eq(&meta_head, &other_head)
+                                        {
+                                            return UnifyResult::Stuck;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
+        if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
+            let t: String = format!("{other:?}").chars().take(2000).collect();
+            eprintln!("meta-assign: {meta_id:?} := {t}");
+            eprintln!(
+                "assign-backtrace: {}",
+                std::backtrace::Backtrace::force_capture()
+            );
+        }
         if self.metas.assign(meta_id, other) {
             UnifyResult::Success
         } else {
             UnifyResult::Failure(format!("failed to assign metavariable {meta_id:?}"))
         }
+    }
+
+    /// Whether `e` mentions any elaborator metavariable (encoded as high-bit
+    /// FVars). Iterative DAG walk via [`crate::unify::meta_state::push_expr_children`];
+    /// used by the type-guarded head-projection check in [`Self::unify_meta`].
+    fn expr_mentions_meta(e: &Expr) -> bool {
+        let mut stack: Vec<&Expr> = vec![e];
+        while let Some(cur) = stack.pop() {
+            if let ExprKind::FVar(id) = cur.kind() {
+                if MetaState::from_fvar(*id).is_some() {
+                    return true;
+                }
+            }
+            crate::unify::meta_state::push_expr_children(cur, &mut stack);
+        }
+        false
     }
 
     /// Propagate universe-level constraints from a metavariable's *type* to the
@@ -480,8 +571,8 @@ impl<'a> Unifier<'a> {
     /// Try to unify two expressions
     pub fn unify(&mut self, left: &Expr, right: &Expr) -> UnifyResult {
         if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
-            let l: String = format!("{left:?}").chars().take(150).collect();
-            let r: String = format!("{right:?}").chars().take(150).collect();
+            let l: String = format!("{left:?}").chars().take(4000).collect();
+            let r: String = format!("{right:?}").chars().take(4000).collect();
             eprintln!("unify-top: L={l} R={r}");
         }
         // Instantiate any assigned metavariables

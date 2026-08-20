@@ -1631,6 +1631,74 @@ impl<'a> ElabCtx<'a> {
         })
     }
 
+    /// Reject a constructor that targets more than one arm.
+    ///
+    /// Both ordered builders walk CONSTRUCTORS and select an arm for each, so
+    /// any arm never selected is silently unused and its body is NEVER
+    /// ELABORATED. A fourth arm on a three-constructor enum therefore swallowed
+    /// whatever it held:
+    ///
+    /// ```text
+    /// | E.a => 0 | E.b => 1 | E.c => 2 | E.a => sorry
+    /// ```
+    ///
+    /// was accepted with no `sorry axioms:` line, and hid an unresolvable
+    /// identifier just as quietly.
+    ///
+    /// Shared by both builders deliberately: they are near-identical walks
+    /// (`casesOn` and `rec`), and a per-builder copy is exactly the kind of
+    /// parallel logic that drifts — the `casesOn` path is the one that actually
+    /// runs for a plain enum, and a guard placed only on the `rec` path looked
+    /// right while changing nothing.
+    ///
+    /// Only CONCRETE constructor targets are checked. A trailing catch-all is
+    /// redundant rather than dangerous, and rejecting it would break the
+    /// wildcard-expansion shapes these builders exist to support.
+    fn reject_duplicate_ctor_targets(
+        &mut self,
+        arms: &[clean_parser::SurfaceMatchArm],
+        type_name: &str,
+    ) -> Result<(), ElabError> {
+        // ONLY for the all-nullary, single-discriminant shape.
+        //
+        // A repeated top-level constructor is LEGITIMATE elsewhere and this
+        // guard must not touch those:
+        //   * multi-discriminant matches are compiled into `Prod.mk` arms, so
+        //     `match x, y with | Nat.zero, k => ... | Nat.succ n, _ => ...`
+        //     repeats the top-level `Prod.mk` by construction;
+        //   * nested patterns distinguish arms by their SUB-pattern, e.g.
+        //     `| Wrap (Foo.a) => ... | Wrap (Foo.b) => ...`.
+        // Both carry sub-patterns, so requiring every arm to be a NULLARY
+        // constructor (or a wildcard) excludes them exactly. An earlier version
+        // of this guard omitted the restriction and broke seven tests, one of
+        // which is literally named
+        // `test_match_multi_discriminant_duplicate_top_level_ctor_elaborates`.
+        let all_nullary_or_wildcard = arms.iter().all(|arm| match &arm.pattern {
+            SurfacePattern::Ctor(_, sub_pats) => sub_pats.is_empty(),
+            SurfacePattern::Wildcard | SurfacePattern::Var(_) => true,
+            _ => false,
+        });
+        if !all_nullary_or_wildcard {
+            return Ok(());
+        }
+
+        let mut seen: Vec<String> = Vec::new();
+        for arm in arms {
+            let Some(target) = self.top_level_ctor_target_name(type_name, &arm.pattern) else {
+                continue;
+            };
+            if seen.contains(&target) {
+                return Err(ElabError::Unsupported {
+                    feature: format!(
+                        "match on `{type_name}`: constructor `{target}` appears in more than one alternative. Each constructor may target at most one arm — a repeat leaves an arm unused and its body unelaborated."
+                    ),
+                });
+            }
+            seen.push(target);
+        }
+        Ok(())
+    }
+
     fn try_build_ctor_ordered_match_alts_inner(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
@@ -1639,6 +1707,8 @@ impl<'a> ElabCtx<'a> {
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
     ) -> Result<Option<Vec<Expr>>, ElabError> {
+        self.reject_duplicate_ctor_targets(arms, type_name)?;
+
         let ind_name = Name::from_string(type_name);
         let Some(ind_info) = self.env.get_inductive(&ind_name).cloned() else {
             return Ok(None);
@@ -2245,6 +2315,8 @@ impl<'a> ElabCtx<'a> {
                 _ => return Ok(None),
             }
         }
+
+        self.reject_duplicate_ctor_targets(arms, type_name)?;
 
         if has_nested_ctor_arms {
             return self.try_build_nested_head_rec_alts(

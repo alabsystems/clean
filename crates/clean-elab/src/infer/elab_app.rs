@@ -1420,23 +1420,47 @@ impl<'a> ElabCtx<'a> {
                 _ => false,
             }
         }
+        // RESULT-SHAPE GUARD, shared with `typed_value_arg_in_open_slot`.
+        //
+        // This helper is one of several `||` routes into the SAME pre-arg
+        // expected-result unification block. The element-coercion route already
+        // learned that higher-order proof combinators must not take it:
+        // `congrArg (fun c => Bool.or (satLit a l) c) ih` has an un-annotated
+        // lambda in an open slot, so the shape test below matches, but
+        // `congrArg`'s result contains an APPLIED function metavariable.
+        // Matching that against a reducible expected equality leaves premature
+        // assignments that resurface as an unrelated rigid-head mismatch
+        // (`List.rec` vs `Bool.rec` —
+        // `test_typed_value_pin_preserves_congr_arg_over_reducible_list_rec`).
+        //
+        // Adding this route without the guard reopened exactly that hole. Reuse
+        // the established predicate rather than a new heuristic: first-order,
+        // linear result metavariables only, and the Pi walk must reach the real
+        // result. Constructor/container results (`Option ?a`, `List ?a`) stay
+        // eligible, so the un-annotated-lambda case this route exists to serve
+        // is untouched.
         self.metas.push_scope();
         let mut cur = self.whnf(&self.metas.instantiate(func_ty));
         let mut found = false;
+        let mut walked_all = true;
         for arg in args {
             let ExprKind::Pi(_, dom, body) = cur.kind() else {
+                walked_all = false;
                 break;
             };
             let dom_inst = self.whnf(&self.metas.instantiate(dom));
             if is_unascribed_lambda(&arg.expr) && self.has_metavars(&dom_inst) {
                 found = true;
-                break;
             }
             let meta = self.fresh_meta(dom_inst);
             cur = self.whnf(&self.metas.instantiate(&body.instantiate(&meta)));
         }
+        let result_is_safe = walked_all
+            && !matches!(cur.kind(), ExprKind::Pi(_, _, _))
+            && self.has_metavars(&cur)
+            && Self::result_metavars_first_order_linear(&cur);
         self.metas.pop_scope();
-        found
+        found && result_is_safe
     }
 
     /// NARROW re-try of the flex-application-slot gate (see the failed broad
@@ -2788,7 +2812,25 @@ impl<'a> ElabCtx<'a> {
                         if expected_is_sort
                             && matches!(next_type.kind(), ExprKind::Pi(bi, _, _) if bi.info == BinderInfo::InstImplicit)
                         {
-                            final_arg = self.whnf(&self.metas.instantiate(&final_arg));
+                            // INSTANCE transparency, not default.
+                            //
+                            // This normalisation exists so a Sort-valued
+                            // argument feeding an instance-implicit parameter is
+                            // in a form instance search can match — correct for
+                            // `@[reducible]` aliases. At DEFAULT transparency it
+                            // also flattens wrapper `def`s: `def M := Nat` became
+                            // `Nat` here, so the goal `Sz M` was already `Sz Nat`
+                            // before resolution ran, two distinct wrappers
+                            // collapsed onto one instance, and the LAST-registered
+                            // one won. Measured: `Sz.size M = 1` selected the
+                            // `Sz F` instance and evaluated to 2.
+                            //
+                            // Reducing at instance transparency keeps
+                            // `@[reducible]` aliases transparent while leaving a
+                            // plain `def` folded, which is what Lean does and
+                            // what Mathlib's OrderDual/Multiplicative idiom
+                            // depends on.
+                            final_arg = self.whnf_instances(&self.metas.instantiate(&final_arg));
                         }
                     }
 

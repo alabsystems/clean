@@ -1,0 +1,68 @@
+# TrustIr — Trusted Mid-level Intermediate Representation
+#
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# Copyright 2026 Andrew Yates | License: Apache-2.0
+#
+# Zero external dependencies. This crate is the single source of truth
+# for the t* verified compilation stack.
+
+[package]
+name = "trust-ir"
+version = "0.6.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/alabsystems/trust-ir"
+authors = ["Andrew Yates <andrewyates.name@gmail.com>"]
+description = "Universal proof-carrying IR for the t* verified compilation stack"
+
+[features]
+default = ["request-reexports"]
+
+# Re-export the cross-repo verification-request/bundle schema (the ~225-line
+# `pub use request::{...}` block) at the crate root. ON by default so the public
+# surface ty/ay/TrustCg import (`trust_ir::NativeVerificationBundle`, etc.)
+# stays unchanged. Turning it OFF (`default-features = false`) de-clutters the
+# crate root so the core IR API (`Module`/`Function`/`Inst`/`Ty`) is not buried
+# under ~330 solver/verification-bundle symbols; the schema is then reached via
+# its canonical `trust_ir::request::` path, which is always available regardless
+# of this feature (audit #55). Zero external deps either way.
+request-reexports = []
+
+parser = []
+
+# Expose the canonical TrustIr binary codec as public API. The implementation
+# is compiled privately even when this feature is off because whole-module
+# SHA-256 identity and native-bundle admission must always recompute from that
+# one canonical encoding rather than trust a producer-supplied digest.
+binary = []
+
+# Canonical text pretty-printer (`trust-ir::format::canonical`) for diff
+# stability (issue #62). Pure Rust, no external deps — feature-gated only
+# so downstream consumers that do not need canonicalization (e.g., TrustIr
+# production builds) do not pay the small compile-time cost.
+fmt = []
+
+serde = ["dep:serde"]
+
+# Enables example/reference `verif` helper APIs for docs, tests, and
+# prototyping. Off by default so the example does not pollute downstream
+# builds or read as the normative cross-repo API.
+dialect-verif-example = []
+
+# Semantic module diff (`trust-ir::diff`). Ignores ID renumbering and
+# declaration order; aligns by name + structure. Used by the `trust-ir-diff`
+# CLI and by CI gates comparing producer output. Zero external deps.
+diff = []
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
+# SF-5: SHA-256 for proof-authority digests. The ProofDigestAlgorithm contract
+# (proof/evidence.rs) makes Sha256 MANDATORY for identities crossing an
+# untrusted boundary or participating in replay/authority selection;
+# `ProofDigest::sha256_of` is the shared producer so every lane mints the
+# same domain-separated construction. RustCrypto sha2, no_std-capable.
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+rmp-serde = "1.3"
+serde_json = "1.0"

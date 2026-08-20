@@ -170,5 +170,50 @@
         ],
         "harness": "cargo test -p clean-verify --test evalir_scratchpad (the EvalIr bundle, not the full spec)",
         "note": "The expensive declaration is the nine-step Eq.refl. Three different spellings of the right-hand side -- the readable reflected constant, a near-exact residual and the EXACT residual in the machine's own vocabulary -- all cost the same ~360 s, so the cost is the run and the residue fold rather than a mis-spelled RHS. The ANSWER is never computed: ir_nat_mul recurses on its second argument, so normalizing ir_nat_mul 1 (ir_nat_pow2 63) would cost 2^63 Nat.rec unfoldings, and it stays an unreduced application on both sides. The counterfactual at shift 64 halts at step 6 and costs 0.045 s, which is the measurement that localizes the cost to the last three steps."
-    }
+    },
+ "superseded_at_head": {
+  "record": "data/crystal_chain_revalidation_2026-08-19.json",
+  "measured": "2026-08-19",
+  "trust_rev": "6819d58406d13fc8a5a0bef61c30ffb4da9316fc",
+  "trust_rev_note": "origin/main; wave-DZ 3a09adfea2 is an ancestor",
+  "clean_rev": "f99b94e21b0ad5a59e07b21f5f0005038df9b8fb",
+  "head_lineage": "sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14",
+  "head_def_index": 19643,
+  "head_func_id": 4635,
+  "head_derived_mir_verdict": "agreed",
+  "head_markers_exact": true,
+  "head_flip_fired": true,
+  "emitted_body_at_head": "NUMBERING-ONLY",
+  "emitted_body_drift_classes": [
+   "functy-index"
+  ],
+  "instructions_moved": 0,
+  "emitted_body_note": "The emitted body is instruction-for-instruction identical to the text pinned in meta_tag_shl.trust-ir.txt; instr_count is unchanged at 9 and the body contains no `gep`. Only whole-crate NUMBERING moved (functy-index), which renumbers on any clean-kernel or producer change and which the semantics provably does not consult: ir_ty_is_agg_enum_any / ir_ty_is_agg_struct_any (spec/core_spec/eval_ir_ops.rs) prove ir_ty_is_agg is Bool.true at EVERY id, and ir_const_agg_eval reaches the type only through it. The .trust-ir.txt fixture is therefore NOT refreshed -- refreshing all eleven was TRIED and measured, and it turns crystal_a1_lineage from 59/59 to 57 passed / 2 failed: expr_path_step_clone's const-type lane (emitted enum176 vs the registered ir_ep_tstep := IRTy.enum_ 181) and level_is_zero.rs:77's hard-coded assert!(body.contains(\"call @func.4914\")).",
+  "this_fixture_is_not_overwritten": "Every measured field ABOVE remains a correct, internally consistent record of the build it was taken at, and is deliberately left alone. It is NOT a claim about HEAD. The 2026-08-19 revalidation is recorded in the file named above: one sealed driver (guard PASS before every run, positive behavioural identification against a pre-wave-DZ control), one recipe (scripts/trust_ir_build.sh --print-only), reproduced over three clean non-incremental builds with byte-identical coverage.json and trust-ir.txt, with a negative control at 0 flip events crate-wide.",
+  "why_it_is_not_re_pinned_in_place": "A partial re-pin would manufacture a fixture that describes no single build. The `build` block here was measured on a DIFFERENT recipe -- RUSTFLAGS applied the flip crate-wide, which is why it records flip_events_all_from_clean_kernel: false over thousands of events -- while scripts/trust_ir_build.sh attaches -Ztrust-ir-flip to the SUBJECT UNIT ALONE, so foreign events are 0 by construction and the two `build` blocks are not comparable field by field. Moving `lineage` while leaving them is exactly the mixing that level_kind_ord.lineage.json's `measurement_scope` warns against.",
+  "how_to_re_derive": "scripts/crystal_fixture_freshness.py <dump-dir> -- seal the driver first; the script's header says how and why."
+ },
+ "reconfirmed_at_newer_producer": {
+  "record": "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json",
+  "measured": "2026-08-19",
+  "trust_rev": "ccf52b40c3e00e846b79f87e01cbe59ce320ef04",
+  "trust_rev_note": "trust origin/main, 33 commits past the 6819d58406 of `superseded_at_head` -- including vtable slices 13/14/15 (producer adoption) and the call-arg nonmax arm. The IR-emitting lowering itself moved: lower.rs c0cda7b988 -> 083c00091c.",
+  "clean_rev": "f0846ade2bc9e5d94a727148543d02f9cf50834f",
+  "clean_kernel_source_identical_to_prior_revalidation": true,
+  "clean_kernel_source_identical_note": "`git diff f99b94e21 f0846ade2 -- crates/clean-kernel Cargo.toml Cargo.lock` is EMPTY, so this is a clean producer-only A/B and every delta is the producer.",
+  "emitted_body_at_head": "NUMBERING-ONLY",
+  "emitted_body_drift_classes": [
+   "functy-index"
+  ],
+  "instructions_moved": 0,
+  "gep_in_fixture": 0,
+  "gep_in_emitted_body": 0,
+  "head_lineage_still": "sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14",
+  "head_def_index_still": 19643,
+  "head_lineage_moved_since_prior_revalidation": false,
+  "head_func_id_moved_to": 4632,
+  "nothing_here_is_superseded": "The `superseded_at_head` block above is NOT stale and has NOT been rewritten. Its head_lineage and head_def_index are the values this body still carries under a producer 33 commits newer, measured on byte-identical clean-kernel source. Only func_id moved (4635 -> 4632), and func_id is a whole-crate ordinal read by no gate lane. A lineage digest is a per-BUILD artifact identity; this run is what ESTABLISHES that for a chained body it is stable under a producer change, rather than assuming it. Overwriting the earlier block would have destroyed exactly that evidence.",
+  "how_to_re_derive": "scripts/crystal_fixture_freshness.py <dump-dir>  (seal the driver first; see its header)",
+  "emitted_body_note": "Instruction-for-instruction identical to the text pinned in meta_tag_shl.trust-ir.txt. Only whole-crate NUMBERING moved (functy-index), and by MORE than at the previous revalidation -- which is itself the argument for not re-recording it: those ordinals move on every producer wave while the body does not."
+ }
 }

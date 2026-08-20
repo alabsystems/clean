@@ -1000,6 +1000,34 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        // 2b. LIVE open-namespace walk. `process_single_open` materializes the
+        //     alias table once, at `open` time, so a declaration added to that
+        //     namespace LATER in the same file is absent from the snapshot and
+        //     resolves as an unknown identifier (Mathlib `Function.swap₂`,
+        //     opened before its own namespace finishes). Lean keeps `openDecls`
+        //     as a scope LIST and resolves against the live environment
+        //     (`Lean/ResolveName.lean`), which is what `name_resolution.rs`
+        //     already implements for the non-elab path — mirror it here.
+        //     Purely additive: it runs only after the frozen table misses.
+        for open_ns in self.namespace_state.open_namespaces() {
+            let candidate = Name::from_string(&format!("{open_ns}.{name}"));
+            if self.env.get_const(&candidate).is_some() && self.is_const_accessible(&candidate) {
+                return Ok(self.mk_const(&candidate));
+            }
+        }
+
+        // 2c. Imported `export` aliases (`Lean.aliasExtension`, decoded at
+        //     import): Lean core's `export Decidable (isTrue isFalse decide)`
+        //     makes those SHORT names resolvable at the root, and Mathlib
+        //     source uses them unqualified.
+        let alias_key = Name::from_string(name);
+        if let Some(target) = self.env.get_export_alias(&alias_key) {
+            let target = target.clone();
+            if self.is_const_accessible(&target) {
+                return Ok(self.mk_const(&target));
+            }
+        }
+
         // 3. Root-level exact constant.
         let const_name = Name::from_string(name);
         if let Some(info) = self.env.get_const(&const_name) {

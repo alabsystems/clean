@@ -156,6 +156,23 @@ const SRC_IR_KO_NEVER_FAULTS: &str = "def ir_ko_never_faults (mem : IRList IRMem
 
 const SRC_IR_KO_KIND_BOUND: &str = "def ir_ko_kind_bound (l : Level) : Le (level_kind_ord l) ir_d4 := Level.rec (fun (l0 : Level) => Le (level_kind_ord l0) ir_d4) (Le.step ir_d0 ir_d3 (Le.step ir_d0 ir_d2 (Le.step ir_d0 ir_d1 (Le.step ir_d0 ir_d0 (Le.refl ir_d0))))) (fun (_p : Level) (_ih : Le (level_kind_ord _p) ir_d4) => (Le.step ir_d1 ir_d3 (Le.step ir_d1 ir_d2 (Le.step ir_d1 ir_d1 (Le.refl ir_d1))))) (fun (_p : Level) (_q : Level) (_ih1 : Le (level_kind_ord _p) ir_d4) (_ih2 : Le (level_kind_ord _q) ir_d4) => (Le.step ir_d2 ir_d3 (Le.step ir_d2 ir_d2 (Le.refl ir_d2)))) (fun (_p : Level) (_q : Level) (_ih1 : Le (level_kind_ord _p) ir_d4) (_ih2 : Le (level_kind_ord _q) ir_d4) => (Le.step ir_d3 ir_d3 (Le.refl ir_d3))) (fun (_nm : Name) => (Le.refl ir_d4)) l";
 
+/// The `Level::kind_ord` chain's MODULE definitions, in registration order.
+///
+/// Same contract as `IR_H2_MODULE_DEFS`: the GAP-2 differential runs the
+/// machine on exactly the module the spec registers.
+pub const IR_KO_MODULE_DEFS: &[&str] = &[
+    SRC_IR_KO_TENUM,
+    SRC_IR_KO_B0,
+    SRC_IR_KO_B1,
+    SRC_IR_KO_B2,
+    SRC_IR_KO_B3,
+    SRC_IR_KO_B4,
+    SRC_IR_KO_B5,
+    SRC_IR_KO_B6,
+    SRC_IR_KO_FUNC,
+    SRC_IR_KO_MODULE,
+];
+
 impl Specification {
     /// The width-one chain over the EMITTED shape of `Level::kind_ord`.
     ///

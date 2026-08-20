@@ -1,0 +1,67 @@
+{
+ "schema": "clean.crystal.freshness_scope/v1",
+ "what_this_is": "The clean-kernel SOURCE the newest crystal revalidation record was measured at. Whether a chained BODY drifted is a question only trustc can answer, and the record is its DATED answer; this pins the tree that answer covers, so a pre-push gate and a suite row can decide -- with no Trust compiler and no dump -- whether it still covers the tree in front of them. Derivable: `scripts/crystal_freshness_scope.py --emit`.",
+ "record": "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json",
+ "covered_clean_rev": "7558a86c8b5ba233c08b058f2af3b89d047c0e52",
+ "clean_kernel_src_sha256": "35339831000b81a7148f7a93cefd2f5e8a5578dd405e73d76234b87dbb217182",
+ "clean_kernel_src_file_count": 1890,
+ "digest_definition": "sha256 over, in sorted path order, `<repo-relative path>\\0<sha256 of file bytes>\\n` for every crates/clean-kernel/src/**/*.rs plus crates/clean-kernel/Cargo.toml, walked from the filesystem.",
+ "chained_body_sources": {
+  "bvar_in_range": {
+   "file": "crates/clean-kernel/src/expr/mod.rs",
+   "sha256": "5fd1bc0db51566a599c3d144593515a9998531a2d805cc072307f7387fdbb3db",
+   "must_contain": "fn bvar_in_range"
+  },
+  "expr_path_step_clone": {
+   "file": "crates/clean-kernel/src/tc/expr_location.rs",
+   "sha256": "65786784f7cc8fe724426482df06a1d54bb52dc067a57cb6284497279b2b30a6",
+   "must_contain": "ExprPathStep"
+  },
+  "flat_flags_contains": {
+   "file": "crates/clean-kernel/src/flat/types.rs",
+   "sha256": "a5cd6b04eebb0c4cc540219781b00e6dbc237d8b7cb003ca90e44ee1dd14baed",
+   "must_contain": "fn contains"
+  },
+  "float_div": {
+   "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
+   "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
+   "must_contain": "fn reduce_float_div"
+  },
+  "from_source_system": {
+   "file": "crates/clean-kernel/src/mode.rs",
+   "sha256": "06318cf91f55eaf5df60624ad77037ca9de40bd1eddcde786343c350927247f2",
+   "must_contain": "fn from_source_system"
+  },
+  "get_char_val_trunc": {
+   "file": "crates/clean-kernel/src/env/native_reducers_beq_shortcircuit.rs",
+   "sha256": "e74180ae04b5a2186c5732238fe24cd36fd98bb78cf08d70a09cc6a7ecf8af89",
+   "must_contain": "fn get_char_val"
+  },
+  "has_cubical_layer": {
+   "file": "crates/clean-kernel/src/mode.rs",
+   "sha256": "06318cf91f55eaf5df60624ad77037ca9de40bd1eddcde786343c350927247f2",
+   "must_contain": "fn has_cubical_layer"
+  },
+  "is_valid_char": {
+   "file": "crates/clean-kernel/src/env/native_reducers_char.rs",
+   "sha256": "19befb08a8228dac92c36ddbc9339536a0caa000275d77f80529e390771a6b82",
+   "must_contain": "fn is_valid_char"
+  },
+  "level_is_zero": {
+   "file": "crates/clean-kernel/src/level/mod.rs",
+   "sha256": "4acddfad0b7e5940f142cf3e03c12272c7b18e5be96edea2bec29908ca9efafb",
+   "must_contain": "fn is_zero"
+  },
+  "level_kind_ord": {
+   "file": "crates/clean-kernel/src/level/mod.rs",
+   "sha256": "4acddfad0b7e5940f142cf3e03c12272c7b18e5be96edea2bec29908ca9efafb",
+   "must_contain": "fn kind_ord"
+  },
+  "meta_tag_shl": {
+   "file": "crates/clean-kernel/src/tc/local_context.rs",
+   "sha256": "d5dc97f9c0306c77a25bafabd96ea9623e353fb698439e80d50927bab955517a",
+   "must_contain": "META_TAG"
+  }
+ },
+ "how_to_re_derive": "A CONTENT-SCOPE failure is not refreshed by re-emitting this file. Produce a fresh dump and run scripts/crystal_fixture_freshness.py, commit the new revalidation record, point `record` at it, then --emit."
+}

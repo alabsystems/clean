@@ -1,0 +1,153 @@
+{
+ "record": "GAP 2 \u2014 encoding-correspondence differential, first measurement",
+ "measured": "2026-08-20",
+ "gate": "crates/clean-verify/tests/crystal_a3_semdiff.rs",
+ "library": "crates/clean-verify/src/ir_semdiff/",
+ "command": "cargo test --offline -p clean-verify --test crystal_a3_semdiff -- --nocapture --test-threads=1",
+ "clean_rev_base": "891b7d153e3379e8403fe71c86a80df05f7a2ecf",
+ "trust_ir_rev": "a4e81b6bea5ad426a494b18fe160e6be5490ee25",
+ "question_answered_first": {
+  "q": "Is trust-ir's semantics written down anywhere, or only implicit in the compiler?",
+  "a": "Written down TWICE, and neither one is the compiler.",
+  "lean_semantics": {
+   "path": "trust:first-party/trust-ir/lean/trust_ir-semantics/",
+   "lines": 22419,
+   "kind": "Lean 4 monadic small-step operational semantics; Semantics/Step.lean dispatches every Inst",
+   "join_to_compiler": "CONSTRUCTOR NAMES ONLY",
+   "join_evidence": "crates/trust-ir/tests/lean_schema_parity.rs header: 'There is no Lean toolchain in CI here to *prove* parity, but we CAN mechanically detect drift' and 'The gate matches constructor NAMES. It cannot see semantic depth.'"
+  },
+  "rust_reference_interpreter": {
+   "path": "trust:first-party/trust-ir/crates/trust-ir/src/interpret.rs",
+   "lines": 12493,
+   "join_to_compiler": "reference only",
+   "self_description": "'Lean remains the source of truth for the full operational semantics'"
+  },
+  "consequence": "Agreement CANNOT be proved against trust-ir's semantics as it stands: the authoritative object (Lean) is joined to the shipped compiler by a name check, and the meaning of an emitted module in the shipped binary is fixed by to_mir.rs + LLVM. GAP 2 is therefore REDUCED and MEASURED, not closed."
+ },
+ "executors": {
+  "E1": "Clean's ir_eval, discharged by the CLEAN KERNEL reducing an Eq.refl over the registered module",
+  "E2": "trust_ir::parser + trust_ir::interpret over the committed emitted body",
+  "E3": "the shipped compiled function, reached through to_mir + rustc passes + LLVM"
+ },
+ "results": {
+  "total_inputs": 23,
+  "agreed": 23,
+  "disagreed": 0,
+  "insufficient": 0,
+  "cost_offset_clean_minus_trust": 0,
+  "cost_uniform_on_every_chain": true,
+  "chains": [
+   {
+    "chain": "mode::CleanMode::has_cubical_layer",
+    "fixture": "crates/clean-verify/tests/fixtures/has_cubical_layer.trust-ir.txt",
+    "clean_module": "ir_h2_module",
+    "inputs": 6,
+    "total_domain": true,
+    "enum_model": "Exact",
+    "executors": [
+     "E1",
+     "E2",
+     "E3"
+    ],
+    "agreed": 6,
+    "trust_steps": 6,
+    "clean_fuel_threshold": 6,
+    "cost_offset": 0
+   },
+   {
+    "chain": "mode::CleanMode::from_source_system",
+    "fixture": "crates/clean-verify/tests/fixtures/from_source_system.trust-ir.txt",
+    "clean_module": "ir_fs_module",
+    "inputs": 12,
+    "total_domain": true,
+    "enum_model": "Exact",
+    "executors": [
+     "E1",
+     "E2",
+     "E3"
+    ],
+    "agreed": 12,
+    "trust_steps": 5,
+    "clean_fuel_threshold": 5,
+    "cost_offset": 0,
+    "why_this_chain_matters": "The emitted switch lists cases 0..9 and 11 \u2014 there is NO case 10. SourceSystem::PVS reaches the DEFAULT EDGE, and only an exhaustive enumeration puts an input on it. A non-contiguous case list with a hole is the sharpest available test of the one thing GAP 2 names by name."
+   },
+   {
+    "chain": "level::Level::kind_ord",
+    "fixture": "crates/clean-verify/tests/fixtures/level_kind_ord.trust-ir.txt",
+    "clean_module": "ir_ko_module",
+    "inputs": 5,
+    "total_domain": true,
+    "enum_model": "TagSurrogate",
+    "enum_model_note": "Level carries payloads (Succ/Max/IMax/Param) elided by the harness. Sound ONLY because the body provably never reads them \u2014 enforced mechanically by ir_semdiff::payload_is_unread against the committed emitted text, not asserted.",
+    "executors": [
+     "E1",
+     "E2"
+    ],
+    "e3_absent_reason": "Level::kind_ord is a PRIVATE fn (clean-kernel/src/level/mod.rs:598). Recorded as an absent leg, never re-implemented: a re-implementation would be a fourth transcription agreeing with itself.",
+    "agreed": 5,
+    "trust_steps": 6,
+    "clean_fuel_threshold": 6,
+    "cost_offset": 0
+   }
+  ]
+ },
+ "coverage": {
+  "irinst_constructors_total": 28,
+  "irinst_constructors_exercised": 6,
+  "exercised": [
+   "br",
+   "const_",
+   "extractfield",
+   "load",
+   "ret",
+   "switch"
+  ],
+  "unmeasured": 22,
+  "note": "Agreement on one body's instruction mix says nothing about the forms it never uses. Printed on every run; a test fails if this note is ever left claiming more than was measured."
+ },
+ "falsification": {
+  "mutations_required_to_go_red": 5,
+  "all_red": true,
+  "list": [
+   "assert has_cubical_layer(Cubical) = false \u2014 the Eq.refl obligations are genuinely EXECUTED",
+   "assert tag 0's answer at tag 2's value \u2014 the module does not ignore its argument",
+   "assert fuel_out at the measured threshold \u2014 the cost measurement is not vacuous",
+   "rewrite `extractfield u8 %2, 0` to `extractfield ptr %2, 1` \u2014 the payload guard refuses",
+   "assert a wrong answer on the DEFAULT edge (tag 10) \u2014 the default edge is pinned, not a black hole"
+  ],
+  "structural_guard": "crystal_a3_default_edge_is_actually_reached fails if case 10 ever appears in the emitted switch, so a dense table cannot silently remove the differential's teeth."
+ },
+ "tcb_delta": {
+  "added": "NOTHING",
+  "why": "trust-ir's parser and interpreter only POSE questions the Clean kernel answers. A wrong E2 yields a spurious RED, never a spurious GREEN.",
+  "demonstrated_not_asserted": "Four harness bugs during construction (missing @ sigil; functy table sized 0 vs declared functy.470; one enum declared where the body mentions enum.175 AND enum.13; subject declared returning enum.175 when it returns enum.13) each surfaced as a loud RED with the Clean and shipped legs still answering correctly."
+ },
+ "defect_found_in_trust_ir": {
+  "what": "trust_ir::parser::parse_module cannot read trust_ir's own printed output for a Rust def-path name",
+  "detail": "`fn @mode::CleanMode::has_cubical_layer` fails at the first ':' with `expected '('`; the print->parse round trip is NOT total over the names the producer emits",
+  "workaround_here": "the subject is renamed before parsing; the interpreter never reads the name",
+  "significance": "independent evidence for the wider programme's move away from the text artefact as the anchor"
+ },
+ "two_design_brief_worries_that_are_actually_agreements": {
+  "switch_arm_order": "trust_ir::interpret returns on the FIRST matching case; Clean's ir_case_find (eval_ir_state.rs:1173) is an IRList.rec testing the head before the IH \u2014 also first-match. The last-wins behaviour flagged in the brief is in the GATE's CFG parser (emitted_cfg_parse_clean.rs, a BTreeMap::insert), not in either semantics.",
+  "exh_flag": "trust_ir::interpret destructures Inst::Switch { .., .. } and drops `exhaustive`; Clean's ir_step binds `exh` and ignores it (eval_ir_machine.rs:929). Both are exh-insensitive, so there is no divergence for a text-anchored gate to be blind to."
+ },
+ "what_this_is_not": "A PROOF. It is a measured, fail-closed agreement over a fully enumerated input set on three bodies, covering 6 of 28 IRInst forms. Extensional agreement \u2014 equal values and equal step counts on every input of a domain \u2014 does not establish that the two encodings DENOTE the same function.",
+ "does_not_move": {
+  "level_is_zero_A0": "4-of-6",
+  "level_is_zero_A6": "3-of-4",
+  "note": "Measuring encoding agreement on three other bodies says nothing about the designated target's refusing gates, and must not be reported as moving them."
+ },
+ "enum_declaration_cross_check": {
+  "why": "The trust-ir side has exactly one human-chosen modelling parameter: the enum declaration reconstituted per chain, because the crate-level dump references enum.13 without carrying an enum table.",
+  "pinned_against": "data/crystal_enum_tag_pin.json, produced by a DIFFERENT lane (77e42993e) from the Rust source for a different purpose",
+  "test": "crystal_a3_enum_declarations_match_the_independent_tag_pin",
+  "result": {
+   "CleanMode": "agree (6 variants)",
+   "SourceSystem": "agree (12 variants)",
+   "Level": "agree (5 variants)"
+  },
+  "also_fails_if": "a pinned enum gains a non-positional discriminant, because the harness's implicit 0..N declaration would stop modelling it"
+ }
+}

@@ -143,6 +143,9 @@ pub(super) fn desugar_quantifier_bounds(
                     name: Spanned::dummy(fresh.clone()),
                     domain: Some(domain),
                     pattern: None,
+                    // Synthesized binder: it belongs to no source-level group,
+                    // and `None` is the conservative singleton.
+                    domain_group: None,
                 });
             }
             _ => {
@@ -150,6 +153,7 @@ pub(super) fn desugar_quantifier_bounds(
                     name: bound.name.clone(),
                     domain,
                     pattern: bound.pattern.clone(),
+                    domain_group: bound.domain_group,
                 });
             }
         }
@@ -379,6 +383,7 @@ fn substitute_binders(
                 name: bound.name.clone(),
                 domain,
                 pattern: bound.pattern.clone(),
+                domain_group: bound.domain_group,
             }
         })
         .collect();
@@ -404,6 +409,7 @@ fn substitute_single_binder(
         name: bound.name.clone(),
         domain,
         pattern: bound.pattern.clone(),
+        domain_group: bound.domain_group,
     };
     (new_bound, substitute(body, &inner))
 }

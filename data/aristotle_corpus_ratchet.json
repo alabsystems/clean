@@ -679,7 +679,7 @@
         "dependent-wtype-whnf-conversion",
         "whnf-conversion"
       ],
-      "status": "UNDISCHARGED"
+      "status": "UNDISCHARGED_BUT_9_OF_10_RUNGS_ARE_PROVED_VACUOUS"
     },
     "hcomp": {
       "rungs": [
@@ -713,13 +713,13 @@
         "stlc-sum-decidable",
         "whnf-conversion"
       ],
-      "status": "UNDISCHARGED_AND_FALSE_UNDER_TYPE_IN_TYPE"
+      "status": "FALSE_UNDER_TYPE_IN_TYPE__REFUTED_ON_ALL_9_DEPENDENT_RUNGS"
     },
     "wcr": {
       "rungs": [
         "newman"
       ],
-      "status": "BY_DESIGN_STATEMENT_PREMISE"
+      "status": "BY_DESIGN_PREMISE_PROVED_NECESSARY"
     },
     "wf": {
       "rungs": [
@@ -834,6 +834,7 @@
     "hjunk",
     "hkonst",
     "hl",
+    "hlam",
     "hlc",
     "hm",
     "hmap",
@@ -846,10 +847,12 @@
     "hnf",
     "hns",
     "hp",
+    "hpair",
     "hpi",
     "hprop",
     "hq",
     "hr",
+    "hrefl",
     "hrs",
     "hs",
     "hsa",
@@ -859,6 +862,8 @@
     "hsn",
     "hsound",
     "hst",
+    "hsucc",
+    "hsup",
     "ht",
     "hterm",
     "hty",
@@ -1190,7 +1195,15 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/DependentBoolWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/DependentBoolWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/DependentBoolWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard/Reduce.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-bool-whnf-conversion/solution/Girard.lean"
       ],
       "hypotheses": [
         "cr",
@@ -1203,19 +1216,22 @@
         "hAs",
         "hB",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
         "hconv",
         "he",
         "hf",
+        "hnf",
         "ht",
         "ih",
         "r",
         "sn"
       ],
-      "lines": 2271,
-      "theorems": 115,
+      "lines": 5108,
+      "theorems": 270,
       "vacuity": {}
     },
     "dependent-coproduct-cr": {
@@ -1295,7 +1311,14 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/DependentCoproductWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/DependentCoproductWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/DependentCoproductWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-coproduct-whnf-conversion/solution/Girard/Reduce.lean"
       ],
       "hypotheses": [
         "cr",
@@ -1308,13 +1331,16 @@
         "hAs",
         "hB",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
         "hconv",
         "he",
         "hf",
         "hl",
+        "hnf",
         "hr",
         "hs",
         "ht",
@@ -1322,8 +1348,8 @@
         "r",
         "sn"
       ],
-      "lines": 2765,
-      "theorems": 127,
+      "lines": 6087,
+      "theorems": 293,
       "vacuity": {}
     },
     "dependent-eta-conv-sr": {
@@ -1429,32 +1455,45 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/DependentIdJWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/DependentIdJWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/DependentIdJWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/MetaSubst.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-id-j-whnf-conversion/solution/Girard/Reduce.lean"
       ],
       "hypotheses": [
         "cr",
         "decWH",
         "h",
+        "h1",
+        "h2",
         "hA",
         "hA's",
         "hAs",
         "hB",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
         "hconv",
         "hd",
         "he",
         "hf",
+        "hnf",
         "hp",
         "ht",
         "ih",
         "r",
         "sn"
       ],
-      "lines": 2523,
-      "theorems": 128,
+      "lines": 5545,
+      "theorems": 291,
       "vacuity": {}
     },
     "dependent-nat-cr": {
@@ -1532,7 +1571,14 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/DependentNatWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/DependentNatWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/DependentNatWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-nat-whnf-conversion/solution/Girard/Reduce.lean"
       ],
       "hypotheses": [
         "cr",
@@ -1545,13 +1591,16 @@
         "hAs",
         "hB",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
         "hconv",
         "he",
         "hf",
         "hn",
+        "hnf",
         "hs",
         "ht",
         "hz",
@@ -1559,8 +1608,8 @@
         "r",
         "sn"
       ],
-      "lines": 2362,
-      "theorems": 122,
+      "lines": 5220,
+      "theorems": 279,
       "vacuity": {}
     },
     "dependent-nf-unique": {
@@ -1687,31 +1736,45 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/DependentSigmaWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/DependentSigmaWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/DependentSigmaWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Reduce.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard/Substitution.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-sigma-whnf-conversion/solution/Girard.lean"
       ],
       "hypotheses": [
         "cr",
         "decWH",
         "h",
+        "h1",
+        "h2",
         "hA",
         "hA's",
         "hAs",
         "hB",
+        "hF",
         "ha",
         "hab",
+        "hac",
         "hacc",
         "hb",
         "hbc",
         "hconv",
         "he",
         "hf",
+        "hnf",
         "ht",
         "ih",
         "r",
         "sn"
       ],
-      "lines": 2481,
-      "theorems": 115,
+      "lines": 5402,
+      "theorems": 263,
       "vacuity": {}
     },
     "dependent-unified-core-cr": {
@@ -1791,18 +1854,30 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/DependentUnifiedCoreWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/DependentUnifiedCoreWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/DependentUnifiedCoreWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Reduce.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-core-whnf-conversion/solution/Girard/Subst.lean"
       ],
       "hypotheses": [
         "cr",
         "decWH",
         "h",
+        "h1",
+        "h2",
         "hA",
         "hA's",
         "hAs",
         "hB",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
         "hconv",
@@ -1810,6 +1885,7 @@
         "he",
         "hf",
         "hn",
+        "hnf",
         "hp",
         "hs",
         "ht",
@@ -1818,8 +1894,8 @@
         "r",
         "sn"
       ],
-      "lines": 3991,
-      "theorems": 176,
+      "lines": 5998,
+      "theorems": 245,
       "vacuity": {}
     },
     "dependent-unified-full-cr": {
@@ -1904,12 +1980,22 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/DependentUnifiedFullWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/DependentUnifiedFullWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/DependentUnifiedFullWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard/Reduce.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-unified-full-whnf-conversion/solution/Girard.lean"
       ],
       "hypotheses": [
         "cr",
         "decWH",
         "h",
+        "h1",
+        "h2",
         "hA",
         "hA'",
         "hA's",
@@ -1917,9 +2003,12 @@
         "hB",
         "hB'",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
+        "hc",
         "hcAA'",
         "hcBB'",
         "hconv",
@@ -1927,17 +2016,23 @@
         "he",
         "hf",
         "hg",
+        "hlam",
         "hn",
+        "hnf",
         "hp",
+        "hpair",
+        "hrefl",
         "hs",
+        "hsucc",
+        "hsup",
         "ht",
         "hz",
         "ih",
         "r",
         "sn"
       ],
-      "lines": 5492,
-      "theorems": 218,
+      "lines": 8362,
+      "theorems": 334,
       "vacuity": {}
     },
     "dependent-whnf-conversion": {
@@ -1953,7 +2048,15 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/DependentWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/DependentWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/DependentWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard/Reduce.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-whnf-conversion/solution/Girard.lean"
       ],
       "hypotheses": [
         "cr",
@@ -1971,12 +2074,13 @@
         "hconv",
         "he",
         "hf",
+        "hnf",
         "ht",
         "ih",
         "sn"
       ],
-      "lines": 1572,
-      "theorems": 90,
+      "lines": 3249,
+      "theorems": 197,
       "vacuity": {}
     },
     "dependent-wtype-cr": {
@@ -2057,7 +2161,14 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/DependentWTypeWhnfConversion.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/DependentWTypeWhnfConversion.lean"
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/DependentWTypeWhnfConversion.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Checker.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Classification.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Hurkens.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Main.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/dependent-wtype-whnf-conversion/solution/Girard/Reduce.lean"
       ],
       "hypotheses": [
         "cr",
@@ -2072,7 +2183,9 @@
         "hB",
         "hB'",
         "hC",
+        "hF",
         "ha",
+        "hac",
         "hacc",
         "hb",
         "hcAA'",
@@ -2081,14 +2194,15 @@
         "he",
         "hf",
         "hg",
+        "hnf",
         "hs",
         "ht",
         "ih",
         "r",
         "sn"
       ],
-      "lines": 3088,
-      "theorems": 148,
+      "lines": 4706,
+      "theorems": 229,
       "vacuity": {}
     },
     "full-loop-iota": {
@@ -2356,15 +2470,19 @@
       "elaborates": true,
       "file": "proofs/aristotle-whnf-model-guides/newman/solution/Newman.lean",
       "files": [
-        "proofs/aristotle-whnf-model-guides/newman/solution/Newman.lean"
+        "proofs/aristotle-whnf-model-guides/newman/solution/Newman.lean",
+        "proofs/aristotle-whnf-model-guides/newman/solution/NewmanPremiseWitness.lean"
       ],
       "hypotheses": [
         "ha",
+        "hb",
+        "hc",
+        "hn",
         "sn",
         "wcr"
       ],
-      "lines": 95,
-      "theorems": 6,
+      "lines": 267,
+      "theorems": 19,
       "vacuity": {}
     },
     "proof-irrelevance-r3": {
@@ -3241,8 +3359,8 @@
     }
   },
   "toolchain": "leanprover/lean4:v4.30.0-rc2",
-  "total_lines": 91126,
-  "total_theorems": 4186,
+  "total_lines": 114430,
+  "total_theorems": 5361,
   "undischarged_assumption_count": 8,
   "vacuity_debt": 0
 }

@@ -154,13 +154,60 @@ pub(crate) struct Cfg {
     /// second one is a shorter body than the shipped artifact, and every lane
     /// that existed before this one would have compared equal anyway.
     ///
-    /// The instruction's TYPE is deliberately absent: `eval_ir_machine` steps
-    /// `IRInst.extractfield t a k` to `ir_ef_at (ir_getd s a) k`, in which `t`
-    /// does not occur. A lane for it would compare something no theorem here
-    /// depends on. The same holds for `load`'s type and volatile flag.
+    /// The instruction's TYPE is NOT here — it is in `extract_tys`, which is a
+    /// separate lane for the reason every type lane in this file is separate
+    /// from its operand lane: an operand change is invisible to the type and a
+    /// type change is invisible to the operand.
     pub(crate) extracts: BTreeMap<u32, Vec<(u32, u32, u32)>>,
+    /// block id -> the ordered `(result, TYPE)` of its `extractfield`s.
+    ///
+    /// **Added 2026-08-19 by the operand-completeness audit.** Until then this
+    /// file carried a standing argument for dropping it: `eval_ir_machine`
+    /// steps `IRInst.extractfield t a k` to `ir_ef_at (ir_getd s a) k`, in
+    /// which `t` does not occur, so "a lane for it would compare something no
+    /// theorem here depends on."
+    ///
+    /// That argument is about CLEAN'S MODEL, and this gate is not a statement
+    /// about Clean's model — it is the statement that the proved module IS the
+    /// emitted module. The slot is printed in the artifact
+    /// (`extractfield {ty} %{agg}, {field}`, `trust-ir/src/display.rs:884`) and
+    /// it is carried by the registered term (`IRInst.extractfield : IRTy → Nat
+    /// → Nat → IRInst`), so both sides HAVE it and neither side read it: a
+    /// transcription at any type at all compared equal. A slot that exists on
+    /// both sides and is compared by neither is the exact defect this file's
+    /// header calls "the same defect as a missing lane", and an argument that
+    /// the semantics ignores it converts a stale-transcription problem into a
+    /// coarse-model problem rather than closing either.
+    pub(crate) extract_tys: BTreeMap<u32, Vec<(u32, String)>>,
     /// block id -> the ordered `(result, pointer operand)` of its `load`s.
     pub(crate) loads: BTreeMap<u32, Vec<(u32, u32)>>,
+    /// block id -> the ordered `(result, TYPE, VOLATILE)` of its `load`s.
+    ///
+    /// **Added 2026-08-19 by the operand-completeness audit, and it is the lane
+    /// that took the FLAGSHIP chain red.** `Inst::Load` prints as
+    /// `[volatile ]load {ty}, ptr %{p}[, align {a}]` (`display.rs:672`) and the
+    /// registered constructor is `IRInst.load : IRTy → Nat → Bool → IRInst`.
+    /// Two of those three operands were read by neither parser: the emitted
+    /// side took the pointer with `t.last()` — which is the pointer only when
+    /// nothing follows it — and the type token sat unread one slot away.
+    ///
+    /// **The type is semantic input to the artifact even though it is not
+    /// semantic input to Clean's model, and that asymmetry is the finding, not
+    /// an excuse.** trust's own executable semantics resolves the read SIZE,
+    /// the alignment fault and the DECODE through the loaded type
+    /// (`trust-ir/src/interpret.rs::eval_load` — `byte_size(ty)`,
+    /// `byte_align(ty)`, `decode_value(ty, …)`), so `load enum.13` and
+    /// `load u8` read different numbers of bytes from the same address. Clean's
+    /// `ir_exec` binds `t` and discards it (`IRInst.load t p vol =>
+    /// ir_bind_result s rs (ir_load_eval s (ir_getd s p))`). A gate over the
+    /// two therefore cannot appeal to Clean's indifference: what it is checking
+    /// is whether the transcription is OF the artifact.
+    ///
+    /// `volatile` travels in the same lane because it is the same instruction's
+    /// other unread slot, and because in trust it selects the initialization
+    /// discipline — a strict load faults on an uninitialized byte where a plain
+    /// one transports it.
+    pub(crate) load_tys: BTreeMap<u32, Vec<(u32, String, bool)>>,
     /// block id -> the ordered `(op, result, lhs, rhs)` of its `icmp`s.
     ///
     /// The operator is part of the body: `uge` and `ugt` differ at exactly one
@@ -509,6 +556,20 @@ pub(crate) fn assert_entry_params(text: &str, func_src: &str, who: &str) {
     );
 }
 
+/// One whole registered spec source file, for the checks that are about the
+/// SHAPE of the Clean model rather than about one chain's blocks.
+///
+/// Added 2026-08-19 by the operand audit: `operand_audit.rs` states two model
+/// holes (a block parameter has no type slot; a switch's exhaustiveness flag is
+/// not printed by the artifact) and checks each against the registered
+/// inductive rather than asserting it in a comment.
+pub(crate) fn spec_source(file: &str) -> String {
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src/spec/core_spec")
+        .join(file);
+    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} must be readable ({e})", p.display()))
+}
+
 /// The registered spec sources for one chain's blocks, in one string.
 ///
 /// `file` is the `core_spec` module and `const_prefix` the shared name of its
@@ -551,11 +612,31 @@ pub(crate) fn assert_lanes(emitted: &Cfg, clean: &Cfg, who: &str) {
         emitted.loads, clean.loads
     );
     assert_eq!(
+        emitted.load_tys, clean.load_tys,
+        "{who}: LOAD TYPE lane differs: emitted {:?} vs Clean {:?}. Each entry is (result, TYPE, \
+         VOLATILE). The type on a load is what trust's own executable semantics resolves the \
+         read SIZE, the alignment fault and the DECODE through (`interpret.rs::eval_load` — \
+         `byte_size(ty)`, `byte_align(ty)`, `decode_value(ty, …)`), so two loads that differ \
+         only here read different numbers of bytes from the same address and are byte-identical \
+         in every other lane. Clean's `ir_exec` discards the type; that makes this lane the ONE \
+         thing standing between the registered term and a type the artifact does not name — it \
+         does not make the difference harmless.",
+        emitted.load_tys, clean.load_tys
+    );
+    assert_eq!(
         emitted.extracts, clean.extracts,
         "{who}: EXTRACTFIELD lane differs: emitted {:?} vs Clean {:?}. Each entry is (result, \
          source, field index) IN EMISSION ORDER, so a dropped duplicate read or a field index \
          off by one fails here.",
         emitted.extracts, clean.extracts
+    );
+    assert_eq!(
+        emitted.extract_tys, clean.extract_tys,
+        "{who}: EXTRACTFIELD TYPE lane differs: emitted {:?} vs Clean {:?}. Each entry is \
+         (result, TYPE). The slot is printed by the artifact and carried by the registered \
+         `IRInst.extractfield`, so a transcription at a type the emitted body does not name is a \
+         module the compiler did not emit — whatever Clean's `ir_ef_at` does or does not read.",
+        emitted.extract_tys, clean.extract_tys
     );
     assert_eq!(
         emitted.icmps, clean.icmps,
@@ -715,6 +796,34 @@ pub(crate) fn assert_lanes(emitted: &Cfg, clean: &Cfg, who: &str) {
                 assert!(
                     !ty.starts_with('?'),
                     "{who}: bb{b} {side}-side const -> %{r} has an UNRESOLVED type {ty:?}."
+                );
+            }
+        }
+    }
+    // And for the two lanes the 2026-08-19 operand audit added, on BOTH sides,
+    // for exactly the same reason: `?enum.13` and `?unresolved:ir_tLevel` are
+    // both `?`-prefixed and would compare equal to each other only if this
+    // check let them through — which is the silent-no-op mode again, one level
+    // down.
+    for (side, m) in [
+        ("emitted", &emitted.extract_tys),
+        ("Clean", &clean.extract_tys),
+    ] {
+        for (b, tys) in m {
+            for (r, ty) in tys {
+                assert!(
+                    !ty.starts_with('?'),
+                    "{who}: bb{b} {side}-side extractfield -> %{r} has an UNRESOLVED type {ty:?}."
+                );
+            }
+        }
+    }
+    for (side, m) in [("emitted", &emitted.load_tys), ("Clean", &clean.load_tys)] {
+        for (b, tys) in m {
+            for (r, ty, _) in tys {
+                assert!(
+                    !ty.starts_with('?'),
+                    "{who}: bb{b} {side}-side load -> %{r} has an UNRESOLVED type {ty:?}."
                 );
             }
         }

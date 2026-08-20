@@ -350,9 +350,29 @@ impl Parser {
                     self.expect(&TokenKind::RParen)?;
                     return Ok(SurfacePattern::Inaccessible(Box::new(expr)));
                 }
-                // A bare/malformed leading dot is invalid. Propagate the
-                // pattern error rather than silently changing its meaning to `_`.
-                self.pattern()
+                // A leading dot is DOTTED CONSTRUCTOR NOTATION: `.red` names the
+                // constructor `red` of the expected type. It can never introduce a
+                // BINDER.
+                //
+                // Parsing the tail as a plain pattern returns `Var(name)` for the
+                // nullary case, because the `Ident` arm cannot see that a dot
+                // preceded it. That silently turned a MISSPELLED constructor into a
+                // catch-all binder: in
+                //
+                //     match c with
+                //     | .reddd => 1      -- typo; parsed as a binder
+                //     | .green => 2      -- dead arm
+                //
+                // every constructor matched the first arm, so `g Col.green` reduced
+                // to `1` and the match still looked exhaustive. A typo changed the
+                // program's meaning with no diagnostic. Re-tagging as a nullary
+                // constructor makes the name resolve like every other dotted
+                // constructor — and an unknown one now fails loudly.
+                //
+                // Applied-constructor patterns (`.cons h t`) already parse as
+                // `Ctor`, so only the nullary case needs re-tagging.
+                let inner = self.pattern()?;
+                Ok(Self::retag_leading_dot_ctor(inner))
             }
             TokenKind::LParen => {
                 self.advance();
@@ -469,6 +489,19 @@ impl Parser {
     /// For example, in `MyList.cons head tail`, `head` and `tail` should be
     /// parsed as separate atomic patterns, not `head` with `tail` as its argument.
     /// (#403: Fix multi-field constructor patterns)
+    /// Re-tag a pattern parsed after a LEADING DOT as a constructor.
+    ///
+    /// `.red` is dotted constructor notation; the nullary case would otherwise
+    /// arrive as `Var("red")` — a binder — so a typo'd constructor became a
+    /// silent catch-all. Only the nullary shape needs it: `.cons h t` already
+    /// parses as `Ctor`.
+    fn retag_leading_dot_ctor(pat: SurfacePattern) -> SurfacePattern {
+        match pat {
+            SurfacePattern::Var(name) => SurfacePattern::Ctor(name, Vec::new()),
+            other => other,
+        }
+    }
+
     pub(super) fn atomic_pattern(&mut self) -> Result<SurfacePattern, ParseError> {
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
@@ -526,9 +559,29 @@ impl Parser {
                     self.expect(&TokenKind::RParen)?;
                     return Ok(SurfacePattern::Inaccessible(Box::new(expr)));
                 }
-                // A bare/malformed leading dot is invalid. Propagate the
-                // pattern error rather than silently changing its meaning to `_`.
-                self.atomic_pattern()
+                // A leading dot is DOTTED CONSTRUCTOR NOTATION: `.red` names the
+                // constructor `red` of the expected type. It can never introduce a
+                // BINDER.
+                //
+                // Parsing the tail as a plain pattern returns `Var(name)` for the
+                // nullary case, because the `Ident` arm cannot see that a dot
+                // preceded it. That silently turned a MISSPELLED constructor into a
+                // catch-all binder: in
+                //
+                //     match c with
+                //     | .reddd => 1      -- typo; parsed as a binder
+                //     | .green => 2      -- dead arm
+                //
+                // every constructor matched the first arm, so `g Col.green` reduced
+                // to `1` and the match still looked exhaustive. A typo changed the
+                // program's meaning with no diagnostic. Re-tagging as a nullary
+                // constructor makes the name resolve like every other dotted
+                // constructor — and an unknown one now fails loudly.
+                //
+                // Applied-constructor patterns (`.cons h t`) already parse as
+                // `Ctor`, so only the nullary case needs re-tagging.
+                let inner = self.atomic_pattern()?;
+                Ok(Self::retag_leading_dot_ctor(inner))
             }
             TokenKind::LParen => {
                 // Parenthesized pattern - can contain full patterns with arguments,

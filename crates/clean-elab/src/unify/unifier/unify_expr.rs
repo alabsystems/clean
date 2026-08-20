@@ -401,6 +401,52 @@ impl<'a> Unifier<'a> {
                 // relies on. Gating on "opposite is a bare meta" confines it to
                 // metavar assignment; general structural unification keeps #379
                 // WHNF. Soundness unchanged (kernel re-checks the proof term).
+                // Second targeted exception: a beta-redex argument (Lam-headed
+                // application) paired against a FLEX application (spine head is
+                // an unsolved metavariable) has TWO legitimate higher-order
+                // solutions, and eager reduction commits to the wrong one when
+                // it is type-incorrect. For the postponed-lambda `congrArg`
+                // shape the pair is
+                //   `(fun o => Ev s n (Value.nat o)) x  =?=  ?f x`
+                // Beta-first yields the PROJECTION `?f := Ev s n` — here
+                // type-incorrect (`Nat → Prop` slot, `Value → Prop` head), and
+                // the failed attempt used to leave `?f` poisoned for every
+                // later consumer (the trust-spec-temporal FiniteModel
+                // regression). Keeping the redex pairs the spines and yields
+                // the IMITATION `?f := (fun o => …)` — but arg-driven flows
+                // (the LRAT `List.rec`/`congrArg` corpus shape) genuinely rely
+                // on the projection. So: try the historical reduced path in a
+                // SPECULATIVE scope first — committing when it succeeds keeps
+                // every previously-working solution byte-identical — and only
+                // on failure roll back (un-poisoning the flex head) and pair
+                // the spines unreduced. Soundness unchanged either way: the
+                // assignment is kernel-re-checked, and beta ⊆ def-eq means the
+                // kept redex can only refine WHICH solution is found, never
+                // equate unequal terms.
+                let flex_head = |u: &Self, e: &Expr| {
+                    matches!(e.kind(), ExprKind::App(_, _))
+                        && u.as_meta(e.get_app_fn()).is_some()
+                };
+                let lam_headed_app = |e: &Expr| {
+                    matches!(e.kind(), ExprKind::App(_, _))
+                        && matches!(e.get_app_fn().kind(), ExprKind::Lam(_, _, _))
+                };
+                if (lam_headed_app(a1) && flex_head(self, a2))
+                    || (lam_headed_app(a2) && flex_head(self, a1))
+                {
+                    self.metas.push_scope();
+                    let reduced = {
+                        let a1_whnf = self.try_whnf(a1);
+                        let a2_whnf = self.try_whnf(a2);
+                        self.unify_core(&a1_whnf, &a2_whnf)
+                    };
+                    if matches!(reduced, UnifyResult::Success) {
+                        self.metas.commit();
+                        return UnifyResult::Success;
+                    }
+                    self.metas.pop_scope();
+                    return self.unify_core(a1, a2);
+                }
                 let a1_keep = self.head_is_protected_def(a1) && self.as_meta(a2).is_some();
                 let a2_keep = self.head_is_protected_def(a2) && self.as_meta(a1).is_some();
                 let a1_whnf = if a1_keep {

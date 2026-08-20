@@ -80,7 +80,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) use emitted_cfg::{
     assert_entry_params, assert_lanes, clean_block_sources, fixture, parse_clean, parse_emitted,
-    Cfg,
+    spec_source, Cfg,
 };
 
 /// A0 and A6, asserted for a chain in one place: every criterion of the
@@ -312,6 +312,41 @@ mod meta_tag_shl;
 // present in the bodies that no lane read and one lane a chain never compared.
 #[path = "crystal_a1_lineage/lane_matrix.rs"]
 mod lane_matrix;
+
+// THE THIRD DENOMINATOR, added by the 2026-08-19 operand-completeness audit:
+// the slots the artifact prints that this gate CANNOT compare, because the
+// Clean side has nowhere to put them. `lane_matrix.rs` says which lanes each
+// chain exercises; this says which operands are outside the lane system
+// altogether, and pins them on the emitted side so a change in one is visible.
+#[path = "crystal_a1_lineage/operand_audit.rs"]
+mod operand_audit;
+
+// THE OTHER DENOMINATOR, and the one nobody had: every gate above compares the
+// spec against a COMMITTED FIXTURE, and until 2026-08-19 nothing in this repo
+// ever compared that fixture against what `trustc` emits today. This module
+// makes the live-dump comparison non-optional — the fixtures must point at a
+// dated revalidation, the pointer and the record must agree, the record must
+// say no body's instructions moved, and the script that produces it must cover
+// exactly the bodies chained here.
+#[path = "crystal_a1_lineage/freshness.rs"]
+mod freshness;
+
+// The two closures around `freshness`: no committed fixture may go uncompared,
+// and every revalidation record — including ones added after that file — is held
+// to the same standard. Split out because `freshness.rs` is at 424 of this
+// repo's 500-line convention and `files_over_500` is a shrink-only ratchet.
+#[path = "crystal_a1_lineage/freshness_closure.rs"]
+mod freshness_closure;
+
+// AND THE DENOMINATOR UNDER THAT ONE. Every check in `freshness` reads the same
+// committed files, so all of them pass at any HEAD however far the kernel has
+// moved from the tree the record was measured at — and at 891b7d153 it HAD
+// moved, three files in crates/clean-kernel/src/env/, with every link-2a gate
+// green. This module binds each record to a kernel SOURCE digest and fails when
+// a chained body's own source file moves; whole-crate renumbering, which moves
+// on any crate item and no instruction, is ledgered rather than failed.
+#[path = "crystal_a1_lineage/freshness_scope.rs"]
+mod freshness_scope;
 
 /// **The numeral convention the type lane resolves through, PROVED from the
 /// registered sources rather than assumed.**

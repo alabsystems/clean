@@ -3209,6 +3209,14 @@ pub struct Environment {
     /// declaration growth, while any registry mutation — including a
     /// count-and-content-neutral remove/re-add cycle — forces a rebuild.
     simp_registry_revision: u64,
+    /// Imported `export` aliases decoded from `Lean.aliasExtension`
+    /// (`export Decidable (isTrue …)` → `isTrue ↦ Decidable.isTrue`).
+    /// Resolution metadata only: an alias never introduces a constant, it
+    /// only lets a SHORT name reach one the kernel already checked, so a
+    /// wrong entry can at worst fail to resolve or resolve to a constant
+    /// whose type then rejects the use.
+    #[serde(default)]
+    export_aliases: HashMap<Name, Name>,
     /// Extern bindings (declaration -> C function name)
     extern_bindings: HashMap<Name, String>,
     /// @[implemented_by] bindings (declaration -> implementing function name).
@@ -4507,6 +4515,7 @@ impl Environment {
             instance_names: hashbrown::HashSet::with_capacity(capacity / 8),
             simp_lemmas: HashMap::with_capacity(capacity / 16),
             simp_registry_revision: 0,
+            export_aliases: HashMap::new(),
             param_names: HashMap::with_capacity(capacity / 4),
             persistent_extensions: HashMap::with_capacity(32),
             extern_bindings: HashMap::with_capacity(capacity / 32),

@@ -87,6 +87,9 @@ has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|block_params|has_cubical_layer.trust-ir.txt|bb4(%1: bool):|bb4(%9: bool):
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|switch_on|has_cubical_layer.trust-ir.txt|switch %3 [|switch %2 [
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|entry_params|has_cubical_layer.trust-ir.txt|bb0(%0: ptr):|bb0(%9: ptr):
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys|has_cubical_layer.trust-ir.txt|load enum.13, ptr %0|load enum.2, ptr %0
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys_volatile|has_cubical_layer.trust-ir.txt|%2 = load enum.13|%2 = volatile load enum.13
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|extract_tys|has_cubical_layer.trust-ir.txt|extractfield u8 %2, 0|extractfield u16 %2, 0
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|blocks|level_kind_ord.trust-ir.txt|ret %1|ret %1\nbb99:
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|int_consts|level_kind_ord.trust-ir.txt|const u8 3|const u8 7
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|cases|level_kind_ord.trust-ir.txt|0: bb1|7: bb1
@@ -187,6 +190,9 @@ SPEC_TABLE=$(cat <<'ROWS'
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|blocks|eval_ir_mode.rs|IRBlock.mk ir_d3 ir_nl0|IRBlock.mk ir_d7 ir_nl0
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|param_blocks|eval_ir_mode.rs|IRBlock.mk ir_d4 (ir_nl1 ir_d1)|IRBlock.mk ir_d4 ir_nl0
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|entry_params|eval_ir_mode.rs|IRFunc.mk ir_d0 (ir_nl1 ir_d0)|IRFunc.mk ir_d0 (ir_nl1 ir_d9)
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys|eval_ir_mode.rs|IRInst.load ir_h2_tmode ir_d0 Bool.false|IRInst.load ir_tLevel ir_d0 Bool.false
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys_volatile|eval_ir_mode.rs|IRInst.load ir_h2_tmode ir_d0 Bool.false|IRInst.load ir_h2_tmode ir_d0 Bool.true
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|extract_tys|eval_ir_mode.rs|IRInst.extractfield ir_tU8 ir_d2 ir_d0|IRInst.extractfield ir_tBool ir_d2 ir_d0
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|blocks|eval_ir_kind_ord.rs|IRBlock.mk ir_d5 ir_nl0|IRBlock.mk ir_d9 ir_nl0
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|cases|eval_ir_kind_ord.rs|ir_sc ir_d0 ir_d1|ir_sc ir_d7 ir_d1
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|default|eval_ir_kind_ord.rs|IRInst.switch ir_d3 ir_d5|IRInst.switch ir_d3 ir_d4
@@ -239,7 +245,7 @@ get_char_val_trunc|get_char_val_trunc::get_char_val_trunc_proved_module_matches_
 get_char_val_trunc|get_char_val_trunc::get_char_val_trunc_proved_module_matches_the_emitted_artifact|cast_tys|eval_ir_trunc.rs|IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32|IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_tU8
 get_char_val_trunc|get_char_val_trunc::get_char_val_trunc_proved_module_matches_the_emitted_artifact|rets|eval_ir_trunc.rs|IRInst.ret (ir_nl1 ir_d2)|IRInst.ret (ir_nl1 ir_d1)
 get_char_val_trunc|get_char_val_trunc::get_char_val_trunc_proved_module_matches_the_emitted_artifact|entry_params|eval_ir_trunc.rs|IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1)|IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d9)
-has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|order|eval_ir_mode.rs|(ir_nd1 (IRInst.load ir_tLevel ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3)|(ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd1 (IRInst.load ir_tLevel ir_d0 Bool.false) ir_d2)
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|order|eval_ir_mode.rs|(ir_nd1 (IRInst.load ir_h2_tmode ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3)|(ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd1 (IRInst.load ir_h2_tmode ir_d0 Bool.false) ir_d2)
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|order|eval_ir_kind_ord.rs|(ir_nd1 (IRInst.load ir_ko_tenum ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3)|(ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd1 (IRInst.load ir_ko_tenum ir_d0 Bool.false) ir_d2)
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|order|eval_ir_from_source.rs|(ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d0)) ir_d3) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d3)))|(ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d3))) (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d0)) ir_d3)
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|order|eval_ir_contains.rs|(ir_nd1 (IRInst.binop IRBinOp.and_ ir_tU8 ir_d2 ir_d3) ir_d4) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d5)|(ir_nd1 (IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d5) (ir_nd1 (IRInst.binop IRBinOp.and_ ir_tU8 ir_d2 ir_d3) ir_d4)

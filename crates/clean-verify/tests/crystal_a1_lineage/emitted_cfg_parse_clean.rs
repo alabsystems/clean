@@ -108,6 +108,8 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
     let mut agg_consts: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
     let mut extracts: BTreeMap<u32, Vec<(u32, u32, u32)>> = BTreeMap::new();
     let mut loads: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
+    let mut load_tys: BTreeMap<u32, Vec<(u32, String, bool)>> = BTreeMap::new();
+    let mut extract_tys: BTreeMap<u32, Vec<(u32, String)>> = BTreeMap::new();
     let mut icmps: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut binops: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut condbrs: BTreeMap<u32, (u32, u32, u32)> = BTreeMap::new();
@@ -196,6 +198,10 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
                 .or_default()
                 .push((strip(head, "IRInst.").to_string(), results.clone()));
             match head {
+                // `IRInst.extractfield <ty> <agg> <field>` — the TYPE slot has
+                // been read since the 2026-08-19 operand audit; before that it
+                // was carried by the term, printed by the artifact, and
+                // compared by nothing.
                 "IRInst.extractfield" => {
                     if let (Some(r), Some(src), Some(k)) = (
                         result,
@@ -203,11 +209,41 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
                         t.get(3).and_then(|s| n(s)),
                     ) {
                         extracts.entry(id).or_default().push((r, src, k));
+                        extract_tys.entry(id).or_default().push((
+                            r,
+                            norm_clean_ty(t.get(1).map_or("", String::as_str), &aliases),
+                        ));
                     }
                 }
+                // `IRInst.load <ty> <ptr> <volatile>` — all three. The
+                // constructor has exactly three operands, so a term with any
+                // other arity is REFUSED rather than half-read.
                 "IRInst.load" => {
+                    assert_eq!(
+                        t.len(),
+                        4,
+                        "the registered load carries {} operands ({inst}); `IRInst.load : IRTy \
+                         -> Nat -> Bool -> IRInst` has exactly three and this parser reads all \
+                         three",
+                        t.len().saturating_sub(1)
+                    );
+                    let vol = match t.get(3).map(String::as_str) {
+                        Some("Bool.true") => true,
+                        Some("Bool.false") => false,
+                        other => panic!(
+                            "the registered load's VOLATILE slot is {other:?}, which is neither \
+                             Bool.true nor Bool.false ({inst}). It is compared against the \
+                             emitted `volatile` prefix, so an unreadable value here would \
+                             compare equal to nothing rather than to the artifact."
+                        ),
+                    };
                     if let (Some(r), Some(src)) = (result, t.get(2).and_then(|s| n(s))) {
                         loads.entry(id).or_default().push((r, src));
+                        load_tys.entry(id).or_default().push((
+                            r,
+                            norm_clean_ty(t.get(1).map_or("", String::as_str), &aliases),
+                            vol,
+                        ));
                     }
                 }
                 "IRInst.icmp" => {
@@ -360,7 +396,9 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
         param_blocks,
         blocks,
         extracts,
+        extract_tys,
         loads,
+        load_tys,
         icmps,
         binops,
         condbrs,

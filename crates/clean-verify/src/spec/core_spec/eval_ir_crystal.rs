@@ -301,9 +301,19 @@ impl Specification {
     fn add_eval_ir_level_module(&mut self) -> Result<(), SpecError> {
         // Shorthands for the three types this body mentions.
         self.add_recursive_def(
-            "def ir_tLevel : IRTy := IRTy.enum_ ir_d0",
-            "The `Level` enum type, enum id 0. A real emission's id comes from the module's type \
-             table; nothing in the semantics depends on the number.",
+            "def ir_tLevel : IRTy := IRTy.enum_ ir_d2",
+            "The `Level` enum type, enum id 2 -- the id the emitted body names in `%3 = load \
+             enum.2, ptr %0` (tests/fixtures/level_is_zero.trust-ir.txt), and the same id \
+             `ir_ko_tenum` carries for the same Rust type in the kind_ord chain. \
+             \
+             CORRECTED 2026-08-19 from `IRTy.enum_ ir_d0`, whose description read \"enum id 0. A \
+             real emission's id comes from the module's type table; nothing in the semantics \
+             depends on the number.\" Both halves of that sentence were true and together they \
+             were a licence to write a number that matches no emission at all: the placeholder \
+             was then copied into `ir_h2_b0`, where the artifact says enum.13. The semantics \
+             indeed does not depend on the number -- `ir_exec` binds the load's type and discards \
+             it -- but the CLAIM that a registered module is the emitted one does, and that claim \
+             is what the A1 load lane now checks.",
         )?;
         self.add_recursive_def("def ir_tBool : IRTy := IRTy.bool_", "The `bool` type.")?;
         self.add_recursive_def(

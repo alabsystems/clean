@@ -1,0 +1,1055 @@
+{
+ "schema": "clean.crystal.markers_vacuity.v2",
+ "date": "2026-08-19",
+ "lane": "lane VAC",
+ "what": "The marker-line ledger for clean-kernel at today's tip: the vacuity split of the `markers_exact` population, the shape of every refusal, and the RE-DERIVATION of the two figures docs/CRYSTAL_STATUS.md \u00a70.6 carried as ASSUMED \u2014 the marker residual of 13 and the 178 -> 192 marker ceiling. Supersedes the 2026-08-13 v1 record (data/crystal_markers_vacuity_2026-08-13.json), which stays as the historical measurement.",
+ "instrument": {
+  "built_here": "scripts/trust_ir_markers.py (new) \u2014 the per-row marker ledger and the residual derivation",
+  "wired_into": "scripts/trust_ir_axes.py \u2014 7 new marker axes; `markers_lines_total`, `markers_differ_content` and `markers_unparseable` are GATED, the rest recorded",
+  "reproduce": [
+   "python3 scripts/trust_ir_markers.py ledger   --coverage <crate>.coverage.json",
+   "python3 scripts/trust_ir_markers.py residual --o3 O3.coverage.json --o3-log O3.flip.txt --o0 O0.coverage.json --o0-log O0.flip.txt",
+   "python3 scripts/trust_ir_markers.py selftest"
+  ],
+  "cost": "~2 s per whole-crate dump; no compiler"
+ },
+ "definition": {
+  "vacuous": "markers_exact: true AND markers_detail == '0 marker line(s) identical' \u2014 two EMPTY marker sequences compared",
+  "non_vacuous": "markers_exact: true AND markers_detail == 'N marker line(s) identical' with N > 0",
+  "note": "Matching emptiness is honest agreement and is NOT a gate malfunction. This lane did not make empty sequences fail: that would refuse honest agreement and cost flips for nothing. The axis makes the split VISIBLE; it does not tighten the gate.",
+  "built_vs_derived": "On the `markers differ` shape the sentinel `<end>` determines ONE side's length exactly and bounds the other. The producer (trust mir_differential.rs, frozen byte-identical for the crystal measurement) never writes both lengths, so `built_lines` / `derived_lines` are null where the artifact does not determine them \u2014 never 0. `0` is a measurement; `null` is its absence."
+ },
+ "headline": {
+  "markers_exact": 1096,
+  "vacuous": 1058,
+  "non_vacuous": 38,
+  "vacuous_fraction": "96.5%",
+  "marker_lines_behind_the_whole_population": 129,
+  "refused_rows": 463,
+  "refused_rows_that_are_derived_side_EMPTY": 462,
+  "refused_rows_that_are_a_CONTENT_disagreement": 0,
+  "marker_lines_that_agreed_before_any_refusal": 0,
+  "channel_skips": 1,
+  "prior_record_2026_08_13": {
+   "markers_exact": 1082,
+   "vacuous": 1055,
+   "non_vacuous": 27,
+   "marker_lines": 105,
+   "vacuous_fraction": "97.5%"
+  }
+ },
+ "the_single_shape_of_every_refusal": "462 of 462 parseable refusals in clean-kernel diverge at LINE 0 with the DERIVED side `<end>`. Not one is a content disagreement, and not one carries a single agreeing marker line. So `markers_exact: false` in this crate does not mean 'the two marker sequences disagree'; it means 'the built side emitted storage markers and the MIR-derived side emitted none at all'. `level::Level::is_zero` is one of those 462, not a special case.",
+ "what_markers_exact_true_is_worth": {
+  "on_1058_of_1096_rows": "It certifies that NEITHER side emitted a storage marker in the walked blocks. That is a true statement about two empty sequences. It is not evidence: it has zero discriminating power against the failure the channel exists to catch, because the failure requires a marker to exist.",
+  "on_38_of_1096_rows": "It certifies that the storage-slot liveness sequence \u2014 per-line block and statement position, slot index, and slot TYPE \u2014 is IDENTICAL between the THIR-built trust-ir and the MIR-derived trust-ir, over 129 marker lines in total, compared without normalization. That is a real, narrow structural fact about stack-slot lifetimes.",
+  "what_it_never_certifies": "Semantic equivalence. The marker channel is a separate, normalization-free comparison layered on top of an already-`agreed` canonical verdict; its failure never downgrades the semantic verdict, and its success never upgrades one.",
+  "the_sibling_axis_that_does_the_work": "Every markers_exact row also carries `N canonical line(s) identical` with N > 0 on 100% of them \u2014 3,645 canonical lines at this tip. The derived-MIR differential did real work on every row in the population. What it did not do on 1,058 of them is compare a MARKER sequence."
+ },
+ "re_derivation_of_the_two_assumed_numbers": {
+  "method": "Both are read off one control lane's -O3/-O0 pair. At -O0 `RemoveStorageMarkers` makes a marker divergence codegen-immaterial, so the flip gate does not consult the marker verdict; the -O0-minus-(-O3) flip set is therefore what the marker gate costs. Joined by def_path ACROSS the two compiles (def_index is not stable across cfg-differing builds) and by def_index WITHIN one. Attribution is MEASURED, not assumed: each residual body is reported with its -O3 derived_mir verdict and marker class.",
+  "control": "the marker CLASS census is BIT-IDENTICAL between the -O3 and -O0 arms (1058/38/462/1 in both), so the residual is a pure GATING difference, not a differential difference",
+  "marker_residual_of_13": {
+   "verdict": "REPRODUCES AS A NUMBER \u2014 BUT AS A DIFFERENT QUANTITY. Disagreement printed.",
+   "measured_here": {
+    "total_flip_event_residual": 13,
+    "composition": {
+     "differ-derived-empty": 12,
+     "channel-skip": 1
+    },
+    "attributed_to_the_marker_gate": "13 of 13 (0 unattributed)",
+    "codegen_residual": 12,
+    "codegen_refused_subcount": 11,
+    "codegen_channel_skip": 1,
+    "ctfe_residual": 1
+   },
+   "what_section_4c_recorded_2026_08_13": {
+    "codegen_residual": 14,
+    "refused_subcount": 13,
+    "channel_skip": 1,
+    "ctfe_residual": "not reported"
+   },
+   "the_disagreement": "\u00a74c's 13 is the `refused` SUBCOUNT of a 14-event CODEGEN residual. Today's 13 is the TOTAL (codegen + CTFE) event residual, and the quantity \u00a74c called 13 now measures 11. The two 13s are not the same number wearing the same name. Anyone quoting 'the marker residual of 13' must now say which.",
+   "continuity": "The single `marker channel(built)` skip is still `env::native_reducers_bool_ext::nat_gcd`, named identically on 2026-08-13 \u2014 the one row that survives both records unchanged."
+  },
+  "ceiling_178_to_192": {
+   "verdict": "THE 192 ENDPOINT REPRODUCES EXACTLY; THE 178 ENDPOINT DOES NOT.",
+   "measured_here": {
+    "codegen_O3": 180,
+    "codegen_O0": 192,
+    "headroom_codegen": 12,
+    "total_events_O3": 221,
+    "total_events_O0": 234,
+    "headroom_total": 13
+   },
+   "reading": "192 is confirmed on two independent drivers. 178 was the -O3 codegen count at an older tip; it is 180 today, which is what \u00a70.5/\u00a74h already record. The live ceiling is therefore 180 -> 192: TWELVE more codegen bodies would flip if the marker gate were satisfied, not fourteen. Stated as total flip events, 221 -> 234.",
+   "what_the_ceiling_is_NOT": "An estimate of what marker work can win. Every one of the 13 residual bodies is refused because the DERIVED side emits no markers at all, so closing them is a derivation build item, not a comparison-tolerance question."
+  }
+ },
+ "flip_backing_by_marker_class": {
+  "note": "which flip events at -O3 rest on a marker comparison that compared something",
+  "measured": {
+   "codegen:exact-vacuous": 151,
+   "codegen:exact-nonvacuous": 29,
+   "ctfe:exact-nonvacuous": 9,
+   "ctfe:exact-vacuous": 32
+  },
+  "summary": "38 of 221 flip events rest on a NON-vacuous marker comparison; 183 rest on a vacuous one",
+  "marker_lines_behind_all_flips": 129,
+  "supersedes": "\u00a74c (2026-08-13): '182 of the 209 flip events passed a marker gate that compared nothing' and 'All 32 CTFE flips are vacuous'. Today it is 183 of 221, and the CTFE lane is no longer all-vacuous: 9 of 41 CTFE flips are non-vacuous."
+ },
+ "reproduced_on_two_independent_drivers": {
+  "agreement": "Every marker-bearing class, the 38 non-vacuous rows and their line counts, the flip-by-class join and the whole residual summary are IDENTICAL across the two lanes. The only difference anywhere is `not-compared` 12,219 vs 12,215, which is the four-body difference between the two clean trees.",
+  "A": {
+   "coverage_o3": "$HOME/trust/scratchpad/lanem5/wc-ctl/dump_O3/clean_kernel.coverage.json",
+   "coverage_o3_sha256": "0b85f2d60bc2e97a93403fa2c3e99619e4b982a7649f4b22b1d6d7e19fb9088a",
+   "coverage_o0": "$HOME/trust/scratchpad/lanem5/wc-ctl/dump_O0/clean_kernel.coverage.json",
+   "coverage_o0_sha256": "0b85f2d60bc2e97a93403fa2c3e99619e4b982a7649f4b22b1d6d7e19fb9088a",
+   "flip_log_o3": "$HOME/trust/scratchpad/lanem5/wc-ctl/O3.flip.txt",
+   "flip_log_o0": "$HOME/trust/scratchpad/lanem5/wc-ctl/O0.flip.txt",
+   "seal_dir": "$HOME/trust/scratchpad/lanem5/seal-ctl",
+   "seal_trust_REV": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+   "seal_TREE": "dirty",
+   "seal_driver_dylib_sha256": "8e0c02488f85cec90ee6d7122e46a123b3cf2476c254fdc43ecedd1a1de09b1b",
+   "caveat": "TREE: dirty \u2014 the control driver was built from a lane worktree that was not clean at its recorded trust REV. Adequate for a population census reproduced across two independent drivers; NOT adequate to seed data/trust_ir_build_baseline.json, which records driver identity and was therefore left untouched by this lane."
+  },
+  "B": {
+   "coverage_o3": "$HOME/trust/scratchpad/lane2rv/wc-ctl/dump_O3/clean_kernel.coverage.json",
+   "coverage_o3_sha256": "f875cba72b51aa7b92b0079e5ff82b17c45763a85f27582676820657c6367c5f",
+   "coverage_o0": "$HOME/trust/scratchpad/lane2rv/wc-ctl/dump_O0/clean_kernel.coverage.json",
+   "coverage_o0_sha256": "f875cba72b51aa7b92b0079e5ff82b17c45763a85f27582676820657c6367c5f",
+   "flip_log_o3": "$HOME/trust/scratchpad/lane2rv/wc-ctl/O3.flip.txt",
+   "flip_log_o0": "$HOME/trust/scratchpad/lane2rv/wc-ctl/O0.flip.txt",
+   "seal_dir": "$HOME/trust/scratchpad/lane2rv/seal-ctl",
+   "seal_trust_REV": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+   "seal_TREE": "dirty",
+   "seal_driver_dylib_sha256": "bbb56beb6ee991a6b263f2253d6901a11b2c37859da90f95ed835384ebacd530",
+   "caveat": "TREE: dirty \u2014 the control driver was built from a lane worktree that was not clean at its recorded trust REV. Adequate for a population census reproduced across two independent drivers; NOT adequate to seed data/trust_ir_build_baseline.json, which records driver identity and was therefore left untouched by this lane."
+  }
+ },
+ "measurements": {
+  "A": {
+   "lane": "lanem5/wc-ctl",
+   "provenance": {
+    "coverage_o3": "$HOME/trust/scratchpad/lanem5/wc-ctl/dump_O3/clean_kernel.coverage.json",
+    "coverage_o3_sha256": "0b85f2d60bc2e97a93403fa2c3e99619e4b982a7649f4b22b1d6d7e19fb9088a",
+    "coverage_o0": "$HOME/trust/scratchpad/lanem5/wc-ctl/dump_O0/clean_kernel.coverage.json",
+    "coverage_o0_sha256": "0b85f2d60bc2e97a93403fa2c3e99619e4b982a7649f4b22b1d6d7e19fb9088a",
+    "flip_log_o3": "$HOME/trust/scratchpad/lanem5/wc-ctl/O3.flip.txt",
+    "flip_log_o0": "$HOME/trust/scratchpad/lanem5/wc-ctl/O0.flip.txt",
+    "seal_dir": "$HOME/trust/scratchpad/lanem5/seal-ctl",
+    "seal_trust_REV": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+    "seal_TREE": "dirty",
+    "seal_driver_dylib_sha256": "8e0c02488f85cec90ee6d7122e46a123b3cf2476c254fdc43ecedd1a1de09b1b",
+    "caveat": "TREE: dirty \u2014 the control driver was built from a lane worktree that was not clean at its recorded trust REV. Adequate for a population census reproduced across two independent drivers; NOT adequate to seed data/trust_ir_build_baseline.json, which records driver identity and was therefore left untouched by this lane."
+   },
+   "bodies": {
+    "O3": 13778,
+    "O0": 13778
+   },
+   "marker_classes": {
+    "O3": {
+     "exact-nonvacuous": 38,
+     "exact-vacuous": 1058,
+     "differ-derived-empty": 462,
+     "differ-built-empty": 0,
+     "differ-content": 0,
+     "channel-skip": 1,
+     "not-compared": 12219,
+     "unparseable": 0
+    },
+    "O0": {
+     "exact-nonvacuous": 38,
+     "exact-vacuous": 1058,
+     "differ-derived-empty": 462,
+     "differ-built-empty": 0,
+     "differ-content": 0,
+     "channel-skip": 1,
+     "not-compared": 12219,
+     "unparseable": 0
+    }
+   },
+   "marker_totals": {
+    "O3": {
+     "markers_exact": 1096,
+     "markers_exact_vacuous": 1058,
+     "markers_exact_nonvacuous": 38,
+     "markers_lines_total": 129,
+     "markers_differ": 462,
+     "markers_differ_derived_empty": 462,
+     "markers_differ_built_empty": 0,
+     "markers_differ_content": 0,
+     "markers_channel_skipped": 1,
+     "markers_agreed_prefix_lines": 0,
+     "markers_unparseable": 0,
+     "not_recorded_by_producer": 12682,
+     "vacuous_fraction_of_exact": 0.965328
+    },
+    "O0": {
+     "markers_exact": 1096,
+     "markers_exact_vacuous": 1058,
+     "markers_exact_nonvacuous": 38,
+     "markers_lines_total": 129,
+     "markers_differ": 462,
+     "markers_differ_derived_empty": 462,
+     "markers_differ_built_empty": 0,
+     "markers_differ_content": 0,
+     "markers_channel_skipped": 1,
+     "markers_agreed_prefix_lines": 0,
+     "markers_unparseable": 0,
+     "not_recorded_by_producer": 12682,
+     "vacuous_fraction_of_exact": 0.965328
+    }
+   },
+   "non_vacuous_rows_O3": [
+    {
+     "marker_lines": 21,
+     "def_path": "expr::bvar_in_range"
+    },
+    {
+     "marker_lines": 12,
+     "def_path": "env::native_reducers_char::is_valid_char"
+    },
+    {
+     "marker_lines": 8,
+     "def_path": "flat::types::FlatFlags::contains"
+    },
+    {
+     "marker_lines": 6,
+     "def_path": "flat::types::FlatFlags::with"
+    },
+    {
+     "marker_lines": 6,
+     "def_path": "tc::heartbeat_profiler::types::SourcePos::new"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "cert::compression::limits::MAX_STREAM_UNCOMPRESSED_BYTES"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "<sem_memory_model::MemoryValue as std::convert::From<u8>>::from"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "bitvec_compute::BvNames::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::builder::state::NodeId::index"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::bundle::MAX_BUNDLE_ENV_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_COMPRESSED_ARCHIVE_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_DECOMPRESSED_CERT_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_DICTIONARY_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_STREAM_CERT_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_UNCOMPRESSED_ARCHIVE_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#3}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#4}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::Environment::set_cumulative"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::Environment::set_lean4_core_strict_monads"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::persistent_ext::ExtensionIdx::index"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::types::Reducibility::height"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::types::SimpPriority::value"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "expr::types::FVarId::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "memory_model::AllocationId::is_null"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "memory_model::AllocationId::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "memory_model::MemoryRegion::is_empty"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "sem_memory_model::Address::is_null"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "sem_memory_model::Address::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "sem_memory_model::MemoryValue::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::TypeChecker::<'env>::set_allow_partial"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::TypeChecker::<'env>::set_allow_unsafe"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::TypeChecker::<'env>::set_cumulative"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries"
+    }
+   ],
+   "marker_line_distribution_non_vacuous": {
+    "2": 28,
+    "4": 5,
+    "6": 2,
+    "8": 1,
+    "12": 1,
+    "21": 1
+   },
+   "canonical_sibling_axis": {
+    "note": "every markers_exact row also carries `N canonical line(s) identical`; that channel is where the real derived-MIR work is recorded, and it is non-empty on 100% of them",
+    "rows_with_zero_canonical_lines": 0,
+    "total_canonical_lines_compared": 3645,
+    "canonical_line_distribution": {
+     "3": 882,
+     "4": 162,
+     "5": 21,
+     "6": 13,
+     "7": 6,
+     "8": 1,
+     "9": 5,
+     "10": 4,
+     "16": 1,
+     "17": 1
+    }
+   },
+   "flip_events_by_marker_class_O3": {
+    "codegen:exact-vacuous": 151,
+    "codegen:exact-nonvacuous": 29,
+    "ctfe:exact-nonvacuous": 9,
+    "ctfe:exact-vacuous": 32
+   },
+   "marker_lines_behind_flips_O3": 129,
+   "residual_O3_to_O0": {
+    "schema_self": "clean.trust_ir_markers.residual.v1",
+    "bodies_o3": 13778,
+    "bodies_o0": 13778,
+    "lanes": {
+     "codegen": {
+      "o3_events": 180,
+      "o0_events": 192,
+      "unjoinable_o3": 0,
+      "unjoinable_o0": 0,
+      "extra_at_o0": 12,
+      "lost_at_o0": 0,
+      "lost_names": []
+     },
+     "ctfe": {
+      "o3_events": 41,
+      "o0_events": 42,
+      "unjoinable_o3": 0,
+      "unjoinable_o0": 0,
+      "extra_at_o0": 1,
+      "lost_at_o0": 0,
+      "lost_names": []
+     }
+    },
+    "residual_rows": [
+     {
+      "lane": "codegen",
+      "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "cert::cross_project::hex_digit",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u8` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "cert::types::proof_cert_has_recursive_children",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "env::native_reducers_bitvec::to_signed",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "env::native_reducers_bool_ext::nat_gcd",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "channel-skip",
+      "derived_lines": null,
+      "built_lines_min": null,
+      "is_marker_refusal": true,
+      "markers_detail": "marker channel(built): storage marker in unwalked block 8 (cleanup/dead code)"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "env::native_reducers_sint::to_signed",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "expr::types::BigNat::is_zero::{closure#0}",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u64` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "memory_model::MemoryRegion::new",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::memory_model::AllocationId` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "mode::CleanMode::allows_large_elimination",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b6.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "tc::reduction::cofib::CofibAtom::var",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:u32` vs derived `<end>`"
+     },
+     {
+      "lane": "ctfe",
+      "def_path": "env::ext_instance::PRIORITY_BYTES",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+     }
+    ],
+    "summary": {
+     "residual_events": 13,
+     "residual_attributed_to_marker_gate": 13,
+     "residual_unattributed": 0,
+     "residual_by_marker_class": {
+      "differ-derived-empty": 12,
+      "channel-skip": 1
+     },
+     "ceiling_codegen": [
+      180,
+      192
+     ],
+     "ceiling_total": [
+      221,
+      234
+     ]
+    }
+   }
+  },
+  "B": {
+   "lane": "lane2rv/wc-ctl",
+   "provenance": {
+    "coverage_o3": "$HOME/trust/scratchpad/lane2rv/wc-ctl/dump_O3/clean_kernel.coverage.json",
+    "coverage_o3_sha256": "f875cba72b51aa7b92b0079e5ff82b17c45763a85f27582676820657c6367c5f",
+    "coverage_o0": "$HOME/trust/scratchpad/lane2rv/wc-ctl/dump_O0/clean_kernel.coverage.json",
+    "coverage_o0_sha256": "f875cba72b51aa7b92b0079e5ff82b17c45763a85f27582676820657c6367c5f",
+    "flip_log_o3": "$HOME/trust/scratchpad/lane2rv/wc-ctl/O3.flip.txt",
+    "flip_log_o0": "$HOME/trust/scratchpad/lane2rv/wc-ctl/O0.flip.txt",
+    "seal_dir": "$HOME/trust/scratchpad/lane2rv/seal-ctl",
+    "seal_trust_REV": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+    "seal_TREE": "dirty",
+    "seal_driver_dylib_sha256": "bbb56beb6ee991a6b263f2253d6901a11b2c37859da90f95ed835384ebacd530",
+    "caveat": "TREE: dirty \u2014 the control driver was built from a lane worktree that was not clean at its recorded trust REV. Adequate for a population census reproduced across two independent drivers; NOT adequate to seed data/trust_ir_build_baseline.json, which records driver identity and was therefore left untouched by this lane."
+   },
+   "bodies": {
+    "O3": 13774,
+    "O0": 13774
+   },
+   "marker_classes": {
+    "O3": {
+     "exact-nonvacuous": 38,
+     "exact-vacuous": 1058,
+     "differ-derived-empty": 462,
+     "differ-built-empty": 0,
+     "differ-content": 0,
+     "channel-skip": 1,
+     "not-compared": 12215,
+     "unparseable": 0
+    },
+    "O0": {
+     "exact-nonvacuous": 38,
+     "exact-vacuous": 1058,
+     "differ-derived-empty": 462,
+     "differ-built-empty": 0,
+     "differ-content": 0,
+     "channel-skip": 1,
+     "not-compared": 12215,
+     "unparseable": 0
+    }
+   },
+   "marker_totals": {
+    "O3": {
+     "markers_exact": 1096,
+     "markers_exact_vacuous": 1058,
+     "markers_exact_nonvacuous": 38,
+     "markers_lines_total": 129,
+     "markers_differ": 462,
+     "markers_differ_derived_empty": 462,
+     "markers_differ_built_empty": 0,
+     "markers_differ_content": 0,
+     "markers_channel_skipped": 1,
+     "markers_agreed_prefix_lines": 0,
+     "markers_unparseable": 0,
+     "not_recorded_by_producer": 12678,
+     "vacuous_fraction_of_exact": 0.965328
+    },
+    "O0": {
+     "markers_exact": 1096,
+     "markers_exact_vacuous": 1058,
+     "markers_exact_nonvacuous": 38,
+     "markers_lines_total": 129,
+     "markers_differ": 462,
+     "markers_differ_derived_empty": 462,
+     "markers_differ_built_empty": 0,
+     "markers_differ_content": 0,
+     "markers_channel_skipped": 1,
+     "markers_agreed_prefix_lines": 0,
+     "markers_unparseable": 0,
+     "not_recorded_by_producer": 12678,
+     "vacuous_fraction_of_exact": 0.965328
+    }
+   },
+   "non_vacuous_rows_O3": [
+    {
+     "marker_lines": 21,
+     "def_path": "expr::bvar_in_range"
+    },
+    {
+     "marker_lines": 12,
+     "def_path": "env::native_reducers_char::is_valid_char"
+    },
+    {
+     "marker_lines": 8,
+     "def_path": "flat::types::FlatFlags::contains"
+    },
+    {
+     "marker_lines": 6,
+     "def_path": "flat::types::FlatFlags::with"
+    },
+    {
+     "marker_lines": 6,
+     "def_path": "tc::heartbeat_profiler::types::SourcePos::new"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "cert::compression::limits::MAX_STREAM_UNCOMPRESSED_BYTES"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}"
+    },
+    {
+     "marker_lines": 4,
+     "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "<sem_memory_model::MemoryValue as std::convert::From<u8>>::from"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "bitvec_compute::BvNames::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::builder::state::NodeId::index"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::bundle::MAX_BUNDLE_ENV_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_COMPRESSED_ARCHIVE_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_DECOMPRESSED_CERT_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_DICTIONARY_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_STREAM_CERT_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::MAX_UNCOMPRESSED_ARCHIVE_BYTES"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#3}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#4}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::Environment::set_cumulative"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::Environment::set_lean4_core_strict_monads"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::persistent_ext::ExtensionIdx::index"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::types::Reducibility::height"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "env::types::SimpPriority::value"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "expr::types::FVarId::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "memory_model::AllocationId::is_null"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "memory_model::AllocationId::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "memory_model::MemoryRegion::is_empty"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "sem_memory_model::Address::is_null"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "sem_memory_model::Address::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "sem_memory_model::MemoryValue::new"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::TypeChecker::<'env>::set_allow_partial"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::TypeChecker::<'env>::set_allow_unsafe"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::TypeChecker::<'env>::set_cumulative"
+    },
+    {
+     "marker_lines": 2,
+     "def_path": "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries"
+    }
+   ],
+   "marker_line_distribution_non_vacuous": {
+    "2": 28,
+    "4": 5,
+    "6": 2,
+    "8": 1,
+    "12": 1,
+    "21": 1
+   },
+   "canonical_sibling_axis": {
+    "note": "every markers_exact row also carries `N canonical line(s) identical`; that channel is where the real derived-MIR work is recorded, and it is non-empty on 100% of them",
+    "rows_with_zero_canonical_lines": 0,
+    "total_canonical_lines_compared": 3645,
+    "canonical_line_distribution": {
+     "3": 882,
+     "4": 162,
+     "5": 21,
+     "6": 13,
+     "7": 6,
+     "8": 1,
+     "9": 5,
+     "10": 4,
+     "16": 1,
+     "17": 1
+    }
+   },
+   "flip_events_by_marker_class_O3": {
+    "codegen:exact-vacuous": 151,
+    "codegen:exact-nonvacuous": 29,
+    "ctfe:exact-nonvacuous": 9,
+    "ctfe:exact-vacuous": 32
+   },
+   "marker_lines_behind_flips_O3": 129,
+   "residual_O3_to_O0": {
+    "schema_self": "clean.trust_ir_markers.residual.v1",
+    "bodies_o3": 13774,
+    "bodies_o0": 13774,
+    "lanes": {
+     "codegen": {
+      "o3_events": 180,
+      "o0_events": 192,
+      "unjoinable_o3": 0,
+      "unjoinable_o0": 0,
+      "extra_at_o0": 12,
+      "lost_at_o0": 0,
+      "lost_names": []
+     },
+     "ctfe": {
+      "o3_events": 41,
+      "o0_events": 42,
+      "unjoinable_o3": 0,
+      "unjoinable_o0": 0,
+      "extra_at_o0": 1,
+      "lost_at_o0": 0,
+      "lost_names": []
+     }
+    },
+    "residual_rows": [
+     {
+      "lane": "codegen",
+      "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "cert::cross_project::hex_digit",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u8` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "cert::types::proof_cert_has_recursive_children",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "env::native_reducers_bitvec::to_signed",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "env::native_reducers_bool_ext::nat_gcd",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "channel-skip",
+      "derived_lines": null,
+      "built_lines_min": null,
+      "is_marker_refusal": true,
+      "markers_detail": "marker channel(built): storage marker in unwalked block 8 (cleanup/dead code)"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "env::native_reducers_sint::to_signed",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "expr::types::BigNat::is_zero::{closure#0}",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u64` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "memory_model::MemoryRegion::new",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::memory_model::AllocationId` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "mode::CleanMode::allows_large_elimination",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b6.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`"
+     },
+     {
+      "lane": "codegen",
+      "def_path": "tc::reduction::cofib::CofibAtom::var",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:u32` vs derived `<end>`"
+     },
+     {
+      "lane": "ctfe",
+      "def_path": "env::ext_instance::PRIORITY_BYTES",
+      "events": 1,
+      "o3_verdict": "agreed",
+      "o3_markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "derived_lines": 0,
+      "built_lines_min": 1,
+      "is_marker_refusal": true,
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+     }
+    ],
+    "summary": {
+     "residual_events": 13,
+     "residual_attributed_to_marker_gate": 13,
+     "residual_unattributed": 0,
+     "residual_by_marker_class": {
+      "differ-derived-empty": 12,
+      "channel-skip": 1
+     },
+     "ceiling_codegen": [
+      180,
+      192
+     ],
+     "ceiling_total": [
+      221,
+      234
+     ]
+    }
+   }
+  }
+ },
+ "not_done_here": [
+  "data/trust_ir_build_baseline.json was NOT seeded. Both control drivers record `TREE: dirty`, and the baseline records driver identity; seeding it from an unverified driver would manufacture a green. The three new gated axes therefore read UNBASELINED-RED until a lane with a sealed, clean driver runs `trust_ir_axes.py tighten --write`. That is the file's designed fail-closed behaviour, not a regression.",
+  "The producer still does not record BOTH marker line counts on a refusal. Adding them needs a mir_differential.rs edit and that file is frozen byte-identical for the crystal measurement."
+ ]
+}

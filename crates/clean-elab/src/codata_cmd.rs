@@ -1444,8 +1444,37 @@ pub(crate) fn elab_codef_decl(
 /// Plain codef: `fname` (zero-state, yields `Unit.unit`) or
 /// `fname <state>`. Indexed codef: `fname <idx>` (zero-state) or
 /// `fname <idx> <state>` — the index argument is not consumed here; the
-/// codata's own target expression governs the index move, and a
-/// mismatched index in the self-call fails the kernel check loudly.
+/// codata's own target expression governs the index move.
+///
+/// KNOWN GAP (measured 2026-08-19, not a claim of safety). This doc previously
+/// asserted that "a mismatched index in the self-call fails the kernel check
+/// loudly". It does NOT. The written index is silently discarded, so a codef
+/// whose self-call passes the wrong index is accepted and means something the
+/// author did not write:
+///
+/// ```text
+/// codata IS3 : (n : Nat) → Type where
+///   val : Nat
+///   next : IS3 (Nat.succ n)
+///
+/// codef tr (n : Nat) : IS3 n where
+///   val := n
+///   next := tr n                              -- wrong; target demands `Nat.succ n`
+///
+/// theorem t : IS3.val (IS3.next (tr 4)) = 5 := rfl   -- ACCEPTED
+/// ```
+///
+/// `= 5` is what the target's index move produces; the author's `tr n` would
+/// give `= 4`, and that version is REJECTED. So the erroneous program is the
+/// one that compiles. This is unsound only with respect to author intent — the
+/// generated term is still kernel-checked, so no ill-typed term is admitted.
+///
+/// Closing it needs the codata field's TARGET INDEX expression (`Nat.succ n`)
+/// to compare the self-call's index against. That expression is not reachable
+/// here: this function sees only the corecursor's parameter NAMES, not the
+/// codata's field types. Threading the per-field target index down to this
+/// point is the build item; until then the index is documented as ignored
+/// rather than described as checked.
 fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<SurfaceExpr> {
     match strip_parens(expr) {
         SurfaceExpr::Ident(_, id) if id == fname && !indexed => Some(ident("PUnit.unit")),

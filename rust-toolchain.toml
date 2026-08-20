@@ -1,18 +1,29 @@
-# Clean builds on ordinary upstream Rust. Nothing here needs a custom rustc:
-# `clean-kernel` is `#![forbid(unsafe_code)]` Rust, and the Trust-facing
-# crates (`clean-autoform`, `clean-reflect`) are consumed *by* Trust from
-# Trust's own checkout, which selects its own toolchain there.
+# The PUBLIC snapshot's toolchain pin. Copied over the export's
+# rust-toolchain.toml by transforms.sh; the private repo keeps channel = "trust".
 #
-# This pin exists because rustup resolves a toolchain from the directory a
-# `cargo` command is run in, and a workstation may set `rustup default` to a
-# verifying compiler fork. Without this file, `cargo check` in a fresh clone
-# of Clean inherits that default and dies inside third-party build scripts
-# (libc, unicode-ident, ...) on proof obligations that have nothing to do with
-# Clean. Pinning here makes the build depend on the repository, not on the
-# operator's ambient rustup state — for contributors and for the reproducible
-# release gate alike.
+# WHY THIS FILE EXISTS. The private repo pins the Trust toolchain, whose
+# in-compilation verifier is FAIL-CLOSED, and pairs it with the
+# `-Ztrust-verify=off` opt-out in .cargo/config.toml — which that file itself
+# calls "the other half of the pin". Unlike nn (whose boundary simply does not
+# export .cargo/config.toml), Clean's publish/manifest.txt exports the whole
+# `.cargo/` directory, so BOTH halves must be swapped in the export:
 #
-# MSRV is declared separately as `rust-version` in Cargo.toml; this pin is the
-# toolchain the project builds and gates with, not the floor it supports.
+#   rust-toolchain.toml   -> this file (a public clone has no rustup toolchain
+#                            named `trust` to resolve at all)
+#   .cargo/config.toml    -> publish/public-cargo-config.toml (a stock compiler
+#                            rejects the nightly-only `-Ztrust-verify=off` on
+#                            EVERY unit — including on the publication host's
+#                            own aarch64-apple-darwin public-clone gate)
+#
+# Same shape nn and aterm use (publish/public-rust-toolchain.toml there).
+# Stock upstream, pinned rather than floating so the snapshot is reproducible,
+# and so the engine's anonymous CHECK_CMD (`cargo check --locked --workspace
+# --all-targets --all-features && scripts/check_public_release_libraries.sh`)
+# is a property of the candidate, not of the operator's rustup default.
+# 1.97.1 is the toolchain the repo last gated green on before the trust flip
+# (workspace clippy + local_gate + 51/51 pinned suite), and satisfies the
+# workspace MSRV (rust-version = "1.90").
 [toolchain]
-channel = "stable"
+channel = "1.97.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

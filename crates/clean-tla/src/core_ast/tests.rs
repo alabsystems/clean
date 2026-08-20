@@ -335,6 +335,7 @@ fn test_expr_from_tla_core_if_then_else() {
 /// Build the bounded CHOOSE `CHOOSE x ∈ S : x > 0` as a tla-core expression.
 fn core_bounded_choose() -> Spanned<core_ast::Expr> {
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: Some(Box::new(Spanned::dummy(core_ast::Expr::Ident(
             "S".to_string(),
@@ -379,6 +380,7 @@ fn test_expr_from_tla_core_unbounded_choose_returns_error() {
     // CHOOSE x : x > 0 (no domain) is not representable — must error, not
     // fabricate a domain.
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: None,
         pattern: None,
@@ -401,6 +403,7 @@ fn test_expr_from_tla_core_unbounded_choose_returns_error() {
 fn test_expr_from_tla_core_tuple_pattern_choose_returns_error() {
     // CHOOSE <<a, b>> ∈ S : P — tuple-pattern binders are not representable.
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("p".to_string()),
         domain: Some(Box::new(Spanned::dummy(core_ast::Expr::Ident(
             "S".to_string(),
@@ -579,6 +582,7 @@ fn test_expr_from_tla_core_prime_in_action_round_trips() {
 #[test]
 fn test_formula_from_tla_core_bounded_forall() {
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: Some(Box::new(Spanned::dummy(core_ast::Expr::Ident(
             "S".to_string(),
@@ -606,6 +610,7 @@ fn test_formula_from_tla_core_bounded_forall() {
 #[test]
 fn test_formula_from_tla_core_unbounded_forall() {
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: None,
         pattern: None,
@@ -621,6 +626,7 @@ fn test_formula_from_tla_core_unbounded_forall() {
 #[test]
 fn test_formula_from_tla_core_bounded_exists() {
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: Some(Box::new(Spanned::dummy(core_ast::Expr::Ident(
             "S".to_string(),
@@ -1111,6 +1117,7 @@ fn ident(name: &str) -> Spanned<core_ast::Expr> {
 /// Helper: a single `BoundVar` named `name` with an explicit identifier domain.
 fn bound_in(name: &str, domain: &str) -> core_ast::BoundVar {
     core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy(name.to_string()),
         domain: Some(Box::new(ident(domain))),
         pattern: None,
@@ -1500,6 +1507,7 @@ fn test_expr_from_tla_core_set_builder_multi_binder_errors() {
 fn test_expr_from_tla_core_func_def_missing_domain_errors() {
     // [x |-> x] with no domain -> single_named_domain rejects missing domain.
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: None,
         pattern: None,
@@ -1512,6 +1520,7 @@ fn test_expr_from_tla_core_func_def_missing_domain_errors() {
 fn test_expr_from_tla_core_set_filter_tuple_pattern_errors() {
     // {<<a, b>> \in S : TRUE} -> bound_name rejects tuple patterns.
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("p".to_string()),
         domain: Some(Box::new(ident("S"))),
         pattern: Some(core_ast::BoundPattern::Tuple(vec![
@@ -1530,6 +1539,7 @@ fn test_expr_from_tla_core_set_filter_tuple_pattern_errors() {
 fn test_expr_from_tla_core_set_filter_missing_domain_errors() {
     // SetFilter bound without a domain -> rejected.
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("x".to_string()),
         domain: None,
         pattern: None,
@@ -1872,6 +1882,7 @@ fn projection(name: &str, index: i64) -> TlaExpr {
 /// A bounded tuple-pattern binder `<<a, b>> \in domain`.
 fn tuple_bound(components: &[&str], domain: &str) -> core_ast::BoundVar {
     core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("_tuple".to_string()),
         domain: Some(Box::new(ident(domain))),
         pattern: Some(core_ast::BoundPattern::Tuple(
@@ -2060,6 +2071,7 @@ fn test_formula_tuple_pattern_later_domain_sees_earlier_projection() {
         Box::new(ident("y")),
     ));
     let z_bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("z".to_string()),
         domain: Some(Box::new(Spanned::dummy(core_ast::Expr::SetEnum(vec![
             ident("x"),
@@ -2114,6 +2126,7 @@ fn test_formula_tuple_pattern_unbounded_returns_error() {
     // \E <<x, y>> : P  (no domain) has no set to range over and no element to
     // project, so it must be rejected precisely, not given a fabricated domain.
     let bound = core_ast::BoundVar {
+        domain_group: None,
         name: Spanned::dummy("_tuple".to_string()),
         domain: None,
         pattern: Some(core_ast::BoundPattern::Tuple(vec![

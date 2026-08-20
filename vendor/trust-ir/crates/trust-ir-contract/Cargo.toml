@@ -1,0 +1,30 @@
+# trust-ir-contract — cross-repo shared verification vocabulary
+#
+# The canonical home for the small set of data types that cross the
+# Trust <-> backend boundary (the SMT Formula/Sort/Symbol vocabulary, block
+# ids, the translation-validation data records, and the proof-assurance
+# enums). Trust's `trust-types` / `trust-verifier-api` re-export these so the
+# compiler is unchanged; backends (e.g. clean) depend on this leaf crate via
+# the universal-IR sibling path instead of reaching into the Trust repo.
+#
+# Leaf by construction: depends only on serde + rustc-hash. It must never
+# depend on trust-types/trust-verifier-api (that would re-create the cycle
+# this crate exists to remove).
+#
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# Copyright 2026 Andrew Yates | License: Apache-2.0
+
+[package]
+name = "trust-ir-contract"
+version = "0.6.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/alabsystems/trust-ir"
+authors = ["Andrew Yates <andrewyates.name@gmail.com>"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+rustc-hash = "2"
+
+[dev-dependencies]
+serde_json = "1"

@@ -1,0 +1,625 @@
+{
+ "schema": "clean.crystal.chain_revalidation/v2",
+ "measured_utc_date": "2026-08-19",
+ "what_this_is": "The THIRD independent revalidation of the ten complete five-link chains plus the designated target Level::is_zero, and the FIRST that also compares the twelfth committed fixture (level_is_zero_deref_callee), which no dump had ever been compared against. Producer: trust origin/main 28fb5dd812 -- 68 commits past the second revalidation's ccf52b40c3, spanning wave-GS (struct-interior GEP flip), wave-CP (checked-chain parameter leaf), wave-AF (scalar_ok off the address path) and vtable slices 16/17, every one of which edits the lowering that emits these bodies.",
+ "supersedes": {
+  "record": "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json",
+  "relationship": "CONFIRMS AND EXTENDS -- nothing in it is retracted and nothing is rewritten."
+ },
+ "chains": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "IDENTICAL",
+    "drift_classes": [],
+    "changed_lines": 0,
+    "detail": {},
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": ""
+   },
+   "links_at_head": {
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17985 ~ clean_kernel[124c]::mode::{impl#0}::has_cubical_layer), asserts=0, lineage=sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054, flipped_so_far=51"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
+    "at_head": "sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054",
+    "at_prior_revalidation_ccf52b40c3": "sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17985,
+    "def_index_at_prior_revalidation": 17982,
+    "func_id_at_head": 4179,
+    "func_id_at_prior_revalidation": 4178
+   }
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @level::Level::kind_ord(functy.470) {  ->  rustcc fn @level::Level::kind_ord(functy.305) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture level_kind_ord.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @level::Level::kind_ord(functy.470) {\n+rustcc fn @level::Level::kind_ord(functy.305) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n"
+   },
+   "links_at_head": {
+    "instr_count": 14,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17098 ~ clean_kernel[124c]::level::{impl#18}::kind_ord), asserts=0, lineage=sha256:2a7187529697fcc9d9ef27ba1213769667b0e080101dfed013942ff6fd815f46, flipped_so_far=213"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:c2d6ef14a416ae797875e23c48f280060ab8a0f6978f2e4fea09a5f3040a419c",
+    "at_head": "sha256:2a7187529697fcc9d9ef27ba1213769667b0e080101dfed013942ff6fd815f46",
+    "at_prior_revalidation_ccf52b40c3": "sha256:2a7187529697fcc9d9ef27ba1213769667b0e080101dfed013942ff6fd815f46",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17098,
+    "def_index_at_prior_revalidation": 17095,
+    "func_id_at_head": 3900,
+    "func_id_at_prior_revalidation": 3899
+   }
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "changed_lines": 2,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @mode::CleanMode::from_source_system(functy.732) {  ->  rustcc fn @mode::CleanMode::from_source_system(functy.551) {"
+     ],
+     "type-table-index": [
+      "bb0(%0: enum.175):  ->  bb0(%0: enum.170):"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture from_source_system.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @mode::CleanMode::from_source_system(functy.732) {\n+rustcc fn @mode::CleanMode::from_source_system(functy.551) {\n     ; #producer: trust\n     ; #names: %0=\"system\"\n-bb0(%0: enum.175):\n+bb0(%0: enum.170):\n     %2 = extractfield u8 %0, 0  ; #loc: 399 186 8\n     switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 399 186 8\n bb1:\n"
+   },
+   "links_at_head": {
+    "instr_count": 27,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17980 ~ clean_kernel[124c]::mode::{impl#0}::from_source_system), asserts=0, lineage=sha256:136721e4c7d6678cc0e5e8e6d97f97c6fcdc0a1d7db543e2c8f7c93aa468fecc, flipped_so_far=52"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+    "at_head": "sha256:136721e4c7d6678cc0e5e8e6d97f97c6fcdc0a1d7db543e2c8f7c93aa468fecc",
+    "at_prior_revalidation_ccf52b40c3": "sha256:136721e4c7d6678cc0e5e8e6d97f97c6fcdc0a1d7db543e2c8f7c93aa468fecc",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17980,
+    "def_index_at_prior_revalidation": 17977,
+    "func_id_at_head": 4177,
+    "func_id_at_prior_revalidation": 4176
+   }
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "changed_lines": 2,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @flat::types::FlatFlags::contains(functy.661) {  ->  rustcc fn @flat::types::FlatFlags::contains(functy.485) {"
+     ],
+     "type-table-index": [
+      "bb0(%0: struct.1012, %1: struct.1012):  ->  bb0(%0: struct.955, %1: struct.955):"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture flat_flags_contains.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @flat::types::FlatFlags::contains(functy.661) {\n+rustcc fn @flat::types::FlatFlags::contains(functy.485) {\n     ; #producer: trust\n     ; #names: %0=\"self\", %1=\"other\"\n-bb0(%0: struct.1012, %1: struct.1012):\n+bb0(%0: struct.955, %1: struct.955):\n     %2 = extractfield u8 %0, 0  ; #loc: 386 90 9\n     %3 = extractfield u8 %1, 0  ; #loc: 386 90 18\n     %4 = and u8 %2, %3  ; #loc: 386 90 8\n"
+   },
+   "links_at_head": {
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16850 ~ clean_kernel[124c]::flat::types::{impl#1}::contains), asserts=0, lineage=sha256:585ecb8207e737f8041ec4b67e6a09e1a6e2663124fac452854a6dcc187c0e3a, flipped_so_far=162"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f",
+    "at_head": "sha256:585ecb8207e737f8041ec4b67e6a09e1a6e2663124fac452854a6dcc187c0e3a",
+    "at_prior_revalidation_ccf52b40c3": "sha256:585ecb8207e737f8041ec4b67e6a09e1a6e2663124fac452854a6dcc187c0e3a",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 16850,
+    "def_index_at_prior_revalidation": 16847,
+    "func_id_at_head": 3833,
+    "func_id_at_prior_revalidation": 3832
+   }
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @expr::bvar_in_range(functy.641) {  ->  rustcc fn @expr::bvar_in_range(functy.464) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture bvar_in_range.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @expr::bvar_in_range(functy.641) {\n+rustcc fn @expr::bvar_in_range(functy.464) {\n     ; #producer: trust\n     ; #names: %0=\"idx\", %1=\"start\", %2=\"end\"\n bb0(%0: u32, %1: u32, %2: u32):\n"
+   },
+   "links_at_head": {
+    "instr_count": 13,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16580 ~ clean_kernel[124c]::expr::bvar_in_range), asserts=0, lineage=sha256:6c8feca75b52a019c3fc54caac0175cb557c054b66d2336c46ad6eaaaf975853, flipped_so_far=214"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+    "at_head": "sha256:6c8feca75b52a019c3fc54caac0175cb557c054b66d2336c46ad6eaaaf975853",
+    "at_prior_revalidation_ccf52b40c3": "sha256:6c8feca75b52a019c3fc54caac0175cb557c054b66d2336c46ad6eaaaf975853",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 16580,
+    "def_index_at_prior_revalidation": 16577,
+    "func_id_at_head": 3751,
+    "func_id_at_prior_revalidation": 3750
+   }
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {  ->  rustcc fn @env::native_reducers_char::is_valid_char(functy.374) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture is_valid_char.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {\n+rustcc fn @env::native_reducers_char::is_valid_char(functy.374) {\n     ; #producer: trust\n     ; #names: %0=\"n\"\n bb0(%0: u64):\n"
+   },
+   "links_at_head": {
+    "instr_count": 15,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15095 ~ clean_kernel[124c]::env::native_reducers_char::is_valid_char), asserts=0, lineage=sha256:b0d73d33d9d64972c96661782c3390ba5f747011e3418e85258145562898b7fd, flipped_so_far=206"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+    "at_head": "sha256:b0d73d33d9d64972c96661782c3390ba5f747011e3418e85258145562898b7fd",
+    "at_prior_revalidation_ccf52b40c3": "sha256:b0d73d33d9d64972c96661782c3390ba5f747011e3418e85258145562898b7fd",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 15095,
+    "def_index_at_prior_revalidation": 15092,
+    "func_id_at_head": 3345,
+    "func_id_at_prior_revalidation": 3344
+   }
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "changed_lines": 14,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {  ->  rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.856) {"
+     ],
+     "type-table-index": [
+      "%2 = load enum.181, ptr %0  ; #loc: 425 20 16  ->  %2 = load enum.176, ptr %0  ; #loc: 425 20 16",
+      "%4 = const enum.181 { 0 }  ; #loc: 425 20 16  ->  %4 = const enum.176 { 0 }  ; #loc: 425 20 16",
+      "%5 = const enum.181 { 1 }  ; #loc: 425 20 16  ->  %5 = const enum.176 { 1 }  ; #loc: 425 20 16",
+      "%6 = const enum.181 { 2 }  ; #loc: 425 20 16  ->  %6 = const enum.176 { 2 }  ; #loc: 425 20 16",
+      "%7 = const enum.181 { 3 }  ; #loc: 425 20 16  ->  %7 = const enum.176 { 3 }  ; #loc: 425 20 16",
+      "%8 = const enum.181 { 4 }  ; #loc: 425 20 16  ->  %8 = const enum.176 { 4 }  ; #loc: 425 20 16",
+      "%9 = const enum.181 { 5 }  ; #loc: 425 20 16  ->  %9 = const enum.176 { 5 }  ; #loc: 425 20 16",
+      "%10 = const enum.181 { 6 }  ; #loc: 425 20 16  ->  %10 = const enum.176 { 6 }  ; #loc: 425 20 16",
+      "%11 = const enum.181 { 7 }  ; #loc: 425 20 16  ->  %11 = const enum.176 { 7 }  ; #loc: 425 20 16",
+      "%12 = const enum.181 { 8 }  ; #loc: 425 20 16  ->  %12 = const enum.176 { 8 }  ; #loc: 425 20 16",
+      "%13 = const enum.181 { 9 }  ; #loc: 425 20 16  ->  %13 = const enum.176 { 9 }  ; #loc: 425 20 16",
+      "%14 = const enum.181 { 10 }  ; #loc: 425 20 16  ->  %14 = const enum.176 { 10 }  ; #loc: 425 20 16",
+      "bb12(%1: enum.181):  ->  bb12(%1: enum.176):"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture expr_path_step_clone.trust-ir.txt\n+++ live dump\n@@ -1,43 +1,43 @@\n-rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {\n+rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.856) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.181, ptr %0  ; #loc: 425 20 16\n+    %2 = load enum.176, ptr %0  ; #loc: 425 20 16\n     %3 = extractfield u8 %2, 0  ; #loc: 425 20 16\n     switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 425 20 16\n bb1:\n-    %4 = const enum.181 { 0 }  ; #loc: 425 20 16\n+    %4 = const enum.176 { 0 }  ; #loc: 425 20 16\n     br bb12(%4)  ; #loc: 425 20 16\n bb2:\n-    %5 = const enum.181 { 1 }  ; #loc: 425 20 16\n+    %5 = const enum.176 { 1 }  ; #loc: 425 20 16\n     br bb12(%5)  ; #loc: 425 20 16\n bb3:\n-    %6 = const enum.181 { 2 }  ; #loc: 425 20 16\n+    %6 = const enum.176 { 2 }  ; #loc: 425 20 16\n     br bb12(%6)  ; #loc: 425 20 16\n bb4:\n-    %7 = const enum.181 { 3 }  ; #loc: 425 20 16\n+    %7 = const enum.176 { 3 }  ; #loc: 425 20 16\n     br bb12(%7)  ; #loc: 425 20 16\n bb5:\n-    %8 = const enum.181 { 4 }  ; #loc: 425 20 16\n+    %8 = const enum.176 { 4 }  ; #loc: 425 20 16\n     br bb12(%8)  ; #loc: 425 20 16\n bb6:\n-    %9 = const enum.181 { 5 }  ; #loc: 425 20 16\n+    %9 = const enum.176 { 5 }  ; #loc: 425 20 16\n     br bb12(%9)  ; #loc: 425 20 16\n bb7:\n-    %10 = const enum.181 { 6 }  ; #loc: 425 20 16\n+    %10 = const enum.176 { 6 }  ; #loc: 425 20 16\n     br bb12(%10)  ; #loc: 425 20 16\n bb8:\n-    %11 = const enum.181 { 7 }  ; #loc: 425 20 16\n+    %11 = const enum.176 { 7 }  ; #loc: 425 20 16\n     br bb12(%11)  ; #loc: 425 20 16\n bb9:\n-    %12 = const enum.181 { 8 }  ; #loc: 425 20 16\n+    %12 = const enum.176 { 8 }  ; #loc: 425 20 16\n     br bb12(%12)  ; #loc: 425 20 16\n bb10:\n-    %13 = const enum.181 { 9 }  ; #loc: 425 20 16\n+    %13 = const enum.176 { 9 }  ; #loc: 425 20 16\n     br bb12(%13)  ; #loc: 425 20 16\n bb11:\n-    %14 = const enum.181 { 10 }  ; #loc: 425 20 16\n+    %14 = const enum.176 { 10 }  ; #loc: 425 20 16\n     br bb12(%14)  ; #loc: 425 20 16\n-bb12(%1: enum.181):\n+bb12(%1: enum.176):\n     ret %1  ; #loc: 425 20 16\n }\n"
+   },
+   "links_at_head": {
+    "instr_count": 26,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:35597 ~ clean_kernel[124c]::tc::expr_location::{impl#4}::clone), asserts=0, lineage=sha256:7732e080397f50addf84d3aad2af5b589a2f9e8d3b3272ce7a64be851cfc57d4, flipped_so_far=185"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+    "at_head": "sha256:7732e080397f50addf84d3aad2af5b589a2f9e8d3b3272ce7a64be851cfc57d4",
+    "at_prior_revalidation_ccf52b40c3": "sha256:7732e080397f50addf84d3aad2af5b589a2f9e8d3b3272ce7a64be851cfc57d4",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 35597,
+    "def_index_at_prior_revalidation": 35591,
+    "func_id_at_head": 6303,
+    "func_id_at_prior_revalidation": 6302
+   }
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {  ->  rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.378) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture float_div.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {\n+rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.378) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n"
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15302 ~ clean_kernel[124c]::env::native_reducers_float::reduce_float_div::{closure#0}), asserts=0, lineage=sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e, flipped_so_far=221"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+    "at_head": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+    "at_prior_revalidation_ccf52b40c3": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 15302,
+    "def_index_at_prior_revalidation": 15299,
+    "func_id_at_head": 3401,
+    "func_id_at_prior_revalidation": 3400
+   }
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {  ->  rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.367) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture get_char_val_trunc.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {\n+rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.367) {\n     ; #producer: trust\n     ; #names: %1=\"n\"\n bb0(%0: (), %1: u64):\n"
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:14934 ~ clean_kernel[124c]::env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}), asserts=0, lineage=sha256:b1f02a9d3b01f0e50e554402ab769ea1fbc23188e47177d7528a96ae9c4f9b59, flipped_so_far=207"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+    "at_head": "sha256:b1f02a9d3b01f0e50e554402ab769ea1fbc23188e47177d7528a96ae9c4f9b59",
+    "at_prior_revalidation_ccf52b40c3": "sha256:b1f02a9d3b01f0e50e554402ab769ea1fbc23188e47177d7528a96ae9c4f9b59",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 14934,
+    "def_index_at_prior_revalidation": 14931,
+    "func_id_at_head": 3288,
+    "func_id_at_prior_revalidation": 3287
+   }
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {  ->  rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.118) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture meta_tag_shl.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {\n+rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.118) {\n     ; #producer: trust\n bb0:\n     %0 = const u64 1  ; #loc: 435 157 30\n"
+   },
+   "links_at_head": {
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: CTFE compiled from trust-ir, did=DefId(0:19646 ~ clean_kernel[124c]::tc::local_context::{impl#0}::push_low_local::META_TAG), asserts=1, lineage=sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14, flipped_so_far=27"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+    "at_head": "sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14",
+    "at_prior_revalidation_ccf52b40c3": "sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 19646,
+    "def_index_at_prior_revalidation": 19643,
+    "func_id_at_head": 4633,
+    "func_id_at_prior_revalidation": 4632
+   }
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "callee-index"
+    ],
+    "changed_lines": 6,
+    "detail": {
+     "callee-index": [
+      "%12 = call @func.4914(%9)  ; #loc: 389 528 34  ->  %12 = call @func.3886(%9)  ; #loc: 389 528 34",
+      "%13 = call @func.4925(%12)  ; #loc: 389 528 37  ->  %13 = call @func.3897(%12)  ; #loc: 389 528 37",
+      "%16 = call @func.4914(%15)  ; #loc: 389 529 34  ->  %16 = call @func.3886(%15)  ; #loc: 389 529 34",
+      "%17 = call @func.4925(%16)  ; #loc: 389 529 37  ->  %17 = call @func.3897(%16)  ; #loc: 389 529 37",
+      "%18 = call @func.4914(%11)  ; #loc: 389 528 50  ->  %18 = call @func.3886(%11)  ; #loc: 389 528 50",
+      "%19 = call @func.4925(%18)  ; #loc: 389 528 53  ->  %19 = call @func.3897(%18)  ; #loc: 389 528 53"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 3,
+    "gep_in_emitted_body": 3,
+    "unified_diff": "--- fixture level_is_zero.trust-ir.txt\n+++ live dump\n@@ -19,20 +19,20 @@\n     %9 = gep inbounds i8, ptr %0, %8  ; #loc: 389 525 8\n     %10 = const i64 16  ; #loc: 389 525 8\n     %11 = gep inbounds i8, ptr %0, %10  ; #loc: 389 525 8\n-    %12 = call @func.4914(%9)  ; #loc: 389 528 34\n-    %13 = call @func.4925(%12)  ; #loc: 389 528 37\n+    %12 = call @func.3886(%9)  ; #loc: 389 528 34\n+    %13 = call @func.3897(%12)  ; #loc: 389 528 37\n     condbr %13, bb7, bb8  ; #loc: 389 528 34\n bb5:\n     %14 = const i64 16  ; #loc: 389 525 8\n     %15 = gep inbounds i8, ptr %0, %14  ; #loc: 389 525 8\n-    %16 = call @func.4914(%15)  ; #loc: 389 529 34\n-    %17 = call @func.4925(%16)  ; #loc: 389 529 37\n+    %16 = call @func.3886(%15)  ; #loc: 389 529 34\n+    %17 = call @func.3897(%16)  ; #loc: 389 529 37\n     br bb6(%17)  ; #loc: 389 525 8\n bb6(%1: bool):\n     ret %1  ; #loc: 389 531 5\n bb7:\n-    %18 = call @func.4914(%11)  ; #loc: 389 528 50\n-    %19 = call @func.4925(%18)  ; #loc: 389 528 53\n+    %18 = call @func.3886(%11)  ; #loc: 389 528 50\n+    %19 = call @func.3897(%18)  ; #loc: 389 528 53\n     br bb9(%19)  ; #loc: 389 528 34\n bb8:\n     %20 = const bool false  ; #loc: 389 528 34\n"
+   },
+   "links_at_head": {
+    "instr_count": 28,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 6,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": false
+    },
+    "flip_fired": false,
+    "flip_event_raw": null
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+    "at_head": "sha256:1e9070c2763eab7f6a6fe9deeb8dcb24370c4adf44c3240afbb5b16a2a361d81",
+    "at_prior_revalidation_ccf52b40c3": "sha256:876ccd4b8a77010c4ce9d9291007353050d8eb18269c70270f5ff5d5cb80dda0",
+    "moved_since_prior_revalidation": true,
+    "def_index_at_head": 17092,
+    "def_index_at_prior_revalidation": 17089,
+    "func_id_at_head": 3897,
+    "func_id_at_prior_revalidation": 3896
+   }
+  }
+ },
+ "extra_fixtures": {
+  "level_is_zero_deref_callee": {
+   "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+   "why_it_is_here": "Committed and asserted against (crystal_a1_lineage/level_is_zero.rs reads it verbatim as the recorded reason `is_zero` cannot be transcribed), never a chain, and until this run compared to no dump at all. It is now in the freshness script's EXTRA_BODIES table and the closure test makes an uncompared fixture impossible.",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "callee-index",
+     "functy-index",
+     "global-index"
+    ],
+    "changed_lines": 4,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.53) {  ->  rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {"
+     ],
+     "callee-index": [
+      "%1 = call @func.8369(%0)  ; #loc: 389 60 13  ->  %1 = call @func.7170(%0)  ; #loc: 389 60 13",
+      "%5 = call @func.7675(%1, %4)  ; #loc: 389 61 13  ->  %5 = call @func.6477(%1, %4)  ; #loc: 389 61 13"
+     ],
+     "global-index": [
+      "%2 = global_addr @global.4527  ; #loc: 389 61 20  ->  %2 = global_addr @global.4524  ; #loc: 389 61 20"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture level_is_zero_deref_callee.trust-ir.txt\n+++ live dump\n@@ -1,11 +1,11 @@\n-rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.53) {\n+rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %1 = call @func.8369(%0)  ; #loc: 389 60 13\n-    %2 = global_addr @global.4527  ; #loc: 389 61 20\n+    %1 = call @func.7170(%0)  ; #loc: 389 60 13\n+    %2 = global_addr @global.4524  ; #loc: 389 61 20\n     %3 = const u64 34  ; #loc: 389 61 20\n     %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 389 61 20\n-    %5 = call @func.7675(%1, %4)  ; #loc: 389 61 13\n+    %5 = call @func.6477(%1, %4)  ; #loc: 389 61 13\n     ret %5  ; #loc: 389 62 5\n }\n"
+   },
+   "links_at_head": {
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 2,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "unsupported",
+     "markers_exact": false
+    },
+    "flip_fired": false
+   },
+   "lineage_at_head": "sha256:cda23d83af52abef67f8a8fd0b9f2fa4567f0084e4e467f09406f67a9745da4e"
+  }
+ },
+ "measurement": {
+  "recipe": "scripts/trust_ir_build.sh --print-only, then scripts/crystal_fixture_freshness.py",
+  "artifact": {
+   "coverage_json_sha256": "5dc2d6bd91112ec804938554d78de516859b17f6089cc9e5c055cb7014e006b9",
+   "trust_ir_txt_sha256": "c4608b53805cc386c1fc55c839938cdaf8a7761ac3fed9c6101652f5c57ce860"
+  }
+ },
+ "provenance": {
+  "trust_worktree_rev": "28fb5dd81254f9673de139e8a8b676ecfad965d3",
+  "clean_worktree_rev": "7558a86c8b5ba233c08b058f2af3b89d047c0e52",
+  "seal": "scripts/seal_driver.sh seal laneC; verify OK; guard PASS on every invocation (the sealed `tc` wrapper fails closed before exec)",
+  "driver_stamp_is_not_source_identity": "The sealed driver is stamped `1.99.0-dev (94147b34f 2026-08-11)` and its seal REV file reads 4854cf3a9c (seal_driver.sh takes REV from TRUST_REPO_ROOT's HEAD, not from the building worktree). Both are recording artefacts, not the source. MEASURED: a first build stamped with the true rev 28fb5dd812 was REJECTED by the stage1 sysroot std with E0514 (`found crate compiled by a different version`), which is why the stamp must match the compiler that built that std. The SOURCE is 28fb5dd812: the build log records WORKTREE REV 28fb5dd812 with an EMPTY `git diff --name-only HEAD` over compiler/ crates/ library/ src/ Cargo.toml, and the ten compiled-file blob digests are printed there.",
+  "driver_sha256": {
+   "librustc_driver_laneC2.dylib": "3a98ffe7da191150dacb77a7854e31a0693a06ecce292bb6fa44bd206306b2f3",
+   "rustc-main": "5f84418cd61a2946e8bd7377c4ea001c8349ea92e39f4c91a9f9f6a9d1d2e1d1",
+   "note": "seal_driver.sh selftest cannot discriminate this driver from an older one -- both register the identical 11 perturb classes -- so identification is BY OUTPUT DIGEST and by source, the same two-part method the ccf52b40c3 record used."
+  }
+ },
+ "the_finding": "THE ONE FIXTURE NOTHING EVER COMPARED IS THE ONE THAT HAD DRIFTED. All eleven CHAINED bodies are IDENTICAL or NUMBERING-ONLY with zero instructions moved, exactly as at the two earlier producers. The TWELFTH committed fixture -- level_is_zero_deref_callee, read verbatim by crystal_a1_lineage/level_is_zero.rs and in no table any comparison ever walked -- came back STRUCTURAL on its first ever comparison. On inspection the body is INTACT: six instructions, same opcodes, same operands, and the `const u64 34` carrying the addressed string's LENGTH byte-identical. What moved is THREE whole-crate index tables, one of which the classifier did not model: functy 53->45, @func 8369->7170 and 7675->6477, and @global 4527->4524. `global-index` is now the fifth AMBER class, with the same justification and the same stated limitation as `callee-index` -- and the verdict is NUMBERING-ONLY.",
+ "what_this_run_does_not_claim": "A `@global.N` (like a `@func.N`) is an INDEX; the module text carries no declaration under that name (globals print as @__trust_promoted_N), so this comparison does NOT re-derive WHICH global is addressed. It establishes that the instruction, its operand shape and the accompanying length constant are unchanged, and that no gate lane reads the index. That is why it is AMBER and not GREEN, and it is the honest strength of the claim.",
+ "producer_moved_since_the_second_revalidation": {
+  "commits": 68,
+  "spanning": "wave-GS (struct-interior GEP flip), wave-CP (checked-chain PARAMETER leaf), wave-AF (scalar_ok off the address path), vtable slices 16 and 17, r4 local mono dumps -- every one of which edits crates/trust-thir-lower/src or compiler/rustc_mir_transform/src."
+ },
+ "still_current_at_a_newer_tip": {
+  "measured_at": "28fb5dd81254f9673de139e8a8b676ecfad965d3",
+  "tip_when_this_was_written": "cf2bcc349af48ea080ae5972dfa658848a1dbfe4",
+  "producer_diff_is_EMPTY": true,
+  "note": "`git diff 28fb5dd812 <tip> -- crates/trust-thir-lower/src crates/trust-ir-bridge/src compiler/rustc_mir_transform/src first-party/trust-ir` is EMPTY, so this measurement is current for the producer at that tip, not merely for the commit it names."
+ },
+ "freeze_at_this_rev": {
+  "mir_differential.rs": "461ab7afcca265c0c11988e619831e19555aa321",
+  "flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+  "crate_module.rs": "266c373cbbfcc09a1235d9e4870da9511a4965b0",
+  "differential.rs": "2149e954076c01d6657d84efc9496cbe7eb0543b",
+  "verdict": "all four blob-identical to 289ba550db and to the tip"
+ }
+}

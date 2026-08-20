@@ -1,0 +1,563 @@
+{
+  "schema": "clean.crystal.enum-tag-pin.v1",
+  "measured_utc_date": "2026-08-19",
+  "provenance": {
+    "clean_rev": "891b7d153",
+    "artifacts": "crates/clean-verify/tests/fixtures/*.trust-ir.txt, verbatim trustc emissions already pinned by crystal_a1_lineage",
+    "method": "switch arms, aggregate-constant tags and IR type tokens extracted mechanically from the committed fixtures; discriminants re-derived from the enum declarations"
+  },
+  "why": [
+    "A crystal chain proves a theorem about the trust-ir trustc emits for a shipped body.",
+    "Where that body is a match over a kernel enum, the emitted IR names no variants -- it",
+    "switches on the NUMERIC DISCRIMINANT, and Clean's side of the proof encodes the same",
+    "numbers (clean_mode_tag, level_kind_tag). Before this pin that mapping appeared in the",
+    "Rust source nowhere at all. The language guarantees the VALUES given a declaration order",
+    "(Reference: unspecified first discriminant is 0, each later one is previous + 1); nothing",
+    "guaranteed the ORDER. Reordering two variants -- a refactor that changes no behaviour of",
+    "the Rust program -- moves Cubical off 2 while the registered module, the recorded fixture",
+    "and every gate over them stay byte-identical, and the chain goes on reporting green while",
+    "proving something false about the shipped body."
+  ],
+  "enforced_by": [
+    "scripts/check_enum_tag_pin.py -- this manifest vs the enum sources, the spec tag defs and the recorded artifacts; wired into scripts/local_gate.sh --fast",
+    "STAGE 2 adds crates/clean-kernel/src/crystal_tag_pin.rs -- const _: () = assert!(...), failing the BUILD; see staged_upgrade"
+  ],
+  "invariants": [
+    "declaration order and discriminant values match this manifest exactly (this is the reorder hole, and it is closed for all four enums today)",
+    "discriminant == declaration index, so the ABI tag and serde's variant index cannot diverge",
+    "for each artifact: explicit switch arms UNION switch_default_covers == the full discriminant set (a new variant therefore fires the gate, because it changes what `default` means in a proved module)",
+    "every aggregate-constant tag `const <ir_type> { k }` is a pinned discriminant",
+    "the recorded ir_type token still matches (see ir_type_note)",
+    "STAGE 2 additionally enforces #[repr(u8)] and an explicit `= N` per variant on the three fieldless enums"
+  ],
+  "ir_type_note": [
+    "ir_type is the type token in the emitted text (`load enum.13, ptr %0`).",
+    "CORRECTED 2026-08-19: this note read \"crystal_a1_lineage's CFG parser does NOT read it",
+    "-- emitted_cfg_parse.rs takes t.last() for `load` (the POINTER register) and",
+    "t.get(2)/t.get(3) for `extractfield`, dropping the type at t.get(1). Pinning it here is",
+    "the only place the token is read at all.\" That was true when written and the",
+    "operand-completeness audit closed it the same day: `load_tys` and `extract_tys` are now",
+    "lanes of the CFG gate, so the token is compared spec-against-artifact on every run. The",
+    "audit's first act was to turn the flagship RED -- ir_h2_b0 loaded `ir_tLevel`",
+    "(IRTy.enum_ 0) where this manifest says enum.13 -- and the registered module was",
+    "corrected to `ir_h2_tmode : IRTy := IRTy.enum_ ir_d13`, which is what this pin asserts.",
+    "This pin is therefore no longer the ONLY reader, and it is not redundant either: it",
+    "reads the token against the ENUM DECLARATION, where the lane reads it against the",
+    "registered spec. It is still a RECORDED artifact value: a legitimate re-dump can",
+    "renumber it, and when it does this gate fires so a human looks, which is the intended",
+    "behaviour and not a false alarm."
+  ],
+  "enums": [
+    {
+      "rust_path": "clean_kernel::mode::CleanMode",
+      "source": "crates/clean-kernel/src/mode.rs",
+      "ident": "CleanMode",
+      "repr": null,
+      "explicit_discriminants": false,
+      "pin_table": null,
+      "variants": [
+        [
+          "Constructive",
+          0
+        ],
+        [
+          "Impredicative",
+          1
+        ],
+        [
+          "Cubical",
+          2
+        ],
+        [
+          "Directed",
+          3
+        ],
+        [
+          "Classical",
+          4
+        ],
+        [
+          "SetTheoretic",
+          5
+        ]
+      ],
+      "spec_tag_defs": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_mode.rs",
+          "const": "SRC_CLEAN_MODE_TAG",
+          "must_contain": "def clean_mode_tag (m : CleanModeR) : Nat := CleanModeR.rec (fun (_ : CleanModeR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 m"
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "crates/clean-verify/tests/fixtures/has_cubical_layer.trust-ir.txt",
+          "body": "mode::CleanMode::has_cubical_layer",
+          "ir_type": "enum.13",
+          "role": "switched_on",
+          "switch_arms": [
+            2,
+            3
+          ],
+          "switch_default_covers": [
+            0,
+            1,
+            4,
+            5
+          ],
+          "agg_const_tags": [],
+          "note": "the flagship chain. Arms 2 and 3 are Cubical and Directed, the two modes matches!(self, Cubical | Directed) is true on."
+        },
+        {
+          "file": "crates/clean-verify/tests/fixtures/from_source_system.trust-ir.txt",
+          "body": "mode::CleanMode::from_source_system",
+          "ir_type": "enum.13",
+          "role": "constructed",
+          "switch_arms": null,
+          "switch_default_covers": null,
+          "agg_const_tags": [
+            0,
+            1,
+            2,
+            4,
+            5
+          ],
+          "note": "CleanMode is the RESULT here, materialised as `const enum.13 { k }` in every arm. 3 (Directed) is absent because no source system maps to it -- a fact about from_source_system, re-derived by the gate rather than trusted."
+        }
+      ],
+      "staged": "STAGE 2 (not in this tree): #[repr(u8)] + explicit `= N` on this enum, and its compile-time tripwire in crates/clean-kernel/src/crystal_tag_pin.rs. Held back deliberately -- see staged_upgrade."
+    },
+    {
+      "rust_path": "clean_kernel::mode::SourceSystem",
+      "source": "crates/clean-kernel/src/mode.rs",
+      "ident": "SourceSystem",
+      "repr": null,
+      "explicit_discriminants": false,
+      "pin_table": null,
+      "variants": [
+        [
+          "Lean4",
+          0
+        ],
+        [
+          "Coq",
+          1
+        ],
+        [
+          "Agda",
+          2
+        ],
+        [
+          "CubicalAgda",
+          3
+        ],
+        [
+          "IsabelleHOL",
+          4
+        ],
+        [
+          "HOLLight",
+          5
+        ],
+        [
+          "HOL4",
+          6
+        ],
+        [
+          "Mizar",
+          7
+        ],
+        [
+          "MetamathZFC",
+          8
+        ],
+        [
+          "MetamathSet",
+          9
+        ],
+        [
+          "PVS",
+          10
+        ],
+        [
+          "ACL2",
+          11
+        ]
+      ],
+      "spec_tag_defs": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_from_source.rs",
+          "const": "SRC_SOURCE_SYSTEM_TAG",
+          "must_contain": "def source_system_tag (s : SourceSystemR) : Nat := SourceSystemR.rec (fun (_ : SourceSystemR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 ir_d6 ir_d7 ir_d8 ir_d9 ir_d10 ir_d11 s"
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "crates/clean-verify/tests/fixtures/from_source_system.trust-ir.txt",
+          "body": "mode::CleanMode::from_source_system",
+          "ir_type": "enum.175",
+          "role": "switched_on",
+          "switch_arms": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            11
+          ],
+          "switch_default_covers": [
+            10
+          ],
+          "agg_const_tags": [],
+          "note": "non-contiguous on purpose: 10 (PVS) rides the DEFAULT edge and 11 (ACL2) has an explicit arm, because both land on Classical. Swapping them is silent in the source and invisible to every existing gate."
+        }
+      ],
+      "staged": "STAGE 2 (not in this tree): #[repr(u8)] + explicit `= N` on this enum, and its compile-time tripwire in crates/clean-kernel/src/crystal_tag_pin.rs. Held back deliberately -- see staged_upgrade."
+    },
+    {
+      "rust_path": "clean_kernel::tc::expr_location::ExprPathStep",
+      "source": "crates/clean-kernel/src/tc/expr_location.rs",
+      "ident": "ExprPathStep",
+      "repr": null,
+      "explicit_discriminants": false,
+      "pin_table": null,
+      "variants": [
+        [
+          "AppFn",
+          0
+        ],
+        [
+          "AppArg",
+          1
+        ],
+        [
+          "LamBody",
+          2
+        ],
+        [
+          "LamType",
+          3
+        ],
+        [
+          "PiDom",
+          4
+        ],
+        [
+          "PiBody",
+          5
+        ],
+        [
+          "LetType",
+          6
+        ],
+        [
+          "LetVal",
+          7
+        ],
+        [
+          "LetBody",
+          8
+        ],
+        [
+          "MDataExpr",
+          9
+        ],
+        [
+          "ProjExpr",
+          10
+        ]
+      ],
+      "spec_tag_defs": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_path_step.rs",
+          "const": "SRC_EXPR_PATH_STEP_TAG",
+          "must_contain": "def expr_path_step_tag (s : ExprPathStepR) : Nat := ExprPathStepR.rec (fun (_ : ExprPathStepR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 ir_d6 ir_d7 ir_d8 ir_d9 ir_d10 s"
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "crates/clean-verify/tests/fixtures/expr_path_step_clone.trust-ir.txt",
+          "body": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+          "ir_type": "enum.181",
+          "role": "switched_on_and_constructed",
+          "switch_arms": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "switch_default_covers": [
+            10
+          ],
+          "agg_const_tags": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "note": "the derived Clone is the identity on the tag, so every discriminant appears twice -- once as a switch arm (10 via default) and once as a materialised aggregate constant."
+        }
+      ],
+      "staged": "STAGE 2 (not in this tree): #[repr(u8)] + explicit `= N` on this enum, and its compile-time tripwire in crates/clean-kernel/src/crystal_tag_pin.rs. Held back deliberately -- see staged_upgrade."
+    },
+    {
+      "rust_path": "clean_kernel::level::Level",
+      "source": "crates/clean-kernel/src/level/mod.rs",
+      "ident": "Level",
+      "repr": null,
+      "explicit_discriminants": false,
+      "pin_table": null,
+      "repr_exception": [
+        "PAYLOAD-BEARING, so `as u8` does not apply and #[repr(u8)] would be a LAYOUT change to",
+        "the kernel's hottest type. It is pinned by declaration order here instead. Taking the",
+        "repr would move the emitted bytes on the DESIGNATED crystal target and stale every",
+        "recorded lineage digest on it (fixtures/level_is_zero.trust-ir.txt,",
+        "fixtures/level_is_zero.a0.json, which pins 4 PASS / 2 FAIL). That flip needs its own",
+        "differential measurement and a re-dump; this gate closes the reorder hole without it.",
+        "Residual, stated rather than smoothed: Level's tag ENCODING (u8 at aggregate field 0)",
+        "is still rustc's choice, not a source-level guarantee."
+      ],
+      "variants": [
+        [
+          "Zero",
+          0
+        ],
+        [
+          "Succ",
+          1
+        ],
+        [
+          "Max",
+          2
+        ],
+        [
+          "IMax",
+          3
+        ],
+        [
+          "Param",
+          4
+        ]
+      ],
+      "spec_tag_defs": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_kind_ord.rs",
+          "const": "SRC_LEVEL_KIND_TAG",
+          "must_contain": "def level_kind_tag (l : Level) : Nat := Level.rec (fun (_ : Level) => Nat) ir_d0 (fun (_ : Level) (_ : Nat) => ir_d1) (fun (_ : Level) (_ : Level) (_ : Nat) (_ : Nat) => ir_d2) (fun (_ : Level) (_ : Level) (_ : Nat) (_ : Nat) => ir_d3) (fun (_ : Name) => ir_d4) l"
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "crates/clean-verify/tests/fixtures/level_is_zero.trust-ir.txt",
+          "body": "level::Level::is_zero",
+          "ir_type": "enum.2",
+          "role": "switched_on",
+          "switch_arms": [
+            0,
+            1,
+            4,
+            2
+          ],
+          "switch_default_covers": [
+            3
+          ],
+          "agg_const_tags": [],
+          "note": "the DESIGNATED crystal target. Arm order is the emitted order, not sorted: 0 Zero, 1 Succ, 4 Param, 2 Max, default 3 IMax."
+        },
+        {
+          "file": "crates/clean-verify/tests/fixtures/level_kind_ord.trust-ir.txt",
+          "body": "level::Level::kind_ord",
+          "ir_type": "enum.2",
+          "role": "switched_on",
+          "switch_arms": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "switch_default_covers": [
+            4
+          ],
+          "agg_const_tags": [],
+          "note": "kind_ord returns the discriminant itself, which is why level_kind_tag and level_kind_ord coincide -- a coincidence eval_ir_kind_ord.rs registers as two separate claims on purpose."
+        }
+      ]
+    }
+  ],
+  "not_pinned_here": {
+    "clean_mathverse::types::SourceSystem": "already #[repr(u8)] with explicit discriminants and a TryFrom<u8>; it is the enum actually persisted by numeric tag into .mathverse shard headers (`source_system: SourceSystem::Lean4 as u8`). Distinct type from clean_kernel::mode::SourceSystem despite the shared name.",
+    "clean_mathverse::types::DeclKind": "already #[repr(u8)] + explicit discriminants + TryFrom<u8>; persisted as one byte in MathverseConstantHeader.",
+    "clean_mathverse::types::ImportConfidence": "already #[repr(u8)] + explicit discriminants, deliberately non-contiguous (0,1,2,3,6,...) for shard binary compatibility.",
+    "finding": "the PERSISTENCE layer had already pinned its numeric tags. The trusted core, whose tags the proofs depend on, had not."
+  },
+  "producer_consequence": {
+    "what_changes": [
+      "Adding #[repr(u8)] makes trustc's THIR lowering carry a repr HINT it did not carry before:",
+      "trust-thir-lower/src/lib.rs enum_repr_hint(adt) -> EnumDef::with_repr, so EnumDef.repr goes",
+      "None -> Some(U8) for CleanMode, SourceSystem and ExprPathStep in the emitted module."
+    ],
+    "why_it_is_a_strengthening": [
+      "Without a hint, trust's interpreter derives the tag width from the DISCRIMINANT RANGE:",
+      "EnumDef::canonical_tag_repr() falls through to EnumTagRepr::smallest_for(min, max)",
+      "(trust-ir/src/ty.rs:1001-1011). So the model's `u8` agreed with the emitted",
+      "`extractfield u8` only because the values happened to fit in a byte; a single wide",
+      "discriminant would have silently widened the MODEL while the emitted body kept reading one",
+      "byte. With the hint present the interpreter instead enforces `hint.fits(d)` for every",
+      "discriminant and returns None -- a hard interpreter error, and a lowering DECLINE at",
+      "registration -- rather than widening. That is a real gap closed, not an annotation."
+    ],
+    "what_must_be_re_measured": [
+      "Body TEXT is unaffected: the recorded .trust-ir.txt fixtures are function bodies and carry",
+      "no enum def, so every link-2a CFG gate compares the same bytes it compared before.",
+      "Per-body LINEAGE is affected: body_lineage_digest frames mini_module.stable_digest()",
+      "(trust-thir-lower/src/lineage.rs:171-192) and the mini-module carries the type table, so the",
+      "three fieldless-enum chains -- has_cubical_layer, from_source_system, expr_path_step_clone --",
+      "will mint NEW lineage digests on the next dump. Re-dump and re-run",
+      "scripts/crystal_fixture_freshness.py, then supersede those three .lineage.json records the",
+      "way data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json supersedes its predecessor.",
+      "The DESIGNATED target level::Level::is_zero is deliberately untouched -- Level takes no repr",
+      "here -- so its lineage, its A0 verdicts and data/crystal_a1_artifact_pin.json's target row",
+      "are not disturbed by this change."
+    ],
+    "not_yet_measured_here": [
+      "This session could not run a trustc driver build (weight 24 on a machine already at 88 of",
+      "96 GB), so the re-dump above is STATED, not done. Nothing in this manifest claims otherwise",
+      "and no gate was weakened to hide it."
+    ]
+  },
+  "niche_descriptor_finding": {
+    "context": "data/crystal_layout_divergence_2026-08-18.json: 115 of 208 enum defs in this crate carry a Niche descriptor, so `tag at field 0` is not a safe default.",
+    "do_the_chained_bodies_assume_it": "YES, all six recorded artifacts do: every one reads the discriminant as `extractfield u8 %v, 0` on the enum aggregate. A niche-encoded enum has no separate tag field -- the discriminant is recovered from a payload value -- so that instruction would be reading a payload byte.",
+    "after_this_change": "For the three FIELDLESS enums the assumption is now guaranteed by the source rather than inferred: a #[repr(u8)] fieldless enum IS a u8, there is no payload for a niche to live in, and crystal_tag_pin.rs asserts size_of == 1 at compile time.",
+    "residual": "level::Level is payload-bearing and takes no repr here, so its tag encoding (Direct, u8, aggregate field 0) remains rustc's choice, evidenced only by the recorded artifact. It is exactly the class the 115 Niche descriptors warn about. Closing it means flipping Level to #[repr(u8)] behind a differential measurement -- a separate change, named in the level/mod.rs CRYSTAL TAG PIN comment.",
+    "what_the_text_form_cannot_show": "The trust-ir TEXT printer emits no enum layout descriptor at all (docs/CRYSTAL_STATUS.md 4h.5), so no committed .trust-ir.txt fixture can answer Direct-vs-Niche for any of these four enums. Deciding it requires the BINARY dump."
+  },
+  "spec_tag_def_census": [
+    "The reflected tag definitions in the spec, enumerated rather than sampled:",
+    "`grep -o 'def [a-z_]*tag[a-z_]* ([^)]*)' crates/clean-verify/src/spec/core_spec/*.rs` returns",
+    "clean_mode_tag, source_system_tag, expr_path_step_tag and level_kind_tag as the only defs that",
+    "encode a Rust enum's discriminant; all four are pinned above. ir_scalar_tag and kexpr_tag are",
+    "about the reflected IR/KExpr calculus, not a Rust layout, and the *_of_tag / *_of_tag_tag defs",
+    "are the round-trip inverses of the four."
+  ],
+  "persistence_audit": {
+    "question": "clean-kernel is the TRUSTED CORE and #[repr(u8)] on a public enum is ABI-affecting. Does anything persist these tags by number?",
+    "kernel_enums_are_never_cast": "grep over crates/ for `CleanMode::<V> as`, `SourceSystem::<V> as`, `ExprPathStep::<V> as`, `Level::<V> as u*` returns ZERO hits in clean-kernel. Every `SourceSystem::<V> as u8` in the tree belongs to clean_mathverse::types::SourceSystem, a DIFFERENT type that shares the name.",
+    "the_one_real_wire": [
+      "Environment carries `mode: CleanMode` (env/mod.rs:1999) and is bincode-persisted by",
+      "Environment::to_bincode / save_to_file / load_from_file (env/serialization.rs:166-196).",
+      "serde's derived encoding for a fieldless enum keys off the DECLARATION INDEX, not the",
+      "discriminant -- self-describing formats emit the variant NAME, compact ones the index --",
+      "so neither wire reads the repr and this change is byte-neutral on both. It is byte-neutral",
+      "only while discriminant == declaration index, which is why that is a gated invariant here",
+      "and an assertion in crystal_tag_pin.rs::test_crystal_serde_wire_is_unchanged_by_the_repr."
+    ],
+    "olean": "clean-olean stores Lean 4 object tags, not CleanMode; the only `cubical` references there are prose about Lean having no cubical tag.",
+    "round_trips_tested": "crystal_tag_pin.rs asserts JSON round-trips by NAME for CleanMode and SourceSystem and a bincode round-trip for all six CleanMode variants."
+  },
+  "mutation_proof": {
+    "measured_utc_date": "2026-08-19",
+    "rule": "a gate nobody has seen fail is a gate nobody has seen. Each row was applied to a scratch copy, the gate run, the mutation reverted; the baseline is green before and after every row.",
+    "stage_1_gate_in_this_tree": [
+      {
+        "mutation": "swap Cubical/Directed in CleanMode (no explicit discriminants \u2014 the stage-1 world)",
+        "fires": "DECLARATION ORDER moved"
+      },
+      {
+        "mutation": "swap Max/IMax in Level",
+        "fires": "DECLARATION ORDER moved"
+      },
+      {
+        "mutation": "add a seventh CleanMode variant",
+        "fires": "DECLARATION ORDER moved"
+      },
+      {
+        "mutation": "reword SRC_SOURCE_SYSTEM_TAG (ir_d10/ir_d11 swapped)",
+        "fires": "no longer contains the pinned reflected tag definition"
+      },
+      {
+        "mutation": "tamper with has_cubical_layer.trust-ir.txt's switch arm 2 -> 5",
+        "fires": "switch arms [5, 3], pinned [2, 3]  AND  explicit arms + default coverage != discriminant set"
+      }
+    ],
+    "stage_2_only_measured_on_the_held_back_tree": [
+      {
+        "mutation": "swap Cubical/Directed with their explicit values",
+        "fires": "DECLARATION ORDER moved"
+      },
+      {
+        "mutation": "renumber Cubical = 7",
+        "fires": "script: discriminant 7, pinned 2  AND  rustc: error[E0080] evaluation panicked: assertion failed: CleanMode::Cubical as u8 == 2 (cargo check -p clean-kernel --lib, exit 101)"
+      },
+      {
+        "mutation": "delete #[repr(u8)] from CleanMode",
+        "fires": "`#[repr(u8)]` is gone"
+      },
+      {
+        "mutation": "edit only CLEAN_MODE_TAGS in crystal_tag_pin.rs, enum untouched",
+        "fires": "pin table disagrees with the manifest"
+      },
+      {
+        "mutation": "insert `Linear,` after `Cubical = 2` with no explicit discriminant",
+        "fires": "rustc: error[E0081] discriminant value `3` assigned more than once -- the compiler itself refuses the silent renumbering, before any gate runs"
+      }
+    ],
+    "verified_at_this_change": [
+      "stage 1 (this tree): scripts/check_enum_tag_pin.py green; scripts/crystal_freshness_scope.py NUMBERING-SCOPE (exit 0, unchanged from origin/main); scripts/paragon_ratchet.sh PASS",
+      "stage 2 (held back, measured at clean 891b7d153): cargo fmt --all --check clean; cargo check --locked --workspace 27/27 exit 0; cargo clippy --locked --workspace --all-targets -- -D warnings exit 0; cargo test -p clean-kernel --lib crystal_tag_pin 6 passed 0 failed; cargo test -p clean-verify --test crystal_a1_lineage 64 passed 0 failed; paragon ratchet PASS (+0 on all four totals)"
+    ]
+  },
+  "staged_upgrade": {
+    "why_this_is_two_commits": [
+      "The reorder hole -- the one that made a registered crystal module a theorem about a body",
+      "that is no longer shipped -- is closed by PINNING DECLARATION ORDER, and that costs zero",
+      "bytes of clean-kernel source. It is here, enforced, today.",
+      "",
+      "#[repr(u8)] and explicit `= N` are the reinforcement: they make a reorder change no NUMBER",
+      "at all, make an unnumbered insertion an E0081 rather than a silent renumbering, and pin the",
+      "tag ENCODING that the emitted `extractfield u8 %v, 0` reads. They also EDIT mode.rs and",
+      "tc/expr_location.rs, which are chained bodies' own defining source files, and",
+      "scripts/crystal_freshness_scope.py (landed 2026-08-19) correctly reads that as CONTENT-SCOPE",
+      "and goes RED: the body the spec module transcribes may no longer be the body the producer",
+      "emits, and no fixture in the tree can say. Clearing it needs a live trustc dump and a new",
+      "data/crystal_chain_revalidation_*.json record.",
+      "",
+      "Measured, not assumed: with the stage-2 edits applied, crystal_freshness_scope.py exits 1 and",
+      "names five chains (expr_path_step_clone, from_source_system, has_cubical_layer, level_is_zero,",
+      "level_kind_ord). Without them it exits 0 at NUMBERING-SCOPE. So stage 2 is held until the",
+      "re-derivation exists -- the gate is not bypassed, not re-emitted, and not weakened."
+    ],
+    "what_stage_2_contains": [
+      "#[repr(u8)] + explicit `= N` on CleanMode, mode::SourceSystem and tc::expr_location::ExprPathStep",
+      "crates/clean-kernel/src/crystal_tag_pin.rs -- 34 const _ assert! tripwires + three size_of == 1, plus serde/bincode round-trip tests",
+      "the CRYSTAL TAG PIN comment on level::Level (which takes no repr; see repr_exception)",
+      "this manifest's repr / explicit_discriminants / pin_table fields flipped back on"
+    ],
+    "how_to_land_it": [
+      "1. build a trustc driver and dump clean-kernel with the stage-2 source applied",
+      "2. scripts/crystal_fixture_freshness.py <dump-dir> -- re-derive all eleven chained bodies",
+      "3. commit a new data/crystal_chain_revalidation_<date>_<trust-rev>.json, then",
+      "   scripts/crystal_freshness_scope.py --emit",
+      "4. supersede the .lineage.json records of has_cubical_layer, from_source_system and",
+      "   expr_path_step_clone -- see producer_consequence for why exactly those three move"
+    ],
+    "verified_at": "the stage-2 tree was fully verified before being held back: see mutation_proof.verified_at_this_change"
+  }
+}

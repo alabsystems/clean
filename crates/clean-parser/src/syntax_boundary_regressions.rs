@@ -223,3 +223,79 @@ fn test_by_block_tactic_if_still_works() {
   if h : x = 0 then exact a else exact b"#;
     parse_file(code).expect("tactic-level if-then-else inside by block should parse");
 }
+
+/// A LEADING-DOT pattern is a constructor reference, never a binder.
+///
+/// The `Dot` arm consumed the dot and re-entered the pattern parser, whose
+/// `Ident` arm cannot see that a dot preceded it — so the nullary case came back
+/// as `Var(name)`, a BINDER. A misspelled constructor therefore became a silent
+/// catch-all:
+///
+/// ```text
+/// match c with
+/// | .reddd => 1      -- typo, parsed as a binder that matches everything
+/// | .green => 2      -- dead arm
+/// ```
+///
+/// `g Col.green` reduced to `1`, and the match still looked exhaustive — a typo
+/// changed the program's meaning with no diagnostic. This asserts the re-tag on
+/// the AST, so it fails if the `Dot` arm ever drops it again.
+#[test]
+fn test_leading_dot_nullary_pattern_is_ctor_not_binder() {
+    let code = r#"def g (c : Col) : Nat :=
+  match c with
+  | .reddd => 1
+  | .green => 2"#;
+    let parsed = parse_file(code).expect("dotted nullary patterns should parse");
+    let dumped = format!("{parsed:?}");
+
+    assert!(
+        !dumped.contains(r#"Var("reddd")"#),
+        "a leading-dot pattern must never become a binder — `.reddd` as \
+         `Var(\"reddd\")` silently swallows every constructor; got: {dumped}"
+    );
+    assert!(
+        dumped.contains(r#"Ctor("reddd", [])"#),
+        "`.reddd` must be a nullary Ctor so the name resolves like any other \
+         dotted constructor (and an unknown one fails loudly); got: {dumped}"
+    );
+}
+
+/// The re-tag is confined to the leading-dot case.
+///
+/// An APPLIED dotted pattern already parsed as `Ctor`, and a bare identifier in
+/// pattern position is a genuine binder that must stay a `Var` — re-tagging it
+/// would turn every pattern variable into an unknown constructor.
+#[test]
+fn test_leading_dot_retag_leaves_applied_ctors_and_real_binders_alone() {
+    let applied = parse_file(
+        r#"def f (l : L) : Nat :=
+  match l with
+  | .cons h t => 1
+  | .nil => 0"#,
+    )
+    .expect("applied dotted patterns should parse");
+    let applied = format!("{applied:?}");
+    assert!(
+        applied.contains(r#"Ctor("cons""#),
+        "an applied dotted pattern stays a Ctor with its arguments; got: {applied}"
+    );
+    assert!(
+        applied.contains(r#"Var("h")"#) && applied.contains(r#"Var("t")"#),
+        "constructor ARGUMENTS are still binders — the re-tag must not reach \
+         them; got: {applied}"
+    );
+
+    let binder = parse_file(
+        r#"def f (n : Nat) : Nat :=
+  match n with
+  | x => x"#,
+    )
+    .expect("binder patterns should parse");
+    let binder = format!("{binder:?}");
+    assert!(
+        binder.contains(r#"Var("x")"#),
+        "a bare identifier with no leading dot is a real binder and must stay a \
+         Var; got: {binder}"
+    );
+}

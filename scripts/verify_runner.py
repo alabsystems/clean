@@ -147,6 +147,7 @@ import re
 import shutil
 import signal
 import socket
+import math
 import subprocess
 import sys
 import threading
@@ -575,6 +576,28 @@ WORKSPACE_GATES = [
 ]
 
 
+# A PACKAGE TARGET whose verdict depends on files outside every crate dir.
+#
+# Same mechanism as `WORKSPACE_GATES`' `_extra_paths`, which until now only
+# existed for gates. `crystal_a1_lineage` needs it because its `freshness` module
+# decides against the committed result of the only check that compares a chain
+# fixture to a LIVE trustc dump -- a `data/` record and a `scripts/` comparator,
+# neither of which is inside any crate directory. `freshness.rs` names that gap
+# in its own module doc; this closes it, so editing a record or the script
+# DEMOTES the recorded green to UNKNOWN instead of leaving it reading fresh.
+#
+# It does not schedule the trustc run itself -- nothing in this suite can, the
+# comparison needs the Trust compiler -- and that remains a manual duty.
+TARGET_EXTRA_PATHS: dict[str, list[str]] = {
+    "clean-verify::test::crystal_a1_lineage": [
+        "data/crystal_chain_revalidation_2026-08-19.json",
+        "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json",
+        "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json",
+        "scripts/crystal_fixture_freshness.py",
+    ],
+}
+
+
 def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[str, Any]]:
     meta = cargo_metadata()
     inv: list[dict[str, Any]] = []
@@ -595,7 +618,9 @@ def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[s
         # non-destructively: `_dirs` is rebuilt on every call, but the entry
         # dicts are the module-level ones, so popping the key would silently
         # narrow the digest on the second call.
-        extra = entry.get("_extra_paths") or ()
+        extra = tuple(entry.get("_extra_paths") or ()) + tuple(
+            TARGET_EXTRA_PATHS.get(entry["id"], ())
+        )
         if extra:
             entry["_dirs"] = list(entry["_dirs"]) + [REPO_ROOT / p for p in extra]
     return inv
@@ -1184,6 +1209,75 @@ def input_digest(entry: dict[str, Any], fresh: bool = False) -> str:
 # --------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Memory admission. WHY: this runner's concurrency unit was TARGETS, but the
+# binding resource is MEMORY, and targets range from ~50 MB to 8.8 GB (a
+# clean-verify spec binary, measured). `--jobs 8` could therefore mean 70 GB or
+# 400 MB with no way to tell in advance. On 2026-08-19 that, combined with
+# concurrent driver builds from other lanes, exhausted the macOS compressor's
+# SEGMENT table (100% segments, pages only 44%) and the kernel watchdog panicked
+# the machine -- see reports/kernel-panic-rca-2026-08-19.md.
+#
+# So each target now acquires GB from the machine-wide gate before it runs, and
+# MEASURES its own peak RSS while running. The measurement is written to the
+# record, so the next run of that target admits at its true cost: the runner
+# tunes its own weights instead of trusting a hand-written table.
+HEAVY_GATE = REPO_ROOT / "scripts" / "heavy_gate.sh"
+DEFAULT_TARGET_GB = 12                 # unmeasured target: above the 8.8 GB spec binary
+MIN_TARGET_GB = 1
+
+
+def _peak_rss_gb(pgid: int, stop: threading.Event) -> float:
+    """Poll the child's whole process group and keep the maximum total RSS.
+
+    Polling rather than getrusage: cargo spawns rustc and the test binary into
+    the group, and the peak we care about is the SUM across the group at one
+    instant, which getrusage(RUSAGE_CHILDREN) cannot give.
+    """
+    peak = 0.0
+    while not stop.is_set():
+        try:
+            out = subprocess.run(["ps", "-o", "rss=", "-g", str(pgid)],
+                                 capture_output=True, text=True, timeout=5).stdout
+            total_kb = sum(int(x) for x in out.split() if x.isdigit())
+            peak = max(peak, total_kb / 1048576.0)
+        except Exception:
+            pass
+        stop.wait(2.0)
+    return peak
+
+
+def _gate_weight_gb(target_id: str) -> int:
+    prior = load_record(target_id) or {}
+    measured = prior.get("peak_rss_gb")
+    if isinstance(measured, (int, float)) and measured > 0:
+        # +50% headroom: peak RSS is sampled, so the true peak can fall between
+        # samples, and a target's cost grows as the spec does.
+        return max(MIN_TARGET_GB, math.ceil(measured * 1.5))
+    return DEFAULT_TARGET_GB
+
+
+def _gate_acquire(weight_gb: int, label: str) -> str | None:
+    if not HEAVY_GATE.exists():
+        return None
+    try:
+        env = dict(os.environ, HEAVY_GATE_OWNER_PID=str(os.getpid()))
+        out = subprocess.run([str(HEAVY_GATE), "acquire", str(weight_gb), label],
+                             capture_output=True, text=True, env=env).stdout.strip()
+        return out or None
+    except Exception:
+        return None      # never let the gate stop the suite from running
+
+
+def _gate_release(token: str | None) -> None:
+    if token and HEAVY_GATE.exists():
+        try:
+            subprocess.run([str(HEAVY_GATE), "release", token],
+                           capture_output=True, timeout=10)
+        except Exception:
+            pass
+
+
 def record_path(target_id: str) -> Path:
     """Where a target's record lives.
 
@@ -1482,6 +1576,12 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
     env["CARGO_TARGET_DIR"] = str(target_dir())
     env.setdefault("CARGO_TERM_COLOR", "never")
 
+    # Weight from what this target ACTUALLY cost here last time. Read BEFORE the
+    # RUNNING template below overwrites the record -- otherwise it reads its own
+    # blank `peak_rss_gb` and every target admits at the default forever. That
+    # bug was live for one commit; the test below pins it.
+    gate_weight = _gate_weight_gb(entry["id"])
+
     started = time.time()
     record = {
         "schema": SCHEMA,
@@ -1512,9 +1612,17 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         # the 2026-08-12 ERROR row is exactly the case where that mattered.
         "timeout_basis": timeout_basis,
         "timed_out": None,
+        # Peak RSS of the child's whole process group, sampled at 2 s. Feeds the
+        # NEXT run's gate weight, so the runner learns each target's real cost.
+        "peak_rss_gb": None,
+        "gate_weight_gb": gate_weight,
         "notes": "",
     }
     write_record(record)
+
+    gate_token = _gate_acquire(gate_weight, entry["id"])
+    rss_stop = threading.Event()
+    rss_future: list[float] = []
 
     try:
         with open(log_path, "w", encoding="utf-8") as handle:
@@ -1532,6 +1640,11 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
             )
             with _LIVE_LOCK:
                 _LIVE_CHILDREN.add(proc.pid)
+            sampler = threading.Thread(
+                target=lambda: rss_future.append(_peak_rss_gb(proc.pid, rss_stop)),
+                daemon=True,
+            )
+            sampler.start()
             try:
                 exit_code = proc.wait(timeout=timeout)
                 timed_out = False
@@ -1544,9 +1657,13 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
                 exit_code = -1
                 timed_out = True
             finally:
+                rss_stop.set()
+                sampler.join(timeout=5)
                 with _LIVE_LOCK:
                     _LIVE_CHILDREN.discard(proc.pid)
     except OSError as exc:
+        rss_stop.set()
+        _gate_release(gate_token)
         record.update(
             status=STATUS_ERROR,
             finished_at=now_iso(),
@@ -1557,6 +1674,10 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         )
         write_record(record)
         return record
+
+    _gate_release(gate_token)
+    if rss_future:
+        record["peak_rss_gb"] = round(rss_future[0], 2)
 
     text = log_path.read_text(errors="replace")
     final_line, counts = summarize_output(text, exit_code)

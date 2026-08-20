@@ -169,6 +169,31 @@ const SRC_IR_FS_MACHINE_SOUND_CUBICAL_WITNESS: &str = "def ir_fs_machine_sound_c
 
 const SRC_IR_FS_MACHINE_SOUND_JUNK_WITNESS: &str = "def ir_fs_machine_sound_junk_witness : Eq Nat (clean_mode_tag (clean_mode_from_source SourceSystemR.pvs)) ir_d4 := ir_fs_machine_sound ir_mem0 ir_d5 ir_d0 (ir_var ir_d10 (ir_sp2 IRScalar.undef_ IRScalar.vnil)) SourceSystemR.pvs ir_d4 (EncodesSourceSystemVal.mk SourceSystemR.pvs (ir_sp2 IRScalar.undef_ IRScalar.vnil)) (Le.refl ir_d5) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d4 ir_sp0))))";
 
+/// The `CleanMode::from_source_system` chain's MODULE definitions, in
+/// registration order.
+///
+/// Same contract as `IR_H2_MODULE_DEFS`: the GAP-2 differential runs the
+/// machine on exactly the module the specification registers.
+pub const IR_FS_MODULE_DEFS: &[&str] = &[
+    SRC_IR_FS_TMODE,
+    SRC_IR_FS_B0,
+    SRC_IR_FS_B1,
+    SRC_IR_FS_B2,
+    SRC_IR_FS_B3,
+    SRC_IR_FS_B4,
+    SRC_IR_FS_B5,
+    SRC_IR_FS_B6,
+    SRC_IR_FS_B7,
+    SRC_IR_FS_B8,
+    SRC_IR_FS_B9,
+    SRC_IR_FS_B10,
+    SRC_IR_FS_B11,
+    SRC_IR_FS_B12,
+    SRC_IR_FS_B13,
+    SRC_IR_FS_FUNC,
+    SRC_IR_FS_MODULE,
+];
+
 impl Specification {
     /// Register the THIRD complete width-one chain:
     /// `mode::CleanMode::from_source_system`.

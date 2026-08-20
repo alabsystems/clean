@@ -16,8 +16,8 @@ use super::load_parse::LoadModule;
 use super::{ExprInternCache, ImportError, LoadSummary, OleanImportPolicy, SkippedConstant};
 use crate::module::{
     ConstantKind, DefinitionSafety, ParsedExtension, ParsedExtensionEntry,
-    ParsedExtensionEntryData, ParsedModule, LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION,
-    LEAN_SIMP_EXTENSION,
+    ParsedExtensionEntryData, ParsedModule, LEAN_ALIAS_EXTENSION, LEAN_CLASS_EXTENSION,
+    LEAN_INSTANCE_EXTENSION, LEAN_SIMP_EXTENSION,
 };
 use crate::payload::CleanPayload;
 use clean_kernel::env::{
@@ -560,6 +560,46 @@ const LEAN_DEFAULT_SIMP_PRIORITY: u64 = 1000;
 /// constant fetched from the environment and every closed goal is re-checked
 /// by the kernel (`close_goal`). A wrong or extra entry can only cost
 /// completeness/parity, never admit a false proof.
+/// Register the DECODED real-Lean `export` aliases of a module.
+///
+/// Lean persists `export Ns (a b c)` in `Lean.aliasExtension` as `Name × Name`
+/// pairs. Before the typed decoder those pairs hit the generic
+/// `(Name × DataValue)` reader, which captured the TARGET as opaque bytes —
+/// so `isTrue` / `isFalse` / `decide` (from `export Decidable …`) and
+/// `eq_of_beq` (`export LawfulBEq …`) were unresolvable after `import Init`
+/// even though their constants imported fine.
+///
+/// Faithfulness: an alias whose TARGET is absent from the environment is
+/// counted as unresolved and NOT registered — an alias may never conjure a
+/// constant. Registration is idempotent (first writer wins), matching the
+/// simp bridge.
+fn register_real_alias_entries(env: &mut Environment, extensions: &[ParsedExtension]) -> usize {
+    let decoded: Vec<(Name, Name)> = extensions
+        .iter()
+        .filter(|ext| ext.extension_name == LEAN_ALIAS_EXTENSION)
+        .flat_map(|ext| ext.entries.iter())
+        .filter_map(|entry| match entry {
+            ParsedExtensionEntry::Alias { alias, target } => {
+                Some((Name::interned(alias), Name::interned(target)))
+            }
+            _ => None,
+        })
+        .collect();
+
+    let mut unresolved = 0usize;
+    for (alias, target) in decoded {
+        if env.get_export_alias(&alias).is_some() {
+            continue;
+        }
+        if env.get_const(&target).is_none() {
+            unresolved += 1;
+            continue;
+        }
+        env.register_export_alias(alias, target);
+    }
+    unresolved
+}
+
 fn register_real_simp_entries(env: &mut Environment, extensions: &[ParsedExtension]) -> usize {
     // Collect (name, priority) pairs first so nothing borrows `extensions`
     // while `env` is mutated.
@@ -1661,6 +1701,7 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
         // (`Lean.Meta.simpExtension`) into the kernel simp registry, counting
         // origins whose constant is absent LOUDLY in the summary (RC-B/T10).
         summary.extension_undecoded_entries += register_real_simp_entries(env, &module.entries);
+        summary.extension_undecoded_entries += register_real_alias_entries(env, &module.entries);
         // Re-register imported `@[simp]` lemmas into the kernel registry so the
         // simp tactic can use them (#simp-import).
         register_simp_lemmas_from_extension(env);
@@ -1946,6 +1987,7 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         // (`Lean.Meta.simpExtension`) into the kernel simp registry, counting
         // origins whose constant is absent LOUDLY in the summary (RC-B/T10).
         summary.extension_undecoded_entries += register_real_simp_entries(env, &module.entries);
+        summary.extension_undecoded_entries += register_real_alias_entries(env, &module.entries);
         // Re-register imported `@[simp]` lemmas into the kernel registry so the
         // simp tactic can use them (#simp-import).
         register_simp_lemmas_from_extension(env);

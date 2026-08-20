@@ -1,0 +1,910 @@
+{
+ "schema": "clean.crystal.chain_revalidation/v2",
+ "measured_utc_date": "2026-08-19",
+ "what_this_is": "The SECOND independent revalidation of the ten complete five-link chains (plus the designated target Level::is_zero) against a MOVED producer. The first, recorded in data/crystal_chain_revalidation_2026-08-19.json, used trust origin/main 6819d58406. This one uses trust origin/main ccf52b40c3 -- 33 commits later, including three PRODUCER-ADOPTION vtable slices (13, 14, 15) and the call-arg/nonmax arm. The IR-emitting lowering itself moved: crates/trust-ir-bridge/src/lower.rs c0cda7b988 -> 083c00091c.",
+ "supersedes": {
+  "record": "data/crystal_chain_revalidation_2026-08-19.json",
+  "relationship": "CONFIRMS AND EXTENDS -- it does not overwrite and nothing in it is retracted.",
+  "reproduced_first": "Before measuring anything new, scripts/crystal_fixture_freshness.py was run against the EARLIER lane's own dump (l2dz/dump_O3). It reproduced that record exactly: 11/11 verdicts, 11/11 drift-class sets, and 11/11 at_head lineage digests. The earlier record is faithful to the dump it was taken from."
+ },
+ "the_risk_this_tested": "Each chain pins its body's emitted trust-ir VERBATIM as a committed fixture, and link 2a is a CFG gate asserting the registered spec module encodes that same graph. The gate reads the FIXTURE. If the producer stopped emitting what the fixture records, every link-2a gate would keep passing while the shipped kernel was built from something else. Several producer waves have landed since the first revalidation, so the question had to be asked again.",
+ "the_answer": "NO CHAINED BODY DRIFTED. Zero instructions moved in any of the eleven; every instr_count is identical (10/14/27/6/13/15/26/2/2/9, is_zero at 28); no `gep` was added to any body. One body (has_cubical_layer) is BYTE-IDENTICAL to its fixture; the other ten differ only in whole-crate NUMBERING indices, the same four classes the first revalidation classified. All ten chains hold links 1/2b/2c at HEAD -- agreed, markers_exact true, unsupported [], zero calls, flip fired. Level::is_zero is unchanged: agreed, markers_exact FALSE, NO flip event, 6 resolved calls. The wall stands.",
+ "the_sharper_result_this_run_adds": "LINEAGE IS STABLE ACROSS TWO INDEPENDENT PRODUCER GENERATIONS. The first revalidation measured that the chained bodies move in func_id ALONE across ONE producer step. This run measures the same thing across a much larger one: over 13,076 common coverage rows, 5,568 moved, 51 of them in instr_count (net +368 instructions) and 154 in `lineage` -- and all ELEVEN chained bodies moved in func_id alone. Not instr_count, not lowered/spliced/unsupported/calls, and NOT lineage. So every chained body's lineage digest and def_index at HEAD are the values the earlier record already pinned, and NO LINEAGE RE-PIN IS REQUIRED. That is a stronger statement than the first run could make, and it is the one that decides whether the link-2c pins are stale: they are not.",
+ "what_DID_move": "Whole-crate NUMBERING, and by more than last time: functy.N on all ten chains (e.g. kind_ord 470 -> 306), enum.N/struct.N on three, @func.N on is_zero (4914 -> 3885). These renumber whenever the producer changes how many bodies it lowers. They are read by no gate lane, and ir_ty_is_agg_enum_any / ir_ty_is_agg_struct_any (spec/core_spec/eval_ir_ops.rs) PROVE ir_ty_is_agg (IRTy.enum_ n) = Bool.true for every n, so a type index cannot reach the value the machine computes. func_id moved by 2-3 on every chained body.",
+ "why_the_fixtures_are_NOT_refreshed": "Refreshing was tried and measured by the first lane and the result stands: it takes crystal_a1_lineage from 59/59 to 57 passed / 2 failed, because expr_path_step_clone's const-type lane and level_is_zero.rs's hard-coded callee assertion spell the OLD indices. Re-recording a whole-crate ordinal that renumbers on every producer change would be stale again next wave -- and this run is the evidence for that: those indices moved AGAIN, by more than last time, while not one instruction did. The fixture pins the BODY; the body has not moved.",
+ "what_still_nothing_checks": "Re-derivation remains a MANUAL duty. Verified independently at f0846ade2: the only trustc-invoking scripts in this repo are trust_ir_build.sh, trust_verify_ratchet.sh, check_trustcore_evidence_staleness.py, trust_ir_axes.py, local_gate.sh and test_isabelle_ops_portability.py, and NOT ONE of them reads a *.trust-ir.txt fixture (grepped). scripts/crystal_fixture_freshness.py is referenced by no gate, no hook (core.hooksPath = .git/hooks), no justfile recipe and no verify_runner row -- tests/crystal_a1_lineage/freshness.rs reads its SOURCE to check coverage, it does not RUN it. So nothing SCHEDULES the comparison; what the 2026-08-19 mechanism guarantees is that when it is run, its result is committed and cross-checked, and that no chain can exist without an entry. The gap named in freshness.rs -- data/ and scripts/ are outside verify_runner's input digest -- is still open and is still correctly named there.",
+ "producer_ab_census": {
+  "control": {
+   "driver": "6819d58406",
+   "dump": "l2dz/dump_O3",
+   "clean_rev": "f99b94e21"
+  },
+  "subject": {
+   "driver": "ccf52b40c3",
+   "dump": "l3rv_t/dump_main",
+   "clean_rev": "f0846ade2"
+  },
+  "this_is_a_clean_producer_only_ab": "`git diff --stat f99b94e21 f0846ade2 -- crates/clean-kernel Cargo.toml Cargo.lock` is EMPTY, so clean-kernel's source and its dependency lock are byte-identical between the two trees and every delta below is attributable to the producer alone.",
+  "common_rows": 13076,
+  "rows_that_moved": 5568,
+  "rows_whose_instr_count_moved": 51,
+  "net_instruction_delta": 368,
+  "rows_whose_lineage_moved": 154,
+  "chained_rows_whose_lineage_moved": 0,
+  "fields_that_moved": {
+   "func_id": 5447,
+   "lineage": 154,
+   "instr_count": 51,
+   "differentials": 8,
+   "unsupported_details": 5,
+   "unsupported": 5,
+   "collect_primary": 5,
+   "lowered": 3,
+   "spliced": 3,
+   "collect_cascade": 2
+  }
+ },
+ "measurement": {
+  "recipe": "scripts/trust_ir_build.sh --print-only (no ratchet applied, no baseline touched)",
+  "artifact": {
+   "coverage_json_sha256": "eb11159a217c45ceddcc9ff7a28d6a5783775dd0f762c8656891e72098620662",
+   "trust_ir_txt_sha256": "0130c76940f3d9ef6f432a545c15387b16810310f6748db023a6318a3ef61f1b",
+   "reproduction_r2_coverage_json_sha256": "eb11159a217c45ceddcc9ff7a28d6a5783775dd0f762c8656891e72098620662",
+   "reproduction_r2_trust_ir_txt_sha256": "0130c76940f3d9ef6f432a545c15387b16810310f6748db023a6318a3ef61f1b",
+   "reproduction": "TWO clean non-incremental builds (separate dump and target dirs, both rm -rf'd first); coverage.json AND trust-ir.txt byte-identical across both."
+  },
+  "crate_totals": {
+   "bodies": 13775,
+   "flip_events": 221,
+   "flip_events_joined_to_a_coverage_row": 221,
+   "flip_events_with_lineage_EQUAL_to_the_coverage_row": 221,
+   "flip_events_with_lineage_MISMATCH": 0,
+   "foreign_flip_events": 0,
+   "derived_mir_census": {
+    "agreed": 1559,
+    "unsupported": 12216
+   },
+   "interpreter_census": {
+    "agreed": 1100,
+    "not-run": 7789,
+    "unsupported": 4877,
+    "mismatch": 9
+   },
+   "lowered": 8871,
+   "spliced": 6391
+  }
+ },
+ "provenance": {
+  "trust_worktree_rev": "ccf52b40c3e00e846b79f87e01cbe59ce320ef04",
+  "trust_worktree_rev_is": "trust origin/main at 2026-08-19; 33 commits past the first revalidation's 6819d58406",
+  "clean_worktree_rev": "f0846ade2bc9e5d94a727148543d02f9cf50834f",
+  "seal": "scripts/seal_driver.sh seal l3rv; guard PASS before EVERY run (fail-closed in run_dump.sh); verify OK",
+  "identification": "TWO-PART, because one part came back UNPROVEN and is reported as such. (1) Against the PRE-wave-DZ control (304ec590ca), `seal_driver.sh selftest` PASSES: the subject accepts the `payload-tramp` perturb class and the control refuses it ('invalid -Ztrust-sat-perturb value'). (2) Against the FIRST revalidation's driver (6819d58406) selftest is UNPROVEN -- both register the identical class set, so that discriminator cannot tell them apart, and 'could not distinguish' is not 'identical'. Identification there is BY OUTPUT DIGEST and by source: the two drivers emit DIFFERENT artifacts from byte-identical clean-kernel source (coverage.json eb11159a... vs the first record's 0e186763..., trust-ir.txt 0130c769... vs bddb9b9b...), and three producer source blobs moved (lower.rs, differential.rs, crate_module.rs).",
+  "stamp_is_not_source_identity": "The driver is stamped `1.99.0-dev (94147b34f 2026-08-11)` because the stage1 SYSROOT std was built by that compiler and a different stamp makes it reject that std with E0514. The SOURCE is ccf52b40c3, recorded in seal-l3rv/{REV,PROVENANCE} and evidenced as above.",
+  "producer_blobs": {
+   "lower.rs": "083c00091c82fce4247803bfa22462c3adeff57d",
+   "to_mir.rs": "2ba7f8d877dd1a4acd7c494f9cd60c376acb3bad",
+   "differential.rs": "710ddffa66c0a2b826c4976bee2e5418c1d7d6a6",
+   "mir_differential.rs": "461ab7afcca265c0c11988e619831e19555aa321",
+   "flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crate_module.rs": "266c373cbbfcc09a1235d9e4870da9511a4965b0",
+   "flip.rs": "bb8df57b48a558e758abc5d8bedc73d9294f2fc3",
+   "freeze_note": "mir_differential.rs and flip_registry.rs are BYTE-IDENTICAL to the digests wave-DZ's merge message records as frozen, and identical to the first revalidation's. crate_module.rs moved again (6923c9a3 -> 266c373c); it was already outside the freeze at the first revalidation, which recorded the same divergence. Reported, not acted on -- this lane edited no trust source."
+  }
+ },
+ "standing_reds_at_head_NOT_caused_by_this_lane": {
+  "interpreter_mismatch": {
+   "value": 9,
+   "note": "9 at the first revalidation, 9 here -- flat, not growing. None is a chained body."
+  },
+  "lowered": {
+   "value": 8871,
+   "at_first_revalidation": 8874,
+   "note": "pre-existing standing red, moved by -3"
+  },
+  "spliced": {
+   "value": 6391,
+   "at_first_revalidation": 6394,
+   "note": "pre-existing standing red, moved by -3"
+  },
+  "derived_mir_mismatch": {
+   "value": 0,
+   "note": "the channel link 2b rests on: still ZERO"
+  }
+ },
+ "chains": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "IDENTICAL",
+    "drift_classes": [],
+    "changed_lines": 0,
+    "detail": {},
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": ""
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     10,
+     10
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     4181,
+     4178
+    ],
+    "interpreter": [
+     "not-run/0",
+     "not-run/0"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "not-run",
+     "samples": 0
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17982 ~ clean_kernel[124c]::mode::{impl#0}::has_cubical_layer), asserts=0, lineage=sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054, flipped_so_far=51"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
+    "at_head": "sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054",
+    "at_prior_revalidation_6819d58406": "sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17982,
+    "def_index_at_prior_revalidation": 17982,
+    "func_id_at_head": 4178,
+    "func_id_at_prior_revalidation": 4181,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (4181 -> 4178), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @level::Level::kind_ord(functy.470) {  ->  rustcc fn @level::Level::kind_ord(functy.306) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture level_kind_ord.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @level::Level::kind_ord(functy.470) {\n+rustcc fn @level::Level::kind_ord(functy.306) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     14,
+     14
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3902,
+     3899
+    ],
+    "interpreter": [
+     "not-run/0",
+     "not-run/0"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 14,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "not-run",
+     "samples": 0
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17095 ~ clean_kernel[124c]::level::{impl#18}::kind_ord), asserts=0, lineage=sha256:2a7187529697fcc9d9ef27ba1213769667b0e080101dfed013942ff6fd815f46, flipped_so_far=213"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:c2d6ef14a416ae797875e23c48f280060ab8a0f6978f2e4fea09a5f3040a419c",
+    "at_head": "sha256:2a7187529697fcc9d9ef27ba1213769667b0e080101dfed013942ff6fd815f46",
+    "at_prior_revalidation_6819d58406": "sha256:2a7187529697fcc9d9ef27ba1213769667b0e080101dfed013942ff6fd815f46",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17095,
+    "def_index_at_prior_revalidation": 17095,
+    "func_id_at_head": 3899,
+    "func_id_at_prior_revalidation": 3902,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3902 -> 3899), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "changed_lines": 2,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @mode::CleanMode::from_source_system(functy.732) {  ->  rustcc fn @mode::CleanMode::from_source_system(functy.552) {"
+     ],
+     "type-table-index": [
+      "bb0(%0: enum.175):  ->  bb0(%0: enum.170):"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture from_source_system.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @mode::CleanMode::from_source_system(functy.732) {\n+rustcc fn @mode::CleanMode::from_source_system(functy.552) {\n     ; #producer: trust\n     ; #names: %0=\"system\"\n-bb0(%0: enum.175):\n+bb0(%0: enum.170):\n     %2 = extractfield u8 %0, 0  ; #loc: 399 186 8\n     switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 399 186 8\n bb1:\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     27,
+     27
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     4179,
+     4176
+    ],
+    "interpreter": [
+     "agreed/12",
+     "agreed/12"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 27,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 12
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17977 ~ clean_kernel[124c]::mode::{impl#0}::from_source_system), asserts=0, lineage=sha256:136721e4c7d6678cc0e5e8e6d97f97c6fcdc0a1d7db543e2c8f7c93aa468fecc, flipped_so_far=52"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+    "at_head": "sha256:136721e4c7d6678cc0e5e8e6d97f97c6fcdc0a1d7db543e2c8f7c93aa468fecc",
+    "at_prior_revalidation_6819d58406": "sha256:136721e4c7d6678cc0e5e8e6d97f97c6fcdc0a1d7db543e2c8f7c93aa468fecc",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17977,
+    "def_index_at_prior_revalidation": 17977,
+    "func_id_at_head": 4176,
+    "func_id_at_prior_revalidation": 4179,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (4179 -> 4176), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "changed_lines": 2,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @flat::types::FlatFlags::contains(functy.661) {  ->  rustcc fn @flat::types::FlatFlags::contains(functy.486) {"
+     ],
+     "type-table-index": [
+      "bb0(%0: struct.1012, %1: struct.1012):  ->  bb0(%0: struct.955, %1: struct.955):"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture flat_flags_contains.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @flat::types::FlatFlags::contains(functy.661) {\n+rustcc fn @flat::types::FlatFlags::contains(functy.486) {\n     ; #producer: trust\n     ; #names: %0=\"self\", %1=\"other\"\n-bb0(%0: struct.1012, %1: struct.1012):\n+bb0(%0: struct.955, %1: struct.955):\n     %2 = extractfield u8 %0, 0  ; #loc: 386 90 9\n     %3 = extractfield u8 %1, 0  ; #loc: 386 90 18\n     %4 = and u8 %2, %3  ; #loc: 386 90 8\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     6,
+     6
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3835,
+     3832
+    ],
+    "interpreter": [
+     "agreed/25",
+     "agreed/25"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 25
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16847 ~ clean_kernel[124c]::flat::types::{impl#1}::contains), asserts=0, lineage=sha256:585ecb8207e737f8041ec4b67e6a09e1a6e2663124fac452854a6dcc187c0e3a, flipped_so_far=162"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f",
+    "at_head": "sha256:585ecb8207e737f8041ec4b67e6a09e1a6e2663124fac452854a6dcc187c0e3a",
+    "at_prior_revalidation_6819d58406": "sha256:585ecb8207e737f8041ec4b67e6a09e1a6e2663124fac452854a6dcc187c0e3a",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 16847,
+    "def_index_at_prior_revalidation": 16847,
+    "func_id_at_head": 3832,
+    "func_id_at_prior_revalidation": 3835,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3835 -> 3832), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @expr::bvar_in_range(functy.641) {  ->  rustcc fn @expr::bvar_in_range(functy.465) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture bvar_in_range.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @expr::bvar_in_range(functy.641) {\n+rustcc fn @expr::bvar_in_range(functy.465) {\n     ; #producer: trust\n     ; #names: %0=\"idx\", %1=\"start\", %2=\"end\"\n bb0(%0: u32, %1: u32, %2: u32):\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     13,
+     13
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3752,
+     3750
+    ],
+    "interpreter": [
+     "agreed/125",
+     "agreed/125"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 13,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 125
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16577 ~ clean_kernel[124c]::expr::bvar_in_range), asserts=0, lineage=sha256:6c8feca75b52a019c3fc54caac0175cb557c054b66d2336c46ad6eaaaf975853, flipped_so_far=214"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+    "at_head": "sha256:6c8feca75b52a019c3fc54caac0175cb557c054b66d2336c46ad6eaaaf975853",
+    "at_prior_revalidation_6819d58406": "sha256:6c8feca75b52a019c3fc54caac0175cb557c054b66d2336c46ad6eaaaf975853",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 16577,
+    "def_index_at_prior_revalidation": 16577,
+    "func_id_at_head": 3750,
+    "func_id_at_prior_revalidation": 3752,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3752 -> 3750), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {  ->  rustcc fn @env::native_reducers_char::is_valid_char(functy.375) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture is_valid_char.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {\n+rustcc fn @env::native_reducers_char::is_valid_char(functy.375) {\n     ; #producer: trust\n     ; #names: %0=\"n\"\n bb0(%0: u64):\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     15,
+     15
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3346,
+     3344
+    ],
+    "interpreter": [
+     "agreed/5",
+     "agreed/5"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 15,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 5
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15092 ~ clean_kernel[124c]::env::native_reducers_char::is_valid_char), asserts=0, lineage=sha256:b0d73d33d9d64972c96661782c3390ba5f747011e3418e85258145562898b7fd, flipped_so_far=206"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+    "at_head": "sha256:b0d73d33d9d64972c96661782c3390ba5f747011e3418e85258145562898b7fd",
+    "at_prior_revalidation_6819d58406": "sha256:b0d73d33d9d64972c96661782c3390ba5f747011e3418e85258145562898b7fd",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 15092,
+    "def_index_at_prior_revalidation": 15092,
+    "func_id_at_head": 3344,
+    "func_id_at_prior_revalidation": 3346,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3346 -> 3344), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "changed_lines": 14,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {  ->  rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.857) {"
+     ],
+     "type-table-index": [
+      "%2 = load enum.181, ptr %0  ; #loc: 425 20 16  ->  %2 = load enum.176, ptr %0  ; #loc: 425 20 16",
+      "%4 = const enum.181 { 0 }  ; #loc: 425 20 16  ->  %4 = const enum.176 { 0 }  ; #loc: 425 20 16",
+      "%5 = const enum.181 { 1 }  ; #loc: 425 20 16  ->  %5 = const enum.176 { 1 }  ; #loc: 425 20 16",
+      "%6 = const enum.181 { 2 }  ; #loc: 425 20 16  ->  %6 = const enum.176 { 2 }  ; #loc: 425 20 16",
+      "%7 = const enum.181 { 3 }  ; #loc: 425 20 16  ->  %7 = const enum.176 { 3 }  ; #loc: 425 20 16",
+      "%8 = const enum.181 { 4 }  ; #loc: 425 20 16  ->  %8 = const enum.176 { 4 }  ; #loc: 425 20 16",
+      "%9 = const enum.181 { 5 }  ; #loc: 425 20 16  ->  %9 = const enum.176 { 5 }  ; #loc: 425 20 16",
+      "%10 = const enum.181 { 6 }  ; #loc: 425 20 16  ->  %10 = const enum.176 { 6 }  ; #loc: 425 20 16",
+      "%11 = const enum.181 { 7 }  ; #loc: 425 20 16  ->  %11 = const enum.176 { 7 }  ; #loc: 425 20 16",
+      "%12 = const enum.181 { 8 }  ; #loc: 425 20 16  ->  %12 = const enum.176 { 8 }  ; #loc: 425 20 16",
+      "%13 = const enum.181 { 9 }  ; #loc: 425 20 16  ->  %13 = const enum.176 { 9 }  ; #loc: 425 20 16",
+      "%14 = const enum.181 { 10 }  ; #loc: 425 20 16  ->  %14 = const enum.176 { 10 }  ; #loc: 425 20 16",
+      "bb12(%1: enum.181):  ->  bb12(%1: enum.176):"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture expr_path_step_clone.trust-ir.txt\n+++ live dump\n@@ -1,43 +1,43 @@\n-rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {\n+rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.857) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.181, ptr %0  ; #loc: 425 20 16\n+    %2 = load enum.176, ptr %0  ; #loc: 425 20 16\n     %3 = extractfield u8 %2, 0  ; #loc: 425 20 16\n     switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 425 20 16\n bb1:\n-    %4 = const enum.181 { 0 }  ; #loc: 425 20 16\n+    %4 = const enum.176 { 0 }  ; #loc: 425 20 16\n     br bb12(%4)  ; #loc: 425 20 16\n bb2:\n-    %5 = const enum.181 { 1 }  ; #loc: 425 20 16\n+    %5 = const enum.176 { 1 }  ; #loc: 425 20 16\n     br bb12(%5)  ; #loc: 425 20 16\n bb3:\n-    %6 = const enum.181 { 2 }  ; #loc: 425 20 16\n+    %6 = const enum.176 { 2 }  ; #loc: 425 20 16\n     br bb12(%6)  ; #loc: 425 20 16\n bb4:\n-    %7 = const enum.181 { 3 }  ; #loc: 425 20 16\n+    %7 = const enum.176 { 3 }  ; #loc: 425 20 16\n     br bb12(%7)  ; #loc: 425 20 16\n bb5:\n-    %8 = const enum.181 { 4 }  ; #loc: 425 20 16\n+    %8 = const enum.176 { 4 }  ; #loc: 425 20 16\n     br bb12(%8)  ; #loc: 425 20 16\n bb6:\n-    %9 = const enum.181 { 5 }  ; #loc: 425 20 16\n+    %9 = const enum.176 { 5 }  ; #loc: 425 20 16\n     br bb12(%9)  ; #loc: 425 20 16\n bb7:\n-    %10 = const enum.181 { 6 }  ; #loc: 425 20 16\n+    %10 = const enum.176 { 6 }  ; #loc: 425 20 16\n     br bb12(%10)  ; #loc: 425 20 16\n bb8:\n-    %11 = const enum.181 { 7 }  ; #loc: 425 20 16\n+    %11 = const enum.176 { 7 }  ; #loc: 425 20 16\n     br bb12(%11)  ; #loc: 425 20 16\n bb9:\n-    %12 = const enum.181 { 8 }  ; #loc: 425 20 16\n+    %12 = const enum.176 { 8 }  ; #loc: 425 20 16\n     br bb12(%12)  ; #loc: 425 20 16\n bb10:\n-    %13 = const enum.181 { 9 }  ; #loc: 425 20 16\n+    %13 = const enum.176 { 9 }  ; #loc: 425 20 16\n     br bb12(%13)  ; #loc: 425 20 16\n bb11:\n-    %14 = const enum.181 { 10 }  ; #loc: 425 20 16\n+    %14 = const enum.176 { 10 }  ; #loc: 425 20 16\n     br bb12(%14)  ; #loc: 425 20 16\n-bb12(%1: enum.181):\n+bb12(%1: enum.176):\n     ret %1  ; #loc: 425 20 16\n }\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     26,
+     26
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     6305,
+     6302
+    ],
+    "interpreter": [
+     "not-run/0",
+     "not-run/0"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 26,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "not-run",
+     "samples": 0
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:35591 ~ clean_kernel[124c]::tc::expr_location::{impl#4}::clone), asserts=0, lineage=sha256:7732e080397f50addf84d3aad2af5b589a2f9e8d3b3272ce7a64be851cfc57d4, flipped_so_far=185"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+    "at_head": "sha256:7732e080397f50addf84d3aad2af5b589a2f9e8d3b3272ce7a64be851cfc57d4",
+    "at_prior_revalidation_6819d58406": "sha256:7732e080397f50addf84d3aad2af5b589a2f9e8d3b3272ce7a64be851cfc57d4",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 35591,
+    "def_index_at_prior_revalidation": 35591,
+    "func_id_at_head": 6302,
+    "func_id_at_prior_revalidation": 6305,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (6305 -> 6302), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {  ->  rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.379) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture float_div.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {\n+rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.379) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     2,
+     2
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3402,
+     3400
+    ],
+    "interpreter": [
+     "agreed/64",
+     "agreed/64"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 64
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15299 ~ clean_kernel[124c]::env::native_reducers_float::reduce_float_div::{closure#0}), asserts=0, lineage=sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e, flipped_so_far=221"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+    "at_head": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+    "at_prior_revalidation_6819d58406": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 15299,
+    "def_index_at_prior_revalidation": 15299,
+    "func_id_at_head": 3400,
+    "func_id_at_prior_revalidation": 3402,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3402 -> 3400), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {  ->  rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.368) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture get_char_val_trunc.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {\n+rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.368) {\n     ; #producer: trust\n     ; #names: %1=\"n\"\n bb0(%0: (), %1: u64):\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     2,
+     2
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3289,
+     3287
+    ],
+    "interpreter": [
+     "agreed/5",
+     "agreed/5"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 5
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:14931 ~ clean_kernel[124c]::env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}), asserts=0, lineage=sha256:b1f02a9d3b01f0e50e554402ab769ea1fbc23188e47177d7528a96ae9c4f9b59, flipped_so_far=207"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+    "at_head": "sha256:b1f02a9d3b01f0e50e554402ab769ea1fbc23188e47177d7528a96ae9c4f9b59",
+    "at_prior_revalidation_6819d58406": "sha256:b1f02a9d3b01f0e50e554402ab769ea1fbc23188e47177d7528a96ae9c4f9b59",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 14931,
+    "def_index_at_prior_revalidation": 14931,
+    "func_id_at_head": 3287,
+    "func_id_at_prior_revalidation": 3289,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3289 -> 3287), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index"
+    ],
+    "changed_lines": 1,
+    "detail": {
+     "functy-index": [
+      "rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {  ->  rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.119) {"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 0,
+    "gep_in_emitted_body": 0,
+    "unified_diff": "--- fixture meta_tag_shl.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {\n+rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.119) {\n     ; #producer: trust\n bb0:\n     %0 = const u64 1  ; #loc: 435 157 30\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     9,
+     9
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     4635,
+     4632
+    ],
+    "interpreter": [
+     "agreed/1",
+     "agreed/1"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "interpreter": {
+     "verdict": "agreed",
+     "samples": 1
+    },
+    "flip_fired": true,
+    "flip_event_raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: CTFE compiled from trust-ir, did=DefId(0:19643 ~ clean_kernel[124c]::tc::local_context::{impl#0}::push_low_local::META_TAG), asserts=1, lineage=sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14, flipped_so_far=27"
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+    "at_head": "sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14",
+    "at_prior_revalidation_6819d58406": "sha256:6b36cf0817d635ad5e1a28d4ef259b653c0afefbb5606778a27d0566fa54db14",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 19643,
+    "def_index_at_prior_revalidation": 19643,
+    "func_id_at_head": 4632,
+    "func_id_at_prior_revalidation": 4635,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (4635 -> 4632), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "callee-index"
+    ],
+    "changed_lines": 6,
+    "detail": {
+     "callee-index": [
+      "%12 = call @func.4914(%9)  ; #loc: 389 528 34  ->  %12 = call @func.3885(%9)  ; #loc: 389 528 34",
+      "%13 = call @func.4925(%12)  ; #loc: 389 528 37  ->  %13 = call @func.3896(%12)  ; #loc: 389 528 37",
+      "%16 = call @func.4914(%15)  ; #loc: 389 529 34  ->  %16 = call @func.3885(%15)  ; #loc: 389 529 34",
+      "%17 = call @func.4925(%16)  ; #loc: 389 529 37  ->  %17 = call @func.3896(%16)  ; #loc: 389 529 37",
+      "%18 = call @func.4914(%11)  ; #loc: 389 528 50  ->  %18 = call @func.3885(%11)  ; #loc: 389 528 50",
+      "%19 = call @func.4925(%18)  ; #loc: 389 528 53  ->  %19 = call @func.3896(%18)  ; #loc: 389 528 53"
+     ]
+    },
+    "instructions_moved": 0,
+    "gep_in_fixture": 3,
+    "gep_in_emitted_body": 3,
+    "unified_diff": "--- fixture level_is_zero.trust-ir.txt\n+++ live dump\n@@ -19,20 +19,20 @@\n     %9 = gep inbounds i8, ptr %0, %8  ; #loc: 389 525 8\n     %10 = const i64 16  ; #loc: 389 525 8\n     %11 = gep inbounds i8, ptr %0, %10  ; #loc: 389 525 8\n-    %12 = call @func.4914(%9)  ; #loc: 389 528 34\n-    %13 = call @func.4925(%12)  ; #loc: 389 528 37\n+    %12 = call @func.3885(%9)  ; #loc: 389 528 34\n+    %13 = call @func.3896(%12)  ; #loc: 389 528 37\n     condbr %13, bb7, bb8  ; #loc: 389 528 34\n bb5:\n     %14 = const i64 16  ; #loc: 389 525 8\n     %15 = gep inbounds i8, ptr %0, %14  ; #loc: 389 525 8\n-    %16 = call @func.4914(%15)  ; #loc: 389 529 34\n-    %17 = call @func.4925(%16)  ; #loc: 389 529 37\n+    %16 = call @func.3885(%15)  ; #loc: 389 529 34\n+    %17 = call @func.3896(%16)  ; #loc: 389 529 37\n     br bb6(%17)  ; #loc: 389 525 8\n bb6(%1: bool):\n     ret %1  ; #loc: 389 531 5\n bb7:\n-    %18 = call @func.4914(%11)  ; #loc: 389 528 50\n-    %19 = call @func.4925(%18)  ; #loc: 389 528 53\n+    %18 = call @func.3885(%11)  ; #loc: 389 528 50\n+    %19 = call @func.3896(%18)  ; #loc: 389 528 53\n     br bb9(%19)  ; #loc: 389 528 34\n bb8:\n     %20 = const bool false  ; #loc: 389 528 34\n"
+   },
+   "producer_only_ab_vs_6819d58406_same_clean_kernel_source": {
+    "fields_moved": [
+     "func_id"
+    ],
+    "instr_count": [
+     28,
+     28
+    ],
+    "lineage_moved": false,
+    "func_id": [
+     3899,
+     3896
+    ],
+    "interpreter": [
+     "not-run/0",
+     "not-run/0"
+    ]
+   },
+   "links_at_head": {
+    "instr_count": 28,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 6,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": false
+    },
+    "interpreter": {
+     "verdict": "not-run",
+     "samples": 0
+    },
+    "flip_fired": false,
+    "flip_event_raw": ""
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+    "at_head": "sha256:876ccd4b8a77010c4ce9d9291007353050d8eb18269c70270f5ff5d5cb80dda0",
+    "at_prior_revalidation_6819d58406": "sha256:876ccd4b8a77010c4ce9d9291007353050d8eb18269c70270f5ff5d5cb80dda0",
+    "moved_since_prior_revalidation": false,
+    "def_index_at_head": 17089,
+    "def_index_at_prior_revalidation": 17089,
+    "func_id_at_head": 3896,
+    "func_id_at_prior_revalidation": 3899,
+    "re_pin_required": false,
+    "why_no_re_pin": "The digest and def_index this body carried at the 2026-08-19 revalidation are the digest and def_index it carries under this producer, 33 trust commits later. There is nothing to supersede: the pointer in the fixture is not stale, it is CORRECT. Only func_id moved (3899 -> 3896), and func_id is a whole-crate ordinal, not a digest -- it is read by no gate lane."
+   }
+  }
+ }
+}

@@ -42,6 +42,20 @@ tempfile = { workspace = true }
 # gains an `.olean` dependency.
 clean-olean = { path = "../clean-olean" }
 
+# GAP-2 encoding differential (`tests/crystal_a3_semdiff.rs`): trust-ir's own
+# parser and reference interpreter, used as an INDEPENDENT SECOND EXECUTOR of
+# the committed emitted bodies. Pinned to the same rev as `trust-ir-contract`
+# and the `clean-compiler` backend so all three read one producer.
+#
+# DEV-ONLY, deliberately. `clean-verify` is outside `default-members`, so this
+# does not widen the publish smoke surface, and no `clean-*/src` crate gains a
+# trust-ir dependency. It is also OUTSIDE THE TCB by construction: trust-ir is
+# used only to POSE questions the Clean kernel answers, so a wrong parse or a
+# wrong interpretation yields a spurious RED, never a spurious GREEN.
+# `default-features = false` drops the ~330-symbol request/bundle re-export
+# block, which this differential does not touch.
+trust-ir = { path = "../../vendor/trust-ir/crates/trust-ir", default-features = false, features = ["parser", "fmt"] }
+
 # Self-dependency to enable test-utils + cli during cargo test. The `sat-verify`
 # feature gates the `cli` module (and its behavioral tests); enabling it here
 # means `cargo test -p clean-verify` exercises the proof-checker dispatch

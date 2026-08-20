@@ -74,14 +74,72 @@ fn is_not_transcribed_and_the_wall_stands() {
 
     let body = fixture("level_is_zero.trust-ir.txt");
     let callee = fixture("level_is_zero_deref_callee.trust-ir.txt");
-    assert!(body.contains("call @func.4914"));
-    assert!(
-        callee.starts_with("rustcc fn @<level::LevelArc as std::ops::Deref>::deref("),
-        "func 4914 is that deref"
+
+    // The deref call site, identified STRUCTURALLY rather than by its index.
+    //
+    // This assertion used to read `body.contains("call @func.4914")`, with a
+    // comment saying "func 4914 is that deref". `@func.N` is a whole-crate
+    // function-table index: it moves whenever clean-kernel gains or loses an
+    // item, and whenever the producer changes how many bodies it lowers, with
+    // not one instruction changed. Measured 2026-08-19: a producer-only A/B on
+    // a byte-identical clean tree moved `@func.N` on this very body. So the
+    // literal was a gate that fires on renumbering — the kind that gets
+    // switched off, taking the real check with it.
+    //
+    // The claim worth keeping has no index in it: is_zero calls a one-argument
+    // function whose RESULT is immediately consumed by the other callee, and
+    // that first function is `<LevelArc as Deref>::deref`. That is read off the
+    // dataflow, so it survives renumbering and still fails if the call
+    // structure moves.
+    let sites = call_sites(&body);
+    assert_eq!(
+        sites.len(),
+        6,
+        "six resolved call sites, matching `calls.resolved` in the A0 evidence"
+    );
+    let callees: BTreeSet<u32> = sites.iter().map(|s| s.callee).collect();
+    assert_eq!(callees.len(), 2, "two distinct callees, three sites each");
+
+    let consumed: BTreeSet<u32> = sites.iter().flat_map(|s| s.args.iter().copied()).collect();
+    let deref_ids: BTreeSet<u32> = sites
+        .iter()
+        .filter(|s| consumed.contains(&s.result))
+        .map(|s| s.callee)
+        .collect();
+    assert_eq!(
+        deref_ids.len(),
+        1,
+        "exactly one callee's result feeds the other call — that one is the deref"
+    );
+    let deref_id = *deref_ids
+        .iter()
+        .next()
+        .expect("invariant: the set was just asserted to hold one element");
+    assert_eq!(
+        sites.iter().filter(|s| s.callee == deref_id).count(),
+        3,
+        "the deref is called once per payload read"
     );
     assert!(
-        callee.contains("call @func.8369") && callee.contains("call @func.7675"),
-        "the deref's declaration-only callees keep the reachable closure non-bodyful"
+        callee.starts_with("rustcc fn @<level::LevelArc as std::ops::Deref>::deref("),
+        "the pinned callee fixture must be that deref (observed at @func.{deref_id} when the \
+         body fixture was taken; the index is recorded, never asserted)"
+    );
+
+    // The deref's own callees: two distinct functions, both declaration-only.
+    // Their indices are not asserted either, and could not be checked from a
+    // fixture in any case — that they are bodyless is what
+    // `a0_criteria.bodyful_reachable_closure == FAIL`, asserted above, records.
+    let deref_sites = call_sites(&callee);
+    assert_eq!(deref_sites.len(), 2, "the deref makes exactly two calls");
+    assert_eq!(
+        deref_sites
+            .iter()
+            .map(|s| s.callee)
+            .collect::<BTreeSet<u32>>()
+            .len(),
+        2,
+        "to two distinct functions, which keep the reachable closure non-bodyful"
     );
 
     let clean = parse_clean(
@@ -109,4 +167,69 @@ fn is_not_transcribed_and_the_wall_stands() {
         "emitted default bb{} is reachable IMax; Clean default bb{} is a trap",
         emitted.default, clean.default
     );
+}
+
+/// One `%r = call @func.N(%a, %b)` site, with every index kept as a NUMBER
+/// rather than as text, so nothing downstream can accidentally pin one.
+struct CallSite {
+    result: u32,
+    callee: u32,
+    args: Vec<u32>,
+}
+
+/// Parse the call sites out of an emitted body.
+///
+/// Deliberately tolerant of everything a whole-crate renumbering can change and
+/// intolerant of everything it cannot: the register numbers, the callee index
+/// and the argument list are read as data, and a line that looks like a call
+/// but does not parse is a hard failure rather than a skip — a silently dropped
+/// call site would weaken every count asserted against it.
+fn call_sites(body: &str) -> Vec<CallSite> {
+    let mut out = Vec::new();
+    for raw in body.lines() {
+        let line = raw.split("; #").next().unwrap_or(raw).trim();
+        let Some((lhs, rhs)) = line.split_once(" = call @func.") else {
+            // A call shape this parser does not read — a void call, say — must
+            // stop the test, not be skipped: every assertion above is a COUNT,
+            // and a silently dropped call site makes each of them agree with a
+            // body that has more calls than it thinks.
+            assert!(
+                !line.contains("call @func."),
+                "call-shaped line this parser does not read: `{line}`. Counting call sites is \
+                 the whole mechanism here, so an unread one fails closed rather than lowering \
+                 every count by one."
+            );
+            continue;
+        };
+        let result = lhs
+            .trim()
+            .strip_prefix('%')
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or_else(|| panic!("call result is not a register: `{line}`"));
+        let (id, rest) = rhs
+            .split_once('(')
+            .unwrap_or_else(|| panic!("call has no argument list: `{line}`"));
+        let callee = id
+            .parse::<u32>()
+            .unwrap_or_else(|e| panic!("callee index is not a number ({e}): `{line}`"));
+        let args = rest
+            .trim_end()
+            .strip_suffix(')')
+            .unwrap_or_else(|| panic!("call argument list is unterminated: `{line}`"))
+            .split(',')
+            .map(str::trim)
+            .filter(|a| !a.is_empty())
+            .map(|a| {
+                a.strip_prefix('%')
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .unwrap_or_else(|| panic!("call argument is not a register: `{line}`"))
+            })
+            .collect();
+        out.push(CallSite {
+            result,
+            callee,
+            args,
+        });
+    }
+    out
 }

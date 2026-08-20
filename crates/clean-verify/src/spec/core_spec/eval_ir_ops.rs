@@ -269,6 +269,43 @@ impl Specification {
              which the semantics must not silently accept.",
         )?;
 
+        // THE WHOLE-CRATE TYPE ID IS A NAME, AND THIS PROVES IT.
+        //
+        // Every aggregate-typed chain writes the emitted id into its module —
+        // `ir_ep_tstep := IRTy.enum_ 181`, `ir_fs_tmode := IRTy.enum_ ir_d13`,
+        // `ir_fc_tflags := IRTy.struct_ 1012` — and each of those constants
+        // carried a COMMENT saying "the particular id is not consulted". A
+        // comment is not a check, and the ids are NOT stable: they are indices
+        // into a whole-crate type table that renumbers whenever `clean-kernel`
+        // gains or loses an item. Measured 2026-08-19 on the shipped kernel,
+        // one sealed driver, three reproduced builds: `ExprPathStep` moved
+        // enum.181 -> enum.176 and `FlatFlags` struct.1012 -> struct.955 with
+        // NOT ONE INSTRUCTION of either body changed
+        // (`data/crystal_chain_revalidation_2026-08-19.json`).
+        //
+        // These two lemmas turn the comment into a kernel-checked fact, for
+        // EVERY id rather than for the pair that happened to be measured:
+        // `ir_const_agg_eval` consults the type only through `ir_ty_is_agg`,
+        // and `ir_ty_is_agg` reduces on the CONSTRUCTOR, so the index is
+        // irrelevant to the value the machine computes. That is why a renumber
+        // is a naming drift and not a proof problem — re-derived here rather
+        // than re-recorded in each chain's fixture.
+        self.add_recursive_def(
+            "def ir_ty_is_agg_enum_any (n : Nat) : Eq Bool (ir_ty_is_agg (IRTy.enum_ n)) Bool.true \
+             := Eq.refl Bool Bool.true",
+            "ir_ty_is_agg_enum_any: an ENUM type is an aggregate at EVERY whole-crate id. The \
+             kernel iota-reduces the match on the constructor, so `n` never appears in the \
+             answer. This is what makes an emitted `const enum.K { j }` mean the same value \
+             under any renumbering of K, and therefore what makes a chain's refinement theorem \
+             independent of the type table. DerivedProved, zero axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            "def ir_ty_is_agg_struct_any (n : Nat) : Eq Bool (ir_ty_is_agg (IRTy.struct_ n)) \
+             Bool.true := Eq.refl Bool Bool.true",
+            "ir_ty_is_agg_struct_any: the same for STRUCT ids, which is the form the fourth \
+             chain's `ir_fc_tflags` carries. DerivedProved, zero axiom_deps.",
+        )?;
+
         // Recursive, and it has to be: `aggv`'s element spine is a chain of
         // `IRConst`s. An explicit `IRConst.rec` rather than a `match`, because
         // the spine constructors call back into the family and `match` in this

@@ -31,9 +31,13 @@
 //! That a non-empty lane is genuinely COMPARED. Emptiness is a denominator, not
 //! a proof: a lane could be non-empty on both sides and never asserted. That is
 //! proved by mutation instead — `scripts/crystal_lane_matrix_battery.sh` runs
-//! 164 cases, one per chain x lane cell in each direction, and requires the gate
-//! to go RED for every one: **100 artifact mutations (`TABLE`) and 64 spec
-//! mutations (`SPEC_TABLE`), 0 blind**, as `7093bb0b7` records at 164/164.
+//! one case per chain x lane cell in each direction and requires the gate to go
+//! RED for every one. `7093bb0b7` records **164/164, 0 blind** — 100 artifact
+//! mutations (`TABLE`) and 64 spec mutations (`SPEC_TABLE`).
+//!
+//! **That 164/164 predates the 2026-08-19 operand audit and does NOT cover the
+//! two lanes it added.** Six more rows now exist and have NOT been run — see
+//! `operand_audit.rs`, which states exactly what is measured about each.
 //!
 //! (Corrected 2026-08-17: this comment read "155 cases ... 100 artifact and 55
 //! spec" after the count had already moved. The rows are countable —
@@ -74,7 +78,9 @@ const CHAINS: &[Chain] = &[
             "branches",
             "param_blocks",
             "extracts",
+            "extract_tys",
             "loads",
+            "load_tys",
             "rets",
             "order",
             "const_tys",
@@ -98,7 +104,9 @@ const CHAINS: &[Chain] = &[
             "branches",
             "param_blocks",
             "extracts",
+            "extract_tys",
             "loads",
+            "load_tys",
             "rets",
             "order",
             "const_tys",
@@ -124,6 +132,7 @@ const CHAINS: &[Chain] = &[
             "branches",
             "param_blocks",
             "extracts",
+            "extract_tys",
             "rets",
             "order",
             "const_tys",
@@ -144,6 +153,7 @@ const CHAINS: &[Chain] = &[
         nonempty: &[
             "blocks",
             "extracts",
+            "extract_tys",
             "icmps",
             "binops",
             "binop_tys",
@@ -215,7 +225,9 @@ const CHAINS: &[Chain] = &[
             "branches",
             "param_blocks",
             "extracts",
+            "extract_tys",
             "loads",
+            "load_tys",
             "rets",
             "order",
             "const_tys",
@@ -293,7 +305,9 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
         ("branches", !c.branches.is_empty()),
         ("param_blocks", !c.param_blocks.is_empty()),
         ("extracts", !c.extracts.is_empty()),
+        ("extract_tys", !c.extract_tys.is_empty()),
         ("loads", !c.loads.is_empty()),
+        ("load_tys", !c.load_tys.is_empty()),
         ("icmps", !c.icmps.is_empty()),
         ("binops", !c.binops.is_empty()),
         ("condbrs", !c.condbrs.is_empty()),
@@ -311,9 +325,12 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
     ]
 }
 
-/// THE MATRIX. Ten chains x **twenty-four** lanes, pinned cell by cell.
+/// THE MATRIX. Ten chains x **twenty-six** lanes, pinned cell by cell.
 ///
-/// (Corrected 2026-08-17: this read "twenty-three" while `lanes()` enumerated
+/// (Twenty-four until 2026-08-19, when the operand-completeness audit added
+/// `extract_tys` and `load_tys` — the two slots that were printed by the
+/// artifact, carried by the registered term, and read by neither parser.
+/// Corrected 2026-08-17: this read "twenty-three" while `lanes()` enumerated
 /// twenty-four. The count is not load-bearing here — `every_cfg_field_is_a_named_lane`
 /// proves the enumeration against `Cfg`'s own fields with equal cardinality, so
 /// the GATE was right and only the sentence was wrong — but a wrong number in a
@@ -438,7 +455,7 @@ fn every_cfg_field_is_a_named_lane() {
         }
     }
     assert!(
-        fields.len() >= 24,
+        fields.len() >= 26,
         "the field scan must have found the whole struct: {fields:?}"
     );
     for f in &fields {

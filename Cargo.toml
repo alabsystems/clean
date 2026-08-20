@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-exclude = ["fuzz", "scripts/isa_harness"]
+exclude = ["fuzz", "scripts/isa_harness", "vendor"]
 members = [
     "crates/clean",
     "crates/clean-auto",
@@ -49,7 +49,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -223,6 +223,14 @@ clean-kernel = { path = "crates/clean-kernel" }
 clean-mathverse = { path = "crates/clean-mathverse" }
 clean-lake = { path = "crates/clean-lake" }
 clean-cake = { path = "crates/clean-cake" }
+# Cross-repo verification vocabulary lives in TrustIr's dependency-leaf
+# contract. Its immutable Git identity keeps standalone Clean builds independent
+# of whichever sibling checkout happens to be present. This is the coherent
+# cycle-cut revision already selected by the Ty and TrustCG predecessors below;
+# advancing only this edge splits TrustIR's nominal Rust types when Clean's
+# all-features tests pass TrustCG values back into Clean. TrustIR's successor
+# advances to this Clean revision after it is published.
+trust-ir-contract = { path = "vendor/trust-ir/crates/trust-ir-contract" }
 clean-lsp = { path = "crates/clean-lsp" }
 clean-macro = { path = "crates/clean-macro" }
 clean-math-project = { path = "crates/clean-math-project" }
@@ -272,7 +280,7 @@ stacker = "0.1"
 # Clean(new), keeping the authority history acyclic. Local cross-repository
 # development can provide an uncommitted Cargo override, but this publishable
 # manifest must resolve exactly the same graph under `--locked` in every clone.
-tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "7a57258bf06635d672bf2d5940f060618c08ee17" }
+tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "c919efc9976f998f5fe9624416d487529d1436cc" }
 
 # The SMT solver sibling repo was renamed z4 -> ay (alabsystems/ay). Keep
 # every AY crate on one immutable Git revision so Clean remains consumable as a
@@ -291,13 +299,13 @@ tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "7a57258bf0663
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60" }
-ay-core = { package = "ay-core", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60" }
-ay-proof = { package = "ay-proof", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60" }
-ay-frontend = { package = "ay-frontend", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60" }
-ay-translate = { package = "ay-translate", version = "0.10.0", git = "https://github.com/alabsystems/ay.git", rev = "ac00c30a825721e7a6dd82043e43d01af35e7b60" }
+ay = { package = "ay", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601" }
+ay-core = { package = "ay-core", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601" }
+ay-proof = { package = "ay-proof", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601" }
+ay-frontend = { package = "ay-frontend", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601" }
+ay-translate = { package = "ay-translate", version = "0.13.0", git = "https://github.com/alabsystems/ay.git", rev = "a533b9ebf54427ff4a375b15579f2f7d2298d601" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).

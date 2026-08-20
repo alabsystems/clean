@@ -32,6 +32,8 @@ mod module_cache_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_alias_ext_import;
+#[cfg(test)]
 mod tests_class_ext_import;
 #[cfg(test)]
 mod tests_external_packages;

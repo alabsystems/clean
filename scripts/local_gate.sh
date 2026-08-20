@@ -19,6 +19,16 @@
 #      module-tree digest + cmd_replacement.rs sha and fails when the checked-in
 #      launch-evidence artifacts pin different digests (prints
 #      TRUSTCORE_STALENESS=fresh|stale|skipped:<reason>)
+#   3c. Crystal revalidation scope: binds the crystal chain revalidation records
+#      to the clean-kernel SOURCE tree they were measured at, and fails when a
+#      CHAINED body's own source file has moved past it (whole-crate
+#      renumbering is ledgered, not failed)
+#   3d. Crystal enum tag pin: the chained kernel enums' declaration order and
+#      discriminants, re-derived from source and cross-checked against the
+#      reflected tag defs and the recorded trust-ir artifacts. A reorder is
+#      invisible to every other gate and silently makes a registered crystal
+#      module a theorem about a body that is no longer shipped
+#      (data/crystal_enum_tag_pin.json)
 #   4. Paragon quality ratchet (shrink-only: file-size, unwrap/expect,
 #      bare-pub, dead-code suppressions — data/paragon_ratchet.json)
 #   4b. Lint coverage: no tracked crate outside [workspace] members, no gate
@@ -162,6 +172,35 @@ fi
 echo "== local gate: trust-core evidence staleness tripwire =="
 python3 scripts/check_trustcore_evidence_staleness.py \
   || fail "trust-core evidence staleness — a cmd_replacement/ gate-logic edit outdated the pinned digests in reports/{kernel-soundness,deny-sorry,axiom-audit}-launch-evidence.json; regenerate with a HEAD-built clean binary (clean replacement trust-core-evidence --kernel-soundness / --deny-sorry, clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json) and commit the refreshed artifacts in the SAME change as the gate edit"
+
+# Crystal revalidation SCOPE. Every link-2a gate compares a spec module to a
+# COMMITTED FIXTURE; the only thing that ever compared a fixture to a live
+# trustc dump is scripts/crystal_fixture_freshness.py, whose answer is a dated
+# record (data/crystal_chain_revalidation_*.json). Nothing bound those records
+# to the clean-kernel source they were measured at, so nothing could say whether
+# they still describe HEAD -- and at 891b7d153 they did not: three files had
+# moved in crates/clean-kernel/src/env/ with every crystal gate green.
+#
+# Fails on CONTENT scope only -- a chained body's own defining source file
+# moving. Whole-crate functy.N/enum.N/struct.N/@func.N renumbering, which moves
+# on any crate item with zero instructions changed, is printed as a ledgered
+# revalidation DEBT and does not fail: a gate that reddens on renumbering is a
+# gate that gets switched off, taking the content case with it. ~0.24 s.
+echo "== local gate: crystal revalidation scope (chained-body source drift) =="
+python3 scripts/crystal_freshness_scope.py \
+  || fail "crystal revalidation scope — either a chained body's own clean-kernel source moved since the newest data/crystal_chain_revalidation_*.json (the spec module may no longer transcribe the emitted body; re-derive with scripts/crystal_fixture_freshness.py against a fresh dump and commit a new record) or the def_path->source mapping went stale (scripts/crystal_freshness_scope.py)"
+
+# Crystal ENUM TAG PIN. Four of the eleven chained bodies are matches over a
+# kernel enum, and the emitted trust-ir names no variants -- it switches on the
+# NUMERIC DISCRIMINANT, which Clean's side of the proof encodes too
+# (clean_mode_tag, source_system_tag, expr_path_step_tag, level_kind_tag).
+# The Reference guarantees the VALUES given a declaration order; nothing
+# guaranteed the ORDER. Reordering two variants changes no behaviour of the Rust
+# program and fails no other gate, while moving Cubical off 2 and leaving the
+# registered module, the fixture and the lineage digest byte-identical. ~0.05 s.
+echo "== local gate: crystal enum tag pin =="
+python3 scripts/check_enum_tag_pin.py \
+  || fail "crystal enum tag pin — a chained enum's declaration order, discriminants, serde-index coherence, reflected tag def or recorded switch arms moved, so a registered crystal module now proves something about a body that is no longer shipped; see data/crystal_enum_tag_pin.json"
 
 echo "== local gate: paragon quality ratchet =="
 scripts/paragon_ratchet.sh || fail "paragon quality ratchet (see data/paragon_ratchet.json)"

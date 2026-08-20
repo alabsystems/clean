@@ -28,6 +28,12 @@ pub(crate) const LEAN_CLASS_EXTENSION: &str = "Lean.classExtension";
 /// whose extension name is the declaration name via `decl_name%`).
 pub(crate) const LEAN_SIMP_EXTENSION: &str = "Lean.Meta.simpExtension";
 
+/// The persisted name of Lean 4's alias extension (`Lean/ResolveName.lean`,
+/// `builtin_initialize aliasExtension`). Holds one `Name × Name` pair per
+/// `export`ed name — the mechanism behind root-level `isTrue` / `isFalse` /
+/// `decide` (from `export Decidable …`) and `eq_of_beq` (`export LawfulBEq …`).
+pub(crate) const LEAN_ALIAS_EXTENSION: &str = "Lean.aliasExtension";
+
 /// Number of object (pointer) slots in a Lean 4 v4.x `ClassEntry`:
 /// `name : Name`, `outParams : Array Nat`, `outLevelParams : Array Nat`
 /// (`Lean/Class.lean:14-32`). All three slots are pointers; there is no
@@ -138,6 +144,8 @@ impl<'a> CompactedRegion<'a> {
             self.read_class_entry_array(entries_ptr)?
         } else if extension_name == LEAN_SIMP_EXTENSION {
             self.read_simp_entry_array(entries_ptr)?
+        } else if extension_name == LEAN_ALIAS_EXTENSION {
+            (self.read_alias_entry_array(entries_ptr)?, 0)
         } else {
             (self.read_extension_entry_array(entries_ptr)?, 0)
         };
@@ -652,6 +660,49 @@ impl<'a> CompactedRegion<'a> {
             }
         }
 
+        Ok(entries)
+    }
+
+    /// Read `Lean.aliasExtension`'s entries: `Name × Name` pairs mapping an
+    /// exported short name to its fully-qualified target. The generic reader
+    /// treats the second slot as an opaque `DataValue`; here it is resolved
+    /// as a `Name`, which is the whole difference between an alias that
+    /// resolves after `import Init` and one that does not.
+    fn read_alias_entry_array(&self, ptr: u64) -> OleanResult<Vec<ParsedExtensionEntry>> {
+        if !is_ptr(ptr) {
+            return Ok(Vec::new());
+        }
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+        if header.tag != tags::ARRAY && header.tag != tags::STRUCT_ARRAY {
+            return Ok(Vec::new());
+        }
+        let size = self.read_usize_at(offset + 8, "Alias entry array")?;
+        self.validate_array_bounds(offset, size)?;
+        let mut entries = Vec::with_capacity(size);
+        for i in 0..size {
+            let elem_offset = self.array_elem_offset(offset, i, "Alias entry array")?;
+            let elem_ptr = self.read_u64_at(elem_offset)?;
+            if !is_ptr(elem_ptr) {
+                continue;
+            }
+            let pair_offset = self.ptr_to_offset(elem_ptr)?;
+            let pair_header = self.read_header_at(pair_offset)?;
+            if !pair_header.is_constructor() || pair_header.other < 2 {
+                continue;
+            }
+            let alias_ptr = self.read_u64_at(pair_offset + 8)?;
+            let target_ptr = self.read_u64_at(pair_offset + 16)?;
+            // Faithfulness: a pair whose EITHER side fails to resolve as a
+            // Name is dropped, never guessed.
+            let (Ok(alias), Ok(target)) = (
+                self.resolve_name_ptr(alias_ptr),
+                self.resolve_name_ptr(target_ptr),
+            ) else {
+                continue;
+            };
+            entries.push(ParsedExtensionEntry::Alias { alias, target });
+        }
         Ok(entries)
     }
 

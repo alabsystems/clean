@@ -78,6 +78,18 @@ corpus-gate ARGS='--fast':
 corpus-gate-full:
     python3 scripts/aristotle_corpus_gate.py --jobs 6
 
+# Crystal revalidation SCOPE (in `scripts/local_gate.sh`, ~0.24 s).
+# Binds data/crystal_chain_revalidation_*.json to the clean-kernel SOURCE tree
+# it was measured at. RED when a CHAINED body's own source file has moved past
+# that tree -- the spec module may no longer transcribe the emitted body, and no
+# fixture in this repo can tell you. Whole-crate functy.N/enum.N/struct.N/
+# @func.N renumbering moves on any crate item with zero instructions changed, so
+# it is printed as a ledgered revalidation debt, never failed; `--strict` fails
+# on it too. Re-deriving the record itself needs trustc and is
+# scripts/crystal_fixture_freshness.py.
+crystal-scope ARGS='':
+    python3 scripts/crystal_freshness_scope.py {{ARGS}}
+
 # Axiom-audit release-check gate (clean-cli subcommand, Wave 87).
 # Runs the two non-mutating lanes (aggregate consistency + live row
 # reconciliation) and writes reports/axiom-audit-launch-evidence.json.

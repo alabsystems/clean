@@ -496,6 +496,22 @@ impl OleanExporter {
                 self.write_u64(data_ptr);
                 self.offset_to_ptr(offset)
             }
+            ParsedExtensionEntry::Alias { alias, target } => {
+                // `Lean.aliasExtension` entries are genuine `Name × Name`
+                // pairs, so — unlike the Instance/Simp arms above — this is a
+                // FAITHFUL round-trip: write both sides as real Name objects.
+                let alias_offset = self.write_name(alias);
+                let alias_ptr = self.offset_to_ptr(alias_offset);
+                let target_offset = self.write_name(target);
+                let target_ptr = self.offset_to_ptr(target_offset);
+
+                self.align8();
+                let offset = self.current_offset();
+                self.write_header(0, 2, 0);
+                self.write_u64(alias_ptr);
+                self.write_u64(target_ptr);
+                self.offset_to_ptr(offset)
+            }
         }
     }
 }

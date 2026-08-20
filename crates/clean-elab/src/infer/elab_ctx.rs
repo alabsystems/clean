@@ -758,6 +758,25 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Compute weak-head normal form of an expression
+    /// WHNF at Lean's INSTANCE transparency: unfolds `@[reducible]` and
+    /// registered instances, leaving plain `def`s folded.
+    ///
+    /// Used where a type is normalised specifically so that INSTANCE SEARCH can
+    /// match it. Ordinary `whnf` sees through a wrapper `def`, which collapses
+    /// distinct wrappers onto one instance; this keeps `@[reducible]` aliases
+    /// transparent (the reason that normalisation exists) while preserving the
+    /// distinction a wrapper is written to create.
+    pub(crate) fn whnf_instances(&self, expr: &Expr) -> Expr {
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches);
+        let instantiated = self.metas.instantiate(expr);
+        let instantiated = self.metas.instantiate_levels(&instantiated);
+        let result =
+            tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Instances);
+        self.tc_caches.replace(tc.take_caches());
+        result
+    }
+
     pub(crate) fn whnf(&self, expr: &Expr) -> Expr {
         let caches = self.tc_caches.take();
         let tc = self.make_tc(caches);

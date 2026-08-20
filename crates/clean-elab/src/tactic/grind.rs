@@ -123,6 +123,37 @@ fn grind_preprocess(state: &mut ProofState, config: &GrindConfig) {
 
     // Try simp; if it fails, that is fine — we proceed with the unnormalized goal.
     let _ = simp(state, simp_config);
+
+    // propext bridge: a goal `@Eq Prop p q` is provable exactly when `p ↔ q`
+    // is, but every propositional closer in the fan below (tauto, cc, the
+    // automation engine) matches on `Iff`/`And`/`Or` and none of them can see
+    // through the `Eq`-at-Prop spelling — so `(a ∨ b) = (b ∨ a)` failed with
+    // "no progress" while the hand-written `apply propext; tauto` closes it.
+    // Applying `propext` HERE, in preprocessing, hands the whole fan the `Iff`
+    // form. `apply` type-checks the term and `close_goal` re-checks it, so a
+    // wrong bridge fails closed; on failure the goal is left untouched.
+    let _ = try_propext_bridge(state);
+}
+
+/// Rewrite a `@Eq Prop p q` goal to `p ↔ q` via `propext`. No-op for any
+/// other goal shape.
+fn try_propext_bridge(state: &mut ProofState) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let target = state.metas.instantiate(&goal.target);
+    let args = target.get_app_args();
+    let head = target.get_app_fn();
+    let is_eq_at_prop = matches!(head.kind(), ExprKind::Const(n, _) if n.to_string() == "Eq")
+        && args.len() == 3
+        && matches!(args[0].kind(), ExprKind::Sort(l) if l.is_zero());
+    if !is_eq_at_prop {
+        return Err(TacticError::NoProgress {
+            tactic: "grind/propext".into(),
+        });
+    }
+    apply(
+        state,
+        Expr::const_(clean_kernel::name::Name::from_string("propext"), vec![]),
+    )
 }
 
 /// Normalize hypothesis equalities by substituting known variable equalities.

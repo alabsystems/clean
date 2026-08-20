@@ -1,5 +1,13 @@
-# Cargo configuration for clean
-# Limit parallelism to prevent memory exhaustion crashes
+# The PUBLIC snapshot's .cargo/config.toml. Copied over the export's
+# .cargo/config.toml by transforms.sh; the private repo's copy additionally
+# carries the Trust verifier opt-out (`-Ztrust-verify=off`), which a stock
+# compiler rejects as an unknown nightly-only flag on every unit.
+#
+# Apart from this header, this file is identical to the config Clean shipped
+# publicly BEFORE the trust flip (jobs cap, CPU tuning, RUST_MIN_STACK,
+# aliases) — the flip is private-only. .cargo/audit.toml and
+# .cargo/config.offline.toml are exported unchanged; only config.toml needs
+# the swap.
 
 [build]
 # Limit parallel jobs to prevent OOM during compilation

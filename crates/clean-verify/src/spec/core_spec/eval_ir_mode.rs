@@ -93,7 +93,37 @@ const SRC_CLEAN_MODE_TAG: &str = "def clean_mode_tag (m : CleanModeR) : Nat := C
 
 const SRC_ENCODESCLEANMODE: &str = "inductive EncodesCleanMode (mem : IRList IRMemSlot) : IRScalar -> CleanModeR -> Type\n| mk : forall (a : Nat) (m : CleanModeR), Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var (clean_mode_tag m) ir_sp0) Bool.true)) -> EncodesCleanMode mem (IRScalar.ptr_ a) m";
 
-const SRC_IR_H2_B0: &str = "def ir_h2_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_tLevel ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d3 ir_nl0 (ir_sc ir_d2 ir_d1 (ir_sc ir_d3 ir_d2 ir_sc0)) Bool.true)))";
+// The type the entry block LOADS. It is `CleanMode`, enum id 13, and the
+// emitted body names it: `%2 = load enum.13, ptr %0`
+// (tests/fixtures/has_cubical_layer.trust-ir.txt).
+//
+// CORRECTED 2026-08-19. This slot read `ir_tLevel` -- `IRTy.enum_ ir_d0`, the
+// alias belonging to the `Level::is_zero` module -- from the day the block was
+// transcribed. It was a copy-paste, and it named a type this body does not
+// touch, in a method on CleanMode. Nothing failed, in either of two ways that
+// are worth separating:
+//
+//  * The A1 lineage gate never read the operand. `IRInst.load` carries a type
+//    and the artifact prints one, and until the 2026-08-19 operand audit added
+//    the `load_tys` lane NEITHER parser looked at the slot, so a transcription
+//    at any type at all compared equal to the artifact.
+//  * The downstream theorems never read it either, and STILL do not:
+//    `ir_exec`'s arm is `IRInst.load t p vol => ir_bind_result s rs
+//    (ir_load_eval s (ir_getd s p))`, which binds `t` and discards it. So
+//    `ir_h2_correct`, `ir_h2_machine_sound` and `ir_h2_never_faults` are
+//    unchanged by this correction -- they were true with the wrong type and are
+//    true with the right one.
+//
+// That second point is the finding, not the reassurance. Clean's model is
+// COARSER here than the artifact's own semantics, where the loaded type decides
+// the read size, the alignment fault and the decode
+// (trust-ir/src/interpret.rs::eval_load). A theorem that cannot tell `enum.13`
+// from `enum.0` is not evidence that the difference does not matter; it is the
+// statement that this model cannot see it. What can see it is the gate, and now
+// does.
+const SRC_IR_H2_TMODE: &str = "def ir_h2_tmode : IRTy := IRTy.enum_ ir_d13";
+
+const SRC_IR_H2_B0: &str = "def ir_h2_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_h2_tmode ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d3 ir_nl0 (ir_sc ir_d2 ir_d1 (ir_sc ir_d3 ir_d2 ir_sc0)) Bool.true)))";
 
 const SRC_IR_H2_B1: &str = "def ir_h2_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tBool (IRConst.bool_ Bool.true)) ir_d4) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d4))))";
 
@@ -131,6 +161,24 @@ const SRC_IR_H2_NEVER_FAULTS: &str = "def ir_h2_never_faults (mem : IRList IRMem
 
 const SRC_IR_H2_CORRECT_WITNESS: &str = "def ir_h2_correct_witness : Eq IROutcome (ir_eval ir_d6 ir_h2_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (clean_mode_has_cubical CleanModeR.directed)))) := ir_h2_correct (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d6 ir_d1 (IRScalar.ptr_ ir_d0) CleanModeR.directed (EncodesCleanMode.mk (ir_cell ir_d0 (ir_var ir_d3 ir_sp0) ir_mem0) ir_d0 CleanModeR.directed (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d3 ir_sp0) Bool.true)))) (Le.refl ir_d6)";
 
+/// The `has_cubical_layer` chain's MODULE definitions, in registration order.
+///
+/// ONE source of truth, shared by [`Specification::add_eval_ir_mode`] and the
+/// GAP-2 encoding differential (`crate::ir_semdiff`). The differential must run
+/// the machine on *the registered module*, not on a second transcription of it;
+/// exporting the same constants is what makes drift between them impossible
+/// rather than merely unlikely.
+pub const IR_H2_MODULE_DEFS: &[&str] = &[
+    SRC_IR_H2_TMODE,
+    SRC_IR_H2_B0,
+    SRC_IR_H2_B1,
+    SRC_IR_H2_B2,
+    SRC_IR_H2_B3,
+    SRC_IR_H2_B4,
+    SRC_IR_H2_FUNC,
+    SRC_IR_H2_MODULE,
+];
+
 impl Specification {
     /// The width-one chain over the EMITTED shape of `CleanMode::has_cubical_layer`.
     pub(super) fn add_eval_ir_mode(&mut self) -> Result<(), SpecError> {
@@ -138,6 +186,7 @@ impl Specification {
         self.add_recursive_def(SRC_CLEAN_MODE_HAS_CUBICAL, "clean_mode_has_cubical: the reflected has_cubical_layer. True on Cubical and Directed -- the 2LTT bridge -- matching mode.rs's three ENSURES clauses. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_CLEAN_MODE_TAG, "clean_mode_tag: each variant's discriminant, 0..5 in declaration order. The ONE place the reflected type meets the emitted layout. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESCLEANMODE, "EncodesCleanMode mem p m: the heap at p represents mode m. One live cell whose payload is the tag -- no edges, no sharing, no child liveness, because the enum is fieldless. Stated as an EQUATION on ir_mem_lookup: membership would be satisfiable by a shadowed duplicate while the machine reads a different cell. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_H2_TMODE, "ir_h2_tmode: the CleanMode enum type, enum id 13 -- the id the emitted body names in `%2 = load enum.13, ptr %0`, and the same id `ir_fs_tmode` carries for the same Rust type in the from_source_system chain. CORRECTED 2026-08-19 from `ir_tLevel` (IRTy.enum_ 0), which was a copy-paste from the Level module and named a type this body does not touch. The load lane of the A1 gate now compares this slot; the machine still does not read it, which is a fact about the model, not a licence. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_H2_B0, "ir_h2_b0: entry block, TRANSCRIBED FROM THE EMITTED IR. Two switch cases (2 -> b1, 3 -> b2) and a default -- not a six-way table. The compiler emits only the true tags explicitly and routes everything else through the default edge. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_H2_B1, "ir_h2_b1: Cubical => true, then br to the join. A SEPARATE block from Directed's, as emitted. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_H2_B2, "ir_h2_b2: Directed => true. The emitted code does NOT share a block with Cubical, so neither does this. DerivedProved, zero axiom_deps.")?;

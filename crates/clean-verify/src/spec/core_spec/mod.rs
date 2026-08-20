@@ -42,6 +42,13 @@ mod beta_reduces_preserves_typing;
 mod binder_join_components;
 mod budget_induction_prereqs;
 mod bundles;
+
+// The two chained EvalIR modules, re-exported so the GAP-2 encoding
+// differential (`crate::ir_semdiff`) runs the machine on exactly the module
+// the specification registers rather than on a second transcription.
+pub use eval_ir_from_source::IR_FS_MODULE_DEFS;
+pub use eval_ir_kind_ord::IR_KO_MODULE_DEFS;
+pub use eval_ir_mode::IR_H2_MODULE_DEFS;
 mod bvar_slot;
 mod closedness_bundle;
 mod complete_development;

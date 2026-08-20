@@ -2531,6 +2531,7 @@ mod tests {
     fn test_translate_tla_core_formula_forall_in() {
         let mut ctx = TlaContext::new();
         let bound = tla_core::ast::BoundVar {
+            domain_group: None,
             name: tla_core::Spanned::dummy("x".to_string()),
             domain: Some(Box::new(tla_core::Spanned::dummy(
                 tla_core::ast::Expr::Ident("S".to_string(), tla_core::intern_name("S")),

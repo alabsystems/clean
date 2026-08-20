@@ -100,6 +100,31 @@ impl<'a> ElabCtx<'a> {
             ))
         })?;
 
+        // The head must be an actual CLASS, not merely an application.
+        //
+        // `extract_class_app` only reports that the conclusion is a constant
+        // applied to arguments, so a plain structure passed it: `instance :
+        // NotAClass := { v := 1 }` was accepted and REGISTERED as an instance,
+        // making a non-class participate in instance search. Lean rejects this
+        // ("invalid 'instance' declaration"), and Clean's `attribute [instance]`
+        // path already does — this is the same check on the `instance` COMMAND
+        // path, which had been missing it.
+        //
+        // Both registries are consulted on purpose. Classes declared in source
+        // land in `self.instances`, while built-ins such as `Inhabited` are
+        // registered only via `add_inductive` during kernel prelude init (#3534)
+        // and carry their class info on the environment. Requiring only the
+        // former would break exactly the built-in classes the short-form path
+        // below exists to support.
+        if !self.instances.is_class(&class_name) && self.env.get_class_info(&class_name).is_none() {
+            return Err(ElabError::Unsupported {
+                feature: format!(
+                    "instance: `{class_name}` is not a class (an `instance` \
+                     declaration's type must conclude in a class application)"
+                ),
+            });
+        }
+
         // Detect the short-form instance syntax: `instance : Class := expr`.
         // The parser represents this as a single pseudo-field named `_value`
         // (see clean-parser/src/grammar/decl/class_instance.rs:225). In this

@@ -119,8 +119,17 @@ COMPOSITION_BLOCKS = ("inductive Step", "def Confl", "inductive Tm", "inductive 
 # changes a pass/fail verdict, and a name absent from it keeps its global status
 # for every rung.
 GLOBAL_ASSUMPTIONS = {
-    "sn": "UNDISCHARGED_AND_FALSE_UNDER_TYPE_IN_TYPE",
-    "decWH": "UNDISCHARGED",
+    # No longer merely asserted: `Girard.sn_false` on `dependent-whnf-conversion`
+    # machine-checks the falsity for that λ* calculus. The other dependent rungs
+    # are extensions of it and are not covered by that proof (see
+    # CONDITIONAL_VACUITY), and on `newman` / the simply-typed rungs `sn` means
+    # something else entirely.
+    "sn": "FALSE_UNDER_TYPE_IN_TYPE__REFUTED_ON_ALL_9_DEPENDENT_RUNGS",
+    # UNDISCHARGED, but on 9 of its 10 rungs discharging it would buy NOTHING:
+    # those capstones are conditioned on a false `sn` (see CONDITIONAL_VACUITY).
+    # The one rung where it was worth real effort — `whnf-conversion`, simply
+    # typed, `sn` true and proved — is discharged.
+    "decWH": "UNDISCHARGED_BUT_9_OF_10_RUNGS_ARE_PROVED_VACUOUS",
     "whnf_conv": "UNDISCHARGED_ORACLE",
     "whnf_steps": "UNDISCHARGED_ORACLE",
     "whnf_whnf": "UNDISCHARGED_ORACLE",
@@ -134,7 +143,7 @@ GLOBAL_ASSUMPTIONS = {
     # `KComplete`, so a whole assumption could hide behind one capitalised name.
     "wf": "BY_DESIGN_PREMISE_PROVED_NECESSARY",
     "ac": "BY_DESIGN_PREMISE_PROVED_NECESSARY",
-    "wcr": "BY_DESIGN_STATEMENT_PREMISE",
+    "wcr": "BY_DESIGN_PREMISE_PROVED_NECESSARY",
     "hcomp": "DISCHARGED_BY_PROOF",
 }
 
@@ -145,6 +154,47 @@ GLOBAL_ASSUMPTIONS = {
 # vacuity pattern, no sorry, and elaborates clean. But a theorem quantified over a
 # degenerate relation says nothing, so the corpus must not report such a rung as
 # healthy. Each entry names the MACHINE-CHECKED witness that proves the collapse.
+# A rung whose CAPSTONE is conditioned on a hypothesis that is FALSE for its own
+# calculus. The theorem is then vacuously true and carries no content — the same
+# end state as a degenerate relation, reached the other way round. Nothing else
+# here can see it: the hypothesis is a binder (so axiom closure is blind), it is
+# satisfiable in general (so no vacuity pattern fires), and the file elaborates
+# clean. It takes joining TWO census rows — "this rung assumes `sn`" and "`sn` is
+# false under `Type : Type`" — and the gate should not make a reader do that.
+CONDITIONAL_VACUITY = {
+    rung: (
+        "**PROVED VACUOUS.** `Girard/Main.lean` in this rung proves "
+        "`Girard.sn_false : ¬ (∀ {Γ e T}, HasType Γ e T → SN e)` — the exact negation of the "
+        "`sn` hypothesis taken by this rung's `decConv_whnf` — so the capstone's hypotheses "
+        "are CONTRADICTORY and it says nothing. Verified by restating `decConv_whnf`'s "
+        "signature verbatim with the conclusion replaced by `False`; it goes through. "
+        "Route: Hurkens' paradox in the OBJECT syntax (`Tm`, 3,875 nodes, unchanged across "
+        "all nine rungs because the core var/sort/pi/lam/app/conv typing rules are "
+        "byte-identical), typed via a verified fuel-bounded inferencer whose `infer_sound` "
+        "turns the KERNEL computation `infer 40 [] paradox = some ⊥` into a real derivation; "
+        "then Church-Rosser and subject reduction show a closed inhabitant of "
+        "`⊥ = Π(X:*).X` has no normal form. Also proved per rung: `Girard.inconsistent` and "
+        "`Girard.confluence : Confl`, the latter discharging that rung's `cr` outright. "
+        "CAVEAT, unchanged: the refutation is INDIRECT — it shows the paradox has no normal "
+        "form rather than exhibiting an explicit loop. That is exactly `¬ SN`, but an "
+        "explicit loop would be strictly more informative and is not done. "
+        "CONSEQUENCE FOR `decWH`: discharging it on any of these rungs would replace one "
+        "hypothesis of a vacuous theorem with a derivation from another false one — it buys "
+        "NO soundness and must never be reported as making a rung sound."
+    )
+    for rung in (
+        "dependent-whnf-conversion",
+        "dependent-bool-whnf-conversion",
+        "dependent-nat-whnf-conversion",
+        "dependent-sigma-whnf-conversion",
+        "dependent-id-j-whnf-conversion",
+        "dependent-coproduct-whnf-conversion",
+        "dependent-wtype-whnf-conversion",
+        "dependent-unified-core-whnf-conversion",
+        "dependent-unified-full-whnf-conversion",
+    )
+}
+
 DEGENERATE_RELATIONS = {
     "proof-irrelevance-r3":
         "Conv is the TOTAL relation — `conv_total (Γ) (x y) : Conv Γ x y` is proved in "
@@ -182,7 +232,43 @@ OBSTRUCTIONS: dict[tuple[str, str], str] = {}
 # environment (otherwise every theorem over them is vacuous), and each is
 # PROVABLY NECESSARY (dropping it falsifies the rung's own conclusion).
 # Reporting only; never moves a verdict.
+#
+# Keyed by name, but each entry names the RUNGS the measurement covers, because a
+# name can mean different things on different rungs: `sn` is an abstract by-design
+# premise on `newman` and PROVED NECESSARY there, while on the dependent rungs it
+# is the false-under-`Type : Type` one. A blanket "[necessity PROVED]" tag next to
+# such a name would be exactly the overclaim this table exists to prevent.
+# Premises MACHINE-CHECKED FALSE for a given rung's own calculus. The strongest
+# possible verdict on an assumption, and the reason its rung's capstone is vacuous.
+PREMISE_REFUTED = {
+    ("sn", rung): "Girard.sn_false — Hurkens' paradox in the object syntax; see CONDITIONAL_VACUITY"
+    for rung in (
+        "dependent-whnf-conversion", "dependent-bool-whnf-conversion",
+        "dependent-nat-whnf-conversion", "dependent-sigma-whnf-conversion",
+        "dependent-id-j-whnf-conversion", "dependent-coproduct-whnf-conversion",
+        "dependent-wtype-whnf-conversion", "dependent-unified-core-whnf-conversion",
+        "dependent-unified-full-whnf-conversion",
+    )
+}
+
+PREMISE_NECESSITY_RUNGS = {
+    "wf": ["let-delta-whnf-conversion", "let-delta-decidable", "let-delta-sn", "let-delta-sr"],
+    "ac": ["let-delta-whnf-conversion", "let-delta-decidable", "let-delta-sn"],
+    "wcr": ["newman"],
+    "sn": ["newman"],
+}
+
 PREMISE_NECESSITY = {
+    "sn": (
+        "ON `newman` ONLY, and it is a DIFFERENT ASSUMPTION from the `sn` of the "
+        "dependent rungs: there it is the false-under-`Type : Type` one, here it is "
+        "`∀ a, Acc (fun x y => step y x) a` over an ABSTRACT carrier — by design, since "
+        "no theorem says every rewrite system is terminating. NECESSARY: "
+        "`NewmanPremiseWitness.not_confl_SCycle` — `SCycle` (`a ⇄ b` with escapes "
+        "`a → a'`, `b → b'`) is locally confluent (`wcr_SCycle`) but not SN "
+        "(`not_sn_SCycle`), and `a` reaches two distinct normal forms, so confluence "
+        "fails. Local confluence alone does not give confluence."
+    ),
     "wf": (
         "`WfEnv E` — every definition's body has its declared type. NECESSARY: "
         "`LetDeltaEnvWitness.subject_reduction_fails_E2` exhibits an ACYCLIC but "
@@ -205,9 +291,13 @@ PREMISE_NECESSITY = {
         "measurement applies there."
     ),
     "wcr": (
-        "`WCR` — local confluence, the premise of Newman's lemma. By design: the "
-        "lemma IS `WCR + SN → CR`. No witness landed; unlike `wf`/`ac` this one has "
-        "not been measured for satisfiability."
+        "`LocalConfl step` — the premise of Newman's lemma, abstract over the carrier, "
+        "so by design. SATISFIABLE NON-VACUOUSLY: `NewmanPremiseWitness.confl_SDiamond` "
+        "runs `newman` on a system with a GENUINE divergence (`a → b`, `a → c` joining "
+        "at `d`), so `LocalConfl` is joining a real peak rather than holding for want "
+        "of one. NECESSARY: `not_confl_SFork` — `SFork` (`a → b`, `a → c`, both normal) "
+        "is SN but not locally confluent, and not confluent. So SN alone does not give "
+        "confluence, and `wcr` does not follow from `sn`."
     ),
 }
 
@@ -446,6 +536,24 @@ def rung_name(path: Path) -> str:
     return path.relative_to(CORPUS_DIR).parts[0]
 
 
+def solution_root(path: Path) -> Path:
+    """The directory `lean` resolves this rung's imports against."""
+    rel = path.relative_to(CORPUS_DIR).parts
+    return CORPUS_DIR / rel[0] / "solution"
+
+
+def module_name(path: Path) -> str:
+    """Dotted module name, as an `import` line inside the rung would spell it.
+
+    `dependent-whnf-conversion` is the corpus's first rung with a module SUBDIRECTORY
+    (`solution/Girard/Main.lean`, imported as `Girard.Main`). Matching imports against
+    bare file stems would have failed to resolve those, silently leaving the rung's
+    files unordered — so the name has to be the path, not the stem.
+    """
+    rel = path.relative_to(solution_root(path)).with_suffix("")
+    return ".".join(rel.parts)
+
+
 def order_rung_files(paths: list[Path]) -> tuple[list[Path], str]:
     """Topologically order one rung's files by their INTRA-RUNG imports.
 
@@ -454,14 +562,15 @@ def order_rung_files(paths: list[Path]) -> tuple[list[Path], str]:
     see a dependency's `.olean` before the importer, and — more importantly — the
     per-file scan below must run over EVERY file, not just the last one.
     """
-    by_stem = {p.stem: p for p in paths}
+    by_stem = {module_name(p): p for p in paths}
     if len(by_stem) != len(paths):
-        # Keying by stem is what `lean` itself does for imports, so a collision is
+        # Module names are what `lean` resolves imports against, so a collision is
         # not merely ambiguous here — it would drop a file from the ordering, which
         # is the exact silent-coverage bug this function exists to end.
         seen: set[str] = set()
-        dupes = sorted({p.stem for p in paths if p.stem in seen or seen.add(p.stem)})
-        return paths, f"duplicate module stem(s) in one rung: {dupes}"
+        names = [module_name(p) for p in paths]
+        dupes = sorted({n for n in names if n in seen or seen.add(n)})
+        return paths, f"duplicate module name(s) in one rung: {dupes}"
     deps: dict[str, set[str]] = {}
     for stem, path in by_stem.items():
         src = path.read_text(encoding="utf-8", errors="replace")
@@ -509,11 +618,16 @@ def elaborate_rung(paths: list[Path]) -> tuple[bool, int, int, str]:
     with tempfile.TemporaryDirectory(prefix="corpus-gate-") as build:
         env = dict(os.environ, LEAN_PATH=build)
         for path in ordered:
+            # The `.olean` must sit at the module's own path (`Girard/Main.olean`),
+            # and `lean` must run from the import root, not the file's directory.
+            root = solution_root(path)
+            olean = Path(build) / (module_name(path).replace(".", os.sep) + ".olean")
+            olean.parent.mkdir(parents=True, exist_ok=True)
             try:
                 proc = subprocess.run(
                     ["elan", "run", TOOLCHAIN, "lean",
-                     "-o", str(Path(build) / f"{path.stem}.olean"), path.name],
-                    cwd=path.parent, capture_output=True, text=True, timeout=1800, env=env,
+                     "-o", str(olean), str(path.relative_to(root))],
+                    cwd=root, capture_output=True, text=True, timeout=1800, env=env,
                 )
             except FileNotFoundError:
                 return False, -1, -1, "elan not installed"
@@ -754,11 +868,30 @@ def main() -> int:
         if walled:
             extra += f"  [obstruction proved: {', '.join(walled)}]"
         if name in PREMISE_NECESSITY:
-            # Only claim a measurement where one actually landed: `wcr` is in the
-            # table as a by-design premise whose satisfiability was NOT measured.
-            extra += ("  [necessity PROVED]" if "NECESSARY:" in PREMISE_NECESSITY[name]
-                      else "  [premise, necessity UNMEASURED]")
+            # Name the rungs the measurement covers. A name can mean different things
+            # on different rungs (`sn` on `newman` vs on the dependent rungs), so a
+            # blanket tag would overclaim on the ones nobody measured.
+            done_on = sorted(set(PREMISE_NECESSITY_RUNGS.get(name, ())) & set(info["rungs"]))
+            # A rung where the premise is REFUTED is measured too — just with the
+            # opposite verdict. Counting it as "unmeasured" would understate what
+            # is known, exactly as a blanket "PROVED" would overstate it.
+            refuted = sorted(r for (n, r) in PREMISE_REFUTED if n == name and r in info["rungs"])
+            rest = len(info["rungs"]) - len(done_on) - len(refuted)
+            if done_on:
+                extra += f"  [necessity PROVED on: {', '.join(done_on)}]"
+            elif not refuted:
+                extra += "  [premise, necessity UNMEASURED]"
+            if refuted:
+                extra += f"  [REFUTED on: {', '.join(refuted)}]"
+            if (done_on or refuted) and rest:
+                extra += f"  [{rest} other rung(s) unmeasured]"
         print(f"  {name:14s} {info['status']:38s} {len(info['rungs'])} rungs{extra}")
+    vac = sorted(r for r in CONDITIONAL_VACUITY if r in report["rungs"])
+    if vac:
+        print(f"\nCONDITIONALLY VACUOUS ({len(vac)}) — capstone conditioned on a hypothesis "
+              f"FALSE for its own calculus, so the theorem says nothing:")
+        print(f"  {', '.join(vac)}")
+        print(f"  {CONDITIONAL_VACUITY[vac[0]][:150]}…")
     if DEGENERATE_RELATIONS:
         print(f"\nDEGENERATE RELATIONS ({len(DEGENERATE_RELATIONS)}) — a theorem over one of "
               f"these says NOTHING:")

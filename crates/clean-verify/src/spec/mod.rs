@@ -35,6 +35,8 @@
 //! elaborated and type-checked by the kernel.
 
 mod core_spec;
+
+pub use core_spec::{IR_FS_MODULE_DEFS, IR_H2_MODULE_DEFS, IR_KO_MODULE_DEFS};
 mod declaration_registration;
 mod definition;
 mod definition_registration;

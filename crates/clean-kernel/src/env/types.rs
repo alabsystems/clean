@@ -124,6 +124,16 @@ impl Reducibility {
         match (self, mode) {
             (Reducibility::Reducible, _) => true,
             (Reducibility::Regular(_), TransparencyMode::Reducible) => false,
+            // Lean parity: `instances` transparency unfolds @[reducible] and
+            // registered INSTANCES only — a plain `def` stays opaque to instance
+            // search (`unfold_with_transparency` adds the instance case).
+            //
+            // Without this arm a wrapper `def Meters := Nat` is transparent to
+            // instance selection, so distinct wrappers with distinct instances
+            // collapse — Mathlib's `OrderDual`/`Multiplicative`/`Additive`/
+            // `Opposite` idiom, where the wrapper exists precisely so a
+            // DIFFERENT instance is chosen.
+            (Reducibility::Regular(_), TransparencyMode::Instances) => false,
             (Reducibility::Regular(_), _) => true,
             (Reducibility::Irreducible, TransparencyMode::All) => true,
             (Reducibility::Irreducible, _) => false,

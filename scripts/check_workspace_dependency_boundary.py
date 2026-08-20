@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
 
-"""Fail closed if Clean crosses a workspace boundary or floats TrustIr."""
+"""Fail closed if Clean crosses a workspace boundary or splits first-party pins."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ except ModuleNotFoundError:  # Python 3.10 and older.
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_MANIFEST = ROOT / "Cargo.toml"
 ROOT_LOCK = ROOT / "Cargo.lock"
+CLI_RUNNER_LOCK = ROOT / "cli-runner/Cargo.lock"
 AUTOFORM_MANIFEST = ROOT / "crates/clean-autoform/Cargo.toml"
 AUTOFORM_SOURCE = ROOT / "crates/clean-autoform/src"
 CONTRACT_NAME = "trust-ir-contract"
@@ -32,6 +33,24 @@ EXACT_REVISION = re.compile(r"[0-9a-f]{40}")
 TRUST_IR_LOCK_SOURCE = re.compile(
     r"^git\+https://github\.com/alabsystems/trust-ir\.git"
     r"\?rev=([0-9a-f]{40})#([0-9a-f]{40})$"
+)
+AY_DEPENDENCY_NAMES = (
+    "ay",
+    "ay-dpll",
+    "ay-core",
+    "ay-lean-bridge",
+    "ay-proof",
+    "ay-frontend",
+    "ay-translate",
+)
+AY_REPOSITORY = "https://github.com/alabsystems/ay.git"
+TY_DEPENDENCY_NAME = "tla-core"
+TY_REPOSITORY = "https://github.com/alabsystems/ty.git"
+AY_LOCK_SOURCE = re.compile(
+    rf"^git\+{re.escape(AY_REPOSITORY)}\?rev=([0-9a-f]{{40}})#([0-9a-f]{{40}})$"
+)
+TY_LOCK_SOURCE = re.compile(
+    rf"^git\+{re.escape(TY_REPOSITORY)}\?rev=([0-9a-f]{{40}})#([0-9a-f]{{40}})$"
 )
 FORBIDDEN_DEPENDENCIES = ("trust-types", "trust-verifier-api")
 FORBIDDEN_CRATE_NAMES = ("trust_types", "trust_verifier_api")
@@ -184,6 +203,173 @@ def check_contract_lock_revision(
             "Cargo.lock TrustIR revision does not match trust-ir-contract: "
             f"lock={lock_revision}, contract={contract_revision}"
         )
+
+
+def check_first_party_manifest_pins(root_manifest: str) -> tuple[str, str, str]:
+    """Return the one AY version/revision and Ty revision required by the root."""
+
+    try:
+        dependencies = tomllib.loads(root_manifest)["workspace"]["dependencies"]
+    except (KeyError, TypeError, tomllib.TOMLDecodeError) as error:
+        raise BoundaryViolation(
+            "root workspace dependencies table is not valid TOML"
+        ) from error
+    if not isinstance(dependencies, dict):
+        raise BoundaryViolation("root workspace dependencies table is not a table")
+
+    ay_versions: set[str] = set()
+    ay_revisions: set[str] = set()
+    for name in AY_DEPENDENCY_NAMES:
+        dependency = dependencies.get(name)
+        if not isinstance(dependency, dict):
+            raise BoundaryViolation(f"workspace AY dependency {name} is absent")
+        version = dependency.get("version")
+        revision = dependency.get("rev")
+        if (
+            dependency.get("git") != AY_REPOSITORY
+            or not isinstance(version, str)
+            or not version
+            or not isinstance(revision, str)
+            or EXACT_REVISION.fullmatch(revision) is None
+        ):
+            raise BoundaryViolation(
+                f"workspace AY dependency {name} needs the canonical Git URL, "
+                "a version, and an exact lowercase 40-hex rev"
+            )
+        ay_versions.add(version)
+        ay_revisions.add(revision)
+    if len(ay_versions) != 1 or len(ay_revisions) != 1:
+        raise BoundaryViolation(
+            "workspace AY dependencies split versions or revisions: "
+            f"versions={sorted(ay_versions)}, revisions={sorted(ay_revisions)}"
+        )
+
+    ty_dependency = dependencies.get(TY_DEPENDENCY_NAME)
+    if not isinstance(ty_dependency, dict):
+        raise BoundaryViolation(
+            f"workspace Ty dependency {TY_DEPENDENCY_NAME} is absent"
+        )
+    ty_revision = ty_dependency.get("rev")
+    if (
+        ty_dependency.get("git") != TY_REPOSITORY
+        or not isinstance(ty_revision, str)
+        or EXACT_REVISION.fullmatch(ty_revision) is None
+    ):
+        raise BoundaryViolation(
+            f"workspace Ty dependency {TY_DEPENDENCY_NAME} needs the canonical "
+            "Git URL and an exact lowercase 40-hex rev"
+        )
+
+    return next(iter(ay_versions)), next(iter(ay_revisions)), ty_revision
+
+
+def check_first_party_lock_inventory(
+    lock_texts: dict[str, str],
+    required_contexts: set[str],
+    ay_version: str,
+    ay_revision: str,
+    ty_revision: str,
+) -> str:
+    """Bind AY and Ty in every tracked lock to the root manifest's epoch."""
+
+    missing = required_contexts.difference(lock_texts)
+    if missing:
+        raise BoundaryViolation(
+            "required first-party locks are not tracked: " + ", ".join(sorted(missing))
+        )
+
+    tla_core_versions: dict[str, str] = {}
+    for context, lock_text in sorted(lock_texts.items()):
+        try:
+            packages = tomllib.loads(lock_text).get("package")
+        except tomllib.TOMLDecodeError as error:
+            raise BoundaryViolation(f"{context} is not valid TOML") from error
+        if not isinstance(packages, list):
+            raise BoundaryViolation(f"{context} has no package inventory")
+
+        ay_packages: list[dict] = []
+        ty_packages: list[dict] = []
+        for package in packages:
+            if not isinstance(package, dict):
+                continue
+            source = package.get("source")
+            if not isinstance(source, str):
+                continue
+            if source.startswith(f"git+{AY_REPOSITORY}"):
+                match = AY_LOCK_SOURCE.fullmatch(source)
+                if match is None or match.group(1) != match.group(2):
+                    raise BoundaryViolation(
+                        f"{context} package {package.get('name', '<unknown>')} "
+                        "does not use one resolved canonical AY revision"
+                    )
+                if match.group(1) != ay_revision:
+                    raise BoundaryViolation(
+                        f"{context} AY revision {match.group(1)} does not match "
+                        f"workspace revision {ay_revision}"
+                    )
+                ay_packages.append(package)
+            elif source.startswith(f"git+{TY_REPOSITORY}"):
+                match = TY_LOCK_SOURCE.fullmatch(source)
+                if match is None or match.group(1) != match.group(2):
+                    raise BoundaryViolation(
+                        f"{context} package {package.get('name', '<unknown>')} "
+                        "does not use one resolved canonical Ty revision"
+                    )
+                if match.group(1) != ty_revision:
+                    raise BoundaryViolation(
+                        f"{context} Ty revision {match.group(1)} does not match "
+                        f"workspace revision {ty_revision}"
+                    )
+                ty_packages.append(package)
+
+        if context in required_contexts and not ay_packages:
+            raise BoundaryViolation(f"{context} has no AY package source")
+        ay_lock_versions: set[str] = set()
+        for package in ay_packages:
+            version = package.get("version")
+            if not isinstance(version, str) or not version:
+                raise BoundaryViolation(
+                    f"{context} AY package {package.get('name', '<unknown>')} "
+                    "has no lockfile version"
+                )
+            ay_lock_versions.add(version)
+        if ay_packages and ay_lock_versions != {ay_version}:
+            raise BoundaryViolation(
+                f"{context} AY versions {sorted(ay_lock_versions)} do not match "
+                f"workspace version {ay_version}"
+            )
+
+        direct_ty = [
+            package
+            for package in ty_packages
+            if package.get("name") == TY_DEPENDENCY_NAME
+        ]
+        if len(direct_ty) > 1:
+            raise BoundaryViolation(
+                f"{context} contains multiple Git-pinned {TY_DEPENDENCY_NAME} packages"
+            )
+        if context in required_contexts and len(direct_ty) != 1:
+            raise BoundaryViolation(
+                f"{context} must contain exactly one Git-pinned {TY_DEPENDENCY_NAME}"
+            )
+        if direct_ty:
+            version = direct_ty[0].get("version")
+            if not isinstance(version, str) or not version:
+                raise BoundaryViolation(
+                    f"{context} {TY_DEPENDENCY_NAME} has no lockfile version"
+                )
+            tla_core_versions[context] = version
+
+    versions = set(tla_core_versions.values())
+    if len(versions) != 1:
+        detail = ", ".join(
+            f"{context}={version}"
+            for context, version in sorted(tla_core_versions.items())
+        )
+        raise BoundaryViolation(
+            f"tracked locks split {TY_DEPENDENCY_NAME} versions: {detail}"
+        )
+    return next(iter(versions))
 
 
 def check_trust_ir_lock_source(lock_text: str, context: str, required: bool) -> str | None:
@@ -470,6 +656,141 @@ def regression_self_test() -> None:
     else:
         raise AssertionError("cross-lock TrustIR split regression was not rejected")
 
+    revision_c = "c" * 40
+    first_party_manifest = "[workspace.dependencies]\n" + "".join(
+        f'{name} = {{ package = "{name}", version = "0.13.0", '
+        f'git = "{AY_REPOSITORY}", rev = "{revision_a}" }}\n'
+        for name in AY_DEPENDENCY_NAMES
+    ) + (
+        f'{TY_DEPENDENCY_NAME} = {{ git = "{TY_REPOSITORY}", '
+        f'rev = "{revision_b}" }}\n'
+    )
+    assert check_first_party_manifest_pins(first_party_manifest) == (
+        "0.13.0",
+        revision_a,
+        revision_b,
+    )
+    invalid_first_party_manifests = (
+        (
+            first_party_manifest.replace('version = "0.13.0"', 'version = "0.12.0"', 1),
+            "split AY versions",
+        ),
+        (
+            first_party_manifest.replace(revision_a, revision_c, 1),
+            "split AY revisions",
+        ),
+        (
+            first_party_manifest.replace(AY_REPOSITORY, "https://example.invalid/ay.git", 1),
+            "non-canonical AY repository",
+        ),
+        (
+            first_party_manifest.replace(revision_b, revision_b[:12]),
+            "abbreviated Ty revision",
+        ),
+    )
+    for manifest, description in invalid_first_party_manifests:
+        try:
+            check_first_party_manifest_pins(manifest)
+        except BoundaryViolation:
+            pass
+        else:
+            raise AssertionError(f"{description} regression was not rejected")
+
+    def first_party_source(repository: str, revision: str) -> str:
+        return f"git+{repository}?rev={revision}#{revision}"
+
+    def first_party_lock_fixture(
+        ay_version: str = "0.13.0",
+        ay_revision: str = revision_a,
+        ty_version: str = "0.13.0",
+        ty_revision: str = revision_b,
+    ) -> str:
+        return "\n".join(
+            (
+                "version = 4\n",
+                "[[package]]\n"
+                'name = "ay"\n'
+                f'version = "{ay_version}"\n'
+                f'source = "{first_party_source(AY_REPOSITORY, ay_revision)}"\n',
+                "[[package]]\n"
+                f'name = "{TY_DEPENDENCY_NAME}"\n'
+                f'version = "{ty_version}"\n'
+                f'source = "{first_party_source(TY_REPOSITORY, ty_revision)}"\n',
+            )
+        )
+
+    required_locks = {"Cargo.lock", "cli-runner/Cargo.lock"}
+    coherent_first_party_locks = {
+        "Cargo.lock": first_party_lock_fixture(),
+        "cli-runner/Cargo.lock": first_party_lock_fixture(),
+        "unrelated/Cargo.lock": unrelated_lock,
+    }
+    assert (
+        check_first_party_lock_inventory(
+            coherent_first_party_locks,
+            required_locks,
+            "0.13.0",
+            revision_a,
+            revision_b,
+        )
+        == "0.13.0"
+    )
+    invalid_first_party_locks = (
+        (
+            {
+                **coherent_first_party_locks,
+                "cli-runner/Cargo.lock": first_party_lock_fixture(
+                    ay_revision=revision_c
+                ),
+            },
+            "stale standalone AY revision",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "cli-runner/Cargo.lock": first_party_lock_fixture(
+                    ay_version="0.12.0"
+                ),
+            },
+            "stale standalone AY version",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "cli-runner/Cargo.lock": first_party_lock_fixture(
+                    ty_revision=revision_c
+                ),
+            },
+            "stale standalone Ty revision",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "cli-runner/Cargo.lock": first_party_lock_fixture(
+                    ty_version="0.12.0"
+                ),
+            },
+            "split standalone tla-core version",
+        ),
+        (
+            {"Cargo.lock": first_party_lock_fixture()},
+            "missing standalone first-party lock",
+        ),
+    )
+    for lock_texts, description in invalid_first_party_locks:
+        try:
+            check_first_party_lock_inventory(
+                lock_texts,
+                required_locks,
+                "0.13.0",
+                revision_a,
+                revision_b,
+            )
+        except BoundaryViolation:
+            pass
+        else:
+            raise AssertionError(f"{description} regression was not rejected")
+
 
 def main() -> int:
     regression_self_test()
@@ -483,6 +804,9 @@ def main() -> int:
 
     try:
         check_contract_declaration(root_manifest, bool(autoform_manifest))
+        ay_version, ay_revision, ty_revision = check_first_party_manifest_pins(
+            root_manifest
+        )
     except BoundaryViolation as error:
         fail(str(error))
 
@@ -513,6 +837,16 @@ def main() -> int:
             root_manifest,
             bool(autoform_manifest),
             trust_ir_revision,
+        )
+        tla_core_version = check_first_party_lock_inventory(
+            lock_texts,
+            {
+                str(ROOT_LOCK.relative_to(ROOT)),
+                str(CLI_RUNNER_LOCK.relative_to(ROOT)),
+            },
+            ay_version,
+            ay_revision,
+            ty_revision,
         )
     except (
         OSError,
@@ -553,7 +887,9 @@ def main() -> int:
 
     print(
         "Clean dependency boundary is closed through trust-ir-contract; "
-        f"one TrustIR lock source={trust_ir_revision or 'absent'}"
+        f"one TrustIR lock source={trust_ir_revision or 'absent'}; "
+        f"AY {ay_version}@{ay_revision}; "
+        f"{TY_DEPENDENCY_NAME} {tla_core_version}@{ty_revision}"
     )
     return 0
 

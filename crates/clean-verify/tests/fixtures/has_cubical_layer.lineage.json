@@ -62,5 +62,46 @@
    "measured": "2026-08-13",
    "why": "superseded by the 2026-08-13 RECONCILIATION measurement: every chain fixture in this tree is now pinned on ONE compiler (trustc 110cc6379) with that compiler's identity recorded, after two sessions' fixtures were found to disagree because they were taken on different, partly unrecorded compilers."
   }
- ]
+ ],
+ "superseded_at_head": {
+  "record": "data/crystal_chain_revalidation_2026-08-19.json",
+  "measured": "2026-08-19",
+  "trust_rev": "6819d58406d13fc8a5a0bef61c30ffb4da9316fc",
+  "trust_rev_note": "origin/main; wave-DZ 3a09adfea2 is an ancestor",
+  "clean_rev": "f99b94e21b0ad5a59e07b21f5f0005038df9b8fb",
+  "head_lineage": "sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054",
+  "head_def_index": 17982,
+  "head_func_id": 4181,
+  "head_derived_mir_verdict": "agreed",
+  "head_markers_exact": true,
+  "head_flip_fired": true,
+  "emitted_body_at_head": "IDENTICAL",
+  "emitted_body_drift_classes": [],
+  "instructions_moved": 0,
+  "emitted_body_note": "The emitted body is BYTE-IDENTICAL to has_cubical_layer.trust-ir.txt at HEAD.",
+  "this_fixture_is_not_overwritten": "Every measured field ABOVE remains a correct, internally consistent record of the build it was taken at, and is deliberately left alone. It is NOT a claim about HEAD. The 2026-08-19 revalidation is recorded in the file named above: one sealed driver (guard PASS before every run, positive behavioural identification against a pre-wave-DZ control), one recipe (scripts/trust_ir_build.sh --print-only), reproduced over three clean non-incremental builds with byte-identical coverage.json and trust-ir.txt, with a negative control at 0 flip events crate-wide.",
+  "why_it_is_not_re_pinned_in_place": "A partial re-pin would manufacture a fixture that describes no single build. The `build` block here was measured on a DIFFERENT recipe -- RUSTFLAGS applied the flip crate-wide, which is why it records flip_events_all_from_clean_kernel: false over thousands of events -- while scripts/trust_ir_build.sh attaches -Ztrust-ir-flip to the SUBJECT UNIT ALONE, so foreign events are 0 by construction and the two `build` blocks are not comparable field by field. Moving `lineage` while leaving them is exactly the mixing that level_kind_ord.lineage.json's `measurement_scope` warns against.",
+  "how_to_re_derive": "scripts/crystal_fixture_freshness.py <dump-dir> -- seal the driver first; the script's header says how and why."
+ },
+ "reconfirmed_at_newer_producer": {
+  "record": "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json",
+  "measured": "2026-08-19",
+  "trust_rev": "ccf52b40c3e00e846b79f87e01cbe59ce320ef04",
+  "trust_rev_note": "trust origin/main, 33 commits past the 6819d58406 of `superseded_at_head` -- including vtable slices 13/14/15 (producer adoption) and the call-arg nonmax arm. The IR-emitting lowering itself moved: lower.rs c0cda7b988 -> 083c00091c.",
+  "clean_rev": "f0846ade2bc9e5d94a727148543d02f9cf50834f",
+  "clean_kernel_source_identical_to_prior_revalidation": true,
+  "clean_kernel_source_identical_note": "`git diff f99b94e21 f0846ade2 -- crates/clean-kernel Cargo.toml Cargo.lock` is EMPTY, so this is a clean producer-only A/B and every delta is the producer.",
+  "emitted_body_at_head": "IDENTICAL",
+  "emitted_body_drift_classes": [],
+  "instructions_moved": 0,
+  "gep_in_fixture": 0,
+  "gep_in_emitted_body": 0,
+  "head_lineage_still": "sha256:d9b7dcbd0e5018dd1fe6c24aeb95e32d072016945624f05f887c6115f90b6054",
+  "head_def_index_still": 17982,
+  "head_lineage_moved_since_prior_revalidation": false,
+  "head_func_id_moved_to": 4178,
+  "nothing_here_is_superseded": "The `superseded_at_head` block above is NOT stale and has NOT been rewritten. Its head_lineage and head_def_index are the values this body still carries under a producer 33 commits newer, measured on byte-identical clean-kernel source. Only func_id moved (4181 -> 4178), and func_id is a whole-crate ordinal read by no gate lane. A lineage digest is a per-BUILD artifact identity; this run is what ESTABLISHES that for a chained body it is stable under a producer change, rather than assuming it. Overwriting the earlier block would have destroyed exactly that evidence.",
+  "how_to_re_derive": "scripts/crystal_fixture_freshness.py <dump-dir>  (seal the driver first; see its header)",
+  "emitted_body_note": "BYTE-IDENTICAL to has_cubical_layer.trust-ir.txt at HEAD."
+ }
 }

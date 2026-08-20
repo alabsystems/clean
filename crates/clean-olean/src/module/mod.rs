@@ -38,7 +38,9 @@ mod readers;
 mod tests;
 
 pub use analysis::{ArrayAnalysis, ElementInfo, RootAnalysis};
-pub(crate) use extensions::{LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION, LEAN_SIMP_EXTENSION};
+pub(crate) use extensions::{
+    LEAN_ALIAS_EXTENSION, LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION, LEAN_SIMP_EXTENSION,
+};
 
 use crate::expr::ParsedExpr;
 
@@ -571,6 +573,18 @@ pub enum ParsedExtensionEntry {
     Class(ParsedClassEntry),
     /// Decoded `@[simp]` registration from `Lean.Meta.simpExtension`.
     Simp(ParsedSimpEntry),
+    /// Decoded `export`/`alias` registration from `Lean.aliasExtension`:
+    /// the short (aliased) name and the fully-qualified constant it names.
+    /// Lean persists these as `Name × Name` pairs, so the generic
+    /// `(Name × DataValue)` reader captured the target as opaque bytes and
+    /// every imported `export` (e.g. `isTrue` for `Decidable.isTrue`) was
+    /// unresolvable after `import Init`.
+    Alias {
+        /// The short name the alias introduces (`isTrue`).
+        alias: String,
+        /// The fully-qualified constant it resolves to (`Decidable.isTrue`).
+        target: String,
+    },
 }
 
 /// Extension entries for a single persistent environment extension.

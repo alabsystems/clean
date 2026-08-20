@@ -14,7 +14,10 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import subprocess
+import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -951,6 +954,80 @@ class TestInventory(unittest.TestCase):
             vr.input_digest(narrow, fresh=True), vr.input_digest(wide, fresh=True)
         )
 
+
+
+
+class MemoryAdmissionTests(unittest.TestCase):
+    """The runner's concurrency unit is memory, and it learns its own weights.
+
+    Regression cover for reports/kernel-panic-rca-2026-08-19.md: `--jobs N`
+    used to mean N targets regardless of whether each was 50 MB or 8.8 GB.
+    """
+
+    def test_unmeasured_target_gets_the_conservative_default(self):
+        with mock.patch.object(vr, "load_record", return_value=None):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_default_exceeds_the_measured_spec_binary(self):
+        # 8.8 GB RSS was measured for a clean-verify spec binary. A default
+        # below that would under-admit the very shape that caused the panic.
+        self.assertGreater(vr.DEFAULT_TARGET_GB, 8.8)
+
+    def test_a_measured_target_admits_at_its_own_cost_plus_headroom(self):
+        with mock.patch.object(vr, "load_record", return_value={"peak_rss_gb": 8.8}):
+            self.assertEqual(vr._gate_weight_gb("t"), 14)   # ceil(8.8 * 1.5)
+
+    def test_a_tiny_target_never_admits_at_zero(self):
+        with mock.patch.object(vr, "load_record", return_value={"peak_rss_gb": 0.05}):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.MIN_TARGET_GB)
+
+    def test_a_junk_measurement_falls_back_to_the_default(self):
+        for bad in ({"peak_rss_gb": 0}, {"peak_rss_gb": -3}, {"peak_rss_gb": "big"}, {}):
+            with mock.patch.object(vr, "load_record", return_value=bad):
+                self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_a_missing_gate_never_blocks_the_suite(self):
+        # The gate is a safety device, not a dependency: if it is absent the
+        # suite must still run, just without admission control.
+        with mock.patch.object(vr, "HEAVY_GATE", vr.REPO_ROOT / "no" / "such"):
+            self.assertIsNone(vr._gate_acquire(4, "t"))
+            vr._gate_release(None)          # must not raise
+
+    def test_peak_rss_measures_a_real_process_group(self):
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "x=bytearray(300*1024*1024); import time; time.sleep(2)"],
+            start_new_session=True,
+        )
+        stop = threading.Event()
+        out: list[float] = []
+        t = threading.Thread(target=lambda: out.append(vr._peak_rss_gb(proc.pid, stop)))
+        t.start()
+        proc.wait()
+        stop.set()
+        t.join(timeout=10)
+        self.assertGreater(out[0], 0.2)      # saw the ~300 MB allocation
+        self.assertLess(out[0], 4.0)         # and did not invent a number
+
+
+
+class WeightIsReadBeforeTheRecordIsOverwritten(unittest.TestCase):
+    """The learning loop must not read its own blank.
+
+    Live for one commit: the RUNNING template (peak_rss_gb=None) was written
+    BEFORE the weight was computed, so `_gate_weight_gb` always read None and
+    every target admitted at the default forever -- the measurement was taken
+    and then ignored. Ordering is the whole fix, so it is pinned here.
+    """
+
+    def test_weight_is_computed_before_the_running_template(self):
+        src = (vr.REPO_ROOT / "scripts" / "verify_runner.py").read_text()
+        weight_at = src.index("gate_weight = _gate_weight_gb(")
+        template_at = src.index('"status": STATUS_RUNNING')
+        self.assertLess(
+            weight_at, template_at,
+            "the gate weight must be read before the RUNNING record overwrites "
+            "peak_rss_gb, or the runner never learns",
+        )
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

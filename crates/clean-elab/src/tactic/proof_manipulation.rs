@@ -152,6 +152,50 @@ fn cases_core(
     // to be an eliminable local fvar; otherwise fall through to the generic
     // path, which fails closed. The assembled term is kernel-rechecked at
     // `close_goal`, so a mis-built motive cannot over-accept.
+    // heqToEq (Lean's `heqToEq`): when a heterogeneous equality's two TYPES
+    // are definitionally equal, `HEq a b` IS `a = b` — convert with
+    // `eq_of_heq` and route to `subst`, exactly as the `Eq` arm above does.
+    // Strictly more capable than the `HEq.ndrec` route below for that shape:
+    // `subst` rewrites the hypothesis through the whole context, so dependent
+    // hypotheses need no generalization, and it also handles a NON-fvar type
+    // index (`HEq f g` with `f g : α → γ`) that the ndrec route cannot.
+    if ind_name == Name::from_string("HEq") && args.len() == 4 {
+        let (alpha, a_val, beta, b_val) = (
+            args[0].clone(),
+            args[1].clone(),
+            args[2].clone(),
+            args[3].clone(),
+        );
+        if let Some(hyp_fvar) = hyp_fvar {
+            if state.is_def_eq(&goal, &alpha, &beta) {
+                let u_level = match head.kind() {
+                    ExprKind::Const(_, lvls) if !lvls.is_empty() => lvls[0].clone(),
+                    _ => Level::zero(),
+                };
+                let mut eq_proof =
+                    Expr::const_(Name::from_string("eq_of_heq"), vec![u_level.clone()]);
+                eq_proof = Expr::app(eq_proof, alpha.clone());
+                eq_proof = Expr::app(eq_proof, a_val.clone());
+                eq_proof = Expr::app(eq_proof, b_val.clone());
+                eq_proof = Expr::app(eq_proof, Expr::fvar(hyp_fvar));
+
+                let mut eq_ty = Expr::const_(Name::from_string("Eq"), vec![u_level]);
+                eq_ty = Expr::app(eq_ty, alpha);
+                eq_ty = Expr::app(eq_ty, a_val);
+                eq_ty = Expr::app(eq_ty, b_val);
+
+                let base = goal
+                    .local_ctx
+                    .iter()
+                    .find(|d| d.fvar == hyp_fvar)
+                    .map_or_else(|| "heq".to_string(), |d| d.name.clone());
+                let eq_hyp_name = format!("{base}_eq");
+                super::forward::have_(state, &eq_hyp_name, eq_ty, Some(eq_proof))?;
+                return super::equality::subst(state, &eq_hyp_name);
+            }
+        }
+    }
+
     if ind_name == Name::from_string("HEq") {
         if let (Some(hyp_fvar), Some(heq_args)) = (hyp_fvar, Some(&args)) {
             if heq_args.len() == 4 {

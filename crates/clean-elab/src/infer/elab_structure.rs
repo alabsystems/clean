@@ -1055,15 +1055,58 @@ impl<'a> ElabCtx<'a> {
         param_fvars: &[clean_kernel::FVarId],
         subobjects: &[ParentSubobject],
         already: &mut std::collections::HashSet<Name>,
-    ) -> Vec<(Name, Expr, Expr)> {
+    ) -> Result<Vec<(Name, Expr, Expr)>, ElabError> {
         let mut out: Vec<(Name, Expr, Expr)> = Vec::new();
+        // Field name -> (parent that contributed it, its result type). Lets the
+        // overlap check below tell a PARENT/PARENT collision apart from a child
+        // field legitimately shadowing an inherited one: `already` is seeded with
+        // the struct's own field names, so it alone cannot distinguish them.
+        let mut parent_contributed: std::collections::HashMap<Name, (Name, Expr)> =
+            std::collections::HashMap::new();
 
         for sub in subobjects {
             let to_field_name = Name::from_string(&format!("{struct_name}.{}", sub.to_field));
             for (field, result_ty) in &sub.flattened {
                 if !already.insert(field.clone()) {
+                    // CLASHING PARENT FIELDS are a LOUD error; a genuine DIAMOND
+                    // is not.
+                    //
+                    // First-parent-wins is the documented, value-preserving
+                    // approximation for a real diamond (`D extends L, R`, both
+                    // exposing `Base.n : Nat` — same field, same type, so dropping
+                    // the second copy loses nothing). But it silently applied to
+                    // UNRELATED parents too: `C extends A, B` with `A.x : Nat` and
+                    // `B.x : Bool` kept only `A.x` and dropped `B.x` with no
+                    // diagnostic, so `C.x` had a type the author never wrote and
+                    // `B`'s field was unreachable. Lean rejects that outright.
+                    //
+                    // Conservative on purpose: only when BOTH result types are
+                    // closed (a dependent inherited field, whose type still
+                    // mentions its own subobject, is already skipped per-field
+                    // above) and they are not definitionally equal. Anything less
+                    // certain keeps the previous silent-skip behaviour, so this can
+                    // only ever reject a case that was already wrong.
+                    if let Some((first_parent, first_ty)) = parent_contributed.get(field) {
+                        let comparable =
+                            !first_ty.has_loose_bvars_quick() && !result_ty.has_loose_bvars_quick();
+                        if comparable && !self.is_def_eq(first_ty, result_ty) {
+                            return Err(ElabError::StructureFieldTypeMismatch {
+                                struct_name: struct_name.clone(),
+                                field: {
+                                    let second_parent = &sub.parent_name;
+                                    format!(
+                                        "{field} (inherited from both `{first_parent}` and `{second_parent}`)"
+                                    )
+                                },
+                                expected: first_ty.to_string(),
+                                actual: result_ty.to_string(),
+                            });
+                        }
+                    }
                     continue;
                 }
+                parent_contributed
+                    .insert(field.clone(), (sub.parent_name.clone(), result_ty.clone()));
                 let proj_name = Name::from_string(&format!("{struct_name}.{field}"));
                 let parent_field_name = Name::from_string(&format!("{}.{field}", sub.parent_name));
                 // Level list for the parent-field reference. For a PARAMETERIZED
@@ -1184,7 +1227,7 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        out
+        Ok(out)
     }
 
     fn infer_implicit_structure_result_ty(&self, field_types: &[Expr]) -> Result<Expr, ElabError> {
@@ -1690,7 +1733,7 @@ impl<'a> ElabCtx<'a> {
                 &param_fvars,
                 &parent_subobjects,
                 &mut already,
-            );
+            )?;
             projections.extend(inherited_projs);
         }
 

@@ -1,0 +1,819 @@
+{
+ "schema": "clean.crystal.frontier_census/2",
+ "provenance": {
+  "measured_utc_date": "2026-08-21",
+  "lane": "LANE RM - TIPxTIP re-measure at the guarded tip: wave-MC chain, the designated targets, and the gep chain",
+  "clean_rev": "b576eadebe912bfaca932c379311de67daed3a31",
+  "clean_kernel_tree": "a3ae6c21fc8aa61b7c19274e84622eb6c8c99c05",
+  "clean_worktree": "detached worktree at clean origin/main; git status --porcelain --untracked-files=no EMPTY",
+  "trust_driver_seal": "$HOME/trust/scratchpad/laneRM/seal-tip",
+  "trust_driver_rev": "111bd87608b2b733baa948fb90af469181201a16",
+  "trust_driver_tree": "clean",
+  "trust_driver_dylib_sha256": "fc3f5661a6d4d79db303a69543721044a551967bd6d0152a06d93975cd6b6565",
+  "oracle_blob": "crates/trust-thir-lower/src/mir_differential.rs @ 709a7794 - the ratified refuse-more guard (f429bb245c, pinned by a0447fa6b2)",
+  "sysroot": "$HOME/trust/scratchpad/laneRM/sysroot-v12t (METADATA_VERSION 12=12, sysrootcheck OK; rebuilt by THIS driver via the dispatch route because the tip driver ICEs decoding the 2026-08-20 v12 sysroot: f24fdb2fdb added Statement.trust_modular_arith without a METADATA_VERSION bump - StmtDebugInfo tag 15 vs 0..2)",
+  "guard": "PASS before every run",
+  "profile_O3": "cargo release, -Cdebuginfo=0, -Ztrust-ir-lower=on",
+  "profile_O0": "-Copt-level=0 -Cdebug-assertions=off",
+  "reproduction_O3": "the -Ztrust-ir-flip=no control is a second full compile; its coverage.json and trust-ir.bin are byte-identical to the flip-on run",
+  "dump_O3_coverage_sha256": "97f72e756b1fef0e175819873d1bc159912dd2b2c7c7a3c9affc48018932f470",
+  "baseline_for_by_name_diff": "laneMV wc-head (clean 7558a86c8b, driver 26d0a0e8 TREE dirty, dylib 50879dc8...)",
+  "supersedes": "data/crystal_frontier_census_2026-08-20.json"
+ },
+ "inputs": {
+  "dump_O3": "$HOME/trust/scratchpad/laneRM/wc-tip/dump_O3",
+  "dump_O0": "$HOME/trust/scratchpad/laneRM/wc-tip/dump_O0",
+  "flip_O3": "$HOME/trust/scratchpad/laneRM/wc-tip/O3.flip.txt",
+  "flip_O0": "$HOME/trust/scratchpad/laneRM/wc-tip/O0.flip.txt"
+ },
+ "index_facts": {
+  "text_entries": 7494,
+  "bodies": 6392,
+  "declarations": 1102,
+  "coverage_spliced": 6392,
+  "coverage_declarations": 1102
+ },
+ "totals": {
+  "bodies": 13778,
+  "instr": 396471,
+  "derived_mir_agreed": 1555,
+  "markers_exact": 1099,
+  "markers_exact_nonvacuous": 42,
+  "codegen_flips_O3": 184,
+  "codegen_flips_O0": 604,
+  "ctfe_flips_O3": 41,
+  "ctfe_flips_O0": 41,
+  "loud_fallbacks_O3": 18,
+  "loud_fallbacks_O0": 54
+ },
+ "constructs": {
+  "gep": {
+   "carry": 1304,
+   "agreed": 4,
+   "markers_exact": 4,
+   "bodyful_closure": 18,
+   "agreed_and_bodyful": 2,
+   "flip_O3": 4,
+   "flip_O0": 4,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0,
+   "flip_O3_bodies": [
+    "env::types::Reducibility::height",
+    "env::types::SimpPriority::value",
+    "level::Level::is_nonzero",
+    "level::Level::is_zero"
+   ]
+  },
+  "call": {
+   "carry": 4823,
+   "agreed": 450,
+   "markers_exact": 5,
+   "bodyful_closure": 52,
+   "agreed_and_bodyful": 11,
+   "flip_O3": 5,
+   "flip_O0": 414,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0,
+   "flip_O3_bodies": [
+    "env::native_reducers_float::f64_to_nat",
+    "env::native_reducers_float::nat_to_f64",
+    "expr::meta::ExprMeta::has_loose_bvars",
+    "level::Level::is_nonzero",
+    "level::Level::is_zero"
+   ]
+  },
+  "load": {
+   "carry": 1182,
+   "agreed": 23,
+   "markers_exact": 19,
+   "bodyful_closure": 326,
+   "agreed_and_bodyful": 21,
+   "flip_O3": 19,
+   "flip_O0": 22,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0,
+   "flip_O3_bodies": [
+    "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+    "cert::bundle::trust_from_certification_audit::{closure#0}",
+    "env::Environment::set_cumulative",
+    "env::Environment::set_lean4_core_strict_monads",
+    "env::registration::<impl env::Environment>::extend_constants_checked::is_tolerable",
+    "env::types::Reducibility::height",
+    "env::types::Reducibility::is_regular",
+    "env::types::Reducibility::kind_rank",
+    "env::types::SimpPriority::value",
+    "level::Level::is_nonzero",
+    "level::Level::is_zero",
+    "level::Level::kind_ord",
+    "micro::types::MicroLevel::kind_ord",
+    "micro::types::MicroLevel::structural_cmp::{closure#0}",
+    "mode::CleanMode::has_cubical_layer",
+    "tc::TypeChecker::<'env>::set_allow_partial",
+    "tc::TypeChecker::<'env>::set_allow_unsafe",
+    "tc::TypeChecker::<'env>::set_cumulative",
+    "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries"
+   ]
+  },
+  "store": {
+   "carry": 66,
+   "agreed": 6,
+   "markers_exact": 6,
+   "bodyful_closure": 14,
+   "agreed_and_bodyful": 6,
+   "flip_O3": 6,
+   "flip_O0": 6,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0,
+   "flip_O3_bodies": [
+    "env::Environment::set_cumulative",
+    "env::Environment::set_lean4_core_strict_monads",
+    "tc::TypeChecker::<'env>::set_allow_partial",
+    "tc::TypeChecker::<'env>::set_allow_unsafe",
+    "tc::TypeChecker::<'env>::set_cumulative",
+    "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries"
+   ]
+  },
+  "insertfield": {
+   "carry": 1923,
+   "agreed": 48,
+   "markers_exact": 28,
+   "bodyful_closure": 122,
+   "agreed_and_bodyful": 31,
+   "flip_O3": 17,
+   "flip_O0": 36,
+   "ctfe_O3": 11,
+   "ctfe_O0": 11,
+   "flip_O3_bodies": [
+    "<env::ai_proof_search::AiSearchBudget as std::default::Default>::default",
+    "<sem_memory_model::MemoryValue as std::convert::From<u8>>::from",
+    "bitvec_compute::BvNames::new",
+    "env::Environment::set_cumulative",
+    "env::Environment::set_lean4_core_strict_monads",
+    "expr::types::FVarId::new",
+    "flat::types::FlatFlags::empty",
+    "flat::types::FlatFlags::with",
+    "memory_model::AllocationId::new",
+    "sem_memory_model::Address::new",
+    "sem_memory_model::MemoryValue::new",
+    "tc::TypeChecker::<'env>::set_allow_partial",
+    "tc::TypeChecker::<'env>::set_allow_unsafe",
+    "tc::TypeChecker::<'env>::set_cumulative",
+    "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries",
+    "tc::heartbeat_profiler::types::SourcePos::new",
+    "tc::heartbeat_profiler::types::SourcePos::unknown"
+   ]
+  },
+  "extractfield": {
+   "carry": 1235,
+   "agreed": 47,
+   "markers_exact": 38,
+   "bodyful_closure": 307,
+   "agreed_and_bodyful": 41,
+   "flip_O3": 38,
+   "flip_O0": 46,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0,
+   "flip_O3_bodies": [
+    "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+    "cert::builder::state::NodeId::index",
+    "cert::builder::state::NodeId::raw",
+    "cert::bundle::trust_from_certification_audit::{closure#0}",
+    "cert::bundle::trust_min::{closure#0}",
+    "env::ai_proof_search::constant_kind_rank",
+    "env::origin::OriginTrust::is_unpinned",
+    "env::persistent_ext::ExtensionIdx::index",
+    "env::proof_search::constant_kind_rank",
+    "env::registration::<impl env::Environment>::extend_constants_checked::is_tolerable",
+    "env::types::Reducibility::height",
+    "env::types::Reducibility::is_regular",
+    "env::types::Reducibility::kind_rank",
+    "env::types::SimpPriority::value",
+    "expr::types::FVarId::as_u64",
+    "expr::types::Multiplicity::allows_many",
+    "expr::types::Multiplicity::allows_zero",
+    "flat::convert::binder_info_to_u8",
+    "flat::types::FlatFlags::bits",
+    "flat::types::FlatFlags::contains",
+    "flat::types::FlatFlags::with",
+    "level::Level::is_nonzero",
+    "level::Level::is_zero",
+    "level::Level::kind_ord",
+    "memory_model::AllocationId::is_null",
+    "memory_model::AllocationId::raw",
+    "memory_model::MemoryRegion::is_empty",
+    "memory_model::MemoryRegion::len",
+    "memory_model::MemoryRegion::offset",
+    "micro::types::MicroLevel::kind_ord",
+    "micro::types::MicroLevel::structural_cmp::{closure#0}",
+    "mode::CleanMode::from_source_system",
+    "mode::CleanMode::has_cubical_layer",
+    "sem_memory_model::<impl std::convert::From<sem_memory_model::MemoryValue> for u8>::from",
+    "sem_memory_model::Address::is_null",
+    "sem_memory_model::Address::raw",
+    "sem_memory_model::MemoryValue::get",
+    "tc::reduction::cofib::CofibAtom::value"
+   ]
+  },
+  "switch": {
+   "carry": 270,
+   "agreed": 27,
+   "markers_exact": 22,
+   "bodyful_closure": 67,
+   "agreed_and_bodyful": 25,
+   "flip_O3": 22,
+   "flip_O0": 26,
+   "ctfe_O3": 0,
+   "ctfe_O0": 0,
+   "flip_O3_bodies": [
+    "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+    "cert::bundle::trust_from_certification_audit::{closure#0}",
+    "cert::bundle::trust_min::{closure#0}",
+    "env::ai_proof_search::constant_kind_rank",
+    "env::origin::OriginTrust::is_unpinned",
+    "env::proof_search::constant_kind_rank",
+    "env::registration::<impl env::Environment>::extend_constants_checked::is_tolerable",
+    "env::types::Reducibility::height",
+    "env::types::Reducibility::is_regular",
+    "env::types::Reducibility::kind_rank",
+    "env::types::SimpPriority::value",
+    "expr::types::Multiplicity::allows_many",
+    "expr::types::Multiplicity::allows_zero",
+    "flat::convert::binder_info_to_u8",
+    "level::Level::is_nonzero",
+    "level::Level::is_zero",
+    "level::Level::kind_ord",
+    "micro::types::MicroLevel::kind_ord",
+    "micro::types::MicroLevel::structural_cmp::{closure#0}",
+    "mode::CleanMode::from_source_system",
+    "mode::CleanMode::has_cubical_layer",
+    "tc::reduction::cofib::CofibAtom::value"
+   ]
+  },
+  "icmp": {
+   "carry": 201,
+   "agreed": 29,
+   "markers_exact": 18,
+   "bodyful_closure": 94,
+   "agreed_and_bodyful": 24,
+   "flip_O3": 6,
+   "flip_O0": 17,
+   "ctfe_O3": 12,
+   "ctfe_O0": 12,
+   "flip_O3_bodies": [
+    "env::native_reducers_char::is_valid_char",
+    "expr::meta::ExprMeta::has_loose_bvars",
+    "flat::types::FlatFlags::contains",
+    "memory_model::AllocationId::is_null",
+    "memory_model::MemoryRegion::is_empty",
+    "sem_memory_model::Address::is_null"
+   ]
+  }
+ },
+ "chainable_O3": {
+  "count": 180,
+  "instruction_census": {
+   "ret": 180,
+   "const": 119,
+   "br": 83,
+   "extractfield": 39,
+   "insertfield": 22,
+   "switch": 20,
+   "load": 19,
+   "icmp": 8,
+   "store": 6,
+   "zext": 2,
+   "gep": 2,
+   "condbr": 2,
+   "trunc": 1,
+   "fadd": 1,
+   "fsub": 1,
+   "fmul": 1,
+   "fdiv": 1,
+   "call": 1,
+   "and": 1,
+   "or": 1
+  },
+  "bare_ret_only": 107,
+  "carrying_gep_or_call": [
+   {
+    "def_path": "env::types::Reducibility::height",
+    "def_index": 13402,
+    "func_id": 3009,
+    "instr": 10,
+    "lineage": "sha256:aabbf04dfd2b4f7696cdb5114251094715cfe3a97bc964086b1362c74b59e145",
+    "markers_detail": "2 marker line(s) identical",
+    "ops": {
+     "load": 2,
+     "extractfield": 1,
+     "switch": 1,
+     "const": 2,
+     "gep": 1,
+     "br": 2,
+     "ret": 1
+    }
+   },
+   {
+    "def_path": "env::types::SimpPriority::value",
+    "def_index": 13411,
+    "func_id": 3014,
+    "instr": 10,
+    "lineage": "sha256:9d3c71cf08a375f35e2f966ef06cdb1deddce2936a00083bdc5b420a966733ae",
+    "markers_detail": "2 marker line(s) identical",
+    "ops": {
+     "load": 2,
+     "extractfield": 1,
+     "switch": 1,
+     "const": 2,
+     "br": 2,
+     "gep": 1,
+     "ret": 1
+    }
+   },
+   {
+    "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+    "def_index": 16174,
+    "func_id": 3650,
+    "instr": 4,
+    "lineage": "sha256:446663acce34f8ddb2f5e5f5291e59b5845eb0895ed7ffaade5fe43c9f7436be",
+    "markers_detail": "4 marker line(s) identical",
+    "ops": {
+     "call": 1,
+     "const": 1,
+     "icmp": 1,
+     "ret": 1
+    }
+   }
+  ]
+ },
+ "chainable_O0_count": 180,
+ "call_bodies_with_a_bodyful_closure": [
+  {
+   "def_path": "cert::bundle::trust_min",
+   "def_index": 813,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "cert::compression::streaming::StreamingArchiveHeader::algorithm",
+   "def_index": 2353,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "cert::compression::ArchiveVariantStats::algorithm",
+   "def_index": 2554,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "cert::compression::CertArchiveEnvelope::algorithm",
+   "def_index": 2560,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::origin::OriginTrust::needs_recheck",
+   "def_index": 3053,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::origin::ConstantOrigin::is_unpinned_olean_import",
+   "def_index": 3060,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "env::origin::ConstantOrigin::needs_recheck",
+   "def_index": 3061,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 3
+  },
+  {
+   "def_path": "env::origin::ConstantOrigin::is_kernel_checked",
+   "def_index": 3062,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+   "def_index": 3304,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 2
+  },
+  {
+   "def_path": "env::sorry_summary::DeclarationTrustSummary::sorry_summary",
+   "def_index": 3307,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::inductive_below_minors::get_ind_universe::{closure#0}",
+   "def_index": 13816,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_float_to_rat::classify",
+   "def_index": 15367,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_float_to_rat::decompose_exact",
+   "def_index": 15368,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 4
+  },
+  {
+   "def_path": "env::native_reducers_name::lean4_name_hash",
+   "def_index": 15601,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "def_index": 16174,
+   "verdict": "agreed",
+   "markers_exact": true,
+   "flip_O3": true,
+   "flip_O0": true,
+   "reachable": 1
+  },
+  {
+   "def_path": "<expr::subst::Instantiator<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16248,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "<expr::subst::MultiInstantiator<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16260,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "<expr::subst::Lifter as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16270,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "<expr::subst::Lowerer as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16280,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "<expr::subst::Abstractor as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16292,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 4
+  },
+  {
+   "def_path": "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16304,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 2
+  },
+  {
+   "def_path": "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16313,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 2
+  },
+  {
+   "def_path": "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16325,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 2
+  },
+  {
+   "def_path": "expr::subst::<impl expr::Expr>::has_loose_bvars",
+   "def_index": 16354,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "expr::Expr::hash_cached",
+   "def_index": 16598,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::Expr::has_fvar_quick",
+   "def_index": 16599,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::Expr::has_expr_mvar_quick",
+   "def_index": 16600,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::Expr::has_level_mvar_quick",
+   "def_index": 16601,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::Expr::has_level_param_quick",
+   "def_index": 16602,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::Expr::loose_bvar_range",
+   "def_index": 16603,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "expr::Expr::has_loose_bvars_quick",
+   "def_index": 16604,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "flat::types::FlatExpr::tag",
+   "def_index": 16877,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "tc::branch_sharing::RecursorApp::<'a>::required_args",
+   "def_index": 18940,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "tc::branch_sharing::RecursorApp::<'a>::motives_range",
+   "def_index": 18942,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "tc::branch_sharing::RecursorApp::<'a>::indices_range",
+   "def_index": 18943,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 5
+  },
+  {
+   "def_path": "tc::branch_sharing::RecursorApp::<'a>::major_idx",
+   "def_index": 18944,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 1
+  },
+  {
+   "def_path": "tc::branch_sharing::RecursorApp::<'a>::minors_range",
+   "def_index": 18945,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 4
+  },
+  {
+   "def_path": "tc::reduction::cofib::Cofib::all_vars::{closure#0}::{closure#0}",
+   "def_index": 19751,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int8_dec_lt",
+   "def_index": 30274,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int8_dec_le",
+   "def_index": 30275,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int16_dec_lt",
+   "def_index": 30285,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int16_dec_le",
+   "def_index": 30286,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int32_dec_lt",
+   "def_index": 30296,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int32_dec_le",
+   "def_index": 30297,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int64_dec_lt",
+   "def_index": 30309,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_int64_dec_le",
+   "def_index": 30310,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_isize_dec_lt",
+   "def_index": 30322,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "env::native_reducers_sint::reduce_isize_dec_le",
+   "def_index": 30323,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "<expr::types::BinderData as std::default::Default>::default",
+   "def_index": 33223,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 2
+  },
+  {
+   "def_path": "<memory_model::MemoryRegion as std::cmp::PartialEq>::eq",
+   "def_index": 34414,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  },
+  {
+   "def_path": "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}",
+   "def_index": 35564,
+   "verdict": "agreed",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": true,
+   "reachable": 3
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfilePositionEntry as std::cmp::PartialEq>::eq",
+   "def_index": 35739,
+   "verdict": "unsupported",
+   "markers_exact": false,
+   "flip_O3": false,
+   "flip_O0": false,
+   "reachable": 1
+  }
+ ]
+}

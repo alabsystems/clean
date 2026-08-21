@@ -22,10 +22,25 @@
    "sha256": "a5cd6b04eebb0c4cc540219781b00e6dbc237d8b7cb003ca90e44ee1dd14baed",
    "must_contain": "fn contains"
   },
+  "float_add": {
+   "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
+   "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
+   "must_contain": "fn reduce_float_add"
+  },
   "float_div": {
    "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
    "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
    "must_contain": "fn reduce_float_div"
+  },
+  "float_mul": {
+   "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
+   "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
+   "must_contain": "fn reduce_float_mul"
+  },
+  "float_sub": {
+   "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
+   "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
+   "must_contain": "fn reduce_float_sub"
   },
   "from_source_system": {
    "file": "crates/clean-kernel/src/mode.rs",
@@ -61,6 +76,11 @@
    "file": "crates/clean-kernel/src/tc/local_context.rs",
    "sha256": "d5dc97f9c0306c77a25bafabd96ea9623e353fb698439e80d50927bab955517a",
    "must_contain": "META_TAG"
+  },
+  "simp_priority_value": {
+   "file": "crates/clean-kernel/src/env/types.rs",
+   "sha256": "6d62a0159012c04e97d89582df3b6179e0f4d08515c1e7a00b2fa6a8877e3e0b",
+   "must_contain": "fn value"
   }
  },
  "how_to_re_derive": "A CONTENT-SCOPE failure is not refreshed by re-emitting this file. Produce a fresh dump and run scripts/crystal_fixture_freshness.py, commit the new revalidation record, point `record` at it, then --emit."

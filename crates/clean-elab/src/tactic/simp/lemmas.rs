@@ -87,7 +87,9 @@ pub(super) fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> V
                     index_mode: SimpIndexMode::Normal,
                     priority: 50,
                 });
-            } else if let Some(lemma) = mk_iff_simp_lemma(&name, &decl.type_, 50) {
+            } else if let Some(lemma) =
+                mk_iff_simp_lemma(&name, &decl.type_, 50, &decl.level_params)
+            {
                 lemmas.push(lemma);
             }
             // If the constant is a Definition whose type is not an equality
@@ -357,9 +359,14 @@ pub(super) fn collect_hypothesis_lemmas(state: &ProofState) -> Vec<SimpLemma> {
 /// invented for non-symmetric (`→`) lemmas because only `Iff` conclusions reach
 /// here. The `propext`-wrapped witness introduces no axiom beyond the
 /// foundational `propext`.
-fn mk_iff_simp_lemma(name: &Name, ty: &Expr, priority: u32) -> Option<SimpLemma> {
+fn mk_iff_simp_lemma(
+    name: &Name,
+    ty: &Expr,
+    priority: u32,
+    level_params: &[Name],
+) -> Option<SimpLemma> {
     let (binder_count, lhs, rhs) = extract_iff_with_binders(ty)?;
-    let proof_expr = mk_iff_rewrite_proof_template(name, binder_count, &lhs, &rhs);
+    let proof_expr = mk_iff_rewrite_proof_template(name, binder_count, &lhs, &rhs, level_params);
     Some(SimpLemma {
         name: name.clone(),
         lhs,
@@ -413,9 +420,12 @@ fn collect_registry_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpL
                     index_mode: SimpIndexMode::Normal,
                     priority: info.priority.value(),
                 });
-            } else if let Some(lemma) =
-                mk_iff_simp_lemma(&info.name, &decl.type_, info.priority.value())
-            {
+            } else if let Some(lemma) = mk_iff_simp_lemma(
+                &info.name,
+                &decl.type_,
+                info.priority.value(),
+                &decl.level_params,
+            ) {
                 out.push(lemma);
             }
         }

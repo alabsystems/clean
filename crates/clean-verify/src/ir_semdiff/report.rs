@@ -4,7 +4,7 @@
 
 //! Rows, verdicts, and the per-chain measured summary.
 //!
-//! Two rules are enforced structurally here rather than by convention:
+//! Three rules are enforced structurally here rather than by convention:
 //!
 //! * **A single executor is never an agreement.** A row that only one side
 //!   could reach is [`Agreement::Insufficient`] and is counted separately; it
@@ -12,9 +12,18 @@
 //! * **Totality is never rounded up.** [`ChainReport::total_domain`] is set by
 //!   the caller from an exhaustive enumeration or not at all, and the printed
 //!   summary says which it was.
-
+//! * **Cost is part of the verdict, not a footnote.** [`ChainReport::is_green`]
+//!   consults [`ChainReport::cost_verdict`], which fails closed three separate
+//!   ways: a row that produced no cost datum, a threshold that was accepted but
+//!   never shown *necessary*, and offsets that differ across the domain. See
+//!   the note below for what that does and does not catch.
+//!
+//! The cost verdict itself lives in [`super::cost`], which documents what
+//! making cost a gate does and does not catch.
+//!
 use std::collections::BTreeMap;
 
+use super::cost::CostVerdict;
 use super::obligations::RunResult;
 use super::EnumModel;
 
@@ -35,6 +44,15 @@ pub struct DiffRow {
     /// Clean's `ir_eval` — value, and the LEAST fuel at which the kernel
     /// accepted it (`None` when no fuel in the probed range was accepted).
     pub clean: Option<(RunResult, Option<u32>)>,
+    /// Was that least fuel shown to be NEEDED — `fuel_out` kernel-accepted one
+    /// step below it?
+    ///
+    /// A threshold that was accepted but never shown necessary is an upper
+    /// bound, and an upper bound compared against trust-ir's exact step count is
+    /// not a cost correspondence. Recorded per row and gated in
+    /// [`ChainReport::cost_verdict`] rather than printed as a note, which is
+    /// what it used to be.
+    pub threshold_tight: bool,
     /// The shipped compiled function, called directly.
     pub shipped: Option<RunResult>,
     /// Anything that made a leg refuse rather than answer.
@@ -73,12 +91,10 @@ impl DiffRow {
 
     /// Clean's measured fuel threshold minus trust-ir's reported step count.
     ///
-    /// Reported rather than asserted: a constant nonzero offset is a real
-    /// finding about the two cost models, not a failure to hide. Only an
-    /// *inconsistent* offset within a chain indicates the step structures
-    /// actually differ.
+    /// `None` when either side produced no number — which is itself a gated
+    /// condition, counted as [`CostVerdict::Unpriced`] rather than skipped.
     #[must_use]
-    pub fn cost_offset(&self) -> Option<i64> {
+    pub(crate) fn cost_offset(&self) -> Option<i64> {
         let (_, steps) = self.trust.as_ref()?;
         let (_, threshold) = self.clean.as_ref()?;
         Some(i64::from((*threshold)?) - i64::from((*steps)?))
@@ -97,7 +113,8 @@ impl DiffRow {
         let clean = self.clean.as_ref().map_or_else(
             || "-".to_owned(),
             |(r, t)| match t {
-                Some(t) => format!("{r} @fuel>={t}"),
+                Some(t) if self.threshold_tight => format!("{r} @fuel={t} (tight)"),
+                Some(t) => format!("{r} @fuel>={t} LOOSE"),
                 None => format!("{r} @fuel=?"),
             },
         );
@@ -106,7 +123,7 @@ impl DiffRow {
             .as_ref()
             .map_or_else(|| "-".to_owned(), ToString::to_string);
         format!(
-            "  tag {:>2} | trust-ir {trust:<24} | clean {clean:<24} | shipped {shipped:<12} | {:?}",
+            "  tag {:>2} | trust-ir {trust:<24} | clean {clean:<26} | shipped {shipped:<12} | {:?}",
             self.tag,
             self.value_agreement()
         )
@@ -144,25 +161,45 @@ pub struct ChainReport {
     pub total_domain: bool,
     /// Distinct Clean-minus-trust cost offsets observed, with their counts.
     pub cost_offsets: BTreeMap<i64, usize>,
+    /// Rows whose fuel threshold was accepted but not shown necessary.
+    pub loose_thresholds: usize,
+    /// The offset this chain is DECLARED to have.
+    ///
+    /// Compared against the measured one, because a uniform-but-wrong offset is
+    /// exactly what a mis-derived harness overhead produces.
+    pub expected_cost_offset: i64,
     /// The rows themselves.
     pub rows: Vec<DiffRow>,
 }
 
 impl ChainReport {
-    /// A chain passes only if every row agreed and at least one row exists.
+    /// A chain passes only if every row agreed on the VALUE, at least one row
+    /// exists, **and** the cost correspondence is the pinned uniform offset.
     #[must_use]
     pub fn is_green(&self) -> bool {
-        self.disagreed == 0 && self.insufficient == 0 && self.agreed > 0
+        self.disagreed == 0
+            && self.insufficient == 0
+            && self.agreed > 0
+            && self.cost_verdict() == CostVerdict::Uniform(self.expected_cost_offset)
     }
 
-    /// Is the cost correspondence a single consistent offset?
-    ///
-    /// One offset repeated across the whole domain means the two machines take
-    /// the same number of steps up to a fixed convention. Several different
-    /// offsets mean the step structures genuinely diverge somewhere.
+    /// The cost verdict, fail-closed in three directions. See [`CostVerdict`].
+    #[must_use]
+    pub fn cost_verdict(&self) -> CostVerdict {
+        CostVerdict::of(self.rows.len(), self.loose_thresholds, &self.cost_offsets)
+    }
+
+    /// Is the cost correspondence a single consistent offset over a fully
+    /// priced, tightly pinned domain?
     #[must_use]
     pub fn cost_is_uniform(&self) -> bool {
-        self.cost_offsets.len() == 1
+        matches!(self.cost_verdict(), CostVerdict::Uniform(_))
+    }
+
+    /// Does the measured cost meet the chain's declared expectation?
+    #[must_use]
+    pub fn cost_is_pinned(&self) -> bool {
+        self.cost_verdict() == CostVerdict::Uniform(self.expected_cost_offset)
     }
 
     /// One-line human summary, stating exactly what was measured.
@@ -184,8 +221,15 @@ impl ChainReport {
         };
         format!(
             "{}: {} agreed / {} disagreed / {} insufficient over a {scope}; \
-             enum model {:?}; clean-minus-trust cost offset {{{offsets}}}",
-            self.chain, self.agreed, self.disagreed, self.insufficient, self.enum_model
+             enum model {:?}; clean-minus-trust cost offset {{{offsets}}} \
+             vs pinned {:+}; cost verdict {:?}",
+            self.chain,
+            self.agreed,
+            self.disagreed,
+            self.insufficient,
+            self.enum_model,
+            self.expected_cost_offset,
+            self.cost_verdict(),
         )
     }
 }
@@ -196,11 +240,13 @@ pub fn summarize(
     chain: &str,
     enum_model: EnumModel,
     total_domain: bool,
+    expected_cost_offset: i64,
     rows: Vec<DiffRow>,
 ) -> ChainReport {
     let mut agreed = 0;
     let mut disagreed = 0;
     let mut insufficient = 0;
+    let mut loose_thresholds = 0;
     let mut cost_offsets: BTreeMap<i64, usize> = BTreeMap::new();
     for row in &rows {
         match row.value_agreement() {
@@ -211,6 +257,9 @@ pub fn summarize(
         if let Some(off) = row.cost_offset() {
             *cost_offsets.entry(off).or_insert(0) += 1;
         }
+        if !row.threshold_tight {
+            loose_thresholds += 1;
+        }
     }
     ChainReport {
         chain: chain.to_owned(),
@@ -220,6 +269,8 @@ pub fn summarize(
         insufficient,
         total_domain,
         cost_offsets,
+        loose_thresholds,
+        expected_cost_offset,
         rows,
     }
 }
@@ -237,9 +288,17 @@ mod tests {
             tag: 0,
             trust,
             clean,
+            threshold_tight: true,
             shipped: None,
             notes: Vec::new(),
         }
+    }
+
+    fn agreeing(clean_fuel: u32) -> DiffRow {
+        row(
+            Some((RunResult::Bool(true), Some(6))),
+            Some((RunResult::Bool(true), Some(clean_fuel))),
+        )
     }
 
     #[test]
@@ -250,10 +309,7 @@ mod tests {
 
     #[test]
     fn test_two_agreeing_executors_agree() {
-        let r = row(
-            Some((RunResult::Bool(true), Some(6))),
-            Some((RunResult::Bool(true), Some(6))),
-        );
+        let r = agreeing(6);
         assert_eq!(r.value_agreement(), Agreement::Agree(2));
     }
 
@@ -274,16 +330,12 @@ mod tests {
 
     #[test]
     fn test_cost_offset_is_clean_minus_trust() {
-        let r = row(
-            Some((RunResult::Bool(true), Some(6))),
-            Some((RunResult::Bool(true), Some(7))),
-        );
-        assert_eq!(r.cost_offset(), Some(1));
+        assert_eq!(agreeing(7).cost_offset(), Some(1));
     }
 
     #[test]
     fn test_an_empty_chain_is_not_green() {
-        let report = summarize("empty", EnumModel::Exact, false, Vec::new());
+        let report = summarize("empty", EnumModel::Exact, false, 0, Vec::new());
         assert!(
             !report.is_green(),
             "a chain with no rows must never be green"
@@ -296,6 +348,7 @@ mod tests {
             "half",
             EnumModel::Exact,
             true,
+            0,
             vec![row(Some((RunResult::Bool(true), Some(6))), None)],
         );
         assert!(!report.is_green());
@@ -304,20 +357,102 @@ mod tests {
 
     #[test]
     fn test_summary_says_sample_when_the_domain_is_not_exhausted() {
-        let report = summarize(
-            "s",
-            EnumModel::TagSurrogate,
-            false,
-            vec![row(
-                Some((RunResult::Bool(true), Some(6))),
-                Some((RunResult::Bool(true), Some(6))),
-            )],
-        );
+        let report = summarize("s", EnumModel::TagSurrogate, false, 0, vec![agreeing(6)]);
         assert!(
             report.summary().contains("SAMPLE of domain"),
             "{}",
             report.summary()
         );
         assert!(report.summary().contains("TagSurrogate"));
+    }
+
+    // ── the cost half is a GATE, and these are its falsifications ──────────
+
+    #[test]
+    fn test_values_agreeing_is_not_enough_when_the_offsets_diverge() {
+        let report = summarize(
+            "divergent",
+            EnumModel::Exact,
+            true,
+            0,
+            vec![agreeing(6), agreeing(7)],
+        );
+        assert_eq!(report.agreed, 2, "both rows agree on the VALUE");
+        assert_eq!(report.disagreed, 0);
+        assert_eq!(report.cost_verdict(), CostVerdict::Divergent);
+        assert!(
+            !report.is_green(),
+            "a chain whose step structures diverge must not be green on values alone"
+        );
+    }
+
+    #[test]
+    fn test_a_uniform_but_unpinned_offset_is_not_green() {
+        // Exactly the shape a wrong harness overhead produces: every row shifts
+        // by the same amount, so uniformity alone cannot see it.
+        let report = summarize(
+            "shifted",
+            EnumModel::Exact,
+            true,
+            0,
+            vec![agreeing(7), agreeing(7)],
+        );
+        assert_eq!(report.cost_verdict(), CostVerdict::Uniform(1));
+        assert!(
+            report.cost_is_uniform(),
+            "it IS uniform — that is the point"
+        );
+        assert!(
+            !report.is_green(),
+            "uniform is not enough: a constant shift must fail against the pin"
+        );
+    }
+
+    #[test]
+    fn test_an_unpriced_row_is_not_a_uniform_cost() {
+        let report = summarize(
+            "unpriced",
+            EnumModel::Exact,
+            true,
+            0,
+            vec![
+                agreeing(6),
+                row(
+                    Some((RunResult::Bool(true), None)),
+                    Some((RunResult::Bool(true), Some(6))),
+                ),
+            ],
+        );
+        assert_eq!(
+            report.cost_verdict(),
+            CostVerdict::Unpriced { rows: 2, priced: 1 },
+            "one row of two produced no offset; the old `len() == 1` test called that uniform"
+        );
+        assert!(!report.is_green());
+    }
+
+    #[test]
+    fn test_a_loose_threshold_is_not_a_cost() {
+        let mut loose = agreeing(6);
+        loose.threshold_tight = false;
+        let report = summarize("loose", EnumModel::Exact, true, 0, vec![agreeing(6), loose]);
+        assert_eq!(report.cost_verdict(), CostVerdict::Loose { loose: 1 });
+        assert!(
+            !report.is_green(),
+            "an upper bound compared against an exact step count is not a correspondence"
+        );
+    }
+
+    #[test]
+    fn test_the_pinned_uniform_case_is_the_only_green_one() {
+        let report = summarize(
+            "ok",
+            EnumModel::Exact,
+            true,
+            0,
+            vec![agreeing(6), agreeing(6)],
+        );
+        assert_eq!(report.cost_verdict(), CostVerdict::Uniform(0));
+        assert!(report.is_green());
     }
 }

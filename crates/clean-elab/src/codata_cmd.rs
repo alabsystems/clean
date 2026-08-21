@@ -1318,6 +1318,8 @@ pub(crate) fn elab_codef_decl(
     let state_name = state.map_or("_", |b| b.name.as_str());
     let mut slot_lambdas: Vec<SurfaceExpr> = Vec::new();
     let mut used: Vec<&str> = Vec::new();
+    // (field, index the author wrote) for each indexed self-call, checked below.
+    let mut idx_checks: Vec<(String, SurfaceExpr)> = Vec::new();
     for slot in &slots {
         let field = slot.strip_suffix('F').unwrap_or(slot);
         let Some((_, value)) = clauses.iter().find(|(n, _)| n == field) else {
@@ -1331,7 +1333,12 @@ pub(crate) fn elab_codef_decl(
         // the NEW STATE. Anything else is an observation value and must
         // not mention the function being defined (productivity).
         let body = match self_call_arg(value, name, indexed) {
-            Some(next_state) => next_state,
+            Some(call) => {
+                if let Some(written) = call.index {
+                    idx_checks.push((field.to_string(), written));
+                }
+                call.state
+            }
             None => {
                 if mentions(value, name) {
                     return Err(unsupported(format!(
@@ -1378,6 +1385,73 @@ pub(crate) fn elab_codef_decl(
         .and_then(|b| b.ty.as_deref().cloned())
         .unwrap_or_else(punit_ty);
     let init_state = state.map_or_else(|| ident("PUnit.unit"), |b| ident(&b.name));
+
+    // INDEX-FIDELITY GUARD.
+    //
+    // The corecursor forces every child to the codata FIELD's target index, so
+    // the index written in a self-call is not consumed. Until this guard, a
+    // self-call that wrote a DIFFERENT index was silently accepted and meant
+    // something the author did not write:
+    //
+    //   codata IS3 : (n : Nat) → Type where
+    //     val : Nat
+    //     next : IS3 (Nat.succ n)
+    //
+    //   codef tr (n : Nat) : IS3 n where
+    //     val := n
+    //     next := tr n                       -- target demands `Nat.succ n`
+    //
+    // `IS3.val (IS3.next (tr 4))` reduced to 5 — the target's move — while the
+    // author's own `tr n` would give 4. The ERRONEOUS program was the one that
+    // compiled. The kernel cannot catch it on its own: it only would if the
+    // state type mentioned the index, which it need not.
+    //
+    // The check needs the field's target index, and `C.<field>`'s result type
+    // already IS `C <params> <target>`. So "written ≡ target" is exactly "does
+    // `C.<field> x` typecheck at `C <params> <written>`" — decided by DEFEQ,
+    // not by syntax, so `tr (n + 1)` against a `Nat.succ n` target stays
+    // accepted. Probe in a THROWAWAY clone before anything is registered, so a
+    // rejection leaves `env` untouched.
+    for (field, written) in &idx_checks {
+        // A HAND-WRITTEN carrier can present an indexed-looking `.corec`
+        // without the generated step accessors. There is then no `C.<field>`
+        // whose result type carries a target index, and probing would reject a
+        // previously-accepted codef while blaming the wrong thing (an
+        // `UnknownIdent` for `C.<field>`, reported as an index mismatch). This
+        // guard owns index fidelity only; carrier impersonation is checked
+        // elsewhere. Nothing to compare against, so skip.
+        let accessor = format!("{head_name}.{field}");
+        if env
+            .get_const(&clean_kernel::Name::from_string(&accessor))
+            .is_none()
+        {
+            continue;
+        }
+        let mut probe_args = type_args.clone();
+        probe_args.pop(); // the result type's own index
+        probe_args.push(written.clone());
+        let mut probe_binders = binders.to_vec();
+        probe_binders.push(SurfaceBinder::new(
+            "_idxProbeSelf",
+            Some((**ty).clone()),
+            SurfaceBinderInfo::Explicit,
+        ));
+        let probe = mk_def(
+            format!("{name}._indexProbe_{field}"),
+            probe_binders,
+            plain_app(&head_name, probe_args),
+            plain_app(&accessor, vec![ident("_idxProbeSelf")]),
+        );
+        let mut probe_env = env.clone();
+        crate::elaborate_decl_and_register(&mut probe_env, &probe).map_err(|e| {
+            unsupported(format!(
+                "codef `{name}`: clause `{field}` corecurses at an index that is not \
+                 the one `{accessor}` moves to. The written index is \
+                 DISCARDED (the codata field's target governs the move), so this \
+                 would compile as a different program than the one written: {e:?}"
+            ))
+        })?;
+    }
 
     // def <name> (idx?) (state?) : <ty> :=
     //   @C.corec <params> <S> <lams…> (<idx>) <init>
@@ -1439,45 +1513,34 @@ pub(crate) fn elab_codef_decl(
     })
 }
 
-/// If `expr` is a plain self-call, return the NEW-STATE expression.
+/// A recognized corecursive self-call: the new state, plus the index the author
+/// wrote (indexed lane only).
+struct SelfCall {
+    /// The index argument the AUTHOR WROTE, in the indexed lane. `None` in the
+    /// plain lane. Kept rather than dropped so the caller can check it against
+    /// the codata field's target index.
+    index: Option<SurfaceExpr>,
+    /// The new corecursion state.
+    state: SurfaceExpr,
+}
+
+/// If `expr` is a plain self-call, return its new STATE and written INDEX.
 ///
-/// Plain codef: `fname` (zero-state, yields `Unit.unit`) or
-/// `fname <state>`. Indexed codef: `fname <idx>` (zero-state) or
-/// `fname <idx> <state>` — the index argument is not consumed here; the
-/// codata's own target expression governs the index move.
+/// Plain codef: `fname` (zero-state, yields `Unit.unit`) or `fname <state>`.
+/// Indexed codef: `fname <idx>` (zero-state) or `fname <idx> <state>`.
 ///
-/// KNOWN GAP (measured 2026-08-19, not a claim of safety). This doc previously
-/// asserted that "a mismatched index in the self-call fails the kernel check
-/// loudly". It does NOT. The written index is silently discarded, so a codef
-/// whose self-call passes the wrong index is accepted and means something the
-/// author did not write:
-///
-/// ```text
-/// codata IS3 : (n : Nat) → Type where
-///   val : Nat
-///   next : IS3 (Nat.succ n)
-///
-/// codef tr (n : Nat) : IS3 n where
-///   val := n
-///   next := tr n                              -- wrong; target demands `Nat.succ n`
-///
-/// theorem t : IS3.val (IS3.next (tr 4)) = 5 := rfl   -- ACCEPTED
-/// ```
-///
-/// `= 5` is what the target's index move produces; the author's `tr n` would
-/// give `= 4`, and that version is REJECTED. So the erroneous program is the
-/// one that compiles. This is unsound only with respect to author intent — the
-/// generated term is still kernel-checked, so no ill-typed term is admitted.
-///
-/// Closing it needs the codata field's TARGET INDEX expression (`Nat.succ n`)
-/// to compare the self-call's index against. That expression is not reachable
-/// here: this function sees only the corecursor's parameter NAMES, not the
-/// codata's field types. Threading the per-field target index down to this
-/// point is the build item; until then the index is documented as ignored
-/// rather than described as checked.
-fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<SurfaceExpr> {
+/// INDEX FIDELITY (closed 2026-08-20). The index is still not CONSUMED here —
+/// the codata's own target expression governs the index move — but it is no
+/// longer discarded either: it is returned so the caller's index-fidelity
+/// guard can check it against the codata field's target index before anything
+/// is generated. A self-call that writes a different index is now a loud
+/// error rather than a silently different program.
+fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<SelfCall> {
     match strip_parens(expr) {
-        SurfaceExpr::Ident(_, id) if id == fname && !indexed => Some(ident("PUnit.unit")),
+        SurfaceExpr::Ident(_, id) if id == fname && !indexed => Some(SelfCall {
+            index: None,
+            state: ident("PUnit.unit"),
+        }),
         SurfaceExpr::App(_, h, args) => {
             let SurfaceExpr::Ident(_, id) = strip_parens(h) else {
                 return None;
@@ -1486,13 +1549,24 @@ fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<Surfa
                 return None;
             }
             let expected = if indexed { 2 } else { 1 };
-            if args.len() == expected {
-                Some(args[expected - 1].expr.clone())
-            } else if indexed && args.len() == 1 {
-                Some(ident("PUnit.unit"))
+            if args.len() != expected && !(indexed && args.len() == 1) {
+                return None;
+            }
+            // ARITY: in BOTH indexed shapes the index is `args[0]` — the
+            // zero-state shape (`tracker (Nat.succ n)`) just leaves the state
+            // implicit. Reading "the last argument" as the index is wrong for
+            // that shape and silently swaps index for state.
+            let index = if indexed {
+                Some(args[0].expr.clone())
             } else {
                 None
-            }
+            };
+            let state = if args.len() == expected {
+                args[expected - 1].expr.clone()
+            } else {
+                ident("PUnit.unit")
+            };
+            Some(SelfCall { index, state })
         }
         _ => None,
     }
@@ -5229,7 +5303,7 @@ fn compile_guarded_codef(
     }
     let depth = layers.len();
     debug_assert!(depth >= 1, "guarded => at least one mk layer");
-    let Some(next_state) = self_call_arg(cursor, name, false) else {
+    let Some(next_state) = self_call_arg(cursor, name, false).map(|c| c.state) else {
         return Err(unsupported(format!(
             "codef `{name}`: the innermost `{mk_name}` child must be the \
              corecursive self-call (`{name} <next-state>`)"

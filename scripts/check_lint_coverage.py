@@ -54,7 +54,17 @@ KNOWN_ORPHANS: dict[str, str] = {
 }
 
 # The pre-push gate. Every site listed below must contain this string verbatim.
-FULL_GATE = "cargo clippy --locked --workspace --all-targets"
+#
+# The DRIVER is deliberately not part of the string. What this check defends is
+# the SELECTION -- `--workspace` and `--all-targets`, the two flags whose loss
+# re-opens the blind spot. Since 2026-08-20 the gate sites invoke clippy through
+# `scripts/rust_frontend.sh`, because `rust-toolchain.toml` pins
+# `channel = "trust"`, whose stage2 ships no `cargo-clippy` (it is `targo-tippy`
+# there) and so answered a bare `cargo clippy` with `error: 'cargo-clippy' is
+# not installed for the custom toolchain 'trust'` -- the gate did not narrow,
+# it failed to start. Matching on the subcommand and its flags keeps this check
+# blind to the driver rename and sharp on the thing it exists to catch.
+FULL_GATE = "clippy --locked --workspace --all-targets"
 GATE_SITES = ("CLAUDE.md", "Justfile", "scripts/local_gate.sh")
 
 

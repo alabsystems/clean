@@ -82,11 +82,27 @@ pub(crate) fn numeral_of(tok: &str) -> Option<u32> {
 pub(crate) fn clean_ty_aliases() -> BTreeMap<String, String> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/spec/core_spec");
     let mut out = BTreeMap::new();
+    // The `.rs` stages AND the GENERATED definition scripts. As of 2026-08-20
+    // `has_cubical_layer`'s module is minted (crystal A2, `src/ir_mint`), so
+    // `ir_h2_tmode` is a line in `generated/ir_h2.defs.txt` rather than a Rust
+    // string literal. Missing it would leave the `load_tys` lane comparing
+    // `?unresolved:ir_h2_tmode` — a token that equals nothing, which is a lane
+    // that has stopped comparing.
+    let mut files: Vec<PathBuf> = Vec::new();
     let entries = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("{} must be readable ({e})", dir.display()));
-    for entry in entries.flatten() {
-        let p = entry.path();
-        if p.extension().and_then(|e| e.to_str()) != Some("rs") {
+    files.extend(entries.flatten().map(|e| e.path()));
+    let generated_dir = dir.join("generated");
+    if let Ok(generated) = std::fs::read_dir(&generated_dir) {
+        files.extend(generated.flatten().map(|e| e.path()));
+    }
+    for p in files {
+        let ext = p.extension().and_then(|e| e.to_str());
+        let is_defs = ext == Some("txt")
+            && p.file_name()
+                .and_then(|f| f.to_str())
+                .is_some_and(|f| f.ends_with(".defs.txt"));
+        if ext != Some("rs") && !is_defs {
             continue;
         }
         let Ok(src) = std::fs::read_to_string(&p) else {

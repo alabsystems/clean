@@ -60,24 +60,59 @@
 //!   reached through `to_mir` + the rustc pass pipeline + LLVM. It is the only
 //!   executor that cannot share a misunderstanding with the other two.
 //!
-//! ## Why this is sharper than "both said true"
+//! ## Why this is sharper than "both said true" — and exactly how much
 //!
-//! Output equality alone is weak — two encodings can differ in a way that a
-//! compensating second difference hides. Two things narrow it.
+//! Output equality alone is weak: two encodings can differ in a way that a
+//! compensating second difference hides. Three things narrow it, and the third
+//! is a limit rather than a strengthening. All three are stated in the terms a
+//! reader can check, because two of them were overstated here until 2026-08-20.
 //!
-//! **Cost is compared, not just value.** Clean's fuel threshold is *measured*
-//! by probing (the least `k` for which `ir_eval k … = ret v` is kernel-accepted)
-//! and compared against trust-ir's reported step count. A mis-encoded `switch`
-//! that still reaches the right answer almost always reaches it in a different
-//! number of steps. The threshold is measured rather than asserted so that a
-//! systematic difference in what "one step" means is *reported as an offset*
-//! instead of being baked into the template and hidden.
+//! **Cost is compared, and since 2026-08-20 it GATES.** Clean's fuel threshold
+//! is *measured* by probing (the least `k` for which `ir_eval k … = ret v` is
+//! kernel-accepted, with `fuel_out` kernel-accepted at `k-1` so the threshold is
+//! a cost and not an upper bound) and compared against trust-ir's reported step
+//! count. A mis-encoded `switch` that still reaches the right answer often
+//! reaches it in a different number of steps. **The correction:** until
+//! 2026-08-20 this paragraph claimed a sharpening the code could not deliver —
+//! `is_green()` consulted only values, `cost_is_uniform()` was called once in
+//! the entire repository inside an `eprintln!`, and a chain with every offset
+//! different would have been published as green. It now decides the verdict,
+//! against a *declared* offset rather than mere self-consistency, because a
+//! wrong harness overhead shifts every row equally and stays uniform. See
+//! [`cost`] for what that catches and what it still cannot.
 //!
 //! **The expected value is never hand-written.** The existing witnesses
 //! (`ir_h2_on_cubical` and friends) are `Eq.refl` against a constant a human
 //! typed. Here the right-hand side is derived from E2 and cross-checked against
 //! E3, so the kernel confirms someone else's measurement rather than its
 //! author's intention.
+//!
+//! **What a value differential CANNOT see: routing.** This is the limit, and it
+//! was previously described backwards. A many-to-one body — one whose distinct
+//! target blocks emit equal values — is *invisible* to any differential that
+//! compares only returned values and step counts, on every permutation of those
+//! equal-valued targets. Measured from the committed fixtures
+//! (`crystal_a3_discriminating_power_is_measured`):
+//!
+//! ```text
+//! chain                inputs  distinct values  value-preserving target permutations
+//! has_cubical_layer         6                2                                     2
+//! from_source_system       12                5                                  2880
+//! level_kind_ord            5                5                                     1
+//! ```
+//!
+//! `from_source_system` was called this differential's sharpest chain on the
+//! grounds that "a contiguous table can be got right by a mechanism that merely
+//! indexes; a hole cannot". By this measure it is the **dullest**: six of its
+//! twelve target blocks emit `enum.13 { 4 }`, so an encoder that routed case 11
+//! to the default block and tag 10 to `bb11` — precisely the positional
+//! off-by-one the hole was supposed to expose — is observably wrong on 0 of 12
+//! inputs and costs the same two instructions either way. The only fully
+//! discriminating chain is `level_kind_ord`, and it is the one with no E3.
+//! Routing is therefore pinned *structurally* instead, by comparing the
+//! registered Clean case table against the emitted switch tag-for-tag and
+//! target-for-target (`crystal_a3_routing_pairwise_matches_the_emitted_switch`);
+//! that comparison, not the value differential, is what refuses the swap.
 //!
 //! ## Where the trust boundary moves — and where it does not
 //!
@@ -86,6 +121,17 @@
 //! generated obligation is REJECTED and the row goes RED. **A wrong E2 can
 //! produce a spurious failure, never a spurious pass** — the only direction of
 //! error a measuring instrument may have.
+//!
+//! **That sentence is true of VALUES and was wrongly stated of the whole gate.**
+//! The value leg is kernel-adjudicated: Clean answers, and a wrong E2 only
+//! changes which candidate is offered first. The cost leg is not. Clean's fuel
+//! threshold *is* kernel-measured — the least accepted fuel, with `fuel_out`
+//! kernel-accepted one below it — but trust-ir's step count is trust-ir's own
+//! report, and the harness overhead subtracted from it is a constant of this
+//! harness. A wrong constant there is rejected by nothing. That asymmetry is why
+//! the offset is pinned per chain and why the overhead is counted rather than
+//! chosen: both directions of cost error are RED, but by construction of the
+//! gate, not by the kernel's refusal. Do not read a cost row as a kernel claim.
 //!
 //! ## What this is NOT
 //!
@@ -97,13 +143,12 @@
 //! denote the same function in general, because agreement on one body's
 //! instruction mix says nothing about the forms that body never uses.
 
-pub mod obligations;
-pub mod report;
+mod cost;
+mod obligations;
+mod report;
 
-pub use obligations::{
-    fuel_out_obligation, ir_numeral, ptr_cell_call, value_arg_call, value_obligation, ArgShape,
-    RunResult, MAX_IR_NUMERAL,
-};
+pub use cost::CostVerdict;
+pub use obligations::{fuel_out_obligation, value_obligation, ArgShape, RunResult, MAX_IR_NUMERAL};
 pub use report::{summarize, Agreement, ChainReport, DiffRow};
 
 /// How the subject's return value is encoded on the Clean side.

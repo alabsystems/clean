@@ -1103,3 +1103,116 @@ codata IS2 : (n : Nat) → Type where
         "a bare `codata` declaration mints no codef origins"
     );
 }
+
+// ── indexed codef: index fidelity ──
+
+/// A self-call at the WRONG index is a loud error.
+///
+/// The corecursor forces every child to the codata FIELD's target index, and
+/// the written index was discarded. So this compiled, and meant something the
+/// author did not write: `IS3.val (IS3.next (tr 4))` reduced to 5 — the
+/// target's move — while the author's own `tr n` says 4. The ERRONEOUS program
+/// was the one that compiled.
+#[test]
+fn test_indexed_codef_wrong_index_rejected() {
+    let mut env = Environment::with_prelude();
+    let src = "\
+codata IS3 : (n : Nat) -> Type where
+  val : Nat
+  next : IS3 (Nat.succ n)
+
+codef tr (n : Nat) : IS3 n where
+  val := n
+  next := tr n
+";
+    let decls = parse_file(src).expect("should parse");
+    elaborate_decl_and_register(&mut env, &decls[0]).expect("codata must elaborate");
+    let err = elaborate_decl_and_register(&mut env, &decls[1])
+        .expect_err("a self-call at the wrong index must be rejected");
+    assert!(
+        format!("{err:?}").contains("corecurses at an index"),
+        "expected an index-fidelity rejection, got: {err:?}"
+    );
+}
+
+/// Same, in the STATEFUL shape — and the index is `args[0]`, not the last arg.
+#[test]
+fn test_indexed_codef_wrong_index_rejected_with_state() {
+    let mut env = Environment::with_prelude();
+    let src = "\
+codata IS2 : (n : Nat) -> Type where
+  val : Nat
+  next : IS2 (Nat.succ n)
+
+codef bad (n : Nat) (acc : Nat) : IS2 n where
+  val := acc
+  next := bad n (acc + acc)
+";
+    let decls = parse_file(src).expect("should parse");
+    elaborate_decl_and_register(&mut env, &decls[0]).expect("codata must elaborate");
+    let err = elaborate_decl_and_register(&mut env, &decls[1])
+        .expect_err("a stateful self-call at the wrong index must be rejected");
+    assert!(
+        format!("{err:?}").contains("corecurses at an index"),
+        "expected an index-fidelity rejection, got: {err:?}"
+    );
+}
+
+/// The check is DEFEQ, not syntactic: `n + 1` satisfies a `Nat.succ n` target.
+///
+/// This is the property that stops the guard from being "reject unless the
+/// author retyped the target character-for-character". If this test ever fails
+/// because someone simplified the probe into a `SurfaceExpr` equality, that is
+/// the regression, not this test.
+#[test]
+fn test_indexed_codef_defeq_index_accepted() {
+    let env = elab_all(
+        "\
+codata IS4 : (n : Nat) -> Type where
+  val : Nat
+  next : IS4 (Nat.succ n)
+
+codef okd (n : Nat) (acc : Nat) : IS4 n where
+  val := acc
+  next := okd (n + 1) (acc + acc)
+",
+    );
+    assert!(
+        env.get_const(&Name::from_string("okd")).is_some(),
+        "`n + 1` is definitionally `Nat.succ n`, so this codef must be accepted"
+    );
+}
+
+/// The guard must not leak its probe, and must leave the env untouched on
+/// rejection so the name stays free.
+#[test]
+fn test_indexed_codef_index_probe_is_transactional() {
+    let mut env = Environment::with_prelude();
+    let src = "\
+codata IS5 : (n : Nat) -> Type where
+  val : Nat
+  next : IS5 (Nat.succ n)
+
+codef tr5 (n : Nat) : IS5 n where
+  val := n
+  next := tr5 n
+";
+    let decls = parse_file(src).expect("should parse");
+    elaborate_decl_and_register(&mut env, &decls[0]).expect("codata must elaborate");
+    let before = env.num_constants();
+    elaborate_decl_and_register(&mut env, &decls[1]).expect_err("must be rejected");
+    assert_eq!(
+        env.num_constants(),
+        before,
+        "a rejected codef must leave the environment untouched"
+    );
+    assert!(
+        env.get_const(&Name::from_string("tr5._indexProbe_next"))
+            .is_none(),
+        "the probe declaration must never be registered"
+    );
+    assert!(
+        env.get_const(&Name::from_string("tr5")).is_none(),
+        "the rejected codef's own name must stay free"
+    );
+}

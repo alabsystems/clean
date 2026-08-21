@@ -424,8 +424,7 @@ impl<'a> Unifier<'a> {
                 // kept redex can only refine WHICH solution is found, never
                 // equate unequal terms.
                 let flex_head = |u: &Self, e: &Expr| {
-                    matches!(e.kind(), ExprKind::App(_, _))
-                        && u.as_meta(e.get_app_fn()).is_some()
+                    matches!(e.kind(), ExprKind::App(_, _)) && u.as_meta(e.get_app_fn()).is_some()
                 };
                 let lam_headed_app = |e: &Expr| {
                     matches!(e.kind(), ExprKind::App(_, _))

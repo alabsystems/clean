@@ -44,6 +44,25 @@ pub struct Chain {
     pub clean_defs: &'static [&'static str],
     /// How faithful the enum declaration is.
     pub enum_model: EnumModel,
+    /// The clean-minus-trust cost offset this chain is DECLARED to have.
+    ///
+    /// Compared against the measured offset, and a mismatch is RED. A declared
+    /// value is what turns cost from telemetry into a gate: uniformity alone
+    /// cannot see a constant error, because a wrong harness overhead shifts
+    /// every row by the same amount. It is not a free knob — the overhead it
+    /// pins is independently counted from the harness's own instructions by
+    /// `crystal_a3_harness_step_overhead_is_derived_not_tuned`.
+    pub expected_cost_offset: i64,
+    /// How many permutations of this switch's target blocks leave the observed
+    /// value function UNCHANGED — the size of the blind spot a value-only
+    /// differential has on this body.
+    ///
+    /// `1` means every wrong routing is observable. Anything larger is the
+    /// number of distinct wrong routings this gate's value comparison cannot
+    /// see, and is why routing is pinned structurally instead. Declared here
+    /// and recomputed from the committed fixture by
+    /// `crystal_a3_discriminating_power_is_measured`, so it cannot drift.
+    pub value_preserving_target_permutations: u64,
     /// Every inhabitant of the argument type, exhaustively.
     pub domain: &'static [u32],
     /// Is `domain` the WHOLE domain? Never rounded up.
@@ -114,8 +133,17 @@ pub fn chains() -> Vec<Chain> {
             arg_shape: ArgShape::PointerCell,
             result_kind: ResultKind::Bool,
             clean_module: "ir_h2_module",
-            clean_defs: clean_verify::spec::IR_H2_MODULE_DEFS,
+            // A FUNCTION, not a constant array: this chain's module is MINTED
+            // (crystal A2, `src/ir_mint`), so the one source of truth is the
+            // generated script `add_eval_ir_mode` replays. The contract this
+            // field exists for is unchanged and is the reason it moved — the
+            // differential must read the registered lines, not a copy.
+            clean_defs: clean_verify::spec::ir_h2_module_defs(),
             enum_model: EnumModel::Exact,
+            expected_cost_offset: 0,
+            // bb1 and bb2 both emit `const bool true`; bb3 is the only false
+            // target. Swapping bb1 and bb2 is invisible to a value comparison.
+            value_preserving_target_permutations: 2,
             domain: &[0, 1, 2, 3, 4, 5],
             total_domain: true,
             shipped: Some(shipped_has_cubical_layer),
@@ -147,13 +175,30 @@ pub fn chains() -> Vec<Chain> {
             clean_module: "ir_fs_module",
             clean_defs: clean_verify::spec::IR_FS_MODULE_DEFS,
             enum_model: EnumModel::Exact,
-            // THE POINT OF THIS CHAIN. The emitted switch lists cases
-            // 0..9 and 11 — there is NO case 10. Tag 10 (PVS) reaches the
-            // DEFAULT edge, and it is only reached because the domain is
-            // enumerated exhaustively rather than sampled. A non-contiguous
-            // case list with a hole in the middle is the sharpest available
-            // test of the one thing GAP 2 names by name: whether Clean's
-            // `switch` encoding routes like trust-ir's.
+            expected_cost_offset: 0,
+            // **THE CORRECTION, 2026-08-20.** This chain used to be described
+            // as the differential's SHARPEST, on the grounds that "a contiguous
+            // table can be got right by a mechanism that merely indexes, while
+            // a hole cannot". Measured from the committed fixture, it is the
+            // DULLEST of the three: six of its twelve target blocks
+            // (bb5 bb6 bb7 bb10 bb11 bb12) emit the same `const enum.13 { 4 }`,
+            // two more emit `{ 0 }` and two emit `{ 5 }`, so 2,880 permutations
+            // of its targets leave every returned value unchanged.
+            //
+            // In particular the very off-by-one the hole was supposed to expose
+            // — a positional encoder that routes case 11 to bb12 and tag 10 to
+            // bb11 instead of the other way round — is observably wrong on
+            // **0 of 12** inputs, and cost cannot separate them either: both
+            // blocks are `const` + `br`, two instructions.
+            //
+            // The hole is still worth having and is still guarded
+            // (`crystal_a3_default_edge_is_actually_reached`), because it puts a
+            // real input on the DEFAULT edge. But what refuses a wrong ROUTE is
+            // the structural tag-for-tag comparison of the registered Clean case
+            // table against the emitted switch
+            // (`crystal_a3_routing_pairwise_matches_the_emitted_switch`), not
+            // this value differential.
+            value_preserving_target_permutations: 2880,
             domain: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
             total_domain: true,
             shipped: Some(shipped_from_source_system),
@@ -176,6 +221,13 @@ pub fn chains() -> Vec<Chain> {
             clean_module: "ir_ko_module",
             clean_defs: clean_verify::spec::IR_KO_MODULE_DEFS,
             enum_model: EnumModel::TagSurrogate,
+            expected_cost_offset: 0,
+            // The ONLY fully discriminating chain of the three: five targets,
+            // five distinct answers, so every wrong routing changes a returned
+            // value and the differential sees it. It is also the one chain with
+            // no E3 — the sharpest body here is the one with the fewest
+            // executors, which is worth stating rather than averaging away.
+            value_preserving_target_permutations: 1,
             domain: &[0, 1, 2, 3, 4],
             total_domain: true,
             shipped: None,

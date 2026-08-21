@@ -443,7 +443,10 @@ impl Parser {
             }
 
             if self.is_atom_start() {
+                // Argument position is max precedence: `Type` is atomic here.
+                self.type_atomic_in_arg = true;
                 let arg = self.atom_expr()?;
+                self.type_atomic_in_arg = false;
 
                 // If the argument is a pattern-matching lambda, stop application parsing
                 // Pattern-matching lambdas use layout-sensitive syntax and we can't
@@ -1062,6 +1065,10 @@ impl Parser {
 
     /// Atomic expressions
     pub(super) fn atom_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        // Applies to THIS atom only. Cleared immediately so a nested parse
+        // (e.g. the `expr()` behind `(`) sees the ordinary `Type u` grammar.
+        let type_atomic = self.type_atomic_in_arg;
+        self.type_atomic_in_arg = false;
         let span = self.current_span();
 
         match self.current_kind().clone() {
@@ -1305,11 +1312,15 @@ impl Parser {
                 // Check for explicit level: Type u, Type 1, Type (max u v),
                 // Type $u, or a level hole `Type _` (levelMVarToParam — the `_`
                 // becomes a fresh universe metavar during elaboration).
-                } else if let TokenKind::Ident(_)
-                | TokenKind::NatLit(_)
-                | TokenKind::LParen
-                | TokenKind::Dollar
-                | TokenKind::Underscore = self.current_kind()
+                } else if !type_atomic
+                    && matches!(
+                        self.current_kind(),
+                        TokenKind::Ident(_)
+                            | TokenKind::NatLit(_)
+                            | TokenKind::LParen
+                            | TokenKind::Dollar
+                            | TokenKind::Underscore
+                    )
                 {
                     let level = self.level_expr()?;
                     Ok(SurfaceExpr::Universe(

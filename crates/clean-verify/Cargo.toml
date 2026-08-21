@@ -72,3 +72,10 @@ features = ["test-utils", "sat-verify"]
 name = "proof_check"
 path = "src/bin/proof_check.rs"
 required-features = ["sat-verify"]
+
+# Regenerator for the crystal-A2 minted module artifacts (`src/ir_mint`). Pure:
+# core module in, definition script and record out. The gate re-runs the same
+# function, so this binary is a convenience and never an authority.
+[[bin]]
+name = "ir_mint_gen"
+path = "src/bin/ir_mint_gen.rs"

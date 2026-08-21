@@ -1,0 +1,7 @@
+def ir_pv_tprio : IRTy := IRTy.enum_ 127
+def ir_pv_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_pv_tprio ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield (IRTy.uint_ 32) ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d2 ir_nl0 (ir_sc ir_d0 ir_d1 ir_sc0) Bool.false)))
+def ir_pv_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 1000)) ir_d4) (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d4))))
+def ir_pv_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.const_ (IRTy.int_ 64) (IRConst.int_ ir_d4)) ir_d5) (IRList.cons IRNode (ir_nd1 (IRInst.gep (IRTy.int_ ir_d8) ir_d0 (ir_nl1 ir_d5) Bool.true) ir_d6) (IRList.cons IRNode (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d6 Bool.false) ir_d7) (IRList.cons IRNode (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d7))) (IRList.nil IRNode)))))
+def ir_pv_b3 : IRBlock := IRBlock.mk ir_d3 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))
+def ir_pv_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_pv_b0 (ir_blk ir_pv_b1 (ir_blk ir_pv_b2 (ir_blk ir_pv_b3 ir_blk0))))
+def ir_pv_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_pv_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)

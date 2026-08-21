@@ -1054,7 +1054,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clean"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "clean-cli",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "clean-auto"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "ay",
@@ -1126,7 +1126,7 @@ dependencies = [
 
 [[package]]
 name = "clean-cake"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "clean-kernel",
@@ -1137,7 +1137,7 @@ dependencies = [
 
 [[package]]
 name = "clean-ck0"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "num-bigint 0.4.8",
  "num-traits 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1147,7 +1147,7 @@ dependencies = [
 
 [[package]]
 name = "clean-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "ark-std",
@@ -1190,7 +1190,7 @@ dependencies = [
 
 [[package]]
 name = "clean-compiler"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clean-features",
@@ -1205,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "clean-discovery"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clean-auto",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "clean-elab"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "clean-features"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "serde",
@@ -1262,7 +1262,7 @@ dependencies = [
 
 [[package]]
 name = "clean-fold"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "clean-kernel"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1317,7 +1317,7 @@ dependencies = [
 
 [[package]]
 name = "clean-lake"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clean-elab",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "clean-lsp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clean-elab",
@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "clean-math-project"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clean-kernel",
  "serde",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "clean-mathverse"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1417,7 +1417,7 @@ dependencies = [
 
 [[package]]
 name = "clean-olean"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ahash",
  "bincode",
@@ -1442,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "clean-parser"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clean-kernel",
  "proptest",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "clean-rust-sem"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clean-elab",
@@ -1483,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "clean-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",
@@ -1516,7 +1516,7 @@ dependencies = [
 
 [[package]]
 name = "clean-sys"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cbindgen",
  "clean-kernel",
@@ -1525,7 +1525,7 @@ dependencies = [
 
 [[package]]
 name = "clean-tla"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clean-auto",
@@ -1937,9 +1937,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.17.0"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
+checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
 name = "endian-type"
@@ -2363,9 +2363,9 @@ checksum = "e590f038c1464a96894fd6d10127e90a8be4509f56ff7ecef851b15cee0b7caa"
 
 [[package]]
 name = "icu_provider"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92a7ed671a6aad807a8651a2e1782a6598fda9ce5185dd8158549e95a91c6428"
+checksum = "d27bbb9d3abbefac45d55f647c9de1d44aafcd1186eb91879afef17c396c3e73"
 dependencies = [
  "displaydoc",
  "icu_locale_core",
@@ -4812,9 +4812,9 @@ dependencies = [
 
 [[package]]
 name = "zerovec-derive"
-version = "0.11.5"
+version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f212a141d820099d57ffafb9569be9617a6f27d3dc881fbee8fb56642f917a9"
+checksum = "34df6fc39dbd26ddc9c10e6a2984476e13acce22e64e4487636ef494369225da"
 dependencies = [
  "proc-macro2",
  "quote",

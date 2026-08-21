@@ -104,6 +104,23 @@ pub struct Parser {
     /// precedence than an application argument). Without this, `show True by
     /// trivial` would parse the type as the application `True (by trivial)`.
     stop_app_at_by: bool,
+    /// When true, `Type` does NOT consume a following token as its universe
+    /// level — it parses as the bare sort.
+    ///
+    /// Lean parses an application ARGUMENT at max precedence, where `Type` is
+    /// atomic: `@Eq.rec Type Y motive rfl Z h` passes `Type` and `Y` as two
+    /// separate arguments, and `Type u` in argument position must be written
+    /// `(Type u)`. Without this, `Type` greedily swallowed the NEXT ARGUMENT as
+    /// a universe level, so that call parsed as `@Eq.rec (Type Y) motive rfl Z h`
+    /// — one argument short, with the term variable `Y` reinterpreted as a
+    /// universe parameter. The measured symptom was `Sort(Succ(Param(Y)))`
+    /// appearing in the expected type, then `CannotInfer` (and 17 cascading
+    /// failures in `data/graduation/clean-mtype/proof/MType.lean`).
+    ///
+    /// Cleared on entry to `atom_expr`, so it applies only to the immediate
+    /// argument atom and never leaks into a nested parse: `f (Type u) x` still
+    /// reads the level inside the parentheses.
+    type_atomic_in_arg: bool,
     /// When true, the `generalizing` and `using` identifiers are not consumed as
     /// application arguments. Used by `parse_tactic_cases_induction` so the
     /// major premise `e` in `induction e using r generalizing x with …` stops at
@@ -250,6 +267,7 @@ impl Parser {
             forbid_do: false,
             stop_at_catch_finally: false,
             stop_app_at_by: false,
+            type_atomic_in_arg: false,
             stop_app_at_generalizing_using: false,
             in_where_block: false,
             in_struct_field: false,

@@ -7,6 +7,96 @@
 //! Link 2a (proved module = emitted module) is still open here. These tests pin
 //! both the emitted body and the exact closure wall. When the wall moves they
 //! deliberately fail, requiring a real transcription and equality gate.
+//!
+//! ## 2026-08-20 — the wall is UNCHANGED, and now it is itemized
+//!
+//! Crystal A2 (`src/ir_mint`) mints `has_cubical_layer`'s module from the
+//! emitted artifact. It deliberately does **not** touch `ir_lz_module`, so the
+//! `assert_ne!` below stands exactly as written and is not inverted.
+//!
+//! Two things the same machinery measured about this body, though, because they
+//! correct the record rather than move the gate:
+//!
+//! * The emitted `is_zero` body projects to a COMPLETE core module
+//!   (`src/spec/core_spec/generated/ir_lz.core.txt`: ten blocks, two `gep`s,
+//!   four calls to two callees, a short-circuit through a second join block).
+//!   Transcribability was never the blocker.
+//! * Minting it refuses today for exactly one nameable reason — numeral 64 is
+//!   outside the registered `ir_d0..ir_d16` atom pool — pinned by
+//!   `crystal_a2_mint`'s `level_is_zero_mints_only_up_to_a_named_refusal`.
+//!
+//! ## 2026-08-20, second entry — the stated wall was HALF A WALL
+//!
+//! What this file said, verbatim, until today:
+//!
+//! > What actually costs something is downstream: a minted `ir_lz_module`
+//! > contains `call` to a callee that is not in the module, `ir_call_exec` is
+//! > fail-closed on that, and `ir_lz_correct` would become unprovable about the
+//! > minted term. Closing 2a here means RETIRING that theorem, not repairing
+//! > it. That is a decision, not a build item, and it is not taken here.
+//!
+//! **The middle clause was false, and it is the clause that carries the safety.**
+//! `ir_call_exec` resolves through `ir_func_find`, and `ir_func_find` matches on
+//! the candidate function's OWN id — the recursor arm is
+//! `(fun (i : Nat) … (ir_nat_eqb i k))` where `i` is `IRFunc`'s first field
+//! (`src/spec/core_spec/eval_ir_state.rs`). The minter hard-coded the projected
+//! function's own id to `0` while interning CALLEE ids by first use, also from
+//! `0`, in a **separate** namespace, and the two collided on that numeral: the
+//! core read `(func 0 …)` for `Level::is_zero` with `(call 0 …)` for
+//! `LevelArc::deref` — a different function — and `(call 1 …)` for the genuine
+//! self-call.
+//!
+//! So a minted `ir_lz_module` would **not** have gone stuck on the deref.
+//! `ir_func_find` would have found `is_zero`, and the machine would have
+//! silently executed a recursive call to `is_zero` where the program calls
+//! `deref` — a type-confused program the semantics accepts. Only the real
+//! self-call went stuck. The wall stood in front of the harmless half and left
+//! the harmful half open.
+//!
+//! **The collision itself is closed** (same day, sibling lane): both writers of
+//! the core form now draw the function's own id and its callee ids from one
+//! namespace, and `generated/ir_lz.core.txt` reads `(call 1 …)` for the deref
+//! and `(call 0 …)` for the recursive call. What remains here is the
+//! consequence, which the collision was hiding, and
+//! `level_is_zero_callee_identity.rs` holds both worlds to account mechanically
+//! rather than in prose.
+//!
+//! ## With callee identity fixed, is a minted `ir_lz_module` safe — and does
+//! `ir_lz_correct` survive?
+//!
+//! **Safe: yes. Survives: no — and it is REFUTED, not merely unprovable.**
+//!
+//! *Safe.* With the function's own id and the callee ids drawn from one
+//! namespace, `call deref` names an id no `IRFunc` in the module carries,
+//! `ir_func_find` returns `IROption.none`, and `ir_call_exec` halts
+//! `IROutcome.stuck IRFault.no_func`. That is the fail-closed behaviour the old
+//! comment claimed, and with the collision gone it is true. No misroute remains.
+//!
+//! *But the theorem does not survive.* `ir_lz_correct` asserts, for **every**
+//! `l` with `EncodesLiveLevelRef mem r l` and enough fuel, that `ir_eval`
+//! returns `ret (bool (level_is_zero l))`. The emitted body reaches a `deref`
+//! call on exactly two arms — `Max` (case 2 -> bb4) and `IMax` (the default edge,
+//! bb5) — while `Zero` (bb1), `Succ` (bb2) and `Param` (bb3) return a constant
+//! with no call at all. `emitted_recursive_arms_are_the_ones_that_call_out`
+//! (same sibling file) pins that split. Over a minted module that defines only `is_zero`, the machine
+//! therefore halts *stuck* on every `Max` and every `IMax`, where the theorem
+//! says it returns. The statement is false there, so retiring is not a stylistic
+//! choice between two provable framings: the theorem as written cannot be
+//! restated over the minted module without dropping two of its five arms.
+//!
+//! **So the decision still needs taking — but it is a different decision, and it
+//! has a build item under it after all.** The blocker is not "a call has no
+//! callee"; it is that the reachable closure is not BODYFUL, which is exactly
+//! the `a0_criteria.bodyful_reachable_closure == FAIL` this file already
+//! asserts. Minting the deref in is not enough either: its own entry block calls
+//! two further functions (`level_is_zero_deref_callee.trust-ir.txt`, straight
+//! line, not a panic branch) that the artifact carries as declarations only. The
+//! honest statement is that `ir_lz_correct` survives a minted `ir_lz_module`
+//! only when the transitive callee closure is lowered with bodies — a named,
+//! measurable producer build item — and that retiring the theorem is the
+//! alternative to doing that work, not a substitute for understanding it.
+//!
+//! None of this moves the `assert_ne!` wall below, and none of it is taken here.
 
 use std::path::PathBuf;
 

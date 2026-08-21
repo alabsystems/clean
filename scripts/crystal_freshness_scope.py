@@ -133,6 +133,12 @@ BODY_SOURCES: dict[str, tuple[str, str]] = {
         "fn get_char_val",
     ),
     "meta_tag_shl": ("src/tc/local_context.rs", "META_TAG"),
+    "simp_priority_value": ("src/env/types.rs", "fn value"),
+    # Chains 12-14, the 2026-08-20 float tranche: three closures inside
+    # float_binary_op's callers, one source line each.
+    "float_add": ("src/env/native_reducers_float.rs", "fn reduce_float_add"),
+    "float_sub": ("src/env/native_reducers_float.rs", "fn reduce_float_sub"),
+    "float_mul": ("src/env/native_reducers_float.rs", "fn reduce_float_mul"),
 }
 
 

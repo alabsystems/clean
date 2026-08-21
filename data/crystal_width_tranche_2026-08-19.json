@@ -1,0 +1,153 @@
+{
+ "schema": "clean.crystal.width.tranche.v1",
+ "measured_utc_date": "2026-08-19",
+ "producer": {
+  "trustc_commit": "10130575cf4e8527212447ff95a487cf33b88ed6",
+  "stamp_date": "2026-08-14",
+  "note": "NOT the lane revalidation producer (trust origin/main 6819d58406). Chain-class bodies were shown not to drift across that range, but any fixture pinned from this run must record this producer."
+ },
+ "method": {
+  "candidate_filter": "lowered & spliced & unsupported==[] & derived_mir.verdict==agreed & markers_exact & calls{resolved,extern_decls,unresolved}==0 & deferred_to_seam==false",
+  "flip_join": "BY def_index <-> DefId(0:N). A def_path STRING join undercounts 178 -> 13, because impl methods print as {impl#N}::m in the flip log and as <T as Tr>::m in coverage.",
+  "lane_rule": "rank by opcodes NOT already covered by the ten landed chains; each new lane extends the proved EvalIR fragment"
+ },
+ "covered_opcodes_by_landed_chains": [
+  "and",
+  "assert",
+  "bitcast",
+  "br",
+  "condbr",
+  "const",
+  "extractfield",
+  "fdiv",
+  "icmp",
+  "load",
+  "ret",
+  "sext",
+  "shl",
+  "switch",
+  "trunc"
+ ],
+ "pool": {
+  "bodies": 13778,
+  "chainable_all_kinds": 1083,
+  "chainable_fn": 193,
+  "chainable_fn_and_flipping": 178,
+  "flip_events": 210
+ },
+ "remaining_uncovered_lanes": {
+  "insertfield": 17,
+  "store": 6,
+  "zext": 2,
+  "or": 1,
+  "fadd": 1,
+  "fsub": 1,
+  "fmul": 1
+ },
+ "tranche": [
+  {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "def_index": 15917,
+   "instr_count": 4,
+   "new_lanes": [
+    "insertfield",
+    "store"
+   ],
+   "flip": {
+    "kind": "codegen",
+    "lineage": "sha256:ed44ee3c2a7c743af22645ef52e8d69ad3fe570a5613d7ea790f74b1f47b4ae5,"
+   },
+   "ops": {
+    "load": 1,
+    "insertfield": 1,
+    "store": 1,
+    "ret": 1
+   }
+  },
+  {
+   "def_path": "flat::types::FlatFlags::with",
+   "def_index": 16851,
+   "instr_count": 6,
+   "new_lanes": [
+    "insertfield",
+    "or"
+   ],
+   "flip": {
+    "kind": "codegen",
+    "lineage": "sha256:7605e522e0c96382eb12b938815e0c02513954ecc94f4151e48dd4893ac9fec2,"
+   },
+   "ops": {
+    "extractfield": 2,
+    "or": 1,
+    "const": 1,
+    "insertfield": 1,
+    "ret": 1
+   }
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "def_index": 15296,
+   "instr_count": 2,
+   "new_lanes": [
+    "fadd"
+   ],
+   "flip": {
+    "kind": "codegen",
+    "lineage": "sha256:40cfe8ad82f90694c3cd2b7b5022309d74f264e842908c45117fcb19d9618dca,"
+   },
+   "ops": {
+    "fadd": 1,
+    "ret": 1
+   }
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "def_index": 15298,
+   "instr_count": 2,
+   "new_lanes": [
+    "fsub"
+   ],
+   "flip": {
+    "kind": "codegen",
+    "lineage": "sha256:566e62508e7b435ae4091bcf1ae47b000ba4b04adf7461045460c8ade433433d,"
+   },
+   "ops": {
+    "fsub": 1,
+    "ret": 1
+   }
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "def_index": 15300,
+   "instr_count": 2,
+   "new_lanes": [
+    "fmul"
+   ],
+   "flip": {
+    "kind": "codegen",
+    "lineage": "sha256:3489149f224d9d1dd951d418887da67ad52cb6153d4bfe8f38f3bc57bb157689,"
+   },
+   "ops": {
+    "fmul": 1,
+    "ret": 1
+   }
+  },
+  {
+   "def_path": "cert::builder::state::NodeId::index",
+   "def_index": 1787,
+   "instr_count": 3,
+   "new_lanes": [
+    "zext"
+   ],
+   "flip": {
+    "kind": "codegen",
+    "lineage": "sha256:12d927361b70a6967db5127eb4b2d1ee7e213fa3078ade27e778c867598f52d4,"
+   },
+   "ops": {
+    "extractfield": 1,
+    "zext": 1,
+    "ret": 1
+   }
+  }
+ ]
+}

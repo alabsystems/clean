@@ -508,23 +508,62 @@ impl<'a> ElabCtx<'a> {
                 )
             }
 
-            // Coinductive (#191): parsed but NOT semantically supported yet.
-            // Fail closed: elaborating a greatest-fixpoint declaration through
-            // `elab_inductive` would silently mint the least fixpoint (with an
-            // induction principle it must not have) — proofs would check while
-            // meaning something other than what the user wrote. The planned
-            // closure is a gfp lowering over complete lattices (Lean 4.25-style
-            // coinductive predicates), not kernel codata; until that lands this
-            // arm must reject.
-            SurfaceDecl::Coinductive { name, .. } => {
+            // Coinductive (#191): the v1 greatest-fixpoint lowering.
+            //
+            // A `coinductive` declaration must NEVER be routed through
+            // `elab_inductive` — that would silently mint the LEAST fixpoint
+            // (with an induction principle the gfp must not have), so proofs
+            // would check while meaning something other than what the user
+            // wrote. Instead the declaration is lowered to the impredicative
+            // gfp encoding (`crate::coinductive_surface`), and every shape the
+            // lowering does not fully understand still rejects LOUDLY.
+            SurfaceDecl::Coinductive {
+                name,
+                universe_params,
+                binders,
+                ty,
+                ctors,
+                deriving,
+                modifiers,
+                ..
+            } => {
                 let qname = self.qualify_name(name);
-                Err(ElabError::Unsupported {
-                    feature: format!(
-                        "coinductive declaration `{qname}`: greatest-fixpoint \
-                         semantics are not implemented; refusing to elaborate \
-                         it as an inductive (least fixpoint)"
-                    ),
-                })
+                let generated = crate::coinductive_surface::lower(
+                    &qname,
+                    name,
+                    self.env,
+                    universe_params,
+                    binders,
+                    ty,
+                    ctors,
+                    deriving,
+                    modifiers,
+                )?;
+                // Elaborate the generated declarations against a CLONE of the
+                // environment: each one depends on its predecessors (`P.coind`
+                // needs `P` to unfold), and `ElabCtx` holds only an immutable
+                // borrow. The results are handed back as an
+                // `ElabResult::Multiple`, which the registration path installs
+                // — and the kernel re-checks — one by one into the real
+                // environment, exactly as for hand-written source. Nothing is
+                // added unchecked and no axiom is minted.
+                let mut candidate: clean_kernel::Environment = self.env.clone();
+                let mut results = Vec::with_capacity(generated.len());
+                for gen_decl in &generated {
+                    let r = crate::elaborate_decl_and_register(&mut candidate, gen_decl).map_err(
+                        |e| ElabError::Unsupported {
+                            feature: format!(
+                                "coinductive declaration `{qname}`: the generated \
+                                 greatest-fixpoint declaration `{}` failed to \
+                                 elaborate/kernel-check ({e:?}); the declaration is \
+                                 REJECTED rather than partially registered",
+                                crate::preprocess_ext::decl_name(gen_decl).unwrap_or("?")
+                            ),
+                        },
+                    )?;
+                    results.push(r);
+                }
+                Ok(ElabResult::Multiple(results))
             }
 
             SurfaceDecl::Codef { .. } => Err(ElabError::Unsupported {

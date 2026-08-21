@@ -50,6 +50,14 @@
 //!   at flip time is A6's job, in trust.
 //! * `ir_h2_module` remains hand-transcribed. This gate makes an incorrect
 //!   transcription FAIL rather than making a correct one automatic.
+//!   **NO LONGER TRUE FOR `has_cubical_layer` as of 2026-08-20**, and true for
+//!   the other nine. That chain's module is now MINTED from the emitted
+//!   artifact (`src/ir_mint`, `tests/crystal_a2_mint.rs`); this gate keeps
+//!   running over it unchanged, as one of four independent readers. Minting it
+//!   found a wrong `Switch.exhaustive_enum_unreachable` that no lane in this
+//!   file could ever have seen, because trust-ir's `Display` never prints that
+//!   field — which is also the sharpest available statement of what "structural"
+//!   costs here.
 //!
 //! So this is the link that was missing, at the strength it can honestly be
 //! claimed: the proved module and the emitted module are checked equal on every
@@ -214,6 +222,12 @@ mod has_cubical_layer;
 #[path = "crystal_a1_lineage/level_is_zero.rs"]
 mod level_is_zero;
 
+// Callee identity in a MINTED ir_lz_module: which call resolves, which goes
+// stuck, and what that costs `ir_lz_correct`. Split out because the reasoning
+// and its three pins outgrew the lane file.
+#[path = "crystal_a1_lineage/level_is_zero_callee_identity.rs"]
+mod level_is_zero_callee_identity;
+
 // The SECOND complete chain — `Level::kind_ord` — has the same two gates, over
 // a structurally different body: seven blocks, a four-case switch with a
 // reachable default, five distinct integer answers, a `u8` join parameter.
@@ -280,6 +294,16 @@ mod expr_path_step_clone;
 // with every lane this file had, on every chain).
 #[path = "crystal_a1_lineage/float_div.rs"]
 mod float_div;
+// The float ADD / SUB / MUL chains, 2026-08-20 — the three sibling closures of
+// float_div, from the 2026-08-19 width tranche. Same emitted shape (one binop,
+// one ret); the gates additionally pin each op token and, for mul, the
+// prefix-disambiguated block filter (`SRC_IR_FM_B0`, not `SRC_IR_FM_B`).
+#[path = "crystal_a1_lineage/float_add.rs"]
+mod float_add;
+#[path = "crystal_a1_lineage/float_mul.rs"]
+mod float_mul;
+#[path = "crystal_a1_lineage/float_sub.rs"]
+mod float_sub;
 
 // The NINTH chain, 2026-08-16 —
 // `env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}`, the first
@@ -310,6 +334,14 @@ mod meta_tag_shl;
 // pinned cell by cell, plus parser totality over the emitted instruction set.
 // Added 2026-08-16 by the lane-completeness audit, which found four constructs
 // present in the bodies that no lane read and one lane a chain never compared.
+// The ELEVENTH chain, 2026-08-20 — `env::types::SimpPriority::value`, the
+// first chained body that COMPUTES AN ADDRESS AND DEREFERENCES IT. It brought
+// the `geps` lane with it: `Cfg` had no lane for the instruction at all, for
+// the reason every lane in this file was once absent, and its own test
+// falsifies the new lane with four perturbations of the emitted gep.
+#[path = "crystal_a1_lineage/simp_priority_value.rs"]
+mod simp_priority_value;
+
 #[path = "crystal_a1_lineage/lane_matrix.rs"]
 mod lane_matrix;
 

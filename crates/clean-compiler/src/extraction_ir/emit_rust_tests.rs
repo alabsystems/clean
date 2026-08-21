@@ -36,6 +36,44 @@ fn doubler() -> Corec {
 /// Returns `None` if rustc is unavailable, so the suite degrades to skipping
 /// rather than failing on a machine without a toolchain. A compile FAILURE is
 /// never a skip — it panics with the compiler's diagnostics.
+/// Invoke `rustc` on an EMITTED program, opting out of Trust verification.
+///
+/// See `clean-elab/src/tactic/native_decide_eval.rs` for the full rationale.
+/// In short: `rustc` resolves through rustup from this repo's
+/// `rust-toolchain.toml`, pinned to `channel = "trust"` since 2026-08-18, so it
+/// ran Trust's obligation checker over these emitted programs and failed the
+/// build on `[overflow:add]` obligations it could not discharge statically.
+/// These programs are extraction ARTIFACTS executed for a differential check,
+/// not verification targets.
+///
+/// Probe rather than assume — the flag is trust-only and its spelling has moved
+/// once already, so fall back to a plain invocation when it is not understood.
+fn rustc_emit(
+    src_path: &std::path::Path,
+    bin_path: &std::path::Path,
+) -> std::io::Result<std::process::Output> {
+    use std::process::Command;
+    let run = |trust_opt_out: bool| {
+        let mut cmd = Command::new("rustc");
+        cmd.arg("--edition=2021").arg("-O");
+        if trust_opt_out {
+            cmd.arg("-Ztrust-verify=off");
+        }
+        cmd.arg("-o").arg(bin_path).arg(src_path).output()
+    };
+    let flag_was_rejected = |stderr: &str| {
+        stderr.contains("only accepted on the nightly compiler")
+            || stderr.contains("unknown unstable option")
+            || stderr.contains("unknown debugging option")
+            || stderr.contains("incorrect value")
+    };
+    let out = run(true)?;
+    if !out.status.success() && flag_was_rejected(&String::from_utf8_lossy(&out.stderr)) {
+        return run(false);
+    }
+    Ok(out)
+}
+
 fn compile_and_run(src: &str, stem: &str) -> Option<Vec<String>> {
     use std::process::Command;
 
@@ -44,14 +82,7 @@ fn compile_and_run(src: &str, stem: &str) -> Option<Vec<String>> {
     let bin_path = dir.path().join(stem);
     std::fs::write(&src_path, src).expect("write source");
 
-    let out = match Command::new("rustc")
-        .arg("--edition=2021")
-        .arg("-O")
-        .arg("-o")
-        .arg(&bin_path)
-        .arg(&src_path)
-        .output()
-    {
+    let out = match rustc_emit(&src_path, &bin_path) {
         Ok(o) => o,
         // No toolchain on this machine.
         Err(_) => return None,
@@ -87,12 +118,7 @@ fn compile_and_count_steps(src: &str, stem: &str) -> Option<u64> {
     let src_path = dir.path().join(format!("{stem}.rs"));
     let bin_path = dir.path().join(stem);
     std::fs::write(&src_path, src).expect("write source");
-    let out = Command::new("rustc")
-        .args(["--edition=2021", "-O", "-o"])
-        .arg(&bin_path)
-        .arg(&src_path)
-        .output()
-        .ok()?;
+    let out = rustc_emit(&src_path, &bin_path).ok()?;
     assert!(
         out.status.success(),
         "must compile:\n{}",

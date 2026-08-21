@@ -25,6 +25,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::emitted_cfg_types::norm_emitted_ty;
 use super::{header_param_ids, id_of, split_commas_top, split_top, target_and_args, Cfg};
 
+#[path = "emitted_cfg_parse_memory.rs"]
+mod memory;
+use memory::{emitted_gep, emitted_load};
+
 /// Every arithmetic and bitwise `binop` opcode trust-ir prints.
 const ARITH: &[&str] = &[
     "add", "sub", "mul", "udiv", "sdiv", "urem", "srem", "shl", "lshr", "ashr", "and", "or", "xor",
@@ -63,6 +67,7 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
     let mut extracts: BTreeMap<u32, Vec<(u32, u32, u32)>> = BTreeMap::new();
     let mut loads: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
     let mut load_tys: BTreeMap<u32, Vec<(u32, String, bool)>> = BTreeMap::new();
+    let mut geps: BTreeMap<u32, Vec<(u32, String, u32, Vec<u32>, bool)>> = BTreeMap::new();
     let mut extract_tys: BTreeMap<u32, Vec<(u32, String)>> = BTreeMap::new();
     let mut icmps: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut binops: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
@@ -118,6 +123,11 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
                     // them, `volatile load u8, ptr %0, align 8`.
                     Some("load" | "volatile") => {
                         emitted_load(b, r, &t, &mut loads, &mut load_tys);
+                    }
+                    // `%6 = gep inbounds i8, ptr %0, %5` — the first
+                    // instruction in this file that COMPUTES AN ADDRESS.
+                    Some("gep") => {
+                        emitted_gep(b, r, &t, &mut geps);
                     }
                     // `%6 = icmp eq u8 %4, %5`
                     Some("icmp") => {
@@ -304,6 +314,7 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
         extract_tys,
         loads,
         load_tys,
+        geps,
         icmps,
         binops,
         condbrs,
@@ -319,67 +330,6 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
         switch_on,
         order,
     }
-}
-
-/// Read a `load` — **every slot it prints**, and refuse the one slot Clean's
-/// `IRInst.load` has no room for.
-///
-/// The printed form is
-/// `[volatile ]load {ty}, ptr %{ptr}[, align {a}]` (`trust-ir/src/display.rs:672`);
-/// the registered constructor is `IRInst.load : IRTy → Nat → Bool → IRInst`.
-///
-/// **Two defects the 2026-08-19 operand audit found here, both measured:**
-///
-/// * the pointer was taken with `t.last()`, which is the pointer only while
-///   nothing follows it. On `load u8, ptr %0, align 8` the last token is `8`,
-///   and `id_of("8")` is `Some(8)` — so the load would have been recorded as
-///   reading `%8`, a binding that need not even exist, with nothing failing.
-///   The pointer is now read from its own slot, positionally.
-/// * the TYPE was never read at all, on either side. That is the slot the
-///   flagship chain disagrees in.
-///
-/// `align` is REFUSED rather than dropped, because Clean's `load` has no
-/// alignment operand: there is nothing for it to be compared against, and a
-/// slot a parser cannot read must never parse to nothing on both sides and
-/// compare equal. That is the same `?usize` rule `switch`'s block arguments and
-/// `assert`'s extra operands are refused under.
-fn emitted_load(
-    b: u32,
-    r: u32,
-    t: &[String],
-    loads: &mut BTreeMap<u32, Vec<(u32, u32)>>,
-    load_tys: &mut BTreeMap<u32, Vec<(u32, String, bool)>>,
-) {
-    let volatile = t.first().map(String::as_str) == Some("volatile");
-    let i = usize::from(volatile);
-    if t.get(i).map(String::as_str) != Some("load") {
-        return;
-    }
-    assert_eq!(
-        t.get(i + 2).map(String::as_str),
-        Some("ptr"),
-        "a `load`'s pointer operand is printed as `ptr %N` and this one is not: {t:?}"
-    );
-    assert_eq!(
-        t.len(),
-        i + 4,
-        "a `load` carries {} tokens ({t:?}), and this parser reads exactly the type, the pointer \
-         and the volatile flag. The extra slot is almost certainly `, align N`, which Clean's \
-         `IRInst.load : IRTy -> Nat -> Bool -> IRInst` has NO operand for — so it cannot be \
-         compared, and a slot that cannot be compared is refused here rather than dropped into \
-         nothing on both sides. (It is also the slot that used to make `t.last()` return the \
-         ALIGNMENT where the pointer was meant to be.)",
-        t.len()
-    );
-    let Some(ptr) = t.get(i + 3).and_then(|s| id_of(s)) else {
-        panic!("a `load`'s pointer operand is not an SSA id: {t:?}");
-    };
-    loads.entry(b).or_default().push((r, ptr));
-    load_tys.entry(b).or_default().push((
-        r,
-        norm_emitted_ty(t.get(i + 1).map_or("", String::as_str)),
-        volatile,
-    ));
 }
 
 /// The SSA ids an emitted assignment's left-hand side binds: `%2` -> `[2]`,

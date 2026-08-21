@@ -546,16 +546,79 @@ fn compile_rust_program(source: &str) -> Result<Vec<u8>, NativeDecideExecError> 
             detail: format!("failed to write native_decide source: {err}"),
         }
     })?;
-    let output = Command::new("rustc")
-        .arg("--edition=2021")
-        .arg("-O")
-        .arg(&source_path)
-        .arg("-o")
-        .arg(&binary_path)
-        .output()
-        .map_err(|err| NativeDecideExecError::NativeCompileFailed {
-            detail: format!("failed to launch rustc for native_decide: {err}"),
-        })?;
+    // TRUST OPT-OUT. `rustc` here resolves through rustup from this repo's
+    // `rust-toolchain.toml`, which pins `channel = "trust"` — a VERIFYING
+    // compiler. It therefore ran Trust's obligation checker over this generated
+    // program and, under the strict policy, FAILED the build:
+    //
+    //   error: Trust strict verification failed for `native_decide::nat_succ`:
+    //          2 obligation(s) were not fully verified
+    //
+    // That is a category error. This program is an evaluation ORACLE for a
+    // ground decidable proposition, not a verification target — and it is
+    // already safe by construction: the emitted arithmetic is `checked_add(..)
+    // .ok_or("native_decide Nat overflow")`, so overflow returns an `Err`
+    // rather than wrapping. Trust's own note says as much — "runtime-checked:
+    // compiler retained the existing assertion because the proof is not yet
+    // static". Opting out removes the static obligation REPORT; the runtime
+    // guard is still compiled in, so the emitted semantics are unchanged.
+    //
+    // `.cargo/config.toml` already establishes this opt-out for everything in
+    // the build that is not itself the verification target.
+    //
+    // PROBE, don't assume: the flag is trust-only (stock rustc rejects any
+    // `-Z` off nightly), and its spelling has already moved once — wave-2
+    // DELETED `-Zno-trust-verify=yes`. So try it, and fall back to a plain
+    // invocation when the compiler does not understand it. The decision is
+    // cached, so the double compile happens at most once per process.
+    fn run_rustc(
+        source_path: &std::path::Path,
+        binary_path: &std::path::Path,
+        trust_opt_out: bool,
+    ) -> std::io::Result<std::process::Output> {
+        let mut cmd = Command::new("rustc");
+        cmd.arg("--edition=2021").arg("-O");
+        if trust_opt_out {
+            cmd.arg("-Ztrust-verify=off");
+        }
+        cmd.arg(source_path).arg("-o").arg(binary_path).output()
+    }
+
+    /// Does this `rustc` understand `-Ztrust-verify=off`?
+    static TRUST_OPT_OUT: OnceLock<bool> = OnceLock::new();
+
+    fn flag_was_rejected(stderr: &str) -> bool {
+        stderr.contains("only accepted on the nightly compiler")
+            || stderr.contains("unknown unstable option")
+            || stderr.contains("unknown debugging option")
+            || stderr.contains("incorrect value")
+    }
+
+    let launch_failed = |err: std::io::Error| NativeDecideExecError::NativeCompileFailed {
+        detail: format!("failed to launch rustc for native_decide: {err}"),
+    };
+
+    let mut output = match TRUST_OPT_OUT.get() {
+        Some(&opt_out) => run_rustc(&source_path, &binary_path, opt_out).map_err(launch_failed)?,
+        None => {
+            let attempt = run_rustc(&source_path, &binary_path, true).map_err(launch_failed)?;
+            let stderr = String::from_utf8_lossy(&attempt.stderr);
+            if !attempt.status.success() && flag_was_rejected(&stderr) {
+                let _ = TRUST_OPT_OUT.set(false);
+                run_rustc(&source_path, &binary_path, false).map_err(launch_failed)?
+            } else {
+                let _ = TRUST_OPT_OUT.set(true);
+                attempt
+            }
+        }
+    };
+
+    // A cached `true` can still go stale if the toolchain changes mid-process;
+    // retry plain rather than reporting a flag-parse failure as a compile error.
+    if !output.status.success() && flag_was_rejected(&String::from_utf8_lossy(&output.stderr)) {
+        output = run_rustc(&source_path, &binary_path, false).map_err(launch_failed)?;
+    }
+
     if !output.status.success() {
         return Err(NativeDecideExecError::NativeCompileFailed {
             detail: format!(

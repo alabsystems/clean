@@ -194,6 +194,7 @@ pub(crate) mod ffi_extern;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 pub(crate) mod codata_cmd;
 pub mod codata_seed;
+pub(crate) mod coinductive_surface;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod ffi_extern_ext;
 pub(crate) mod file_context;

@@ -67,6 +67,7 @@ pub use codata_origin::{CodataLane, CodataOrigin};
 #[cfg(test)]
 use decl_add::find_undef_level_param;
 pub use decl_add::{mm_axiom_only, mm_two_pass_active, set_mm_axiom_only, MmAxiomOnlyGuard};
+pub use inductive_container_map::{ContainerMapError, ContainerMapOutcome};
 pub use inductive_deep_induction::{DeepIndError, DeepIndOutcome};
 pub use inductive_info::InductiveInfo;
 pub use inductive_local_lift::{LiftedFamilyInfo, LocalLift, LocalLiftError};
@@ -1859,6 +1860,7 @@ mod inductive_below;
 mod inductive_below_minors;
 #[allow(clippy::unnecessary_cast)]
 mod inductive_builder;
+mod inductive_container_map;
 mod inductive_deep_induction;
 mod inductive_fixed_indices;
 mod inductive_local_lift;

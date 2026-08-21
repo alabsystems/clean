@@ -180,8 +180,9 @@ fn validate_inductive_read_only(
     }
 
     let mut overlay = shadowing_overlay_env(env, &shadowed_names);
-    overlay
-        .add_inductive(InductiveDecl {
+    add_inductive_honouring_local_lift(
+        &mut overlay,
+        InductiveDecl {
             level_params: universe_params.to_vec(),
             num_params,
             types: vec![InductiveType {
@@ -195,8 +196,8 @@ fn validate_inductive_read_only(
                     })
                     .collect(),
             }],
-        })
-        .map_err(|e| format!("Type check error: {e}"))?;
+        },
+    )?;
 
     for inst in derived_instances {
         if overlay.get_const(&inst.name).is_none() {
@@ -221,6 +222,60 @@ fn validate_inductive_read_only(
     Ok(())
 }
 
+/// Replay an inductive into the overlay THE WAY REGISTRATION DID.
+///
+/// `clean.inductive.liftNestedLocals` lets the real registration path retry a
+/// `NestedParamsContainLocals` rejection by lifting the capturing occurrences
+/// into specialized aux mutual families (clean-elab `register.rs`,
+/// `retry_add_inductive_with_local_lift`). The read-only replay must honour the
+/// same opt-in.
+///
+/// Without this it modelled a DIFFERENT program than the one registered: the
+/// `ElabResult` payload carries the user's ORIGINAL spelling, so replaying it
+/// re-hit the very rejection the lift exists to clear. `clean check` then printed
+///
+///   ✗ ValidCombined: Inductive type error: nested inductive datatypes
+///     parameters cannot contain local variables.
+///
+/// and exited nonzero for a declaration that had in fact been lifted, registered,
+/// round-trip-guarded and bridged — the rung-8 flagship, which the library tests
+/// confirm registers correctly. Reporting a correct declaration as failed is the
+/// defect; the lift itself was always fine.
+///
+/// Fail-closed: the option must be on AND the error must be exactly the
+/// nested-local rejection, or the original error surfaces unchanged. The failed
+/// first attempt rolls the overlay back, so the retry starts clean.
+fn add_inductive_honouring_local_lift(
+    overlay: &mut Environment,
+    decl: InductiveDecl,
+) -> Result<(), String> {
+    use clean_kernel::{EnvError, InductiveError};
+
+    let Err(original) = overlay.add_inductive(decl.clone()) else {
+        return Ok(());
+    };
+    let lift_enabled = matches!(
+        overlay.get_option("clean.inductive.liftNestedLocals"),
+        Some(Some(v)) if v != "false"
+    );
+    if !lift_enabled
+        || !matches!(
+            original,
+            EnvError::Inductive(InductiveError::NestedParamsContainLocals)
+        )
+    {
+        return Err(format!("Type check error: {original}"));
+    }
+    match overlay.lift_nested_locals(&decl) {
+        Ok(lifted) => overlay
+            .add_inductive(lifted.decl)
+            .map_err(|e| format!("Type check error: {e}")),
+        Err(lift_error) => Err(format!(
+            "Type check error: {original} (nested-local lift declined: {lift_error})"
+        )),
+    }
+}
+
 /// Read-only validation of a mutual inductive family: replay the whole
 /// [`InductiveDecl`] into a shadowing overlay so the kernel re-checks positivity
 /// and every constructor type without mutating the real environment.
@@ -243,9 +298,7 @@ fn validate_mutual_inductive_read_only(
     }
 
     let mut overlay = shadowing_overlay_env(env, &shadowed_names);
-    overlay
-        .add_inductive(decl.clone())
-        .map_err(|e| format!("Type check error: {e}"))?;
+    add_inductive_honouring_local_lift(&mut overlay, decl.clone())?;
 
     for inst in derived_instances {
         if overlay.get_const(&inst.name).is_none() {
@@ -428,6 +481,62 @@ mod tests {
 
     fn prelude_env() -> Environment {
         Environment::try_with_prelude().expect("try_with_prelude should succeed")
+    }
+
+    /// Read-only validation must AGREE with what registration actually did.
+    ///
+    /// With `clean.inductive.liftNestedLocals` on, registration retries a
+    /// `NestedParamsContainLocals` rejection by lifting the capturing occurrence
+    /// into an aux mutual family. The `ElabResult` payload still carries the
+    /// user's ORIGINAL spelling, so a replay that ignores the option re-hits the
+    /// very rejection the lift exists to clear — and `clean check` printed
+    /// `✗ Bad: … nested inductive datatypes parameters cannot contain local
+    /// variables` and exited nonzero for a declaration that had been lifted,
+    /// registered, round-trip-guarded and bridged.
+    ///
+    /// This is the rung-8 shape. Without the lift-aware replay it fails.
+    #[test]
+    fn test_validate_decl_read_only_agrees_with_the_nested_local_lift() {
+        let src = "\
+set_option clean.inductive.liftNestedLocals true
+
+inductive Base : Type
+  | o : Base
+
+inductive Wrap (P : Base → Prop) : Prop
+  | mk : P Base.o → Wrap P
+
+inductive Bad : Base → Prop
+  | step : (n : Base) → Wrap (fun (m : Base) => Bad n) → Bad n
+";
+        let mut env = prelude_env();
+        let decls = clean_parser::parse_file(src).expect("flagship source should parse");
+        let mut results = Vec::new();
+        for decl in &decls {
+            results.push(
+                clean_elab::elaborate_decl_and_register(&mut env, decl)
+                    .unwrap_or_else(|e| panic!("registration must succeed under the lift: {e:?}")),
+            );
+        }
+        assert!(
+            env.get_inductive(&Name::from_string("_lifted.Wrap_1"))
+                .is_some(),
+            "precondition: the lift must actually have fired"
+        );
+
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        for registered in &results {
+            let mut leaves = Vec::new();
+            registered.leaf_decls(&mut leaves);
+            for leaf in leaves {
+                validate_decl_read_only(&env, &tc, leaf).unwrap_or_else(|e| {
+                    panic!(
+                        "read-only validation must agree with the registration it \
+                         is re-checking; got: {e}"
+                    )
+                });
+            }
+        }
     }
 
     #[test]

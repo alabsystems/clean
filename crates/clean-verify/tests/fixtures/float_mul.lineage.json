@@ -1,0 +1,58 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "measured": "2026-08-20",
+ "lineage": "sha256:feb0c246cba5179adbd3f6812ffff0371f00cb37c69e3655034d94f8f50ac806",
+ "def_index": 15300,
+ "instr_count": 2,
+ "build": {
+  "clean_repo_HEAD": "78cbf687888acc0a0281e482f979edf6bbacfa55",
+  "trustc": "$HOME/trust/build/aarch64-apple-darwin/stage1/bin/trustc (LOCAL stage1, via the additive rustup link `trust1`; NOT a sealed lane driver)",
+  "trustc_stamp": "rustc 1.99.0-dev (10130575c 2026-08-14) trustc 0.1.0",
+  "provenance_strength": "THREE clean non-incremental builds of THIS tree with byte-identical coverage.json (the reproduction block); the driver is the unsealed local stage1, identified by stamp and by the float_div control below rather than by a seal.",
+  "control": "the SAME dump reproduces the committed float_div.trust-ir.txt BYTE-FOR-BYTE, tying this producer's emission to the lane's revalidated series. A prior dump of the PRE-merge tree (same producer) emitted byte-identical IR text for all four float bodies while every whole-crate lineage digest moved \u2014 the digest is a per-BUILD identity, and only same-build comparisons of it are meaningful.",
+  "command": "RUSTUP_TOOLCHAIN=trust1 TRUST_IR_BUILD_DUMP=<dump> scripts/trust_ir_build.sh --print-only",
+  "profile": "release (-C opt-level=3 -Cdebuginfo=0), the DEPLOYED profile"
+ },
+ "body": {
+  "lowered": true,
+  "spliced": true,
+  "unsupported": [],
+  "derived_mir": {
+   "verdict": "agreed",
+   "detail": "6 canonical line(s) identical",
+   "markers_exact": true,
+   "markers_detail": "4 marker line(s) identical"
+  },
+  "interpreter": {
+   "verdict": "agreed",
+   "samples": 64
+  },
+  "calls": {
+   "resolved": 0,
+   "extern_decls": 0,
+   "unresolved": 0
+  },
+  "flip_event_lineage": "sha256:feb0c246cba5179adbd3f6812ffff0371f00cb37c69e3655034d94f8f50ac806",
+  "flip_lineage_equals_coverage": true,
+  "flip_kind": "codegen",
+  "def_index_note": "def_index is PER-RUN and per-crate, not a stable key. Join across runs by def_path + same-run lineage, never by def_index.",
+  "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+  "instr_count": 2,
+  "coverage_row_lineage": "sha256:feb0c246cba5179adbd3f6812ffff0371f00cb37c69e3655034d94f8f50ac806",
+  "def_index": 15300
+ },
+ "head_measurement": {
+  "record": "data/crystal_fixture_freshness_2026-08-20_lane13.json",
+  "at_head_lineage": "sha256:feb0c246cba5179adbd3f6812ffff0371f00cb37c69e3655034d94f8f50ac806",
+  "note": "This fixture was cut from the same dump the record compares against; its row there must read IDENTICAL with an empty class list."
+ },
+ "reproduction": {
+  "coverage_json_byte_identical_across_all_three": true,
+  "sha256_run1": "bb80e265968866f91fdac51dc3ea62b4e7d796fa4e0a2fdf30f9e834697c795c",
+  "sha256_run2": "bb80e265968866f91fdac51dc3ea62b4e7d796fa4e0a2fdf30f9e834697c795c",
+  "sha256_run3": "bb80e265968866f91fdac51dc3ea62b4e7d796fa4e0a2fdf30f9e834697c795c",
+  "protocol": "three clean non-incremental builds (CARGO_INCREMENTAL=0, fresh CARGO_TARGET_DIR each, cargo clean -p clean-kernel first), same producer trustc 10130575c, same clean tree, via scripts/trust_ir_build.sh --print-only"
+ }
+}

@@ -946,6 +946,75 @@ impl Specification {
              constructor.",
         )?;
 
+        // ===================================================================
+        // THE THREE OPERANDS THE DISPATCH DROPS, PROVED INERT.
+        //
+        // `ir_exec` above drops exactly three operands of the instructions it
+        // executes: `Switch.exhaustive_enum_unreachable`, and
+        // `CallIndirect`'s signature index and calling convention. Each was
+        // documented as dropped IN A COMMENT — `eval_ir_syntax.rs` says of the
+        // convention that "nothing in the semantics dispatches on it; it is
+        // retained so … an adequacy theorem has something to quantify over".
+        //
+        // These are that theorem. A comment is not a check, and this one is
+        // load-bearing in a way the comment could not be: the exhaustive flag
+        // is the slot trust-ir's `Display` NEVER PRINTS, so no reader of the
+        // emitted text can witness it, and the hand transcription had it WRONG
+        // (`Bool.true` against a measured `false` on three producer dumps and
+        // four sibling chains). What makes that a lineage defect rather than a
+        // soundness defect is precisely that the machine cannot see the flag —
+        // and that is now kernel-checked at EVERY module, state, selector,
+        // default, argument list and case list rather than argued.
+        //
+        // Same standard as `ir_ty_is_agg_enum_any`, and the same mechanism: the
+        // kernel iota-reduces the match on the constructor, so the dropped
+        // field never appears in the answer and `Eq.refl` closes it.
+        // ===================================================================
+        self.add_recursive_def(
+            concat!(
+                "def ir_exec_switch_exh_irrelevant (m : IRModule) (v : Nat) (dflt : Nat) ",
+                "(dargs : IRList Nat) (cases : IRList IRSwitchCase) (rs : IRList Nat) ",
+                "(s : IRMachine) : Eq IRConfig ",
+                "(ir_exec m (IRInst.switch v dflt dargs cases Bool.true) rs s) ",
+                "(ir_exec m (IRInst.switch v dflt dargs cases Bool.false) rs s) := ",
+                "Eq.refl IRConfig (ir_switch_exec m s (ir_getd s v) dflt dargs cases)",
+            ),
+            "ir_exec_switch_exh_irrelevant: the machine's step on a `switch` is THE SAME \
+             CONFIGURATION whichever way `exhaustive_enum_unreachable` is set — at every module, \
+             state, selector, default, argument list and case list. This is the field trust-ir's \
+             Display never prints, so no text-anchored reader can witness it; the flag's value is \
+             therefore a LINEAGE fact about which module was emitted and provably not a fact \
+             about what that module computes. DerivedProved, zero axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            concat!(
+                "def ir_exec_callind_conv_irrelevant (m : IRModule) (cid : Nat) (sig : Nat) ",
+                "(args : IRList Nat) (cc1 : Nat) (cc2 : Nat) (rs : IRList Nat) (s : IRMachine) : ",
+                "Eq IRConfig (ir_exec m (IRInst.callindirect cid sig args cc1) rs s) ",
+                "(ir_exec m (IRInst.callindirect cid sig args cc2) rs s) := ",
+                "Eq.refl IRConfig (ir_callind_exec m s rs (ir_getd s cid) args)",
+            ),
+            "ir_exec_callind_conv_irrelevant: the CALLING CONVENTION operand cannot change the \
+             step, at any two conventions. `eval_ir_syntax.rs` keeps the field so \"an adequacy \
+             theorem has something to quantify over\"; this is it. It is also the semantic half \
+             of the `cc-and-linkage` blind slot — the convention is outside the fragment because \
+             the fragment provably does not consult it. DerivedProved, zero axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            concat!(
+                "def ir_exec_callind_sig_irrelevant (m : IRModule) (cid : Nat) (g1 : Nat) ",
+                "(g2 : Nat) (args : IRList Nat) (cc : Nat) (rs : IRList Nat) (s : IRMachine) : ",
+                "Eq IRConfig (ir_exec m (IRInst.callindirect cid g1 args cc) rs s) ",
+                "(ir_exec m (IRInst.callindirect cid g2 args cc) rs s) := ",
+                "Eq.refl IRConfig (ir_callind_exec m s rs (ir_getd s cid) args)",
+            ),
+            "ir_exec_callind_sig_irrelevant: the SIGNATURE-TABLE index cannot change the step \
+             either. That index is the same whole-crate `functy.N` the header carries and the \
+             `functy-index` blind slot names — measured to renumber on every producer change with \
+             no instruction changed — so this is the kernel-checked reason the core module may \
+             drop it. DerivedProved, zero axiom_deps.",
+        )?;
+
         self.add_recursive_def(
             r"def ir_exec_node (m : IRModule) (n : IRNode) (s : IRMachine) : IRConfig := match n with
 | IRNode.mk i rs => ir_exec m i rs s",

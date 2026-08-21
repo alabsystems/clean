@@ -218,9 +218,21 @@ pub(crate) fn mk_iff_rewrite_proof_template(
     binder_count: u32,
     lhs: &Expr,
     rhs: &Expr,
+    level_params: &[Name],
 ) -> Expr {
     // h := name applied to its binder arguments (outermost binder first).
-    let mut h = Expr::const_(lemma_name.clone(), vec![]);
+    //
+    // The head MUST carry one level argument per declared level parameter:
+    // emitting `Expr::const_(name, vec![])` for a universe-polymorphic `Iff`
+    // lemma (`forall_const.{u} (α : Sort u) …`) produced
+    // `LevelCountMismatch { expected: 1, got: 0 }`, and where the counts
+    // happened to line up it landed a `Sort u` domain in a `Prop` binder slot
+    // — the `forall₂_true_iff` failure. Spelling each parameter by its own
+    // name keeps the template a faithful stand-in for the declaration; the
+    // rewrite path instantiates them from the match (see
+    // `resolve_lemma_level`) and any that stay unsolved are refused there.
+    let levels: Vec<Level> = level_params.iter().cloned().map(Level::param).collect();
+    let mut h = Expr::const_(lemma_name.clone(), levels);
     for idx in (0..binder_count).rev() {
         h = Expr::app(h, Expr::bvar(idx));
     }
@@ -1038,6 +1050,23 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
             let proof = if let Some(proof_expr) = &lemma.proof_expr {
                 let proof_with_metas = substitute_bvars_with_metas(proof_expr, &bvar_to_meta);
                 let proof = metas.instantiate(&proof_with_metas);
+                // Prebuilt templates (`mk_iff_rewrite_proof_template`) are
+                // assembled at REGISTRATION time, where nothing can solve the
+                // declaration's universe parameters — matching happens later.
+                // A template whose head still spells this lemma's own declared
+                // parameter is therefore unsolved, and emitting it produces an
+                // ill-typed term that `proof_matches_rewrite` cannot catch
+                // (`infer_type` is the non-checking fast path) and only the
+                // kernel rejects, killing the whole declaration. Refuse it
+                // here so simp merely reports that the lemma did not apply.
+                let declared: Vec<Name> = state
+                    .env
+                    .get_const(&lemma.name)
+                    .map(|info| info.level_params.clone())
+                    .unwrap_or_default();
+                if !declared.is_empty() && template_has_unsolved_level(&proof, &declared) {
+                    return None;
+                }
                 if !proof_matches_rewrite(state, goal, &proof, expr, &result) {
                     return None;
                 }
@@ -1096,8 +1125,117 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
                             .collect()
                     })
                     .unwrap_or_default();
-                let mut proof = Expr::const_(lemma.name.clone(), lemma_levels);
+                // FAIL CLOSED on an unsolved lemma universe. A level parameter
+                // that occurs only in a BINDER TYPE — `implies_true.{u}
+                // (α : Sort u) : (α → True) = True`, whose registered pattern
+                // is just `Pi(_ : ?α, True)` — is never touched by matching,
+                // so `resolve_lemma_level` hands back the declaration's own
+                // raw `Param("u")` and simp emitted `@implies_true.{u} Nat`.
+                // The kernel then rejected the whole declaration
+                // (`expected Sort(Param(u)), inferred Sort(1)`); worse, the
+                // guard below could not catch it, because `infer_type` is the
+                // NON-checking fast path and never checks an application's
+                // argument against its binder domain. Refusing the rewrite
+                // here turns a hard, declaration-killing type error into an
+                // ordinary "this lemma did not apply", which is the honest
+                // outcome — simp may still close the goal another way.
+                //
+                // A level that legitimately resolves to a RIGID param of the
+                // surrounding polymorphic declaration is fine and common, so
+                // the test is not "has params" but "is one of THIS lemma's own
+                // declared parameter names", i.e. demonstrably unsolved.
+                let declared: Vec<Name> = state
+                    .env
+                    .get_const(&lemma.name)
+                    .map(|info| info.level_params.clone())
+                    .unwrap_or_default();
                 let max_bvar = bvar_to_meta.keys().copied().max().map_or(0, |m| m + 1);
+                let is_leaked = |lvls: &[Level]| {
+                    lvls.iter().any(
+                        |lvl| matches!(lvl, Level::Param(p) if declared.iter().any(|d| d == p)),
+                    )
+                };
+                // SOLVE what matching could not. Walk the declaration's own Pi
+                // telescope alongside the arguments about to be applied: a
+                // binder declared `(α : Sort u)` whose argument is `Nat` pins
+                // `u := 1` (from `Nat : Sort 1`). This is precisely the
+                // information the LHS pattern lacks, and it is exactly how the
+                // application would have solved the level had it gone through
+                // the elaborator's own app path.
+                let mut solved_params: Vec<Name> = Vec::new();
+                let lemma_levels = if is_leaked(&lemma_levels) {
+                    let mut subst: Vec<(Name, Level)> = Vec::new();
+                    if let Some(info) = state.env.get_const(&lemma.name) {
+                        let mut ty = info.type_.clone();
+                        for i in (0..max_bvar).rev() {
+                            // A binder with no matched argument is NOT applied
+                            // by the assembly loop below, so the telescope and
+                            // the argument list part ways here: continuing
+                            // would solve a later `Sort u` binder from the
+                            // WRONG argument (e.g. `u := 0` from a `True`).
+                            // Alignment is unrecoverable, so stop solving —
+                            // any still-unsolved parameter is then refused by
+                            // the guard below, which is the safe direction.
+                            let Some(meta_expr) = bvar_to_meta.get(&i) else {
+                                break;
+                            };
+                            let arg = inst(meta_expr);
+                            let ExprKind::Pi(_, dom, body) = ty.kind() else {
+                                break;
+                            };
+                            if let ExprKind::Sort(Level::Param(p)) = dom.kind() {
+                                if declared.iter().any(|d| d == p)
+                                    && !subst.iter().any(|(q, _)| q == p)
+                                {
+                                    if let Ok(arg_ty) = state.infer_type(goal, &arg) {
+                                        if let ExprKind::Sort(l) = state.whnf(goal, &arg_ty).kind()
+                                        {
+                                            subst.push((p.clone(), l.clone()));
+                                            solved_params.push(p.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            ty = body.instantiate(&arg);
+                        }
+                    }
+                    lemma_levels
+                        .into_iter()
+                        .map(|lvl| match &lvl {
+                            Level::Param(p) => subst
+                                .iter()
+                                .find(|(q, _)| q == p)
+                                .map_or(lvl.clone(), |(_, l)| l.clone()),
+                            _ => lvl,
+                        })
+                        .collect()
+                } else {
+                    lemma_levels
+                };
+                // Still unsolved after that: refuse the rewrite. NOTE the
+                // test is "did solving assign this parameter", not "is its
+                // name one of the declaration's" — a level legitimately
+                // solved to a RIGID param of the surrounding declaration can
+                // share the lemma's spelling (`{γ : Sort u}` against
+                // `implies_true.{u}`), and refusing those broke goals that
+                // previously worked by that very name coincidence.
+                // Emitting the
+                // declaration's own raw parameter produced `@implies_true.{u}
+                // Nat`, which the kernel rejected — killing the whole
+                // declaration — while the guard below could not catch it
+                // (`infer_type` is the non-checking fast path and never checks
+                // an application's argument against its binder domain).
+                // Refusing turns that into an ordinary "this lemma did not
+                // apply".
+                let unsolved_leak = lemma_levels.iter().any(|lvl| {
+                    matches!(lvl, Level::Param(p)
+                        if declared.iter().any(|d| d == p)
+                            && !solved_params.iter().any(|s| s == p))
+                });
+                if unsolved_leak {
+                    return None;
+                }
+                let mut proof = Expr::const_(lemma.name.clone(), lemma_levels);
                 for i in (0..max_bvar).rev() {
                     if let Some(meta_expr) = bvar_to_meta.get(&i) {
                         let arg = inst(meta_expr);
@@ -1371,4 +1509,33 @@ fn unfold_named_consts(expr: &Expr, unfold_defs: &HashMap<Name, Expr>) -> Expr {
 
     let mut folder = UnfoldFolder { unfold_defs };
     folder.fold_expr(expr)
+}
+
+/// Whether a prebuilt rewrite proof still carries one of `declared` — the
+/// lemma's OWN universe parameters — in a `Const` head. Such a level was
+/// never solved (templates are built before matching), so the term is
+/// ill-typed; see the call site for why the ordinary guard cannot see it.
+fn template_has_unsolved_level(proof: &Expr, declared: &[Name]) -> bool {
+    struct V<'a> {
+        declared: &'a [Name],
+        found: bool,
+    }
+    impl clean_kernel::ExprVisitor for V<'_> {
+        type Result = ();
+        fn combine(&self, _a: (), _b: ()) {}
+        fn visit_const(&mut self, _name: &Name, levels: &LevelVec) {
+            if levels
+                .iter()
+                .any(|lvl| matches!(lvl, Level::Param(p) if self.declared.iter().any(|d| d == p)))
+            {
+                self.found = true;
+            }
+        }
+    }
+    let mut v = V {
+        declared,
+        found: false,
+    };
+    clean_kernel::ExprVisitor::visit_expr(&mut v, proof);
+    v.found
 }

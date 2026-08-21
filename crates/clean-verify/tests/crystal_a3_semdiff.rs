@@ -23,11 +23,20 @@
 //! **Does:** on every input of a fully enumerated domain, Clean's kernel,
 //! trust-ir's reference interpreter, and (where reachable) the shipped compiled
 //! function return the same value, and Clean's measured fuel threshold stands in
-//! one consistent relation to trust-ir's step count.
+//! the chain's DECLARED relation to trust-ir's step count. Since 2026-08-20 the
+//! cost half is part of the verdict rather than a printed aside: see
+//! `clean_verify::ir_semdiff::cost`.
 //!
 //! **Does not:** that the two `IRInst` encodings denote the same function. The
 //! bodies here exercise 6 of Clean's 28 `IRInst` constructors. The other 22 are
 //! untouched by this measurement and are reported as such.
+//!
+//! **Does not, second and newly measured:** pin ROUTING. A value differential is
+//! blind to any permutation of target blocks that emit equal values, and
+//! `from_source_system` — long described here as the sharpest chain — has 2,880
+//! of them. `routing.rs` carries the structural comparison that does pin it, and
+//! `crystal_a3_discriminating_power_is_measured` records the blindness per chain
+//! from the committed fixtures.
 
 #[path = "crystal_a3_semdiff/chains.rs"]
 mod chains;
@@ -38,6 +47,15 @@ mod trust_exec;
 /// Falsification. A gate that cannot go red is not evidence.
 #[path = "crystal_a3_semdiff/mutations.rs"]
 mod mutations;
+
+/// Falsification for the COST half specifically, by perturbing the measured
+/// quantity rather than a hardcoded probe.
+#[path = "crystal_a3_semdiff/cost_mutations.rs"]
+mod cost_mutations;
+
+/// ROUTING, which no value differential on these bodies can see.
+#[path = "crystal_a3_semdiff/routing.rs"]
+mod routing;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -90,6 +108,7 @@ fn clean_probe(
     spec: &mut Specification,
     chain: &Chain,
     tag: u32,
+    name_prefix: &str,
     trust_answer: Option<&RunResult>,
 ) -> (RunResult, Option<u32>) {
     // Candidate values: trust-ir's answer first, then every other value this
@@ -120,7 +139,7 @@ fn clean_probe(
     for fuel in 0..=MAX_IR_NUMERAL {
         for (idx, cand) in candidates.iter().enumerate() {
             let Ok(src) = value_obligation(
-                &format!("a3_{}_t{tag}_f{fuel}_c{idx}", chain.name),
+                &format!("{name_prefix}_{}_t{tag}_f{fuel}_c{idx}", chain.name),
                 chain.clean_module,
                 chain.arg_shape,
                 fuel,
@@ -152,13 +171,14 @@ fn clean_threshold_is_tight(
     spec: &mut Specification,
     chain: &Chain,
     tag: u32,
+    name_prefix: &str,
     threshold: u32,
 ) -> bool {
     if threshold == 0 {
         return true;
     }
     let Ok(src) = fuel_out_obligation(
-        &format!("a3_{}_t{tag}_tight", chain.name),
+        &format!("{name_prefix}_{}_t{tag}_tight", chain.name),
         chain.clean_module,
         chain.arg_shape,
         threshold - 1,
@@ -171,7 +191,22 @@ fn clean_threshold_is_tight(
 }
 
 /// Run one chain end to end and return its measured report.
-fn measure(spec: &mut Specification, chain: &Chain) -> ChainReport {
+pub(crate) fn measure(spec: &mut Specification, chain: &Chain) -> ChainReport {
+    measure_with(spec, chain, "a3", 0)
+}
+
+/// [`measure`], with the two knobs the cost-mutation battery needs.
+///
+/// `name_prefix` keeps two measurements in one `Specification` from colliding on
+/// generated def names. `overhead_bias` perturbs the harness overhead subtracted
+/// from trust-ir's step count — the quantity the cost gate compares — so a
+/// mutation can falsify the COST verdict rather than a hardcoded probe.
+pub(crate) fn measure_with(
+    spec: &mut Specification,
+    chain: &Chain,
+    name_prefix: &str,
+    overhead_bias: i64,
+) -> ChainReport {
     let text = fixture(chain.fixture);
 
     // A TagSurrogate enum declaration is sound only if the body never reads the
@@ -198,24 +233,33 @@ fn measure(spec: &mut Specification, chain: &Chain) -> ChainReport {
 
     let mut rows = Vec::new();
     for &tag in chain.domain {
-        let (raw, tsteps) = trust_exec::run(&module, &harness, chain.arg_shape, tag);
+        let (raw, tsteps) = trust_exec::run(&module, &harness, chain.arg_shape, tag, overhead_bias);
         let tv = chain.result_kind.decode(&raw);
         // A fault is recorded, never dropped: a vanished leg would silently
         // become `Insufficient` and read as "not measured" instead of
         // "trust-ir refused where Clean answered".
         let trust_leg = Some((tv.clone(), tsteps));
 
-        let (cv, cthreshold) = clean_probe(spec, chain, tag, Some(&tv));
+        let (cv, cthreshold) = clean_probe(spec, chain, tag, name_prefix, Some(&tv));
         let mut notes = Vec::new();
-        if let Some(t) = cthreshold {
-            if !clean_threshold_is_tight(spec, chain, tag, t) {
-                notes.push(format!(
-                    "clean fuel {t} was accepted but fuel {} is not `fuel_out`: the threshold \
-                     is an upper bound, not a pinned cost",
-                    t.saturating_sub(1)
-                ));
+        // Tightness is a GATED condition, not a note. A threshold that was
+        // accepted but never shown NECESSARY is an upper bound, and an upper
+        // bound compared against trust-ir's exact step count is not a cost
+        // correspondence — it used to be recorded here as prose nothing read.
+        let threshold_tight = match cthreshold {
+            Some(t) => {
+                let tight = clean_threshold_is_tight(spec, chain, tag, name_prefix, t);
+                if !tight {
+                    notes.push(format!(
+                        "clean fuel {t} was accepted but fuel {} is not `fuel_out`: the threshold \
+                         is an upper bound, not a pinned cost",
+                        t.saturating_sub(1)
+                    ));
+                }
+                tight
             }
-        }
+            None => false,
+        };
         if let Some(reason) = chain.shipped_absent {
             notes.push(format!("E3 absent: {reason}"));
         }
@@ -225,12 +269,19 @@ fn measure(spec: &mut Specification, chain: &Chain) -> ChainReport {
             tag,
             trust: trust_leg,
             clean: Some((cv, cthreshold)),
+            threshold_tight,
             shipped: chain.shipped.and_then(|f| f(tag)),
             notes,
         });
     }
 
-    summarize(chain.name, chain.enum_model, chain.total_domain, rows)
+    summarize(
+        chain.name,
+        chain.enum_model,
+        chain.total_domain,
+        chain.expected_cost_offset,
+        rows,
+    )
 }
 
 /// **The gate.** Every covered chain, every input of its domain, every executor.
@@ -255,14 +306,11 @@ fn crystal_a3_semdiff_measures_encoding_agreement() {
     eprintln!("\n--- GAP 2, measured ---");
     for r in &reports {
         eprintln!(
-            "{:<20} {}  cost-uniform={}",
+            "{:<20} {}  cost={:?} (pinned {:+})",
             r.chain,
-            if r.is_green() {
-                "AGREE"
-            } else {
-                "**DISAGREE**"
-            },
-            r.cost_is_uniform()
+            if r.is_green() { "AGREE" } else { "**RED**" },
+            r.cost_verdict(),
+            r.expected_cost_offset,
         );
     }
     eprintln!(
@@ -271,6 +319,28 @@ fn crystal_a3_semdiff_measures_encoding_agreement() {
          nothing about the {} forms it never uses.",
         exercised_forms().len(),
         28 - exercised_forms().len()
+    );
+
+    // `is_green` consults BOTH halves. Stated separately here so a red says
+    // which half failed instead of only that one did: before 2026-08-20 the
+    // cost half could not fail at all.
+    let cost_failed: Vec<&ChainReport> = reports.iter().filter(|r| !r.cost_is_pinned()).collect();
+    assert!(
+        cost_failed.is_empty(),
+        "GAP-2 COST correspondence FAILED on {} chain(s). Cost is a gate, not a note:\n{}",
+        cost_failed.len(),
+        cost_failed
+            .iter()
+            .map(|r| format!(
+                "  {}: verdict {:?}, pinned {:+}, offsets {:?}, loose thresholds {}",
+                r.chain,
+                r.cost_verdict(),
+                r.expected_cost_offset,
+                r.cost_offsets,
+                r.loose_thresholds
+            ))
+            .collect::<Vec<_>>()
+            .join("\n")
     );
 
     let failed: Vec<&ChainReport> = reports.iter().filter(|r| !r.is_green()).collect();

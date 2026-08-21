@@ -51,7 +51,7 @@ impl RunResult {
     /// `None` for a fault: a faulting run has no `ret` outcome, so there is no
     /// value obligation to phrase and the row must be handled as a refusal.
     #[must_use]
-    pub fn clean_scalar(&self) -> Option<String> {
+    pub(crate) fn clean_scalar(&self) -> Option<String> {
         match self {
             RunResult::Bool(true) => Some("(IRScalar.bool_ Bool.true)".to_owned()),
             RunResult::Bool(false) => Some("(IRScalar.bool_ Bool.false)".to_owned()),
@@ -68,7 +68,7 @@ impl RunResult {
 /// [`DiffError::NumeralOutOfRange`] when `n > MAX_IR_NUMERAL`. Generating a
 /// name the spec does not define would fail to elaborate for a reason that has
 /// nothing to do with semantics, and would be misread as a disagreement.
-pub fn ir_numeral(n: u32) -> Result<String, DiffError> {
+pub(crate) fn ir_numeral(n: u32) -> Result<String, DiffError> {
     if n > MAX_IR_NUMERAL {
         return Err(DiffError::NumeralOutOfRange(n));
     }
@@ -85,7 +85,7 @@ pub fn ir_numeral(n: u32) -> Result<String, DiffError> {
 /// runs the machine on the same states the chain's own theorems quantify over
 /// rather than on a state invented for the test.
 #[must_use]
-pub fn ptr_cell_call(module: &str, fuel: &str, tag: &str) -> String {
+pub(crate) fn ptr_cell_call(module: &str, fuel: &str, tag: &str) -> String {
     format!(
         "ir_eval {fuel} {module} ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) \
          (ir_cell ir_d0 (ir_var {tag} ir_sp0) ir_mem0) ir_d1"
@@ -100,7 +100,7 @@ pub fn ptr_cell_call(module: &str, fuel: &str, tag: &str) -> String {
 /// `ir_bind_params` on an aggregate and reaches the switch with no `load` in
 /// front of it, so a `load`-side misunderstanding cannot mask a switch-side one.
 #[must_use]
-pub fn value_arg_call(module: &str, fuel: &str, tag: &str) -> String {
+pub(crate) fn value_arg_call(module: &str, fuel: &str, tag: &str) -> String {
     format!("ir_eval {fuel} {module} ir_d0 (ir_vl1 (ir_var {tag} ir_sp0)) ir_mem0 ir_d0")
 }
 
@@ -116,7 +116,7 @@ pub enum ArgShape {
 impl ArgShape {
     /// The `ir_eval` application for this shape.
     #[must_use]
-    pub fn call(self, module: &str, fuel: &str, tag: &str) -> String {
+    pub(crate) fn call(self, module: &str, fuel: &str, tag: &str) -> String {
         match self {
             ArgShape::PointerCell => ptr_cell_call(module, fuel, tag),
             ArgShape::ValueAggregate => value_arg_call(module, fuel, tag),

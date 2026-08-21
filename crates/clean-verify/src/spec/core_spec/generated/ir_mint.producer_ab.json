@@ -1,0 +1,578 @@
+{
+ "what": "Producer A/B for the crystal-A2 core form: three real dumps of the SHIPPED clean-kernel, eleven chained bodies, one canonical core module each. The question this answers is the one a gate over emitted IR lives or dies on -- does it fire on pure renumbering?",
+ "method": "`scripts/crystal_a2_project` (reader A, committed): trust_ir::binary::deserialize_module -> trust_ir::format::canonicalize (the PRODUCER's own dense SSA renumbering: block parameters in block-id order, then instruction results in program order) -> project onto the fragment Clean's IRModule encodes -> renumber crate-level interning ids by FIRST USE -> print the canonical core text. Digest: sha256 under domain `clean.ir_mint.core.v1`.",
+ "method_correction_2026_08_20": "ONE NAMESPACE. The function's own id is now interned into the SAME table as its callees, and FIRST, so it takes canonical index 0, a recursive call resolves to 0, and every foreign callee is pushed above it. Before this, `(func 0 ...)` was a hard-coded literal in a namespace separate from the callee table, which also started at 0 -- so in `level_is_zero` the numeral 0 denoted both `level::Level::is_zero` and `<LevelArc as Deref>::deref`, and exchanging the two `@func.N` literals in the emitted text produced a BYTE-IDENTICAL core module for a program that composes its two calls the other way round. The namespaces are one because the specification says so: `ir_func_find` resolves a callee by scanning for a function whose OWN id equals it, and `ir_call_exec` goes through it. EFFECT ON THIS TABLE, re-derived by re-running reader A over all three dumps rather than edited: (1) `level_is_zero` is the only row whose CORE TEXT moved -- its two callee indices exchanged, `core_digest` d1ace681...b2b2a7 -> 72f04d73...6e4c5105; the other ten core texts are byte-identical to what was committed, which is the check that the change is a renumbering of one namespace and not a different projection. (2) `crate_func_ids_seen` moved on ALL ELEVEN rows, from `[]` to a list whose head is the body's own id: every body is in its own function namespace, so an empty list was never the truth -- it was the collision, seen from the provenance side. (3) `crate_func_names_seen` is new: only reader A can resolve a `@func.N` to a name, because the artifact binary carries the function table and the emitted TEXT does not.",
+ "producers": [
+  {
+   "tag": "P1",
+   "dump": "$HOME/trust/scratchpad/wave-tr-fix/dump_ck_rel",
+   "dump_mtime": "2026-08-12",
+   "trust_ir_binary_format_version": 36,
+   "dump_sha256": "9b030fd541c7866c893018f77757780479fff8c4079e2c6e10c16518d67041e0"
+  },
+  {
+   "tag": "P2",
+   "dump": "$HOME/trust/scratchpad/mfclose/wc-subject/dump_O3",
+   "dump_mtime": "2026-08-13",
+   "trust_ir_binary_format_version": 36,
+   "dump_sha256": "4291ea0f108d1fbb16dd8fa28bb356be33890cc606473b9a6453798a19e7a8c0"
+  },
+  {
+   "tag": "P3",
+   "dump": "$HOME/trust/scratchpad/lane2rv/wc-a/dump_O3",
+   "dump_mtime": "2026-08-19",
+   "trust_ir_binary_format_version": 37,
+   "dump_sha256": "90acab65506f48732e25c8c146a2a0dc6b929c36623f966752e3128045bce68c"
+  }
+ ],
+ "headline": "Every artifact func_id moved across the three producers; expr_path_step_clone's enum id moved 181 -> 176 (the exact drift class docs/CRYSTAL_STATUS.md records as an open failure for that chain's fixture refresh); every core digest is IDENTICAL, 11 of 11.",
+ "clean_side_digest_note": "`clean_core_digest` is BLAKE3 under the same domain, computed by clean-verify's own `ir_mint::digest` over the COMMITTED core text. The sha256 column is the producer-side value; two hashes over the same bytes, recorded so neither side has to trust the other's hasher.",
+ "rows": [
+  {
+   "chain": "has_cubical_layer",
+   "core_digest": [
+    "8409fe1ae10de05cddaab2250024d5738da984f51d601b30c92594202bf0ea6d",
+    "8409fe1ae10de05cddaab2250024d5738da984f51d601b30c92594202bf0ea6d",
+    "8409fe1ae10de05cddaab2250024d5738da984f51d601b30c92594202bf0ea6d"
+   ],
+   "artifact_func_id": [
+    5246,
+    5246,
+    4177
+   ],
+   "crate_enum_ids_seen": [
+    [
+     13
+    ],
+    [
+     13
+    ],
+    [
+     13
+    ]
+   ],
+   "crate_func_ids_seen": [
+    [
+     5246
+    ],
+    [
+     5246
+    ],
+    [
+     4177
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "mode::CleanMode::has_cubical_layer"
+    ],
+    [
+     "mode::CleanMode::has_cubical_layer"
+    ],
+    [
+     "mode::CleanMode::has_cubical_layer"
+    ]
+   ],
+   "artifact_functy_id": [
+    0,
+    0,
+    0
+   ],
+   "core_text_identical_across_producers": true,
+   "clean_core_digest": "9e20f562ea4f88a0546f4cadbd32063462cf30ee42a342f8c79ea1551e37faf8"
+  },
+  {
+   "chain": "expr_path_step_clone",
+   "core_digest": [
+    "8666bb95821fb7ca037e79f98b328b41771b34cf05eede801d3bb4ecb8a09a94",
+    "8666bb95821fb7ca037e79f98b328b41771b34cf05eede801d3bb4ecb8a09a94",
+    "8666bb95821fb7ca037e79f98b328b41771b34cf05eede801d3bb4ecb8a09a94"
+   ],
+   "artifact_func_id": [
+    7478,
+    7475,
+    6301
+   ],
+   "crate_enum_ids_seen": [
+    [
+     181
+    ],
+    [
+     181
+    ],
+    [
+     176
+    ]
+   ],
+   "crate_func_ids_seen": [
+    [
+     7478
+    ],
+    [
+     7475
+    ],
+    [
+     6301
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone"
+    ],
+    [
+     "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone"
+    ],
+    [
+     "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone"
+    ]
+   ],
+   "artifact_functy_id": [
+    1094,
+    1091,
+    857
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "level_is_zero",
+   "core_digest": [
+    "72f04d73ab7ab7da50d6eef4a56c64c3d668cc71f37381e424dcd5a06e4c5105",
+    "72f04d73ab7ab7da50d6eef4a56c64c3d668cc71f37381e424dcd5a06e4c5105",
+    "72f04d73ab7ab7da50d6eef4a56c64c3d668cc71f37381e424dcd5a06e4c5105"
+   ],
+   "artifact_func_id": [
+    4925,
+    4925,
+    3895
+   ],
+   "crate_enum_ids_seen": [
+    [
+     2
+    ],
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "crate_func_ids_seen": [
+    [
+     4925,
+     4914
+    ],
+    [
+     4925,
+     4914
+    ],
+    [
+     3895,
+     3884
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "level::Level::is_zero",
+     "<level::LevelArc as std::ops::Deref>::deref"
+    ],
+    [
+     "level::Level::is_zero",
+     "<level::LevelArc as std::ops::Deref>::deref"
+    ],
+    [
+     "level::Level::is_zero",
+     "<level::LevelArc as std::ops::Deref>::deref"
+    ]
+   ],
+   "artifact_functy_id": [
+    0,
+    0,
+    0
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "from_source_system",
+   "core_digest": [
+    "dc7f19f6b3f8d755784cc60d0ed179ece25d4b14afa74934d6061d9f26b89055",
+    "dc7f19f6b3f8d755784cc60d0ed179ece25d4b14afa74934d6061d9f26b89055",
+    "dc7f19f6b3f8d755784cc60d0ed179ece25d4b14afa74934d6061d9f26b89055"
+   ],
+   "artifact_func_id": [
+    5243,
+    5243,
+    4175
+   ],
+   "crate_enum_ids_seen": [
+    [
+     13
+    ],
+    [
+     13
+    ],
+    [
+     13
+    ]
+   ],
+   "crate_func_ids_seen": [
+    [
+     5243
+    ],
+    [
+     5243
+    ],
+    [
+     4175
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "mode::CleanMode::from_source_system"
+    ],
+    [
+     "mode::CleanMode::from_source_system"
+    ],
+    [
+     "mode::CleanMode::from_source_system"
+    ]
+   ],
+   "artifact_functy_id": [
+    732,
+    732,
+    552
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "level_kind_ord",
+   "core_digest": [
+    "271f7d6e503f9162c6c8e7deb58ec7f2651971856108c7b158b828bb4cda6bb9",
+    "271f7d6e503f9162c6c8e7deb58ec7f2651971856108c7b158b828bb4cda6bb9",
+    "271f7d6e503f9162c6c8e7deb58ec7f2651971856108c7b158b828bb4cda6bb9"
+   ],
+   "artifact_func_id": [
+    4928,
+    4928,
+    3898
+   ],
+   "crate_enum_ids_seen": [
+    [
+     2
+    ],
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "crate_func_ids_seen": [
+    [
+     4928
+    ],
+    [
+     4928
+    ],
+    [
+     3898
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "level::Level::kind_ord"
+    ],
+    [
+     "level::Level::kind_ord"
+    ],
+    [
+     "level::Level::kind_ord"
+    ]
+   ],
+   "artifact_functy_id": [
+    470,
+    470,
+    306
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "bvar_in_range",
+   "core_digest": [
+    "9a42f74fa57dcaaecd04f99d29af29b7d4a38aa8093af9d51f5279a346dade8c",
+    "9a42f74fa57dcaaecd04f99d29af29b7d4a38aa8093af9d51f5279a346dade8c",
+    "9a42f74fa57dcaaecd04f99d29af29b7d4a38aa8093af9d51f5279a346dade8c"
+   ],
+   "artifact_func_id": [
+    4776,
+    4776,
+    3749
+   ],
+   "crate_enum_ids_seen": [
+    [],
+    [],
+    []
+   ],
+   "crate_func_ids_seen": [
+    [
+     4776
+    ],
+    [
+     4776
+    ],
+    [
+     3749
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "expr::bvar_in_range"
+    ],
+    [
+     "expr::bvar_in_range"
+    ],
+    [
+     "expr::bvar_in_range"
+    ]
+   ],
+   "artifact_functy_id": [
+    641,
+    641,
+    465
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "flat_flags_contains",
+   "core_digest": [
+    "53e469871568db5264370462e3567edd62d43ba248b7f7238a7ce947a5172d38",
+    "53e469871568db5264370462e3567edd62d43ba248b7f7238a7ce947a5172d38",
+    "53e469871568db5264370462e3567edd62d43ba248b7f7238a7ce947a5172d38"
+   ],
+   "artifact_func_id": [
+    4860,
+    4860,
+    3831
+   ],
+   "crate_enum_ids_seen": [
+    [],
+    [],
+    []
+   ],
+   "crate_func_ids_seen": [
+    [
+     4860
+    ],
+    [
+     4860
+    ],
+    [
+     3831
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "flat::types::FlatFlags::contains"
+    ],
+    [
+     "flat::types::FlatFlags::contains"
+    ],
+    [
+     "flat::types::FlatFlags::contains"
+    ]
+   ],
+   "artifact_functy_id": [
+    661,
+    661,
+    486
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "float_div",
+   "core_digest": [
+    "e14d9020881f9d58192cda35d00b5b7a05fb8478b4415319a8262094c791e3f7",
+    "e14d9020881f9d58192cda35d00b5b7a05fb8478b4415319a8262094c791e3f7",
+    "e14d9020881f9d58192cda35d00b5b7a05fb8478b4415319a8262094c791e3f7"
+   ],
+   "artifact_func_id": [
+    4414,
+    4414,
+    3399
+   ],
+   "crate_enum_ids_seen": [
+    [],
+    [],
+    []
+   ],
+   "crate_func_ids_seen": [
+    [
+     4414
+    ],
+    [
+     4414
+    ],
+    [
+     3399
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "env::native_reducers_float::reduce_float_div::{closure#0}"
+    ],
+    [
+     "env::native_reducers_float::reduce_float_div::{closure#0}"
+    ],
+    [
+     "env::native_reducers_float::reduce_float_div::{closure#0}"
+    ]
+   ],
+   "artifact_functy_id": [
+    551,
+    551,
+    379
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "get_char_val_trunc",
+   "core_digest": [
+    "7c4117f0e1e0e7f78bb3f60ace35250c2aa7054a7843bbd0320a04eb00cf3ee9",
+    "7c4117f0e1e0e7f78bb3f60ace35250c2aa7054a7843bbd0320a04eb00cf3ee9",
+    "7c4117f0e1e0e7f78bb3f60ace35250c2aa7054a7843bbd0320a04eb00cf3ee9"
+   ],
+   "artifact_func_id": [
+    4301,
+    4301,
+    3286
+   ],
+   "crate_enum_ids_seen": [
+    [],
+    [],
+    []
+   ],
+   "crate_func_ids_seen": [
+    [
+     4301
+    ],
+    [
+     4301
+    ],
+    [
+     3286
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}"
+    ],
+    [
+     "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}"
+    ],
+    [
+     "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}"
+    ]
+   ],
+   "artifact_functy_id": [
+    540,
+    540,
+    368
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "is_valid_char",
+   "core_digest": [
+    "e117f7af018d246563a78a8686ec9eb3c5b424f96edf7dc674b2451f57b4c65a",
+    "e117f7af018d246563a78a8686ec9eb3c5b424f96edf7dc674b2451f57b4c65a",
+    "e117f7af018d246563a78a8686ec9eb3c5b424f96edf7dc674b2451f57b4c65a"
+   ],
+   "artifact_func_id": [
+    4358,
+    4358,
+    3343
+   ],
+   "crate_enum_ids_seen": [
+    [],
+    [],
+    []
+   ],
+   "crate_func_ids_seen": [
+    [
+     4358
+    ],
+    [
+     4358
+    ],
+    [
+     3343
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "env::native_reducers_char::is_valid_char"
+    ],
+    [
+     "env::native_reducers_char::is_valid_char"
+    ],
+    [
+     "env::native_reducers_char::is_valid_char"
+    ]
+   ],
+   "artifact_functy_id": [
+    547,
+    547,
+    375
+   ],
+   "core_text_identical_across_producers": true
+  },
+  {
+   "chain": "meta_tag_shl",
+   "core_digest": [
+    "1fea11273666057bb523785d4a854a5b21c10ec6dc9c19c078ea96844a196a8f",
+    "1fea11273666057bb523785d4a854a5b21c10ec6dc9c19c078ea96844a196a8f",
+    "1fea11273666057bb523785d4a854a5b21c10ec6dc9c19c078ea96844a196a8f"
+   ],
+   "artifact_func_id": [
+    5756,
+    5756,
+    4631
+   ],
+   "crate_enum_ids_seen": [
+    [],
+    [],
+    []
+   ],
+   "crate_func_ids_seen": [
+    [
+     5756
+    ],
+    [
+     5756
+    ],
+    [
+     4631
+    ]
+   ],
+   "crate_func_names_seen": [
+    [
+     "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}"
+    ],
+    [
+     "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}"
+    ],
+    [
+     "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}"
+    ]
+   ],
+   "artifact_functy_id": [
+    130,
+    130,
+    119
+   ],
+   "core_text_identical_across_producers": true
+  }
+ ],
+ "dump_paths_note": "The dump directories are transient trust-side scratch. What pins each measurement is `dump_sha256` over the artifact bytes and the binary-format version, both recorded above; the paths are provenance, not an interface.",
+ "reproduce": "cargo build --release --manifest-path scripts/crystal_a2_project/Cargo.toml && ./target/release/a2project <crate.trust-ir.bin> <fn-name> <out-dir> [slug]",
+ "func_namespace_note": "`crate_func_ids_seen` is the ONE namespace the core module's `(func N ...)` and `(call M ...)` share, in canonical order. Its head is always the body's OWN id -- that is what `self interned first` means on reader A's side, and `crystal_a2_mint`'s M8 lane asserts `crate_func_ids_seen[i][0] == artifact_func_id[i]` for every producer of every row. Ten of the eleven bodies call nothing, so their lists are exactly that one entry. `level_is_zero` is the only body that calls anything: it calls `<LevelArc as Deref>::deref` three times and ITSELF three times, which is why it is the one row where the collision was observable and the one chain whose tag table carries a non-empty `funcs` lane. The IDS move across the three dumps and the NAMES do not, which is why both are recorded and why a reviewer checks the name."
+}

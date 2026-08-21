@@ -1,0 +1,36 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 2) (load (enum 0) 0 false))
+            (node (results 3) (extractfield (uint 32) 2 0))
+            (node (results) (switch 3 2 (args) (cases (case 0 1 (args))) false))
+          ))
+        (block 1
+          (params)
+          (nodes
+            (node (results 4) (const (uint 32) (int 1000)))
+            (node (results) (br 3 (args 4)))
+          ))
+        (block 2
+          (params)
+          (nodes
+            (node (results 5) (const (int 64) (int 4)))
+            (node (results 6) (gep (int 8) 0 (idx 5) true))
+            (node (results 7) (load (uint 32) 6 false))
+            (node (results) (br 3 (args 7)))
+          ))
+        (block 3
+          (params 1)
+          (nodes
+            (node (results) (ret (vals 1)))
+          ))
+      ))
+  )
+  (globals)
+)

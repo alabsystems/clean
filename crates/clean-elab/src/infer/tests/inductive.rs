@@ -1291,24 +1291,218 @@ fn test_recursive_repr_is_materialized_from_registered_constructor_metadata() {
     assert!(deps.is_empty(), "derived Repr must be axiom-free: {deps:?}");
 }
 
+// ── coinductive (#191): the v1 greatest-fixpoint surface ────────────────
+//
+// The lowering under test lives in `crate::coinductive_surface`; its
+// envelope is documented there. These tests pin BOTH halves of the
+// contract: the supported shape genuinely elaborates to a greatest
+// fixpoint, and every shape outside the envelope still rejects loudly.
+
+/// Prelude env plus a tiny stream model (`Str`/`shd`/`stl`) for the
+/// bisimulation examples. Each declaration is elaborated and kernel-checked
+/// through the ordinary path.
+fn coind_stream_env() -> Environment {
+    let mut env = Environment::with_prelude();
+    for src in [
+        r"def Str : Type := Nat → Nat",
+        r"def shd (s : Str) : Nat := s 0",
+        r"def stl (s : Str) : Str := fun n => s (Nat.succ n)",
+    ] {
+        let d = parse_decl_for_elab(src).unwrap_or_else(|e| panic!("parse `{src}`: {e:?}"));
+        crate::elaborate_decl_and_register(&mut env, &d)
+            .unwrap_or_else(|e| panic!("elab `{src}`: {e:?}"));
+    }
+    env
+}
+
+fn elab_in(env: &mut Environment, src: &str) -> Result<ElabResult, ElabError> {
+    let d = parse_decl_for_elab(src)?;
+    crate::elaborate_decl_and_register(env, &d)
+}
+
+/// The v1 shape lands: a `coinductive` bisimulation elaborates to the gfp
+/// encoding, every companion kernel-checks, and the result BEHAVES like a
+/// greatest fixpoint (Park coinduction proves `Bisim s s`, which the LEAST
+/// fixpoint of this functor cannot).
 #[test]
-fn test_elab_coinductive_fails_closed() {
-    // A `coinductive` declaration must NOT silently elaborate as an inductive:
-    // that would mint the least fixpoint (plus an induction principle the
-    // greatest fixpoint must not have) for a declaration whose meaning is the
-    // greatest fixpoint. Until the gfp lowering lands, this is fail-closed.
-    let result = elab_decl(
-        r"coinductive Bisim : Nat → Nat → Prop
-| step : Bisim m n → Bisim m n",
+fn test_elab_coinductive_lowers_to_greatest_fixpoint() {
+    let mut env = coind_stream_env();
+    elab_in(
+        &mut env,
+        r"coinductive Bisim : Str → Str → Prop
+| step : shd s = shd t → Bisim (stl s) (stl t) → Bisim s t",
+    )
+    .expect("the v1 coinductive shape must elaborate to the gfp encoding");
+
+    // Every companion is registered and axiom-free (no `sorry`, no new axiom).
+    for name in [
+        "Bisim",
+        "Bisim.F",
+        "Bisim.coind",
+        "Bisim.F_mono",
+        "Bisim.unfold",
+        "Bisim.fold",
+        "Bisim.step",
+    ] {
+        let n = Name::from_string(name);
+        let info = env
+            .get_const(&n)
+            .unwrap_or_else(|| panic!("`{name}` must be registered"));
+        assert!(
+            !info.type_.has_sorry(),
+            "`{name}` statement must be sorry-free"
+        );
+        let deps = env
+            .axiom_deps(&n)
+            .unwrap_or_else(|| panic!("`{name}` must have an auditable closure"));
+        assert!(deps.is_empty(), "`{name}` must be axiom-free, got {deps:?}");
+    }
+
+    // A greatest fixpoint has NO induction principle. `Bisim` is a `def`,
+    // not an inductive type, so there is no recursor to misuse.
+    assert!(
+        env.get_const(&Name::from_string("Bisim.rec")).is_none(),
+        "a coinductive predicate must not acquire an induction principle"
     );
 
-    match result {
-        Err(ElabError::Unsupported { feature }) => {
-            assert!(
-                feature.contains("coinductive") && feature.contains("Bisim"),
-                "diagnostic must name the construct and declaration: {feature}"
-            );
+    // THE discriminator. `bisimF`'s LEAST fixpoint is empty (every
+    // derivation would have to be infinitely deep), so `Bisim s s` is
+    // provable only if `Bisim` really is the GREATEST fixpoint.
+    elab_in(
+        &mut env,
+        r"theorem bisim_refl : ∀ s : Str, Bisim s s :=
+  fun s => Bisim.coind (fun a b => a = b)
+    (fun a b h => And.intro (congrArg shd h) (congrArg stl h)) s s rfl",
+    )
+    .expect("Park coinduction through the generated `Bisim.coind` must prove `Bisim s s`");
+
+    // Anti-vacuity: the destructor yields REAL content, so `Bisim` is not
+    // the constantly-true predicate.
+    elab_in(
+        &mut env,
+        r"theorem bisim_head : ∀ s : Str, ∀ t : Str, Bisim s t → shd s = shd t :=
+  fun s t h => And.left (Bisim.unfold s t h)",
+    )
+    .expect("the generated `Bisim.unfold` must expose the non-recursive premise");
+
+    // The declared constructor is usable at its declared type.
+    elab_in(
+        &mut env,
+        r"theorem bisim_step_use : ∀ s : Str, ∀ t : Str,
+    shd s = shd t → Bisim (stl s) (stl t) → Bisim s t :=
+  fun s t h0 h1 => Bisim.step h0 h1",
+    )
+    .expect("the generated constructor must have the declared type");
+}
+
+/// Everything outside the v1 envelope must reject LOUDLY — naming the
+/// construct and the declaration — rather than silently mint a least
+/// fixpoint or a partially-registered family.
+#[test]
+fn test_elab_coinductive_fails_closed() {
+    // (shape, a distinctive fragment of the required diagnostic)
+    let out_of_envelope: &[(&str, &str)] = &[
+        // Type-valued: that is the `codata` command's job, not a gfp predicate.
+        (
+            r"coinductive Stream : Type
+| cons : Nat → Stream → Stream",
+            "result sort must be `Prop`",
+        ),
+        // More than one constructor: the functor would be a DISJUNCTION.
+        (
+            r"coinductive Two : Str → Str → Prop
+| l : Two (stl s) t → Two s t
+| r : Two s (stl t) → Two s t",
+            "exactly ONE constructor",
+        ),
+        // Compound target: needs the index-equation lowering.
+        (
+            r"coinductive Bad : Str → Str → Prop
+| step : Bad s t → Bad (stl s) t",
+            "DISTINCT variable arguments",
+        ),
+        // Repeated target variable: also not a destructor-style rule.
+        (
+            r"coinductive Diag : Str → Str → Prop
+| step : Diag (stl s) (stl s) → Diag s s",
+            "DISTINCT variable arguments",
+        ),
+        // Declaration parameters.
+        (
+            r"coinductive Par (n : Nat) : Str → Prop
+| step : Par n (stl s) → Par n s",
+            "declaration parameters are not supported",
+        ),
+        // `deriving` on a Prop-valued greatest fixpoint is meaningless.
+        (
+            r"coinductive Der : Str → Str → Prop
+| step : Der (stl s) (stl t) → Der s t
+deriving Repr",
+            "deriving",
+        ),
+        // A premise with no premises at all would make the functor `True`.
+        (
+            r"coinductive Vac : Str → Prop
+| step : Vac s",
+            "no premises",
+        ),
+        // A stray free variable would be AUTO-BOUND into the functor.
+        (
+            r"coinductive Stray : Str → Str → Prop
+| step : Stray (stl s) qUnbound → Stray s t",
+            "neither a target variable nor a known constant",
+        ),
+        // A non-positive / nested occurrence of the predicate.
+        (
+            r"coinductive Neg : Str → Str → Prop
+| step : (Neg s t → False) → Neg s t",
+            "FULLY-APPLIED recursive occurrence",
+        ),
+        // A constructor claiming a generated companion name.
+        (
+            r"coinductive Clash : Str → Str → Prop
+| fold : Clash (stl s) (stl t) → Clash s t",
+            "collides with the generated companion",
+        ),
+    ];
+
+    let base = coind_stream_env();
+    for (src, needle) in out_of_envelope {
+        let mut env = base.clone();
+        match elab_in(&mut env, src) {
+            Err(ElabError::Unsupported { feature }) => {
+                assert!(
+                    feature.contains("coinductive"),
+                    "diagnostic must name the construct: {feature}\nfor:\n{src}"
+                );
+                assert!(
+                    feature.contains(needle),
+                    "diagnostic must explain the envelope clause \
+                     (expected {needle:?}): {feature}\nfor:\n{src}"
+                );
+            }
+            other => panic!("must fail closed with Unsupported, got {other:?}\nfor:\n{src}"),
         }
-        other => panic!("coinductive must fail closed with Unsupported, got {other:?}"),
+    }
+}
+
+/// A rejected `coinductive` must leave NOTHING behind: no half-built
+/// companion family in the environment.
+#[test]
+fn test_elab_coinductive_reject_registers_nothing() {
+    let mut env = coind_stream_env();
+    let err = elab_in(
+        &mut env,
+        r"coinductive Two : Str → Str → Prop
+| l : Two (stl s) t → Two s t
+| r : Two s (stl t) → Two s t",
+    )
+    .expect_err("multi-constructor coinductive must reject");
+    assert!(matches!(err, ElabError::Unsupported { .. }), "{err:?}");
+    for name in ["Two", "Two.F", "Two.coind", "Two.l", "Two.r"] {
+        assert!(
+            env.get_const(&Name::from_string(name)).is_none(),
+            "`{name}` must not survive a rejected coinductive declaration"
+        );
     }
 }

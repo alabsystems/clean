@@ -1,0 +1,44 @@
+{
+ "prefix": "ir_pv",
+ "body": "env::types::SimpPriority::value",
+ "core_digest": "4df18fc3f10c896b04350f31a8b842c2edef761923a76a27b04bd83f3071dbe8",
+ "defs_digest": "107e394f1e374bc6024e6bd42b5bba1df8d55babd51a466590885deaff50468b",
+ "def_count": 7,
+ "artifact_core_digest": "a92f873584d4878ea10be6d1c47d28f4ea3fafec3a297f0a96d2afe5c8c8c3b5",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader.",
+ "reader_a": {
+  "dump": "laneW wc3/dump_O3a/clean_kernel.trust-ir.bin (and, identically, laneMV wc-head/dump_O3)",
+  "dump_sha256": "91ec95c9d2faaf4c6712c6944118de46bacd6ee9aa9774049340ff4bb7d3389a",
+  "artifact_func_index": 3014,
+  "artifact_func_id": 3014,
+  "artifact_functy_id": 147,
+  "crate_enum_ids_seen": [
+   127
+  ],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   3014
+  ],
+  "crate_func_names_seen": [
+   "env::types::SimpPriority::value"
+  ],
+  "aligns_erased": [
+   "load:None",
+   "load:None"
+  ],
+  "param_tys_erased": [
+   "Ptr"
+  ],
+  "block_param_tys_erased": [
+   "bb3:U32"
+  ]
+ },
+ "text_unwitnessed": [
+  {
+   "slot": "bb0#2 switch arg4",
+   "why": "trust-ir Display never prints Switch.exhaustive_enum_unreachable"
+  }
+ ],
+ "producer_dumps_observed": 2,
+ "producer_dumps_note": "TWO, and that is less than ir_h2's three. Both are the same sealed driver over byte-identical clean-kernel source in two different checkouts, so what they establish is invariance under a CRATE-METADATA change (disambiguator 124c vs ab17, different whole-crate digests, different body lineage) and NOT invariance under a producer change. The core digest, the enum id 127 and the func id 3014 were identical on both."
+}

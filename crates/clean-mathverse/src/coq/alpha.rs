@@ -2514,6 +2514,32 @@ fn dialect_for_each_ind_occ(
                     dialect_for_each_ind_occ(&items[3], name, idx, depth, f)?;
                     dialect_for_each_ind_occ(&items[4], name, idx, depth + 1, f)
                 }
+                // Normalized projection `(Proj <struct-name> <field-idx>
+                // <record>)`: VISIT NOTHING, exactly like the kernel. This
+                // walker's contract is to mirror clean-kernel's
+                // `for_each_ind_occurrence_depth`
+                // (env/inductive_fixed_indices.rs), whose match handles only
+                // `App`/`Pi`/`Lam`/`Let` and drops every other node — including
+                // `ExprKind::Proj` — through its `_ => {}` arm. Descending into
+                // the record here would let the mirror observe an occurrence the
+                // kernel never sees, so `predicted_fixed_index_promotion` could
+                // clear a mask bit the kernel keeps and mis-predict the
+                // recursor's params/motive/indices boundary; and
+                // `compute_uniform_num_params` could demote a parameter on
+                // evidence the kernel's own analysis does not have.
+                //
+                // The WIN is not the traversal, it is no longer ERRORING: before
+                // this arm a constructor type carrying a primitive projection
+                // (the Hierarchy-Builder mixin shape) returned
+                // "promotion mirror: unsupported head `Proj`", which makes
+                // `compute_uniform_num_params` keep `declared` (no Acc-style
+                // demotion, ever) and `predicted_fixed_index_promotion` return
+                // `None` (indexed `Case` lowering fails closed) for the WHOLE
+                // family. Skipping is also the conservative direction for both
+                // callers: an unseen occurrence can only leave `num_params`
+                // larger (today's rejected-as-before behavior), never mint a
+                // demotion the evidence does not support.
+                "Proj" if items.len() == 4 => Ok(()),
                 other => Err(format!("promotion mirror: unsupported head `{other}`")),
             }
         }
@@ -4612,7 +4638,15 @@ fn raw_anon_binder() -> Result<Sexp, String> {
 
 /// Walk a raw term remapping every free `(Rel n)` via `f(n, depth)` where
 /// `depth` is the number of binders entered since the root. Fails closed on
-/// nested `Fix`/`CoFix`/`Proj` (their binder structure is out of scope here).
+/// nested `Fix`/`CoFix` (their binder structure is out of scope here).
+///
+/// A raw SerAPI primitive projection `(Proj <projection-payload> <relevance>
+/// <record>)` IS traversed: it binds nothing, so the record is its sole
+/// subterm and sits at the same depth. The projection payload
+/// (`proj_ind`/`proj_npars`/`proj_arg`/`proj_name`, plus the unfolded flag) and
+/// the relevance carry no de Bruijn content and are cloned verbatim — walking
+/// into them would both error on their record heads and risk reading the
+/// numeric `proj_arg` as an index.
 fn raw_remap_rels(sexp: &Sexp, depth: u32, f: &dyn Fn(u32, u32) -> u32) -> Result<Sexp, String> {
     match sexp {
         Sexp::Atom(_) => Ok(sexp.clone()),
@@ -4663,6 +4697,14 @@ fn raw_remap_rels(sexp: &Sexp, depth: u32, f: &dyn Fn(u32, u32) -> u32) -> Resul
                     Ok(Sexp::List(vec![v[0].clone(), t, v[2].clone(), ty]))
                 }
                 Some("Case") if v.len() == 8 => raw_remap_case_rels(v, depth, f),
+                // Raw SerAPI primitive projection: only the record (index 3) is
+                // a subterm, at THIS depth (a projection binds nothing).
+                Some("Proj") if v.len() == 4 => Ok(Sexp::List(vec![
+                    v[0].clone(),
+                    v[1].clone(),
+                    v[2].clone(),
+                    raw_remap_rels(&v[3], depth, f)?,
+                ])),
                 Some("Const") | Some("Ind") | Some("Construct") | Some("Sort") | Some("Var")
                 | Some("Int") | Some("Float") | Some("String") => Ok(sexp.clone()),
                 _ => Err("commute: unsupported node in a match body".to_string()),
@@ -5792,6 +5834,15 @@ fn permute_self_call_args(
                         branches,
                     ]))
                 }
+                // Raw SerAPI primitive projection: only the record (index 3) is
+                // a subterm (a projection binds nothing). The projection payload
+                // and the relevance are cloned verbatim.
+                Some("Proj") if v.len() == 4 => Ok(Sexp::List(vec![
+                    v[0].clone(),
+                    v[1].clone(),
+                    v[2].clone(),
+                    permute_self_call_args(&v[3], fd, k, nmemb, perm)?,
+                ])),
                 Some("Const") | Some("Ind") | Some("Construct") | Some("Sort") | Some("Var")
                 | Some("Int") | Some("Float") | Some("String") => Ok(sexp.clone()),
                 _ => Err("commute: unsupported node in a match body".to_string()),
@@ -6044,10 +6095,21 @@ fn remap_mutual_body(sexp: &Sexp, fd: u32, k: u32) -> Result<Sexp, String> {
                     Ok(Sexp::List(vec![v[0].clone(), t, v[2].clone(), ty]))
                 }
                 Some("Case") if v.len() == 8 => remap_mutual_case(v, fd, k),
+                // Raw SerAPI primitive projection: only the record (index 3) is
+                // a subterm, at THIS depth (a projection binds nothing), so a
+                // cross-member self-call inside it remaps normally. The
+                // projection payload and relevance carry no de Bruijn content
+                // and are cloned verbatim.
+                Some("Proj") if v.len() == 4 => Ok(Sexp::List(vec![
+                    v[0].clone(),
+                    v[1].clone(),
+                    v[2].clone(),
+                    remap_mutual_body(&v[3], fd, k)?,
+                ])),
                 // Leaves with no de Bruijn content.
                 Some("Const") | Some("Ind") | Some("Construct") | Some("Sort") | Some("Var")
                 | Some("Int") | Some("Float") | Some("String") => Ok(sexp.clone()),
-                // Nested Fix/CoFix/Proj and anything unrecognized: fail closed.
+                // Nested Fix/CoFix and anything unrecognized: fail closed.
                 _ => Err("mutual-fix: unsupported node in a mutual body".to_string()),
             }
         }
@@ -7867,6 +7929,19 @@ fn rewrite_fix_self_calls(sexp: &Sexp, depth: u32, cfg: &FixSelfRewrite) -> Resu
                     }
                     Ok(Sexp::List(out))
                 }
+                // Normalized projection `(Proj <struct-name> <field-idx>
+                // <record>)`: a projection binds nothing, so the record subterm
+                // sits at THIS depth and a self-call inside it (`(f x').1`)
+                // rewrites normally. The struct name and the NUMERIC field
+                // index are payloads and are cloned verbatim — recursing into
+                // them would let `is_rel`'s bare-atom form read the field index
+                // as a de Bruijn `Rel` and silently project the WRONG field.
+                "Proj" if items.len() == 4 => Ok(Sexp::List(vec![
+                    items[0].clone(),
+                    items[1].clone(),
+                    items[2].clone(),
+                    rewrite_fix_self_calls(&items[3], depth, cfg)?,
+                ])),
                 "Case" => {
                     let mut out = vec![items[0].clone(), items[1].clone()];
                     for part in &items[2..] {
@@ -8275,6 +8350,19 @@ fn fix_branch_transform(sexp: &Sexp, depth: u32, cfg: &FixBranchCfg) -> Result<S
                     }
                     Ok(Sexp::List(out))
                 }
+                // Normalized projection `(Proj <struct-name> <field-idx>
+                // <record>)`: a projection binds nothing, so the record subterm
+                // is transformed at THIS depth. The struct name and the NUMERIC
+                // field index are payloads cloned verbatim — this walker remaps
+                // BARE numeric atoms as `Rel` leaves (`rel_of`), so recursing
+                // into the field index would shift it over the inserted
+                // ihs/post' binders and silently project the WRONG field.
+                "Proj" if items.len() == 4 => Ok(Sexp::List(vec![
+                    items[0].clone(),
+                    items[1].clone(),
+                    items[2].clone(),
+                    fix_branch_transform(&items[3], depth, cfg)?,
+                ])),
                 "Case" => {
                     let mut out = vec![items[0].clone(), items[1].clone()];
                     for part in &items[2..] {
@@ -13105,6 +13193,268 @@ mod tests {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // The `Proj` traversal hole, closed in the REMAINING dialect/raw walkers.
+    //
+    // `dialect_map_rels` gained its `Proj` arm with the projfix landing (the
+    // test above); six sibling walkers still erred on the head, so ANY value
+    // or constructor type carrying a primitive projection hard-failed on their
+    // paths and dropped the constant/family to a type-only stand-in.
+    //
+    // The six split by role, and the tests pin the role:
+    //
+    //   * the five TRANSFORMERS (`rewrite_fix_self_calls`,
+    //     `fix_branch_transform`, `raw_remap_rels`, `permute_self_call_args`,
+    //     `remap_mutual_body`) MUST descend into the record — its de Bruijn
+    //     content needs the same rewrite as everything else — at the
+    //     projection's own depth, since a projection binds nothing. Their
+    //     FIDELITY NEGATIVE CONTROL is that the struct name / projection payload
+    //     and the NUMERIC field index are cloned verbatim: each of these walkers
+    //     reads a bare numeric atom as a `Rel`, so recursing into the field
+    //     index would silently project the WRONG field.
+    //   * the one ANALYZER (`dialect_for_each_ind_occ`) must NOT descend — it
+    //     mirrors a kernel walker that does not — it must merely stop erroring.
+    // ---------------------------------------------------------------------
+
+    /// A realistic, compact RAW SerAPI projection payload (`proj_ind` /
+    /// `proj_npars` / `proj_arg` / `proj_name` + the unfolded flag), same shape
+    /// as [`SERAPI_PROJ_GRING_ADD`]. Carries the bare numeric atoms (`0`, `1`)
+    /// whose survival is the raw walkers' fidelity control.
+    const RAW_PROJ_PAYLOAD: &str = "(((proj_ind ((MutInd (KerName (MPfile (DirPath ((Id T)))) \
+         (Id R)) ()) 0)) (proj_npars 0) (proj_arg 1) \
+         (proj_name (Constant (KerName (MPfile (DirPath ((Id T)))) (Id fld)) ()))) false)";
+
+    #[test]
+    fn test_promotion_mirror_skips_proj_like_the_kernel() {
+        // A constructor type whose FIELD TYPE is a primitive projection of
+        // another record — the Hierarchy-Builder mixin shape. Before the `Proj`
+        // arm the mirror erred "promotion mirror: unsupported head `Proj`",
+        // which makes `compute_uniform_num_params` keep `declared` and
+        // `predicted_fixed_index_promotion` return `None` for the WHOLE family.
+        // It must now SUCCEED — and, mirroring clean-kernel's
+        // `for_each_ind_occurrence_depth` (whose `_ => {}` arm drops
+        // `ExprKind::Proj`), report NO occurrence from inside the projection.
+        let ct = parse_sexp("(Prod x (Proj B.0 1 (App (Ind I 0) (Rel 0))) (Sort Prop))").unwrap();
+        let mut seen: Vec<(usize, u32)> = Vec::new();
+        dialect_for_each_ind_occ(&ct, "I", 0, 0, &mut |args, depth| {
+            seen.push((args.len(), depth));
+        })
+        .expect("the promotion mirror must not error on a Proj");
+        assert!(
+            seen.is_empty(),
+            "FIDELITY: the kernel's occurrence walker never descends into a \
+             projection, so neither may the mirror — got {seen:?}"
+        );
+
+        // POSITIVE CONTROL: the same occurrence OUTSIDE a projection is still
+        // reported (with its argument, at the enclosing binder depth), proving
+        // the walk is live and the emptiness above is the Proj rule, not a
+        // silently dead traversal.
+        let plain = parse_sexp("(Prod x (App (Ind I 0) (Rel 0)) (Sort Prop))").unwrap();
+        let mut plain_seen: Vec<(usize, u32)> = Vec::new();
+        dialect_for_each_ind_occ(&plain, "I", 0, 0, &mut |args, depth| {
+            plain_seen.push((args.len(), depth));
+        })
+        .expect("plain occurrence walks");
+        assert_eq!(plain_seen, vec![(1, 0)]);
+
+        // The `Proj` node still fails closed on an UNRECOGNIZED arity — the
+        // shape guard is load-bearing, not a blanket head allowance.
+        let bad = parse_sexp("(Prod x (Proj B.0 1) (Sort Prop))").unwrap();
+        assert!(
+            dialect_for_each_ind_occ(&bad, "I", 0, 0, &mut |_a, _d| {}).is_err(),
+            "a non-projfix Proj arity must still fail closed"
+        );
+    }
+
+    #[test]
+    fn test_fixed_index_promotion_decidable_through_a_proj_field() {
+        // WHAT THE HOLE COST, at the caller. `Inductive foo : nat -> Prop :=
+        // mk : forall n, <projected field type> -> foo n` — a fixed index `n`
+        // plus one constructor field whose TYPE is a primitive projection.
+        //
+        // `predicted_fixed_index_promotion` walks every constructor field
+        // domain through `dialect_for_each_ind_occ` and returns `None` — "shape
+        // undecidable" — the moment one walk errs. The projected field made it
+        // err, so indexed `Case` lowering fell closed for the whole family even
+        // though the promotion is perfectly decidable. It must now decide.
+        let mut ctx = SerapiNormCtx::default();
+        let arity = parse_sexp("(Prod n (Ind Coq.Init.Datatypes.nat 0) (Sort Prop))").unwrap();
+        let ctor = parse_sexp(
+            "(Prod n (Ind Coq.Init.Datatypes.nat 0) (Prod h (Proj B.0 0 (Rel 0)) \
+             (App (Ind SerTop.foo 0) (Rel 1))))",
+        )
+        .unwrap();
+        ctx.register("SerTop.foo", 0, 0, &arity, &[ctor]);
+        let info = ctx.lookup("SerTop.foo", 0).unwrap();
+        assert_eq!(
+            predicted_fixed_index_promotion(info, "SerTop.foo", 0),
+            Some(1),
+            "the fixed index must be predicted as promoted even though a \
+             constructor field's type is a primitive projection"
+        );
+    }
+
+    #[test]
+    fn test_rewrite_fix_self_calls_traverses_proj_record() {
+        // STRICT structural-Fix encoder. Branch frame with k=1 fix argument,
+        // m=1 constructor field and q=1 induction hypothesis: at traversal
+        // depth 2 the fix self is `Rel 3`, the recursive field is `Rel 1` and
+        // the induction hypothesis is `Rel 0`. A self-call sitting inside a
+        // primitive projection (`(f x').fld`) must rewrite to the IH.
+        let cfg = FixSelfRewrite {
+            k: 1,
+            m: 1,
+            q: 1,
+            r: 0,
+            idx_positions: vec![],
+            rec_fields: vec![0],
+            recon: StructBinderRecon {
+                ind_name: "N".to_string(),
+                ind_idx: 0,
+                ctor_idx: 1,
+                params: vec![],
+            },
+        };
+        let body = parse_sexp("(Proj B.0 2 (App (Rel 3) (Rel 1)))").unwrap();
+        let out = rewrite_fix_self_calls(&body, 2, &cfg)
+            .expect("the strict Fix encoder must traverse a Proj in a branch body");
+        assert_eq!(
+            out,
+            parse_sexp("(Proj B.0 2 (Rel 0))").unwrap(),
+            "the self-call inside the record becomes the induction hypothesis; \
+             the struct name and field index are untouched payloads"
+        );
+
+        // FIDELITY NEGATIVE CONTROL: a field index numerically EQUAL to the fix
+        // self-reference (`3` at this depth). `is_rel` matches bare numeric
+        // atoms, so recursing into the index would read it as the fix binder and
+        // error "self-reference outside a recognized structural self-call".
+        let shadow = parse_sexp("(Proj B.0 3 (App (Rel 3) (Rel 1)))").unwrap();
+        assert_eq!(
+            rewrite_fix_self_calls(&shadow, 2, &cfg)
+                .expect("a field index is never a self-reference"),
+            parse_sexp("(Proj B.0 3 (Rel 0))").unwrap(),
+            "field index 3 must stay the literal field index, not be read as `Rel 3`"
+        );
+    }
+
+    #[test]
+    fn test_fix_branch_transform_traverses_proj_record() {
+        // GENERAL (post-abstracted) structural-Fix encoder. k=1, r=0, m=1, q=1,
+        // p=0: at depth 0 the fix self is `Rel 2`, the recursive field `Rel 0`,
+        // and the minor premise's IH lands at `Rel 0`.
+        let cfg = FixBranchCfg {
+            k: 1,
+            r: 0,
+            m: 1,
+            q: 1,
+            p: 0,
+            rec_fields: vec![0],
+            recon: StructBinderRecon {
+                ind_name: "N".to_string(),
+                ind_idx: 0,
+                ctor_idx: 1,
+                params: vec![],
+            },
+        };
+        let body = parse_sexp("(Proj B.0 5 (App (Rel 2) (Rel 0)))").unwrap();
+        let out = fix_branch_transform(&body, 0, &cfg)
+            .expect("the general Fix encoder must traverse a Proj in a branch body");
+        match sexp_to_cic(&out).expect("transformed Proj lowers") {
+            CicTerm::Proj(name, idx, inner) => {
+                assert_eq!(name, "B.0", "struct name preserved verbatim");
+                // FIDELITY NEGATIVE CONTROL: this walker remaps BARE numeric
+                // atoms as `Rel` leaves, so recursing into the index would shift
+                // `5` over the inserted ihs/post' binders to `6` — the wrong
+                // field, in a structurally corrupt node.
+                assert_eq!(idx, 5, "field index is a payload, never remapped");
+                assert!(
+                    matches!(*inner, CicTerm::Rel(0)),
+                    "the self-call inside the record becomes the induction hypothesis"
+                );
+            }
+            other => panic!("expected Proj, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_raw_remap_rels_traverses_proj_record_only() {
+        // Match-COMMUTATION preprocessing walks RAW SerAPI terms. The raw
+        // `(Proj <projection-payload> <relevance> <record>)` has exactly one
+        // subterm, at the same depth.
+        let proj = parse_sexp(&format!(
+            "(Proj {RAW_PROJ_PAYLOAD} Relevant (App (Rel 1) ((Rel 2))))"
+        ))
+        .unwrap();
+        let out = raw_remap_rels(&proj, 0, &|n, _d| n + 10)
+            .expect("the commute remap must traverse a raw Proj");
+        let expected = parse_sexp(&format!(
+            "(Proj {RAW_PROJ_PAYLOAD} Relevant (App (Rel 11) ((Rel 12))))"
+        ))
+        .unwrap();
+        assert_eq!(
+            out, expected,
+            "only the record's Rels are remapped; the projection payload and the \
+             relevance are byte-identical"
+        );
+
+        // FIDELITY NEGATIVE CONTROL: the payload's own bare numeric atoms
+        // (`proj_npars 0`, `proj_arg 1`) must be untouched — remapping
+        // `proj_arg` would silently project a different field.
+        let Sexp::List(items) = &out else {
+            panic!("expected a Proj list")
+        };
+        let Sexp::List(orig) = &proj else {
+            panic!("expected a Proj list")
+        };
+        assert_eq!(items[1], orig[1], "projection payload byte-identical");
+        assert_eq!(items[2], orig[2], "relevance byte-identical");
+    }
+
+    #[test]
+    fn test_permute_self_call_args_traverses_proj_record() {
+        // Argument-reorder pass of the commute transform: fd=0, k=2, nmemb=1 →
+        // the fix binder is `Rel 3`; `perm = [1, 0]` swaps the two arguments of
+        // a saturated self-call. The self-call here sits inside a projection.
+        let proj = parse_sexp(&format!(
+            "(Proj {RAW_PROJ_PAYLOAD} Relevant (App (Rel 3) ((Rel 4) (Rel 5))))"
+        ))
+        .unwrap();
+        let out = permute_self_call_args(&proj, 0, 2, 1, &[1, 0])
+            .expect("the arg-permutation pass must traverse a raw Proj");
+        assert_eq!(
+            out,
+            parse_sexp(&format!(
+                "(Proj {RAW_PROJ_PAYLOAD} Relevant (App (Rel 3) ((Rel 5) (Rel 4))))"
+            ))
+            .unwrap(),
+            "the self-call inside the record is permuted; the payload is untouched"
+        );
+    }
+
+    #[test]
+    fn test_remap_mutual_body_traverses_proj_record() {
+        // 2-body mutual-fixpoint merge: fd=0, k=1 → an enclosing argument
+        // (`Rel 1`) shifts by one over the inserted selector binder, outer
+        // context (`Rel 5`) is unchanged.
+        let proj = parse_sexp(&format!(
+            "(Proj {RAW_PROJ_PAYLOAD} Relevant (App (Rel 5) ((Rel 1))))"
+        ))
+        .unwrap();
+        let out =
+            remap_mutual_body(&proj, 0, 1).expect("the mutual-fix remap must traverse a raw Proj");
+        assert_eq!(
+            out,
+            parse_sexp(&format!(
+                "(Proj {RAW_PROJ_PAYLOAD} Relevant (App (Rel 5) ((Rel 2))))"
+            ))
+            .unwrap(),
+            "the record's enclosing-argument Rel shifts over the selector binder; \
+             the projection payload is untouched"
+        );
+    }
+
     #[test]
     fn test_value_translation_failure_marks_salvaged_standin() {
         // A value we cannot TRANSLATE (here an unstructuralizable `Fix`) is a
@@ -14558,6 +14908,133 @@ mod tests {
                 .contains(&"SerTop.two_plus_two".to_string()),
             "the computational theorem over the RAW Fix must kernel-verify \
              (iota-reduce my_add 2 2 to 4), got {:?}",
+            report.kernel_verified_names
+        );
+    }
+
+    /// `Inductive Box := mk : nat -> nat -> Box.` — a single-constructor
+    /// record. `infer_proj_type` (clean-kernel tc/infer_proj.rs) accepts a
+    /// projection against any inductive with exactly one constructor, matched
+    /// by the BLOCK-INDEXED name `SerTop.Box.0`.
+    const BOX_RECORD_IND: &str = "(CoqInductive SerTop.Box 0 Set\n  (Ctor mk (Prod a (Ind \
+         Coq.Init.Datatypes.nat 0) (Prod b (Ind Coq.Init.Datatypes.nat 0) (Ind SerTop.Box 0)))))\n";
+
+    /// The `my_add` fixpoint's self-call, verbatim from
+    /// [`RAW_SERAPI_TWO_PLUS_TWO`] (frame `[…, my_add, n, m, p]`, 1-based:
+    /// `p = Rel 1`, `m = Rel 2`, `my_add = Rel 4`).
+    const MY_ADD_SELF_CALL: &str = "(App(Rel 4)((Rel 1)(Rel 2)))";
+
+    /// A raw SerAPI `Construct` reference to `SerTop.Box`'s constructor `mk`
+    /// (SerAPI constructor indices are 1-based). Shape copied verbatim from the
+    /// `nat` constructor references inside [`RAW_SERAPI_TWO_PLUS_TWO`].
+    const BOX_MK_CTOR: &str =
+        "(Construct((((MutInd(KerName(MPfile(DirPath((Id SerTop))))(Id Box))())0)1)\
+         (Instance(()()))))";
+
+    /// A raw SerAPI `Construct` reference to `nat`'s `O`.
+    const NAT_O_CTOR: &str = "(Construct((((MutInd(KerName(MPfile(DirPath((Id Datatypes)\
+         (Id Init)(Id Coq))))(Id nat))())0)1)(Instance(()()))))";
+
+    /// Build the [`RAW_SERAPI_TWO_PLUS_TWO`] closure with `my_add`'s recursive
+    /// call wrapped in a PRIMITIVE PROJECTION of a freshly-built `Box`:
+    /// `S (my_add p m)` becomes `S (mk (my_add p m) O).(field)`.
+    ///
+    /// At `field = 0` the projection reduces back to `my_add p m`, so `my_add`
+    /// is extensionally unchanged and `two_plus_two : my_add 2 2 = 4` still
+    /// holds — but ONLY if the whole chain works: the Fix branch-body walker
+    /// must traverse the projection to find the self-call, and the kernel must
+    /// then iota-reduce the projection while checking `eq_refl`.
+    fn two_plus_two_with_projected_self_call(field: u32) -> String {
+        // Payload shape copied verbatim from [`SERAPI_PROJ_GRING_ADD`] (the
+        // measured sertop-projfix output) with the kernames retargeted.
+        let payload = format!(
+            "(((proj_ind((MutInd(KerName(MPfile(DirPath((Id SerTop))))(Id Box))())0))\
+             (proj_npars 0)(proj_arg {field})(proj_name(Constant(KerName(MPfile\
+             (DirPath((Id SerTop))))(Id fst))())))false)"
+        );
+        assert_eq!(
+            RAW_SERAPI_TWO_PLUS_TWO.matches(MY_ADD_SELF_CALL).count(),
+            1,
+            "the self-call anchor must be unique in the fixture"
+        );
+        let projected = format!(
+            "(Proj {payload} Relevant (App {BOX_MK_CTOR} ({MY_ADD_SELF_CALL} {NAT_O_CTOR})))"
+        );
+        let with_box = RAW_SERAPI_TWO_PLUS_TWO.replacen(
+            "(CoqInductive Coq.Init.Logic.eq 0",
+            &format!("{BOX_RECORD_IND}(CoqInductive Coq.Init.Logic.eq 0"),
+            1,
+        );
+        with_box.replace(MY_ADD_SELF_CALL, &projected)
+    }
+
+    /// END-TO-END REACHABILITY of the Fix branch-body `Proj` arm: a REAL raw
+    /// SerAPI fixpoint whose recursive call sits inside a primitive projection.
+    ///
+    /// This is the shape the `Proj` traversal hole was costing. Before the arm,
+    /// the structural-Fix encoder's branch walk hit the normalized
+    /// `(Proj <struct> <field-idx> <record>)` and erred
+    /// "Fix: unsupported head `Proj` in branch body", so the whole value was
+    /// dropped and `my_add` imported as a type-only stand-in — taking
+    /// `two_plus_two` (which must iota-reduce `my_add 2 2`) down with it.
+    #[test]
+    fn test_raw_serapi_fix_with_projected_self_call_kernel_verifies() {
+        let closure = two_plus_two_with_projected_self_call(0);
+
+        let mut w = ShardWriter::new();
+        let stats = CoqImporter.import_sexp(&closure, &mut w).unwrap();
+        assert_eq!(
+            stats.value_translation_failed, 0,
+            "the Fix value carrying a Proj in its branch body must translate: {:?}",
+            stats.value_failure_reasons
+        );
+
+        let report = verify_sexp(&closure);
+        assert_eq!(
+            report.failed, 0,
+            "no constant may fail: {:?}",
+            report.failures
+        );
+        assert!(
+            report
+                .kernel_verified_names
+                .contains(&"SerTop.my_add".to_string()),
+            "the Fix whose self-call sits inside a primitive projection must \
+             structuralize and kernel-verify, got {:?} / fallbacks {:?}",
+            report.kernel_verified_names,
+            report.axiom_fallback_names
+        );
+        assert!(
+            report
+                .kernel_verified_names
+                .contains(&"SerTop.two_plus_two".to_string()),
+            "the computational theorem must still kernel-verify — the kernel has \
+             to iota-reduce `(mk (my_add p m) O).0` back to `my_add p m` for \
+             `my_add 2 2` to reach 4; got {:?} / fallbacks {:?}",
+            report.kernel_verified_names,
+            report.axiom_fallback_names
+        );
+    }
+
+    /// FIDELITY NEGATIVE CONTROL for the test above: the SAME closure with
+    /// `proj_arg 1` projects the record's SECOND field (`O`), so `my_add n m`
+    /// collapses to `S O` on every successor and `my_add 2 2 = 4` becomes
+    /// FALSE. The kernel must REJECT it.
+    ///
+    /// This is what makes the positive test meaningful: the field index is
+    /// carried faithfully through the branch walk and honored by the kernel's
+    /// projection reduction — a walker that mangled the index, or a kernel that
+    /// ignored it, would let this wrong arithmetic through.
+    #[test]
+    fn test_projected_self_call_wrong_field_index_is_rejected() {
+        let closure = two_plus_two_with_projected_self_call(1);
+        let report = verify_sexp(&closure);
+        assert!(
+            !report
+                .kernel_verified_names
+                .contains(&"SerTop.two_plus_two".to_string()),
+            "projecting the WRONG field makes `my_add 2 2 = 4` false; it must \
+             never kernel-verify, got {:?}",
             report.kernel_verified_names
         );
     }

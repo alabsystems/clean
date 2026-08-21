@@ -30,6 +30,8 @@ mod cache_reuse;
 mod calc;
 #[path = "tests/calc_multistep.rs"]
 mod calc_multistep;
+#[path = "tests/congr_arg_flex_head.rs"]
+mod congr_arg_flex_head;
 #[path = "tests/conv_proof_chain.rs"]
 mod conv_proof_chain;
 #[path = "tests/ctor_pattern_arity.rs"]
@@ -54,8 +56,6 @@ mod do_match_patterns;
 mod do_match_q_patterns;
 #[path = "tests/do_match_return_bodies.rs"]
 mod do_match_return_bodies;
-#[path = "tests/congr_arg_flex_head.rs"]
-mod congr_arg_flex_head;
 #[path = "tests/do_notation.rs"]
 mod do_notation;
 #[path = "tests/do_notation_state.rs"]

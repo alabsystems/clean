@@ -35,12 +35,46 @@ Every line that differs is classified, and only one class is RED:
                      RED, always.
 
   functy-index       the `functy.N` in the function header.  A whole-crate
-                     function-TYPE table index.  Read by NO gate lane.
+                     function-TYPE table index.
+                     NO LONGER UNREAD, as of 2026-08-20, and for the same reason
+                     `callee-index` stopped being unread: the gap WAS the defect.
+                     `FuncTy` is `{ params, returns, is_vararg }`, and a printed
+                     body shows its parameter types in the entry block header,
+                     its return types only through a `ret` an execution reaches,
+                     and `is_vararg` nowhere at all --- so two texts differing
+                     only in this numeral are a variadic and a non-variadic
+                     function, and `ir_mint::project` accepted both.  It is now
+                     pinned in `generated/ir_<chain>.tags.json`'s
+                     `interface.functy` and compared.
+                     It stays AMBER here because the index still MOVES with the
+                     whole-crate table --- measured over the three producer
+                     dumps, 9 of the 11 chained bodies moved theirs, the same
+                     drift rate as `@func.N` --- and a move is a reviewed re-pin
+                     of that table, which is what the M10 lane reports.  Both
+                     designated chains are in the 2 that did NOT move
+                     (`has_cubical_layer` and `level_is_zero` are `[0, 0, 0]`).
+                     What is no longer true of it is `read by NO gate lane`.
   type-table-index   `enum.N` / `struct.N` / `tuple.N` / `array.N`.  Read by the
                      `const_tys` lane when it sits on a `const`, and by nothing
                      when it sits on a `load` or an entry parameter.
   callee-index       `@func.N` in a `call`.  Only `level_is_zero` has one, and
                      its link 2a is measured-OPEN.
+                     NO LONGER UNREAD, as of 2026-08-20.  This class was AMBER
+                     partly because no gate lane consulted it, and that gap was
+                     itself the defect: the core form interned callee ids in a
+                     namespace SEPARATE from the function's own id, both
+                     starting at 0, so one numeral denoted two functions and
+                     swapping the two `@func.N` literals in this very fixture
+                     produced a byte-identical core module for a different
+                     program.  `crystal_a2_mint`'s M8 lane now reads the index
+                     --- against `generated/ir_lz.tags.json`'s `funcs` lane,
+                     which pins both the crate id and the NAME reader A read for
+                     it, and against reader A's `crate_func_ids_seen` record.
+                     It stays AMBER here because the index still MOVES with the
+                     whole-crate table (measured: 4914/4925 -> 3884/3895 across
+                     the three producer dumps) while the names do not; a move is
+                     a reviewed re-pin of that table, which is what M8 reports.
+                     What is no longer true of it is `read by NO gate lane`.
   global-index       `@global.N` in a `global_addr`.  The exact analogue of
                      `callee-index`, and found the same way it was: on 2026-08-19,
                      the FIRST run that ever compared `level_is_zero_deref_callee`
@@ -57,7 +91,10 @@ Every line that differs is classified, and only one class is RED:
                      the instruction, its operand shape and the accompanying
                      length constant are unchanged, and that no gate lane reads
                      the index.  It is AMBER for exactly that reason and for no
-                     stronger one.
+                     stronger one --- and unlike `callee-index`, which acquired
+                     a gate lane on 2026-08-20, this one still has none.  It is
+                     row `global-index` of `data/crystal_mint_blind_slots.json`,
+                     which is where the finite list of such slots now lives.
   loc-file-index     the `; #loc:` file index.  Excluded from
                      `Module::stable_digest`; the CFG parser strips it.
 
@@ -66,7 +103,11 @@ clean-kernel gains or loses an item, and also whenever the producer changes how
 many bodies it lowers --- so they go stale by construction and say nothing about
 whether a proof still describes the artifact.  They are reported as AMBER, with
 the fixture and the live value printed, and they do not fail the run unless
-`--strict` is passed.
+`--strict` is passed.  One LINE can carry several classes at once -- a `const
+enum.N { k }` line also carries the `; #loc:` comment -- so classification
+COMPOSES the normalisers and a line is STRUCTURAL only if the fully
+index-normalised texts still differ (see `classify()`; this was a measured
+defect until 2026-08-20).
 
 That split is a measurement, not an opinion.  `ir_const_agg_eval` consults an
 aggregate type only through `ir_ty_is_agg`, and `ir_ty_is_agg_enum_any` /
@@ -130,6 +171,17 @@ BODIES: dict[str, str] = {
     "get_char_val_trunc": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
     "meta_tag_shl": "tc::local_context::LocalContext::push_low_local::META_TAG",
     "level_is_zero": "level::Level::is_zero",
+    # The 2026-08-20 float tranche — post-record pins (see freshness.rs's
+    # POST_RECORD_PINS): pinned against local stage1 trustc 10130575c, owed an
+    # entry in the NEXT revalidation record.
+    "float_add": "env::native_reducers_float::reduce_float_add::{closure#0}",
+    "float_sub": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+    "float_mul": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+    # The ELEVENTH chain, 2026-08-20 -- the first chained body that computes an
+    # address and dereferences it.  Its fixture was taken from a live dump on
+    # the day it was committed, and it enters this table so the NEXT lane
+    # re-derives it like every other.
+    "simp_priority_value": "env::types::SimpPriority::value",
 }
 
 # Fixtures that are NOT chains but whose emitted text is committed and asserted
@@ -180,20 +232,64 @@ def _strip_loc(s: str) -> str:
     return s.split("; #")[0].rstrip()
 
 
-def classify(old: str, new: str) -> str:
-    """Name the drift class of one changed line, or STRUCTURAL if it is real."""
+def classify(old: str, new: str) -> tuple[str, ...]:
+    """Name the drift classes of one changed line, or ("STRUCTURAL",) if real.
+
+    COMPOSITIONAL, and it was not (fixed 2026-08-20).  The first shape of this
+    function tried each normaliser ALONE, so a line carrying TWO index classes
+    at once -- `const enum.181 { 0 }  ; #loc: 425` going to
+    `const enum.174 { 0 }  ; #loc: 422` -- matched no single normaliser and
+    fell through to STRUCTURAL.  At the 2026-08-20 producer that is not a
+    corner case, it is the CONTROL: an unchanged clean main read STRUCTURAL on
+    four bodies (expr_path_step_clone enum+loc, level_is_zero callee+loc,
+    simp_priority_value enum+loc, level_is_zero_deref_callee func/global+loc),
+    so a clean revalidation record could not be minted on an UNCHANGED tree.
+    Fail-loud, so safe -- but a gate that is red on the control cannot say
+    anything about a subject.
+
+    Now every applicable normaliser is applied to BOTH lines and the verdict is
+    taken on the composition; a line is STRUCTURAL exactly when the fully
+    index-normalised texts still differ.  The returned classes are the
+    normalisers that were NEEDED -- those whose omission from the composition
+    leaves the lines unequal -- so a single-class line reports exactly what it
+    always did, and a composed line reports each class it carries.  The caller
+    ledgers the line under every class it returns; the five class names are
+    pinned by `crystal_a1_lineage/freshness.rs`, which is why this returns
+    plural known names rather than minting a composite name.
+    """
+    norms: list[tuple[str, object]] = []
     if old.startswith("rustcc fn @") and new.startswith("rustcc fn @"):
-        if _norm_functy(old) == _norm_functy(new):
-            return "functy-index"
-    if _norm_tytable(old) == _norm_tytable(new):
-        return "type-table-index"
-    if _norm_callee(old) == _norm_callee(new):
-        return "callee-index"
-    if _norm_global(old) == _norm_global(new):
-        return "global-index"
-    if _strip_loc(old) == _strip_loc(new):
-        return "loc-file-index"
-    return "STRUCTURAL"
+        norms.append(("functy-index", _norm_functy))
+    norms.extend(
+        [
+            ("type-table-index", _norm_tytable),
+            ("callee-index", _norm_callee),
+            ("global-index", _norm_global),
+            ("loc-file-index", _strip_loc),
+        ]
+    )
+
+    def compose(line: str, skip: str | None = None) -> str:
+        for name, fn in norms:
+            if name != skip:
+                line = fn(line)  # type: ignore[operator]
+        return line
+
+    if compose(old) != compose(new):
+        return ("STRUCTURAL",)
+    needed = tuple(
+        name for name, _fn in norms if compose(old, skip=name) != compose(new, skip=name)
+    )
+    if needed:
+        return needed
+    # Degenerate guard: old != new yet no single omission breaks equality.
+    # Possible only if two normalisers' patterns overlap on the same span (e.g.
+    # a differing token inside the `; #`-stripped region that another regex
+    # also rewrites).  Refuse to return an empty class set -- name every
+    # normaliser that touches either line, and if none does, the difference is
+    # real and unclassified: STRUCTURAL.
+    touched = tuple(name for name, fn in norms if fn(old) != old or fn(new) != new)  # type: ignore[operator]
+    return touched or ("STRUCTURAL",)
 
 
 def signature_of(fixture_text: str) -> str:
@@ -293,9 +389,10 @@ def main() -> int:
             else:
                 for a, b in zip(fl, ll):
                     if a != b:
-                        classes.setdefault(classify(a, b), []).append(
-                            f"{a.strip()}  ->  {b.strip()}"
-                        )
+                        for cls in classify(a, b):
+                            classes.setdefault(cls, []).append(
+                                f"{a.strip()}  ->  {b.strip()}"
+                            )
             entry["classes"] = sorted(classes)
             entry["detail"] = classes
             entry["diff"] = "".join(

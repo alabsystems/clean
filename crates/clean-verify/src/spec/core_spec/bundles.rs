@@ -1804,6 +1804,39 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The float ADD chain, 2026-08-20: `env::native_reducers_float::
+    // reduce_float_add::{closure#0}` — the `fadd` row of the 2026-08-19 width
+    // tranche (`data/crystal_width_tranche_2026-08-19.json`). AFTER
+    // add_eval_ir_float_div and load-bearing rather than alphabetical: it reuses
+    // that chain's EncodesF64Val / ir_outcome_fuelout_ne_unmodelled_prop /
+    // ir_option_is_some / ir_outcome_is_trap. What it adds: the fin/fin cell ANSWERS (ir_f64_add_fin), so this chain returns computed values on exactly the inputs the eighth registers as refused.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_float_add,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The float SUB chain, 2026-08-20: `env::native_reducers_float::
+    // reduce_float_sub::{closure#0}` — the `fsub` row of the 2026-08-19 width
+    // tranche (`data/crystal_width_tranche_2026-08-19.json`). AFTER
+    // add_eval_ir_float_div and load-bearing rather than alphabetical: it reuses
+    // that chain's EncodesF64Val / ir_outcome_fuelout_ne_unmodelled_prop /
+    // ir_option_is_some / ir_outcome_is_trap. What it adds: non-commutative on the value axis; its symbolic-A5 corollaries are split into abstract-o lemmas + concrete instantiations (see the module doc for the measured defeq wall).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_float_sub,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The float MUL chain, 2026-08-20: `env::native_reducers_float::
+    // reduce_float_mul::{closure#0}` — the `fmul` row of the 2026-08-19 width
+    // tranche (`data/crystal_width_tranche_2026-08-19.json`). AFTER
+    // add_eval_ir_float_div and load-bearing rather than alphabetical: it reuses
+    // that chain's EncodesF64Val / ir_outcome_fuelout_ne_unmodelled_prop /
+    // ir_option_is_some / ir_outcome_is_trap. What it adds: the sign-XOR lane, contrasted in-file with addition's sign-AND.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_float_mul,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // The NINTH chain, 2026-08-16:
     // `env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}` — the
     // first over a CAST, and the other half of the ground the 2026-08-15 lane-8
@@ -1857,6 +1890,38 @@ const STAGES: &[CoreSpecStage] = &[
     // `ir_run_halted` (add_eval_ir_steps).
     CoreSpecStage {
         apply: Specification::add_eval_ir_meta_tag,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The ELEVENTH chain, 2026-08-20: `env::types::SimpPriority::value` — the
+    // FIRST chained body that COMPUTES AN ADDRESS AND DEREFERENCES IT. Its
+    // Custom arm materialises a byte offset, `gep`s the receiver by it, and
+    // loads through the RESULT; every earlier chain reads memory at most
+    // through the pointer it was handed, and six of the eleven read no memory
+    // at all.
+    //
+    // It exists because the frontier table was STALE. `gep` and `call` were
+    // recorded at zero deployed-profile flips on 2026-08-16 and quoted for four
+    // days; re-measured at HEAD after waves GS/CP/DR/W3/W3b, `gep` flips 4 times
+    // at -O3 and `call` twice (data/crystal_frontier_census_2026-08-20.json,
+    // re-derivable by scripts/crystal_frontier_census.py). Two of the four gep
+    // flips are Level::is_zero and is_nonzero, whose closure is not bodyful; of
+    // the other two, `Reducibility::height` is rejected because the switch-map
+    // perturbation records applications=0 on it — a fail-closed control that
+    // cannot reach the body it controls is not a control.
+    //
+    // AFTER add_eval_ir_meta_tag, and load-bearing rather than alphabetical:
+    // this stage REUSES `ir_d32` (add_eval_ir_bvar_range), `ir_d64`
+    // (add_eval_ir_valid_char), `ir_cfg_mach` (add_eval_ir_bvar_range),
+    // `ir_outcome_nat` (add_eval_ir_kind_ord), `ir_outcome_is_ret`
+    // (add_eval_ir_correct), `ir_run_le_ret` (add_eval_ir_fuel) and `ir_steps`
+    // (add_eval_ir_steps). Re-declaring any of them is the eighth chain's one
+    // real error, which elaborated cleanly in every fast gate and failed only
+    // in the full `Specification::new()`. The scratchpad CANNOT see a
+    // stage-ordering fault at all: it builds the whole spec and only then
+    // appends candidates.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_priority,
         in_substitution: false,
         in_impl_soundness: false,
     },

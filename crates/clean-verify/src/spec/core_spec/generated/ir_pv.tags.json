@@ -1,0 +1,66 @@
+{
+ "chain": "ir_pv",
+ "body": "env::types::SimpPriority::value",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first: WHICH aggregate slot a body reads is a property of the BODY and lives in the core module as a canonical first-use index; WHICH crate table entry the artifact named is a property of the BUILD and lives here. `enum.127` is the second kind. Folding it into the module the theorems are about would make a re-interning look like a proof about a different program.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_pv_tprio` alias (`IRTy.enum_ 127`) that `ir_pv_b0` loads, so the REGISTERED term carries the crate id exactly as the 2026-08-19 load-type correction requires. `ir_mint::decode` reads it in the other direction and REFUSES an id the table does not list.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print: every parameter's TYPE, every `align` operand and the KINDS of trailing annotation clause. Read `ir_h2.tags.json`'s `interface_what` for why they are pinned here rather than in the module. This chain's entry parameter is the `ptr` the body GEPS OFF, which makes the params lane sharper here than anywhere else in the tree: `ptr` and `Rc<enum.127>` project to the same core module and are a `&SimpPriority` and an `Rc<SimpPriority>`, and the second load reads a payload through one and a refcount header through the other.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED, because it moves. Both were read from reader A's own record on the dump this chain was cut from: `param_tys_erased: [\"Ptr\"]`, `block_param_tys_erased: [\"bb3:U32\"]`, `aligns_erased: [\"load:None\", \"load:None\"]`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
+  "functy": 147,
+  "functy_note": "Pinned VERBATIM and re-pinned under review: a body has one header signature, so there is nothing to intern it against, and the emitted text carries no signature table. Read the notes in ir_h2.tags.json.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&env::types::SimpPriority",
+    "note": "The receiver. The entry `load` reads the discriminant through it and the Custom arm GEPS it by four bytes and loads the payload through the result -- so this is the one chained body where the parameter type is what says which object the computed address is inside."
+   }
+  ],
+  "block_params": [
+   {
+    "block": 3,
+    "index": 0,
+    "ssa": 1,
+    "ty": "u32",
+    "observed_ty": "u32",
+    "note": "The join. Both arms funnel through it: the materialised 1000 and the payload read through the gep."
+   }
+  ],
+  "aligns": [
+   "load:None",
+   "load:None"
+  ],
+  "aligns_note": "TWO entries, one per memory instruction in program order, and this is the only chain with more than one -- the entry load and the load through the gep result. Reader A wrote both in its own spelling (`format!(\"load:{align:?}\")`), so the two records compare directly.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "the_alias_is_a_LITERAL_and_that_is_new": "127 is outside the registered `ir_d0..ir_d16` atom pool, so this alias reads `IRTy.enum_ 127` where `ir_h2_tmode` reads `IRTy.enum_ ir_d13`. Before 2026-08-20 `Tags::alias_defs` formatted every id as `ir_d{id}` unconditionally and this chain would have minted `IRTy.enum_ ir_d127` -- a constant the specification does not declare, caught by nothing in ir_mint and surfacing only as an elaboration failure at registration. `mint::interning_id` is now the one policy, shared with the widths and constant values (`shape::Arg::Data`).",
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 127,
+   "alias": "ir_pv_tprio",
+   "rust_type": "env::types::SimpPriority",
+   "observed_crate_id_by_producer": {
+    "laneMV-2026-08-20": 127,
+    "laneW-2026-08-20": 127
+   },
+   "note": "Observed on TWO dumps of byte-identical clean-kernel source through the same sealed driver, taken in two different checkouts (crate disambiguators `124c` and `ab17`, whole-crate artifacts NOT byte-identical, body lineage digests DIFFERENT). The interning id did not move, and neither did the projected core module -- reader A's digest is a92f873584d4878ea10be6d1c47d28f4ea3fafec3a297f0a96d2afe5c8c8c3b5 on both. That is two observations, not ir_h2's three producers, and it is stated as such: a pin to be re-checked, not a measured invariance. `expr_path_step_clone`'s id moved 181 -> 176 over three dumps with not one instruction changed."
+  }
+ ],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `SimpPriority::value` calls NOTHING: its coverage row records calls {resolved 0, extern_decls 0, unresolved 0}, reader A's `crate_func_ids_seen` is the single entry [3014] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`, under which reader B reserves canonical index 0 and interns callees from 1; with no callee that is exactly reader A's numbering. `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`, so this cannot silently become the 2026-08-20 namespace collision."
+}

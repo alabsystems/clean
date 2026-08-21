@@ -104,9 +104,12 @@ axiom-audit-release-check:
 # compiled at all, and without `--all-targets` the 348 test targets of the 19
 # non-default members are never linted. Measured 2026-08-12: 233 s from an empty
 # target dir. scripts/check_lint_coverage.py fails closed if either flag is
-# dropped here.
+# dropped here. The driver is `scripts/rust_frontend.sh`, not a bare `cargo`,
+# because the pinned `trust` toolchain ships clippy as `targo-tippy` and
+# rustfmt as `targo-fmt`; the resolver execs plain `cargo <sub>` everywhere
+# else. Same flags, same deny level, either way.
 clippy:
-    cargo clippy --locked --workspace --all-targets -- -D warnings
+    scripts/rust_frontend.sh clippy --locked --workspace --all-targets -- -D warnings
 
 # Lint-coverage invariant (~0.1s): no tracked crate outside the workspace, and
 # no gate site that has quietly narrowed its selection.
@@ -115,11 +118,11 @@ lint-coverage:
 
 # Apply rustfmt to the whole workspace.
 fmt:
-    cargo fmt --all
+    scripts/rust_frontend.sh fmt --all
 
 # Verify rustfmt is clean (CI gate).
 fmt-check:
-    cargo fmt --all --check
+    scripts/rust_frontend.sh fmt --all --check
 
 # ── Tooling / Codegen ──────────────────────────────────────────────────────
 

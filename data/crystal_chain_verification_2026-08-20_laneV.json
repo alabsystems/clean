@@ -1,0 +1,744 @@
+{
+ "schema": "clean.crystal.chain_verification/v1",
+ "date": "2026-08-20",
+ "lane": "V",
+ "subject": "chains TWELVE-FOURTEEN (float_add / float_sub / float_mul), landed by 123c341c0 from ANOTHER MACHINE",
+ "why": "123c341c0 was measured on a different machine (its fixtures name $HOME/trust/... and a dump under -Users-wintergreen-clean). This programme's own rule is that another lane's measurement is SEEDED, not measured, and a seeded row is UNKNOWN. This record is the independent re-measurement on m8Macbo128GB8TB, against producers the landing lane never used.",
+ "verified_at": {
+  "clean_HEAD_of_this_record": "97efa0e6c",
+  "clean_rev_of_the_local_dump": "fa691b5a9 (working tree; crystal_freshness_scope.py verdict FRESH -- clean-kernel source digest 35339831000b81a7148f7a93 unmoved since 7558a86c8b)",
+  "clean_rev_of_the_four_sealed_dumps": "7558a86c8b (data/crystal_marker_ceiling_2026-08-20.json, clean_tracked_dirt [])",
+  "rebased_onto": "b53711723 (origin/main at push time; the CRYSTAL_STATUS and TARGET_EXTRA_PATHS anchors were unchanged from 97efa0e6c, patch applied clean)"
+ },
+ "producers_used": {
+  "_note": "ordered by trust ancestry; every one of these is a DIFFERENT producer from the trustc 10130575c the three fixtures were pinned from.",
+  "94147b34f": {
+   "date": "2026-08-11",
+   "role": "LOCAL stage1 on this machine, compiled here by lane V",
+   "ancestor_of_fixture_producer": true
+  },
+  "10130575c": {
+   "date": "2026-08-14",
+   "role": "THE FIXTURE PRODUCER (not re-run here)"
+  },
+  "4854cf3a9c": {
+   "date": "2026-08-17",
+   "role": "three sealed drivers (wc-rctl, wc-sub2, wc-basev11b)"
+  },
+  "26d0a0e8ee": {
+   "date": "2026-08-20",
+   "role": "sealed driver wc-head, the producer tip"
+  }
+ },
+ "verdict_per_link": {
+  "link1_emitted_body_pinned_verbatim": {
+   "verdict": "HOLDS",
+   "how": "scripts/crystal_fixture_freshness.py against a dump this lane produced here (trustc 94147b34f) reads IDENTICAL with an EMPTY class list for float_add, float_sub and float_mul. Independently, the four sealed dumps at trust 4854cf3a9c and 26d0a0e8ee carry the same three bodies with opcode, operand ids, operand types and `ret` BYTE-IDENTICAL to the committed fixtures; the only differing tokens are `functy.N` (functy-index) and, on the three 4854cf3a9c drivers, the `#loc` FILE index (loc-file-index). Both are AMBER numbering classes read by no gate lane. ZERO structural drift on any of five producers.",
+   "strength_note": "This is STRONGER than the committed record, which compares the fixture to the same build it was cut from."
+  },
+  "link2a_proved_module_equals_emitted_module": {
+   "verdict": "HOLDS AS A GATE, BUT WEAKER IN KIND THAN THE MINTED CHAINS -- and the page should not blur them",
+   "minted": false,
+   "how": "These three chains do NOT go through `src/ir_mint/`. There is no `generated/ir_f{a,s2,m}.*` artifact; the only minted chains are ir_h2 (has_cubical_layer), ir_lz (level_is_zero) and ir_pv (simp_priority_value). `ir_fa_module` / `ir_fs2_module` / `ir_fm_module` are HAND-TRANSCRIBED `add_recursive_def` sources, gated by the A1 lane comparator plus a fail-closed mutation battery. So the 2026-08-20 mint closures -- param types, function name, callee name, globals, align, clause kinds -- do NOT apply to them. The chains' own module docs say `hand-transcribed`; docs/CRYSTAL_STATUS.md 3k did not.",
+   "measured_gate_state": "TWO independent readings on this host, both 93 passed / 0 failed / 0 ignored: (a) a sibling lane's suite sweep, `cargo test --locked -p clean-verify --test crystal_a1_lineage` (debug), recorded 2026-08-20T22:55:02Z at fa691b5a9 with input_digest unmoved during the run; (b) this lane's own `cargo test --locked --release -p clean-verify --test crystal_a1_lineage`, exit 0. The 93 include the three new float gates, the freshness lanes and their drift-catching perturbation tests.",
+   "param_types": "`parse_emitted` deliberately excludes the ENTRY block's parameter list, and `assert_entry_params` compares parameter IDS and the entry block id only -- not the TYPES. `bb0(%0: ptr, %1: f64, %2: f64)` is pinned only as a `text.contains` against the FIXTURE, never against the registered IRFunc. That is row `param-type` of data/crystal_mint_blind_slots.json, whose closure runs through the mint tag tables these chains do not have."
+  },
+  "link2b_flip_present_and_lineage_equal": {
+   "verdict": "HOLDS on every producer at or after the fixture's -- and DOES NOT HOLD on the one before it",
+   "holds_on": [
+    "4854cf3a9c (wc-rctl, wc-sub2, wc-basev11b)",
+    "26d0a0e8ee (wc-head)"
+   ],
+   "fails_on": [
+    "94147b34f (this machine's local stage1, 2026-08-11)"
+   ],
+   "how": "On all four sealed drivers each of the three bodies carries a `trust-ir-flip: compiled from trust-ir` event with asserts=0 and a lineage EQUAL to its coverage row's, on the full 64-hex compare. On the local 94147b34f build there is NO flip event for any reduce_float_* closure (154 codegen flips crate-wide, none of them a float reducer), because `derived_report.markers_exact` is FALSE there and the flip gate at rustc_mir_build/src/builder/mod.rs:386 requires it whenever the session emits lifetime markers. The failure text is `markers differ: line 0: built `mk b0.0:live s0:f64` vs derived `<end>`` -- the derived side emitted no storage marker at all.",
+   "the_disagreement": "The three fixtures record the flip and `markers_exact: true` with no statement of the MINIMUM PRODUCER those two facts need. They are properties of trustc >= 10130575c, and this lane measured them absent at 94147b34f, three days earlier. Nothing is wrong with the chains; what is missing is the producer floor.",
+   "crate_wide_mechanism_check": "On the local build the flip<->coverage join is exact crate-wide: flip_lineage_equal 186 of 186 events, flip_lineage_mismatch 0, flip_events_unjoinable 0, foreign_flip_events 0."
+  },
+  "link2c_negative_control": {
+   "verdict": "ABSENT FROM THE THREE FIXTURES; RUN AND PASSED HERE",
+   "how": "float_div.lineage.json carries a negative control; float_add/sub/mul.lineage.json carry none. This lane ran one: `scripts/trust_ir_build.sh --negative-control` at 94147b34f -> `NEGATIVE CONTROL OK: 0 flip events with -Ztrust-ir-flip=no`, crate-wide, against 186 in the positive arm. The sealed wc-basev11b and wc-head dumps carry their own O3_noflip logs with 0 `compiled from trust-ir` lines."
+  },
+  "link3_4_5_refinement": {
+   "A4_is": "a UNIVERSALLY QUANTIFIED DENOTATIONAL EQUALITY, not witnesses at literals",
+   "A4_statement": "ir_fa_correct / ir_fs2_correct / ir_fm_correct: for every pair of binary64 bit patterns a b, every pair of IRScalars representing them (EncodesF64Val ra a, EncodesF64Val rb b), every closure environment pointer p, every heap mem, every next-address counter na and every fuel with `Le 2 fuel`, `ir_eval fuel ir_f*_module ir_d0 (ir_vl3 p ra rb) mem na` is EXACTLY `ir_f*_res (env_reduce_float_* a b)`. Proof term is a double `EncodesF64Val.rec` induction bottoming out in `ir_f*_run_le` applied to `ir_f*_exact`. It is TOTAL: refusals are the tagged `IROutcome.unmodelled IRFault.float_domain`, not a side condition.",
+   "A5_is": "NOT universally quantified for these three -- and only ONE of the three has the split the summary claims",
+   "A5_measured": {
+    "float_sub": "ir_fs2_sound_at + ir_fs2_ret_at + ir_fs2_trap_at (abstract in the outcome x and the answer o), plus FIVE concrete instantiations at an answering pair (1.0-2.0) and a refusing pair (inf-inf): machine_sound_at_one_minus_two, returns_at_one_minus_two, returns_at_inf_minus_inf, never_traps_at_one_minus_two, never_traps_at_inf_minus_inf.",
+    "float_add": "ir_fa_sound_gen ONLY, and in the WEAKER image-only form (no `x`, no `hx`). NO ret_at, NO trap_at, and NO concrete instantiation of any of them.",
+    "float_mul": "ir_fm_sound_gen ONLY (this one IS in the x/hx form, i.e. sub's `sound_at` under another name). NO ret_at, NO trap_at, NO concrete instantiation."
+   },
+   "denotational_or_inversion": "A4 is the DENOTATIONAL step (machine outcome = a function of the operands). A5 is the inversion (machine answer -> reflected predicate) and is present only abstractly, plus at literals for float_sub. So these three do NOT stop at the inversion -- they stop SHORT of a universally quantified inversion, which is the opposite failure and is stated as such in each module's own doc and in the commit.",
+   "float_semantics": {
+    "modelled_not_assumed": true,
+    "what": "`env_reduce_float_add a b := ir_f64_add a b`, and ir_f64_add = ir_f64_add_at a b (ir_f64_class a) (ir_f64_class b), whose fin/fin cell is `ir_f64_add_fin` -- the correctly-rounded binary64 pipeline built in spec/core_spec/eval_ir_float_fin{,_ops}.rs. Nothing is axiomatized: the closure bottoms out in inductive constructors and recursors.",
+    "what_is_NOT_proved": "`ir_f64_add` is NOT proved equal to Rust's `f64::add` / the hardware adder. That gap is stated in the module docs and closed nowhere; it is checked only by witnesses. It is LARGER than float_div's, because more of this operator computes."
+   },
+   "witnesses_independently_recomputed": {
+    "count": 38,
+    "result": "ALL AGREE with real IEEE-754 binary64, recomputed here from the raw numerals by struct.unpack. 1.0+2.0=3.0 (0x4008000000000000); max+max=+inf; inf+inf=+inf; inf+(-inf) refused; (-0)+(-0)=-0; (-0)+(+0)=+0; 1.0+(-1.0)=+0; 1-2=-1; 2-1=1; 1-1=+0; (+0)-1=-1; (-0)-(+0)=-0; inf-inf refused; inf-(-inf)=inf; 1*2=2; 2*3=6; max*2=+inf; (-2)*(+0)=-0; (-0)*(-0)=+0; 0*inf and inf*0 refused; NaN operand refused. Zero discrepancies."
+   }
+  },
+  "markers_exact_non_vacuity": {
+   "verdict": "NON-VACUOUS, and confirmed on four producers",
+   "per_chain_line_count": 4,
+   "how": "All four sealed drivers report `4 marker line(s) identical` for each of float_add, float_sub, float_mul (and float_div). The vacuity PREMISE is confirmed independently: on this lane's own dump 1053 of 1059 `markers_exact: true` rows (99.4 %) compare ZERO marker lines and only 6 compare any; the sibling lane's HEAD-producer ledger (data/crystal_marker_ceiling_2026-08-20.json) reads 1058 vacuous of 1098, 96.4 %. These three chains are in the non-vacuous minority."
+  },
+  "fail_closed_perturbations_reach_the_body": {
+   "verdict": "REACH IT, but they are SOURCE-LEVEL, not the compiler-side control",
+   "how": "The three a1 files mutate the emitted text and the registered spec source and assert the lanes DISAGREE (assert_ne on binops / binop_tys / rets). A `str::replace` that matched nothing leaves the mutant equal to the original and the assert_ne FAILS, so the batteries are fail-closed on non-application. What these chains do NOT have is the compiler-side `-Ztrust-sat-perturb` control with a printed `applications` count; that exists only for the eleventh chain (simp_priority_value, applications=1). No float fixture carries a perturbation block."
+  },
+  "census_and_axiom_closure": {
+   "census": 11,
+   "census_composition": "3 foundational (Classical.choice, propext, Quot.sound) + 4 quotient primitives (Quot, Quot.ind, Quot.lift, Quot.mk) + 4 anti-trust markers (sorry, sorryAx, trustedArith, trustedAy). data/clean_verify_axiom_ratchet.json.",
+   "transitive_closure_checked": "Static transitive closure over the registered spec SOURCES: from the 113 `def ir_f{a,s2,m}_*` roots the closure reaches 196 registered defs and bottoms out ONLY in inductive constructors and recursors (Bool.*, Eq.refl/symm/trans/cong/subst, Nat.*, Le.*, EncodesF64Val.*, IR*.*). It reaches NO census axiom and NO forbidden trust marker.",
+   "limitation_stated": "That is a TEXTUAL closure over the source strings, not `Environment::axiom_deps` kernel ground truth. The authoritative gates are clean-verify::test::spec_axiom_closure_honesty (no closure reaches sorry/sorryAx/trustedArith/trustedAy; DerivedProved debt subset of the golden, which is count 0 / entries {}) and ::axiom_ratchet. Both read UNKNOWN at this HEAD: their newest COMMITTED measurement is at beb513c37, which git reports is an ANCESTOR of 123c341c0 and therefore never saw these 118 constants. A sibling lane's sweep had axiom_ratchet RUNNING at fa691b5a9 when this record was written. This row is NOT a claim that they pass."
+  }
+ },
+ "disagreements_printed": [
+  {
+   "id": "D1",
+   "severity": "doc names a gate that does not exist",
+   "where": "docs/CRYSTAL_STATUS.md 3k",
+   "claim": "\"They are post-record pins ... freshness.rs exempts them from the record-consuming tests and `post_record_pins_owe_the_next_revalidation` expires that exemption the moment a third record lands.\"",
+   "measured": "Neither `POST_RECORD_PINS` nor `post_record_pins_owe_the_next_revalidation` occurs anywhere in the tree. The implemented protocol is `HEAD_MEASURED` (tests/crystal_a1_lineage/freshness.rs:135) gated by `freshness_head::every_head_measured_chain_names_its_own_live_dump_record`, which is an ADDITIONAL requirement, not an exemption: the named record must cover every fixture of its cohort, the row must read IDENTICAL with an empty class list, the at-head lineage must equal the fixture's, and the build must be reproduced three times byte-identically. The commit message itself says the post-record design was superseded IN-FLIGHT; 3k was not updated.",
+   "fixed_by_this_record": true
+  },
+  {
+   "id": "D2",
+   "severity": "summary overclaims 3 modules on the evidence of 1",
+   "where": "docs/CRYSTAL_STATUS.md 3k and the 123c341c0 commit message",
+   "claim": "\"Each module ships the honest split -- abstract-o lemmas (ir_*_sound_at/ret_at/trap_at, proved) plus concrete instantiations at an answering AND a refusing pair\"",
+   "measured": "float_sub has all three lemmas and five instantiations. float_add has `ir_fa_sound_gen` only, in the weaker image-only form, with no ret_at, no trap_at and no instantiation. float_mul has `ir_fm_sound_gen` only, with no ret_at, no trap_at and no instantiation. float_add's own module doc contradicts the summary in as many words: \"the two machine-level corollaries the eighth chain carries (ir_fd_returns_iff_modelled, ir_fd_never_traps) are NOT registered here at all\".",
+   "fixed_by_this_record": true
+  },
+  {
+   "id": "D3",
+   "severity": "the suite row's freshness digest does not cover the record the chains rest on",
+   "where": "scripts/verify_runner.py TARGET_EXTRA_PATHS[\"clean-verify::test::crystal_a1_lineage\"]",
+   "claim": "the crystal_a1_lineage GREEN tracks its inputs",
+   "measured": "The extra-path list names the three 2026-08-19 revalidation records and scripts/crystal_fixture_freshness.py. It does NOT name data/crystal_fixture_freshness_2026-08-20_lane13.json -- the ONLY live-dump record backing chains 11-14 and the file `freshness_head.rs` reads at runtime -- nor data/crystal_freshness_scope.json (read by freshness_scope.rs) nor scripts/crystal_freshness_scope.py. Verified by enumerating the entry's digest pathspecs: the three are NOT COVERED. So the row's GREEN survives an edit to the record it reads. Same class as the hole crystal_fixture_freshness.py was written to close, one level up.",
+   "fixed_by_this_record": true,
+   "consequence": "widening the scope MOVES the digest, so the crystal_a1_lineage row correctly demotes to UNKNOWN and must be re-measured. That is the honest outcome, not a regression."
+  },
+  {
+   "id": "D4",
+   "severity": "registered doc strings contradict their own gate (under-claim)",
+   "where": "eval_ir_float_{add,sub,mul}.rs registered docs and tests/crystal_a1_lineage/float_{add,sub}.rs module docs",
+   "claim": "the fixture \"carries no negative control and no reproduction stanza\"",
+   "measured": "All three fixtures DO carry a `reproduction` stanza -- three clean non-incremental builds with byte-identical coverage.json bb80e265... -- and `freshness_head::every_head_measured_chain_names_its_own_live_dump_record` REQUIRES it (`coverage_json_byte_identical_across_all_three` must be true). `float_add_a0_evidence_is_recorded_at_the_strength_it_was_measured` asserts provenance_strength contains \"THREE clean non-incremental builds\" twenty-five lines below the doc comment that denies it. The `no negative control` half is TRUE.",
+   "fixed_by_this_record": false,
+   "why_not_fixed_here": "the correction lands in crates/clean-verify/src and would move the input digest of every clean-verify target while a sibling lane's suite sweep is in flight. Left as a build item."
+  },
+  {
+   "id": "D5",
+   "severity": "latent, diagnosed but only one third acted on",
+   "where": "tests/crystal_a1_lineage/float_add.rs:66,299 and float_sub.rs:64",
+   "claim": "the commit says \"The sibling chains were immune only by accident; the gate filters on SRC_IR_FM_B0\"",
+   "measured": "Only float_mul was changed to the exact prefix. float_add still filters on `const SRC_IR_FA_B` and float_sub on `const SRC_IR_FS2_B`; both remain PREFIX filters that today match exactly one constant and would silently absorb any future `SRC_IR_FA_B*` / `SRC_IR_FS2_B*` sibling. Immune by accident, still.",
+   "fixed_by_this_record": false,
+   "why_not_fixed_here": "same reason as D4."
+  }
+ ],
+ "also_observed": {
+  "local_producer_derived_mir_mismatches": "The 94147b34f build reports 5 derived-MIR mismatches crate-wide (cert::def_eq::...try_type_directed_eq, env::origin::OriginTrust::is_unpinned, env::sorry_summary::DeclarationTrustSummary::is_fully_verified, expr::types::Multiplicity::allows_zero, tc::reduction::cofib::CofibAtom::value), all switch-arm shape differences. NONE is a chained body. Recorded because the fixture producer reports 0.",
+  "def_index_stability": "def_index 15296 / 15298 / 15300 / 15302 for add / sub / mul / div is identical on this lane's 94147b34f build AND on all four sealed drivers AND in the committed fixtures -- across three clean revs and five producers."
+ },
+ "commands_run_here": [
+  "scripts/crystal_freshness_scope.py                       -> FRESH",
+  "TRUST_IR_BUILD_DUMP=<scratch> scripts/trust_ir_build.sh --print-only   (trustc 94147b34f, release, -Cdebug-assertions=off; profile assertion 6/6)",
+  "scripts/crystal_fixture_freshness.py <that dump>          -> float_add/sub/mul IDENTICAL, classes []",
+  "scripts/trust_ir_build.sh --negative-control              -> NEGATIVE CONTROL OK: 0 flip events",
+  "python3 (this lane) over the four sealed dump_O3 coverage/flip/trust-ir.txt at $HOME/trust/scratchpad/lane{R,MV}/wc-*",
+  "cargo test --locked --release -p clean-verify --test crystal_a1_lineage  -> ok. 93 passed; 0 failed"
+ ],
+ "measured_payload": {
+  "_sealed": {
+   "wc-rctl": {
+    "dump_dir": "$HOME/trust/scratchpad/laneR/wc-rctl",
+    "trust_rev": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+    "dylib_sha256": "d3a0d01bd20de55773193a4c54960352c6a0f5bc91fb76d070c5ba349940ed9f",
+    "note": "laneR CONTROL: pre wave-DR, pre wave-W3/W3b",
+    "coverage_sha256": "7be1ece790151a484ddb9da7bad03b87f7462838e371ab396843fd294ef66a10",
+    "negative_control_flip_events": null,
+    "bodies": {
+     "float_add": {
+      "def_index": 15296,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_sub": {
+      "def_index": 15298,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_mul": {
+      "def_index": 15300,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_div": {
+      "def_index": 15302,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     }
+    }
+   },
+   "wc-sub2": {
+    "dump_dir": "$HOME/trust/scratchpad/laneR/wc-sub2",
+    "trust_rev": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+    "dylib_sha256": "906c0ed378f7785c552fbd06798300da7872e9885d48e1ec00401d9f3a1a583d",
+    "note": "laneR SUBJECT: wave-DR in, wave-W3/W3b OUT",
+    "coverage_sha256": "f0be4e7267270bd81d4bb27e50f02278479b7466faddc91750e478c0a021573f",
+    "negative_control_flip_events": null,
+    "bodies": {
+     "float_add": {
+      "def_index": 15296,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_sub": {
+      "def_index": 15298,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_mul": {
+      "def_index": 15300,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_div": {
+      "def_index": 15302,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     }
+    }
+   },
+   "wc-basev11b": {
+    "dump_dir": "$HOME/trust/scratchpad/laneMV/wc-basev11b",
+    "trust_rev": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+    "dylib_sha256": "58b5fc15b9d20badae53974c6822f4e16595835478f58ba7185e5b227382b228",
+    "note": "laneMV control, sysroot v11b: wave-DR + the W3b unwind fix",
+    "coverage_sha256": "af60952dd4f4fbaeb2f7eecfb7ba3ae9a0b21e1aeb25056eef8e8e1484afb441",
+    "negative_control_flip_events": 0,
+    "bodies": {
+     "float_add": {
+      "def_index": 15296,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_sub": {
+      "def_index": 15298,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_mul": {
+      "def_index": 15300,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     },
+     "float_div": {
+      "def_index": 15302,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index",
+       "loc-file-index"
+      ]
+     }
+    }
+   },
+   "wc-head": {
+    "dump_dir": "$HOME/trust/scratchpad/laneMV/wc-head",
+    "trust_rev": "26d0a0e8eefd88505463c63ccaf8db6ba6c7fe02",
+    "dylib_sha256": "50879dc8cf7f0e528eb907dd1882e46e7260fd68ec62dc90120a69903832ba98",
+    "note": "PRODUCER TIP, sysroot v12: wave-DR + wave-W3 + wave-W3b",
+    "coverage_sha256": "2f440406c6bcd688500ee4d619d04ac50667c97b885c10f9a090ceab532b805a",
+    "negative_control_flip_events": 0,
+    "bodies": {
+     "float_add": {
+      "def_index": 15296,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:e7ba686d8c5b94c73e89a9b236ac578affe9ce98e95f3adb4ca6a08a56af6fe2",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index"
+      ]
+     },
+     "float_sub": {
+      "def_index": 15298,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:5c2a7f7cc53888e820a30526208af2d7a24d69e246206eb09d25cd7bc91bf2f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index"
+      ]
+     },
+     "float_mul": {
+      "def_index": 15300,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:458b25bb83884288c716571e96c4b7aac28252395452b36d85f6a5b0dd92b7f8",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index"
+      ]
+     },
+     "float_div": {
+      "def_index": 15302,
+      "instr_count": 2,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir_verdict": "agreed",
+      "markers_exact": true,
+      "markers_detail": "4 marker line(s) identical",
+      "interpreter": "agreed",
+      "interpreter_samples": 64,
+      "coverage_row_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_event_present": true,
+      "flip_event_asserts": 0,
+      "flip_event_lineage": "sha256:3625179ca9b42bd3f80535c885b0f81486eff80802c20b056a9e69f0aa2a136e",
+      "flip_lineage_equals_coverage": true,
+      "ir_text_vs_committed_fixture": "DIFFERS",
+      "ir_text_drift_classes": [
+       "functy-index"
+      ]
+     }
+    }
+   }
+  },
+  "_local": {
+   "float_add": {
+    "freshness_verdict": "IDENTICAL",
+    "freshness_classes": [],
+    "def_index": 15296,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:f64` vs derived `<end>`",
+    "interpreter": "agreed",
+    "interpreter_samples": 64,
+    "coverage_row_lineage": "sha256:bec53df6f9c1934c7f1ac72d4913e04e44e3f34dcb22dd4ae6e8e4d3a91df11e",
+    "flip_event_present": false
+   },
+   "float_sub": {
+    "freshness_verdict": "IDENTICAL",
+    "freshness_classes": [],
+    "def_index": 15298,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:f64` vs derived `<end>`",
+    "interpreter": "agreed",
+    "interpreter_samples": 64,
+    "coverage_row_lineage": "sha256:caf200ca563216c28a80326b817fe0e1f891a6113f68a8cd377e4c35bfd2bc69",
+    "flip_event_present": false
+   },
+   "float_mul": {
+    "freshness_verdict": "IDENTICAL",
+    "freshness_classes": [],
+    "def_index": 15300,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:f64` vs derived `<end>`",
+    "interpreter": "agreed",
+    "interpreter_samples": 64,
+    "coverage_row_lineage": "sha256:244ec166aa0beaaf9a3ea52358927d7ed6ca8be3c2f0c39f576bccf4de4a3150",
+    "flip_event_present": false
+   },
+   "float_div": {
+    "freshness_verdict": "IDENTICAL",
+    "freshness_classes": [],
+    "def_index": 15302,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:f64` vs derived `<end>`",
+    "interpreter": "agreed",
+    "interpreter_samples": 64,
+    "coverage_row_lineage": "sha256:f1dadf643f3a014328b179794f512e10a97ecf3a840e4b1e167907e33b095da5",
+    "flip_event_present": false
+   }
+  },
+  "_axes": {
+   "bodies": 13778,
+   "lowered": 9073,
+   "spliced": 7577,
+   "derived_mir_agreed": 1174,
+   "mismatch": 5,
+   "flip_events_total": 186,
+   "flip_events_codegen": 154,
+   "flip_events_ctfe": 32,
+   "flip_lineage_equal": 186,
+   "markers_exact": 1059,
+   "markers_exact_vacuous": 1053,
+   "markers_exact_nonvacuous": 6,
+   "interpreter_mismatch": 0
+  },
+  "_invariants": {
+   "foreign_flip_events": 0,
+   "flip_events_unparsed": 0,
+   "flip_events_unjoinable": 0,
+   "flip_lineage_mismatch": 0,
+   "flip_lineage_row_absent": 0,
+   "flip_lineage_digest_unknown": 0,
+   "flip_events_unspliced": 0,
+   "lineage_digest_collisions": 0,
+   "lineage_rows_malformed": 0
+  },
+  "_local_dump_sha": {
+   "coverage_json": "sha256:ab3d99bf9115c75e19c5c317e61995933f1da29a07e58d4ab6dda986535d3be7",
+   "trust_ir_txt": "sha256:d2f75fba3afb1e49c3edfd7a02204f68d1b29b2aced79f31905b0fc06ca66d82"
+  }
+ }
+}

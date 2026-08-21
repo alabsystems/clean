@@ -1,0 +1,77 @@
+{
+  "schema": "clean.crystal.never_flip_partition/1",
+  "date": "2026-08-20",
+  "lane": "LANE N13 — the 13 bodies that never flip, partitioned to zero remainder",
+  "question": "Of the 332 distinct bodies the marker gate refuses at the tip (agreed & !markers_exact), 319 flip when the gate is bypassed at -O0 and 13 never flip. What refuses the 13?",
+  "method": "No compile. The ceiling lane's own committed dumps (laneMV/wc-head, clean rev 7558a86c8b, trust tip driver 26d0a0e8ee, dylib 50879dc8…) re-read: the never-flip set re-derived independently from dump_O3/clean_kernel.coverage.json plus both flip logs (RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info was live on every recorded run), then every never-flip body joined BY def_index to its -O0 FALLBACK line. Reproduces the ceiling record exactly: 461 refused rows, 332 distinct bodies, 319 flip at -O0, 13 never flip, 0 already flip at -O3.",
+  "headline": "ALL 13 REFUSE LOUDLY AT -O0 AND SILENTLY AT -O3, AND THE PARTITION IS TWO WALLS, NO REMAINDER: 5 bodies (28 rows) refused by the generic-ABI wall in rederive_abi_sig, 8 bodies (8 rows) refused by the local-type fragment wall in gate_derived_body. Every cause is fail-closed-and-CORRECT; zero stale guards, zero defects, zero producer changes made by this lane.",
+  "silence_mechanism": "At -O3 the marker gate refuses these rows first and logs nothing — none of the 13 appears in O3.flip.txt. At -O0 the marker verdict is not consulted, the bodies reach the flip gate, and the NEXT wall refuses each one with a WARN FALLBACK line carrying stage and reason. The loud channel existed in the recorded dumps all along; it had not been joined to the never-flip set.",
+  "walls": {
+    "A_generic_abi": {
+      "site": "rederive_abi_sig, crates/trust-thir-lower/src/to_mir.rs:7782 at trust 26d0a0e8ee (same line at working a0447fa6b2)",
+      "reason_verbatim": "shim: abi rederive: generic fn signature",
+      "stage": "gate",
+      "mechanism": "The flip's compile path re-derives ABI types from tcx alone (SigSource::Rederive) so it never reads built MIR; a signature with has_non_region_param() has no single concrete ABI at the LocalDefId level, because the flip compiles one machine body per DefId at the MIR-transform seam, pre-monomorphization. The DIFFERENTIAL compares generic bodies fine (SigSource::Provided, both sides polymorphic), which is exactly why these rows can be `agreed` yet can never flip.",
+      "bodies": [
+        {"def_path": "<cert::types::_::<impl Deserialize for ProofCertWire<C,E,L,LS,N,Li,M,D,Z>>::deserialize::__Visitor as Visitor>::expecting", "def_index_wc_head": 22025, "rows": 1},
+        {"def_path": "<…ProofCertWire…::deserialize::…visit_enum::__Visitor as Visitor>::expecting", "def_index_wc_head": "22074..23318", "rows": 23, "note": "23 per-variant serde __Visitor DefIds collapse to one pretty def_path; the ceiling's distinct-body count deduplicates by pretty name"},
+        {"def_path": "<cert::types::_::<impl Deserialize for DefEqStepWire<D,N,S,V>>::deserialize::__Visitor as Visitor>::expecting", "def_index_wc_head": 23675, "rows": 1},
+        {"def_path": "<…DefEqStepWire…::deserialize::…visit_enum::__Visitor as Visitor>::expecting", "def_index_wc_head": "23693,23711", "rows": 2},
+        {"def_path": "cert::expr_eq::CertExprEqContext::level_eq", "def_index_wc_head": 908, "rows": 1, "note": "a DEFAULT METHOD on the pub(super) trait CertExprEqContext — polymorphic over Self (crates/clean-kernel/src/cert/expr_eq.rs:34)"}
+      ],
+      "rows_total": 28,
+      "classification": "fail-closed-and-CORRECT",
+      "honest_work": "An Instance-level flip seam: flip per monomorphized instance at codegen, re-deriving the ABI under the instance's substitutions — the machinery direction trust #197 item 3c (instantiation-invariant callee signatures, commit 299fcac9f8) already points at. A LocalDefId-level admission cannot be honest here; the guard names a live property of the body."
+    },
+    "B_local_type_fragment": {
+      "site": "gate_derived_body local-decl wall, crates/trust-thir-lower/src/flip.rs:2005 at trust 26d0a0e8ee (2040 at working a0447fa6b2)",
+      "reason_verbatim": "local type outside fragment: <T>",
+      "stage": "gate",
+      "mechanism": "Every non-arg local of the DERIVED body must be fragment-scalar or covered by a measured admission (waves 15/29b/30/AF/W3/D/F/V/GH2/EP). All 8 bodies share ONE unadmitted shape: a CALL-RESULT temp of non-fragment type forwarded directly into the next consumer, with no reborrow pair.",
+      "bodies": [
+        {"def_path": "<level::LevelArc as std::cmp::PartialEq>::eq", "def_index_wc_head": 17051, "offending_local_ty": "&'{erased} level::Level", "shape": "%2=deref(self); %3=deref(other); %4=Level::eq(%2,%3) — two lone call-dest &Level temps, each mentions==2 with the single use a bare call arg; relay_pair_admits requires a forward+source reborrow PAIR with source_callarg_uses==0, so a lone source is refused"},
+        {"def_path": "<level::LevelArc as std::fmt::Debug>::fmt", "def_index_wc_head": 17057, "offending_local_ty": "&'{erased} level::Level", "shape": "%2=deref(self); Debug::fmt(%2,f) — same lone call-dest ref shape"},
+        {"def_path": "expr::kind::arc_eq", "def_index_wc_head": 16141, "offending_local_ty": "&'{erased} expr::Expr", "shape": "Arc::ptr_eq(a,b) || **a == **b — the deref results are lone call-dest &Expr temps fed straight to eq"},
+        {"def_path": "<mode::AxiomId as std::fmt::Display>::fmt", "def_index_wc_head": 17992, "offending_local_ty": "&'{erased} str", "shape": "f.write_str(self.name()) — call-dest &str temp; refused twice over: lone call-dest shape AND str is unsized, so thin_shared_pointee_ok refuses the fat pointer"},
+        {"def_path": "<mode::CleanMode as std::fmt::Display>::fmt", "def_index_wc_head": 17994, "offending_local_ty": "&'{erased} str", "shape": "same as AxiomId::fmt"},
+        {"def_path": "env::origin::ConstantOrigin::needs_recheck", "def_index_wc_head": 3061, "offending_local_ty": "env::origin::OriginTrust", "shape": "self.trust().needs_recheck() — call-dest BY-VALUE fieldless Copy enum temp forwarded whole into a call; wave-V admits enum ARGS only, wave-GH2 admits STRUCT call-result temps only"},
+        {"def_path": "env::origin::ConstantOrigin::is_unpinned_olean_import", "def_index_wc_head": 3060, "offending_local_ty": "env::origin::OriginTrust", "shape": "matches!(self, Olean{..}) && self.trust().is_unpinned() — same enum-temp shape"},
+        {"def_path": "<expr::types::BinderData as std::default::Default>::default", "def_index_wc_head": 33223, "offending_local_ty": "expr::types::BinderInfo", "shape": "derived Default: %0=call default() -> BinderInfo enum temp consumed by insertfield into the aggregate return — enum call-result temp, no admission arm"}
+      ],
+      "rows_total": 8,
+      "classification": "fail-closed-and-CORRECT",
+      "honest_work": {
+        "thin_refs_3_bodies": "a lone-source relay extension (W-wave discipline: review corpus + mutation tests): admit a non-arg &P thin SHARED call-dest local with total mentions==2 whose single use is a bare call argument — the existing relay's source conditions minus the forward pair",
+        "fat_str_2_bodies": "fat-pointer (ptr+len) locals in the fragment — a slice/str ABI step in trust-ir, strictly larger than any admission to date",
+        "enum_temps_3_bodies": "extend wave-GH2's call-result-temp discipline from Copy Drop-free structs to Copy Drop-free fieldless-or-payload-free enums (temp_struct_ty_ok -> temp_enum_ty_ok), or wave-V from args to temps"
+      }
+    }
+  },
+  "corollary": "never-flip ⊆ call-carrying is not a coincidence: in all 8 wall-B bodies the CALL is what mints the non-fragment temp, and all 5 wall-A bodies are generic precisely because they are trait/impl machinery. The zero-call residual (set R below) is disjoint by construction.",
+  "residual_reconciliation": {
+    "rule": "Three quantities equaled 13 and they are pairwise different sets. They now have names; say the name, not the number.",
+    "set_G_4c_refused_subcount": {
+      "definition": "§4c (2026-08-13): of the 14 extra codegen bodies at -O0, those whose marker class was `refused` (differ-derived-empty). Was 13; measures 11.",
+      "the_two_that_left": ["env::types::Reducibility::height", "env::types::SimpPriority::value"],
+      "mechanism": "GRADUATION, not loss. Both are textbook enum-payload reads (match self { Regular(h) => *h, _ => 0 }). wave-EP — the enum-payload-read marker plan, trust e7171a5daf, in 352aa0306d..4854cf3a9c, i.e. landed between the §4c driver and every later driver — made the derived side emit the payload-borrow temp's markers. Marker class moved differ-derived-empty -> exact-nonvacuous (2 marker lines each, measured in both dumps), and both bodies now flip at -O3 on every wave-EP driver (rctl, head: flip lines present, identical lineage digests).",
+      "row_exact_flip_diff_4c_driver_to_rctl": {
+        "codegen_O3_177_to_180": {"gained": ["env::types::Reducibility::height", "env::types::SimpPriority::value", "env::types::collect_fvar_ids_for_diagnostics::{impl#0}::combine"], "lost": []},
+        "codegen_O0_191_to_192": {"gained": ["env::types::collect_fvar_ids_for_diagnostics::{impl#0}::combine"], "lost": []},
+        "ctfe_O3_32_to_41": {"gained": ["cert::bundle::MAX_BUNDLE_ENV_BYTES", "cert::compression::limits::MAX_COMPRESSED_ARCHIVE_BYTES", "cert::compression::limits::MAX_DECOMPRESSED_CERT_BYTES", "cert::compression::limits::MAX_DICTIONARY_BYTES", "cert::compression::limits::MAX_STREAM_CERT_BYTES", "cert::compression::limits::MAX_STREAM_UNCOMPRESSED_BYTES", "cert::compression::limits::MAX_UNCOMPRESSED_ARCHIVE_BYTES", "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#3}", "cert::compression::limits::decode_bincode_with_limits::{closure#0}::{constant#4}"], "lost": []},
+        "ctfe_O0_42_to_42": {"gained": [], "lost": []}
+      },
+      "source_of_4c_names": "laneP/wc-subject flip logs re-parsed this lane; the 14-body residual reproduces §4c's 177->191 exactly, and 14 = today's 11 + nat_gcd (channel-skip) + the two graduates"
+    },
+    "set_R_zero_call_residual": {
+      "definition": "§4c-ii/§4c-iii: the zero-call subset of the -O0 minus -O3 flip residual. 13 bodies, SAME names on all four drivers (wall-invariant). These DO flip the moment the marker gate is bypassed — they are marker-gate-only refusals and part of the 319/425 headroom, NOT never-flip bodies.",
+      "count": 13
+    },
+    "set_N_never_flip": {
+      "definition": "§4c-iii tip: marker-refused distinct bodies that do not flip even at -O0. 13 bodies, partitioned above: 5 generic-ABI + 8 local-type-fragment.",
+      "count": 13,
+      "intersection_with_R": 0,
+      "intersection_with_G": 0
+    }
+  },
+  "what_this_lane_did_not_do": "No producer change, no driver build, no compile. All causes measured fail-closed-and-CORRECT, so no mutation proof is owed — a mutation proof is the burden of removing or weakening a guard, and this lane removes none. The honest-work items above are build items in the standing sense of §0.7 rule 3."
+}

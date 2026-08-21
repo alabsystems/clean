@@ -528,17 +528,32 @@ WORKSPACE_GATES = [
         "kind": "gate",
         "argv": ["cargo", "check", "--locked", "--workspace", "--all-targets"],
     },
+    # `scripts/rust_frontend.sh` rather than a bare `cargo`, and ONLY for these
+    # two: `rust-toolchain.toml` pins `channel = "trust"`, whose stage2 ships
+    # the lint and format frontends as `targo-tippy` / `targo-fmt`. Cargo
+    # resolves `cargo <sub>` by looking for a `cargo-<sub>` sibling, so on this
+    # toolchain BOTH gates died before running a single unit -- measured at
+    # fa691b5a9, 2026-08-20: `error: 'cargo-clippy' is not installed for the
+    # custom toolchain 'trust'`. `cargo check` needs no such help; it is a
+    # built-in subcommand, which is why gate::check is spelled plainly.
+    #
+    # The resolver changes the DRIVER, never the check: the flags below are the
+    # same `--workspace --all-targets ... -D warnings` the pre-push gate has
+    # always run, and on an upstream toolchain the resolver execs `cargo <sub>`
+    # unchanged.
     {
         "id": "gate::clippy",
         "package": "__workspace__",
         "kind": "gate",
-        "argv": ["cargo", "clippy", "--locked", "--workspace", "--all-targets", "--", "-D", "warnings"],
+        "argv": ["scripts/rust_frontend.sh", "clippy", "--locked", "--workspace", "--all-targets", "--", "-D", "warnings"],
+        "_extra_paths": ["scripts/rust_frontend.sh"],
     },
     {
         "id": "gate::fmt",
         "package": "__workspace__",
         "kind": "gate",
-        "argv": ["cargo", "fmt", "--all", "--check"],
+        "argv": ["scripts/rust_frontend.sh", "fmt", "--all", "--check"],
+        "_extra_paths": ["scripts/rust_frontend.sh"],
     },
     # The paragon quality ratchet, added 2026-08-17 because NOTHING ROUTINE RAN
     # IT. It is a leg of `scripts/local_gate.sh` (both modes -- it sits above
@@ -589,11 +604,33 @@ WORKSPACE_GATES = [
 # It does not schedule the trustc run itself -- nothing in this suite can, the
 # comparison needs the Trust compiler -- and that remains a manual duty.
 TARGET_EXTRA_PATHS: dict[str, list[str]] = {
+    # `crystal_a1_lineage` reaches OUTSIDE every crate directory at run time: its
+    # freshness lanes read committed revalidation records, the head-measurement
+    # record a head-measured chain names, and the freshness-scope pin. Every one of
+    # those is an INPUT to the verdict, so every one has to be in the digest or
+    # the row's GREEN survives an edit to the evidence it read.
+    #
+    # The three 2026-08-19 records were added on discovery (141f2662b, "the record
+    # inside the input digest"). The 2026-08-20 lane-13 record and the scope files
+    # landed afterwards and were NOT added -- measured 2026-08-20 by lane V, by
+    # enumerating this entry's digest pathspecs: all three read NOT COVERED, so a
+    # green `crystal_a1_lineage` stood while
+    # `data/crystal_fixture_freshness_2026-08-20_lane13.json` -- the ONLY live-dump
+    # record backing chains 11-14, and the file `freshness_head.rs` reads -- could
+    # be edited underneath it. Same class as the hole
+    # `crystal_fixture_freshness.py` exists to close, one level up in the
+    # bookkeeping. `data/crystal_chain_verification_2026-08-20_laneV.json`, D3.
+    #
+    # Adding a path MOVES the digest, so the row correctly demotes to UNKNOWN once
+    # and is re-measured. That is the intended cost.
     "clean-verify::test::crystal_a1_lineage": [
         "data/crystal_chain_revalidation_2026-08-19.json",
         "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json",
         "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json",
+        "data/crystal_fixture_freshness_2026-08-20_lane13.json",
+        "data/crystal_freshness_scope.json",
         "scripts/crystal_fixture_freshness.py",
+        "scripts/crystal_freshness_scope.py",
     ],
 }
 
@@ -1257,16 +1294,50 @@ def _gate_weight_gb(target_id: str) -> int:
     return DEFAULT_TARGET_GB
 
 
-def _gate_acquire(weight_gb: int, label: str) -> str | None:
+# A FAILED ACQUIRE IS NOT A FREE PASS, AND IT MUST NOT BE SILENT.
+#
+# `heavy_gate.sh acquire` blocks until it fits, so the only way it returns
+# without a token is an ERROR -- in practice `_lock` starving out (its mkdir
+# mutex is unfair and gives up after 180 s) when a dozen threads and half a
+# dozen other lanes storm it at once. The runner then proceeds anyway, on the
+# deliberate principle that the gate must never stop the suite from running.
+#
+# That principle stands. What was wrong is that it happened INVISIBLY: measured
+# 2026-08-20 at fa691b5a9, a `--jobs 8` sweep had EIGHT `cargo test` children
+# alive under the worker and TWO gate tokens to its name -- six targets running
+# with no reservation at all, on a machine whose kernel panicked on 2026-08-19
+# from exactly that kind of unaccounted concurrency. Nothing in the artifact
+# said so.
+#
+# So: retry a failed acquire a few times before giving up, and RECORD which way
+# it went. `gate_admitted: false` in a record means "this row's memory was never
+# reserved" -- the number a reader needs to judge whether a pass was gated.
+GATE_ACQUIRE_ATTEMPTS = 3
+GATE_ACQUIRE_BACKOFF_S = 5.0
+
+
+def _gate_acquire(weight_gb: int, label: str) -> tuple[str | None, bool]:
+    """Reserve `weight_gb` from the machine-wide gate.
+
+    Returns `(token, admitted)`. `admitted` is False when the gate could not
+    admit us and the caller is proceeding UNGATED -- never a reason to skip the
+    target, always a reason to say so in the record.
+    """
     if not HEAVY_GATE.exists():
-        return None
-    try:
-        env = dict(os.environ, HEAVY_GATE_OWNER_PID=str(os.getpid()))
-        out = subprocess.run([str(HEAVY_GATE), "acquire", str(weight_gb), label],
-                             capture_output=True, text=True, env=env).stdout.strip()
-        return out or None
-    except Exception:
-        return None      # never let the gate stop the suite from running
+        return None, False
+    for attempt in range(GATE_ACQUIRE_ATTEMPTS):
+        try:
+            env = dict(os.environ, HEAVY_GATE_OWNER_PID=str(os.getpid()))
+            proc = subprocess.run([str(HEAVY_GATE), "acquire", str(weight_gb), label],
+                                  capture_output=True, text=True, env=env)
+            token = proc.stdout.strip()
+            if proc.returncode == 0 and token:
+                return token, True
+        except Exception:
+            pass         # never let the gate stop the suite from running
+        if attempt + 1 < GATE_ACQUIRE_ATTEMPTS:
+            time.sleep(GATE_ACQUIRE_BACKOFF_S * (attempt + 1))
+    return None, False
 
 
 def _gate_release(token: str | None) -> None:
@@ -1616,11 +1687,21 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         # NEXT run's gate weight, so the runner learns each target's real cost.
         "peak_rss_gb": None,
         "gate_weight_gb": gate_weight,
+        # Whether the machine-wide gate actually reserved that weight. False
+        # means the row ran with NO reservation -- see _gate_acquire.
+        "gate_admitted": None,
         "notes": "",
     }
     write_record(record)
 
-    gate_token = _gate_acquire(gate_weight, entry["id"])
+    gate_token, gate_admitted = _gate_acquire(gate_weight, entry["id"])
+    record["gate_admitted"] = gate_admitted
+    if not gate_admitted:
+        record["notes"] = (
+            (record["notes"] + " | ") if record["notes"] else ""
+        ) + f"ran UNGATED: heavy_gate did not reserve {gate_weight} GB "\
+            f"(script absent, or acquire failed {GATE_ACQUIRE_ATTEMPTS} times)"
+        write_record(record)
     rss_stop = threading.Event()
     rss_future: list[float] = []
 

@@ -121,14 +121,26 @@ fn crystal_a3_mutation_cost_floor_is_real() {
 /// **The default edge is genuinely exercised, and stays that way.**
 ///
 /// `from_source_system`'s emitted switch lists cases 0..9 and 11. There is **no
-/// case 10**: `PVS` reaches the DEFAULT edge. That hole is what makes this chain
-/// the sharpest available test of the one thing GAP 2 names by name — whether
-/// Clean's `switch` encoding routes like trust-ir's — because a contiguous table
-/// can be got right by a mechanism that merely indexes, while a hole cannot.
+/// case 10**: `PVS` reaches the DEFAULT edge, and only an exhaustive enumeration
+/// puts a live input on it. This test fails if the hole ever closes, so a future
+/// producer emitting a dense 0..11 table cannot quietly remove that input.
 ///
-/// This test fails if the hole ever closes. Without it, a future producer that
-/// emitted a dense 0..11 table would silently remove the teeth from the
-/// differential while leaving every row green.
+/// **What this does NOT establish (corrected 2026-08-20).** The hole was
+/// described here, in `chains.rs` and in the committed record as what makes this
+/// the *sharpest* chain for the one thing GAP 2 names by name — routing —
+/// "because a contiguous table can be got right by a mechanism that merely
+/// indexes, while a hole cannot". Measured, that is backwards: six of the twelve
+/// target blocks emit the same `const enum.13 { 4 }`, so 2,880 permutations of
+/// the targets return identical values on all twelve inputs. The positional
+/// off-by-one the hole was supposed to expose — routing case 11 to `bb12` and
+/// tag 10 to `bb11` — is observably wrong on **0 of 12** inputs, and both blocks
+/// cost two instructions, so the step count cannot separate them either.
+///
+/// This test checks the SHAPE of the emitted switch. Routing itself is pinned in
+/// `routing.rs`, by comparing the registered Clean case table against this
+/// switch tag-for-tag; that comparison refuses the swap, and
+/// `crystal_a3_the_value_differential_is_blind_to_the_swap` measures why it has
+/// to.
 #[test]
 fn crystal_a3_default_edge_is_actually_reached() {
     let text = fixture("from_source_system.trust-ir.txt");
@@ -155,7 +167,8 @@ fn crystal_a3_default_edge_is_actually_reached() {
          truncation: {cases}"
     );
     eprintln!(
-        "default-edge check: switch is non-contiguous (…9, 11, default), tag 10 falls through"
+        "default-edge check: switch is non-contiguous (…9, 11, default), tag 10 falls through. \
+         This pins the SHAPE, not the route — see routing.rs."
     );
 }
 
@@ -165,6 +178,12 @@ fn crystal_a3_default_edge_is_actually_reached() {
 /// whatever the last explicit case answered, the hole at 10 would be
 /// indistinguishable from a case. Tag 10 (`PVS`) answers `Classical` (tag 4),
 /// and asserting anything else must be rejected.
+///
+/// **Scope, corrected 2026-08-20.** This refutes a wrong VALUE at tag 10. It
+/// does **not** refute a wrong ROUTE, and was previously cited as though it
+/// did: every block this switch could plausibly send tag 10 to — `bb10`,
+/// `bb11`, `bb12` — answers `4`, so re-routing tag 10 among them leaves this
+/// mutation green. `routing.rs` is what refuses that.
 #[test]
 fn crystal_a3_mutation_default_edge_answer_is_pinned() {
     let mut spec = build_eval_ir_spec_with_stack();

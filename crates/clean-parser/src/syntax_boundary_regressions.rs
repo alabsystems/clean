@@ -299,3 +299,60 @@ fn test_leading_dot_retag_leaves_applied_ctors_and_real_binders_alone() {
          Var; got: {binder}"
     );
 }
+
+/// `Type` in ARGUMENT position is atomic — it must not swallow the next
+/// argument as its universe level.
+///
+/// Lean parses an application argument at max precedence, where `Type` is
+/// atomic; `Type u` there must be written `(Type u)`. Clean's `atom_expr` read
+/// the level unconditionally, so
+///
+/// ```text
+/// @Eq.rec Type Y (fun Z' h2' => …) rfl Z h2
+/// ```
+///
+/// parsed as `@Eq.rec (Type Y) …` — one argument short, with the TERM variable
+/// `Y` reinterpreted as a universe parameter. The elaborated type then carried
+/// `Sort(Succ(Param(Y)))` and the declaration died with `CannotInfer`, taking
+/// 16 more of `MType.lean`'s 49 declarations down with it.
+#[test]
+fn test_bare_type_in_argument_position_does_not_eat_the_next_argument() {
+    let parsed = parse_file("def f := g Type y z").expect("should parse");
+    let dumped = format!("{parsed:?}");
+    assert!(
+        !dumped.contains("TypeLevel"),
+        "`Type` as an argument must stay the bare sort, not take `y` as a \
+         universe level; got: {dumped}"
+    );
+    assert!(
+        dumped.contains(r#"Ident(Span { start: 15, end: 16 }, "y")"#)
+            || dumped.matches("Ident").count() >= 3,
+        "`y` and `z` must survive as their own arguments; got: {dumped}"
+    );
+}
+
+/// The suppression is scoped to the immediate argument atom.
+///
+/// A PARENTHESISED `(Type u)` argument still reads its level, and `Type u` in
+/// an ordinary (non-argument) position is untouched — otherwise the fix above
+/// would break every universe-polymorphic signature.
+#[test]
+fn test_parenthesised_and_non_argument_type_levels_still_parse() {
+    let paren = format!(
+        "{:?}",
+        parse_file("def f := g (Type u) y").expect("should parse")
+    );
+    assert!(
+        paren.contains("TypeLevel"),
+        "a parenthesised `(Type u)` argument must still read its level; got: {paren}"
+    );
+
+    let ascription = format!(
+        "{:?}",
+        parse_file("def f (a : Type u) : Type u := a").expect("should parse")
+    );
+    assert!(
+        ascription.contains("TypeLevel"),
+        "`Type u` outside argument position must still read its level; got: {ascription}"
+    );
+}

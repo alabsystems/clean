@@ -80,6 +80,9 @@ const PARAM_TYPES: &[(&str, &str)] = &[
     ("float_div", "bb0(%0: ptr, %1: f64, %2: f64)"),
     ("get_char_val_trunc", "bb0(%0: (), %1: u64)"),
     ("meta_tag_shl", ""),
+    // The ELEVENTH chain. Its join block's `u32` is the erased slot this table
+    // exists for; its ENTRY parameter is the `ptr` the body geps off.
+    ("simp_priority_value", "bb0(%0: ptr) bb3(%1: u32)"),
 ];
 
 /// The emitted block headers of one fixture, as `bbN(params)` joined by spaces.
@@ -222,6 +225,7 @@ const CHAIN_FIXTURES: &[(&str, &str)] = &[
     ("float_div", "float_div.trust-ir.txt"),
     ("get_char_val_trunc", "get_char_val_trunc.trust-ir.txt"),
     ("meta_tag_shl", "meta_tag_shl.trust-ir.txt"),
+    ("simp_priority_value", "simp_priority_value.trust-ir.txt"),
 ];
 
 /// The `PARAM_TYPES` table must cover exactly the chains the gate runs, for the

@@ -90,7 +90,59 @@ fn assert_all_ok(results: &[Result<ElabResult, crate::ElabError>], context: &str
             "{context}: declaration {i} failed: {:?}",
             r.as_ref().err().unwrap()
         );
+        // NAMESPACE-Ok MASKING. `elab_file` returns per-TOP-LEVEL-decl results,
+        // and a `namespace … end` block returns `Ok(Multiple([…]))` even when a
+        // CHILD declaration failed — the failure is recorded as an explicit
+        // `ElabResult::Failed` leaf rather than an `Err`. Checking only
+        // `r.is_ok()` therefore PASSED on files whose namespaced declarations
+        // had silently failed, leaving every namespaced corpus test that relies
+        // on this helper alone unprotected.
+        //
+        // The elaborator was already doing its part (it records the leaf
+        // deliberately, and `clean check` reports it); the harness simply never
+        // looked. `leaf_decls` flattens the block, so descend and fail on any
+        // `Failed` leaf.
+        let mut leaves = Vec::new();
+        r.as_ref()
+            .expect("outer result asserted Ok above")
+            .leaf_decls(&mut leaves);
+        for leaf in leaves {
+            if let ElabResult::Failed { name, error, .. } = leaf {
+                panic!(
+                    "{context}: declaration {i}: inner declaration `{name}` failed                      inside a namespace/section block: {error:?}"
+                );
+            }
+        }
     }
+}
+
+/// `assert_all_ok` must SEE a failure inside a `namespace … end` block.
+///
+/// The block returns `Ok(Multiple([…]))` with the child's failure recorded as an
+/// `ElabResult::Failed` leaf, so a helper that checks only the outer `Result`
+/// passes on a file whose namespaced declaration failed. Without the descent in
+/// `assert_all_ok` this test does not panic and therefore FAILS — that is what
+/// makes it a real pin rather than a restatement.
+#[test]
+#[should_panic(expected = "inside a namespace/section block")]
+fn test_assert_all_ok_sees_failure_inside_namespace_block() {
+    let code = "namespace NsMask\ndef bad : Nat := Bool.true\nend NsMask\n";
+    let (_env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "namespaced child failure");
+}
+
+/// The control: a namespace block whose children all succeed still passes.
+///
+/// Guards against "fix" by making the helper reject every `Multiple`.
+#[test]
+fn test_assert_all_ok_still_passes_for_healthy_namespace_block() {
+    let code = "namespace NsOk\ndef good : Nat := 1\ndef alsoGood : Nat := good\nend NsOk\n";
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "healthy namespace block");
+    assert!(
+        env.get_const(&Name::from_string("NsOk.good")).is_some(),
+        "the healthy block's children must still register"
+    );
 }
 
 // ---------------------------------------------------------------------------

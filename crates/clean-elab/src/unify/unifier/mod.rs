@@ -426,8 +426,7 @@ impl<'a> Unifier<'a> {
                     if let ExprKind::Pi(_, meta_dom, _) = meta_ty_whnf.kind() {
                         if !Self::expr_mentions_meta(meta_dom) {
                             if let Ok(other_ty) = tc.infer_type(&other) {
-                                let other_ty_whnf =
-                                    tc.whnf(&self.metas.instantiate(&other_ty));
+                                let other_ty_whnf = tc.whnf(&self.metas.instantiate(&other_ty));
                                 if let ExprKind::Pi(_, other_dom, _) = other_ty_whnf.kind() {
                                     // Narrow deliberately: fire ONLY when both
                                     // domains whnf to DIFFERENTLY-NAMED rigid

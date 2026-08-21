@@ -156,6 +156,9 @@ pub(crate) mod emit_trust_ir_runtime;
 // preservation certificates for in-fragment decls, attached post-finalize.
 #[cfg(feature = "trust-ir-backend")]
 pub mod emit_trust_ir_tv;
+// WebAssembly backend for the straight-line first-order fragment: `.wat` text
+// plus the matching binary encoding, both from one lowering.
+pub mod emit_wasm;
 pub mod error;
 pub mod extraction_ir;
 pub mod ffi_bridge;

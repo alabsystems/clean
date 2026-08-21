@@ -66,10 +66,15 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "has_cubical_layer",
         fixture: "has_cubical_layer.trust-ir.txt",
-        spec: "eval_ir_mode.rs",
-        blocks_prefix: "const SRC_IR_H2_B",
+        // The FIRST chain whose registered module is MINTED rather than hand
+        // written (crystal A2, `src/ir_mint`). The comparator, the lane set and
+        // this row's expectations are unchanged: only the file the Clean side
+        // is read from moved, from seven `const SRC_IR_H2_*` strings to the
+        // generated script `eval_ir_mode.rs` now replays.
+        spec: "generated/ir_h2.defs.txt",
+        blocks_prefix: "def ir_h2_",
         block_marker: "def ir_h2_b",
-        func_prefix: "const SRC_IR_H2_FUNC",
+        func_prefix: "def ir_h2_func",
         nonempty: &[
             "blocks",
             "consts",
@@ -287,6 +292,39 @@ const CHAINS: &[Chain] = &[
             "order",
         ],
     },
+    Chain {
+        who: "simp_priority_value",
+        fixture: "simp_priority_value.trust-ir.txt",
+        // MINTED, like has_cubical_layer: the Clean side is the generated
+        // script, not hand-written constants.
+        spec: "generated/ir_pv.defs.txt",
+        blocks_prefix: "def ir_pv_",
+        block_marker: "def ir_pv_b",
+        func_prefix: "def ir_pv_func",
+        // The ELEVENTH chain, and the ONLY row with `geps` in it — which is
+        // why the lane exists at all. Read this row against `has_cubical_layer`
+        // above: same load/extractfield/switch/join skeleton, and then a
+        // SECOND load whose pointer is an address this body computed.
+        nonempty: &[
+            "blocks",
+            "int_consts",
+            "cases",
+            "default",
+            "branches",
+            "param_blocks",
+            "extracts",
+            "extract_tys",
+            "loads",
+            "load_tys",
+            "geps",
+            "rets",
+            "const_tys",
+            "edge_args",
+            "block_params",
+            "switch_on",
+            "order",
+        ],
+    },
 ];
 
 /// Every lane of `Cfg`, paired with the predicate "this lane is non-empty".
@@ -308,6 +346,7 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
         ("extract_tys", !c.extract_tys.is_empty()),
         ("loads", !c.loads.is_empty()),
         ("load_tys", !c.load_tys.is_empty()),
+        ("geps", !c.geps.is_empty()),
         ("icmps", !c.icmps.is_empty()),
         ("binops", !c.binops.is_empty()),
         ("condbrs", !c.condbrs.is_empty()),
@@ -325,7 +364,13 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
     ]
 }
 
-/// THE MATRIX. Ten chains x **twenty-six** lanes, pinned cell by cell.
+/// THE MATRIX. Eleven chains x **twenty-seven** lanes, pinned cell by cell.
+///
+/// (Twenty-six until 2026-08-20, when the eleventh chain added `geps` — the
+/// lane for an instruction no chained body had ever contained, so a
+/// transcription that gep'd a different base, by a different index, at a
+/// different element type, or that dropped `inbounds`, compared EQUAL in every
+/// other lane. Same class as `extract_tys` and `load_tys` below.)
 ///
 /// (Twenty-four until 2026-08-19, when the operand-completeness audit added
 /// `extract_tys` and `load_tys` — the two slots that were printed by the
@@ -400,6 +445,7 @@ fn every_emitted_mnemonic_has_a_lane() {
         ("extractfield", "extracts"),
         ("fdiv", "binops + binop_tys"),
         ("icmp", "icmps + icmp_tys"),
+        ("gep", "geps"),
         ("load", "loads"),
         ("ret", "rets"),
         ("sext", "casts + cast_tys"),
@@ -435,56 +481,5 @@ fn every_emitted_mnemonic_has_a_lane() {
     );
 }
 
-/// **The lane list this matrix is stated in must be TOTAL over `Cfg`.**
-///
-/// `lanes()` is a hand-written enumeration, and a hand-written enumeration of a
-/// struct's fields is a drift risk of the same shape as everything else here. So
-/// it is checked against the struct: `Cfg`'s `Debug` output names every field
-/// exactly once, and every name in it must appear in the list.
-#[test]
-fn every_cfg_field_is_a_named_lane() {
-    let c = parse_emitted(&fixture("has_cubical_layer.trust-ir.txt"));
-    let named: BTreeSet<&str> = lanes(&c).into_iter().map(|(ln, _)| ln).collect();
-    let debug = format!("{c:?}");
-    let mut fields: BTreeSet<String> = BTreeSet::new();
-    for tok in debug.split(&[' ', ',', '{', '}'][..]) {
-        if let Some(f) = tok.strip_suffix(':') {
-            if !f.is_empty() && f.chars().all(|ch| ch.is_ascii_lowercase() || ch == '_') {
-                fields.insert(f.to_string());
-            }
-        }
-    }
-    assert!(
-        fields.len() >= 26,
-        "the field scan must have found the whole struct: {fields:?}"
-    );
-    for f in &fields {
-        assert!(
-            named.contains(f.as_str()),
-            "`Cfg::{f}` is a lane with no entry in `lanes()`, so the matrix above is stated over \
-             fewer lanes than the shape has and every chain's row silently omits it."
-        );
-    }
-    assert_eq!(
-        fields.len(),
-        named.len(),
-        "the lane list and the struct must have the SAME number of entries: struct {fields:?} vs \
-         list {named:?}"
-    );
-}
-
-/// **The function signature, for all ten chains in one place.**
-///
-/// `assert_entry_params` is called from each chain's own gate; this repeats it
-/// across the whole set so a chain added later without the call is still
-/// covered here.
-#[test]
-fn every_chain_pins_its_function_signature() {
-    for ch in CHAINS {
-        assert_entry_params(
-            &fixture(ch.fixture),
-            &clean_block_sources(ch.spec, ch.func_prefix),
-            ch.who,
-        );
-    }
-}
+#[path = "lane_matrix_shape.rs"]
+mod shape_checks;

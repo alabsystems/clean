@@ -1,0 +1,387 @@
+{
+ "schema": "clean.crystal.wave_mc/1",
+ "lane": "LANE MK \u2014 wave-MC: the by-value CALL-CHAIN marker plan (the ninth plan)",
+ "provenance": {
+  "measured_utc_date": "2026-08-21",
+  "trust_rev": "111f5f48fc122fe8df01ad60e6ae5a82c082dc38",
+  "clean_rev_consumed": "d93b2fbb906a08768ed29a860feca4f1f09affb6",
+  "control_driver_seal": "$HOME/trust/scratchpad/laneMK/seal-ctl",
+  "control_driver_sha256": "cbbce4654749ea8b9d76d9e15f34697ab4fff1659d51204fda06087958eb35f4",
+  "subject_driver_seal": "$HOME/trust/scratchpad/laneMK/seal-sub",
+  "subject_driver_sha256": "6d894c4a571177a685f4cc22706414c2e3722aa0cacbd74c8f6337a0992146df",
+  "control_tree": "clean",
+  "subject_tree": "dirty",
+  "subject_diff_vs_control": "the five files listed under `changed_files`; the two drivers are otherwise the same source tree, built in the same worktree with the same target dir",
+  "sysroot": "$HOME/trust/scratchpad/laneMV/sysroot-v12 (METADATA_VERSION 12)",
+  "sysrootcheck": "OK on BOTH seals \u2014 driver=12 sysroot=12, std resolves",
+  "guard": "PASS before every run on both sides",
+  "perturb_classes_control": 13,
+  "perturb_classes_subject": 14
+ },
+ "changed_files": [
+  "crates/trust-thir-lower/src/to_mir.rs",
+  "crates/trust-thir-lower/src/flip.rs",
+  "crates/trust-thir-lower/probes/mc_call.rs (new)",
+  "compiler/rustc_driver_impl/src/lib.rs",
+  "compiler/rustc_driver_impl/src/tests.rs",
+  "compiler/rustc_session/src/options.rs"
+ ],
+ "frozen_files_touched": [],
+ "whole_crate_row_exact": {
+  "O3": {
+   "control": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 933,
+    "markers_exact_nonvacuous": 40,
+    "codegen_flips": 182,
+    "ctfe_flips": 41,
+    "loud_fallbacks": 19
+   },
+   "subject": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 936,
+    "markers_exact_nonvacuous": 43,
+    "codegen_flips": 185,
+    "ctfe_flips": 41,
+    "loud_fallbacks": 19
+   }
+  },
+  "O0": {
+   "control": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 933,
+    "markers_exact_nonvacuous": 40,
+    "codegen_flips": 500,
+    "ctfe_flips": 42,
+    "loud_fallbacks": 32
+   },
+   "subject": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 936,
+    "markers_exact_nonvacuous": 43,
+    "codegen_flips": 500,
+    "ctfe_flips": 42,
+    "loud_fallbacks": 32
+   }
+  },
+  "O3_noflip": {
+   "control": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 933,
+    "markers_exact_nonvacuous": 40,
+    "codegen_flips": 0,
+    "ctfe_flips": 0,
+    "loud_fallbacks": 0
+   },
+   "subject": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 936,
+    "markers_exact_nonvacuous": 43,
+    "codegen_flips": 0,
+    "ctfe_flips": 0,
+    "loud_fallbacks": 0
+   }
+  },
+  "O3_mcplan": {
+   "control": "NOT RUN (the control driver does not register this class)",
+   "subject": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1265,
+    "derived_mir_mismatch": 0,
+    "markers_exact": 935,
+    "markers_exact_nonvacuous": 42,
+    "codegen_flips": 184,
+    "ctfe_flips": 41,
+    "loud_fallbacks": 19
+   }
+  },
+  "O3_switchmap": {
+   "control": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1250,
+    "derived_mir_mismatch": 15,
+    "markers_exact": 920,
+    "markers_exact_nonvacuous": 37,
+    "codegen_flips": 169,
+    "ctfe_flips": 41,
+    "loud_fallbacks": 19
+   },
+   "subject": {
+    "bodies": 13079,
+    "derived_mir_agreed": 1250,
+    "derived_mir_mismatch": 15,
+    "markers_exact": 923,
+    "markers_exact_nonvacuous": 40,
+    "codegen_flips": 172,
+    "ctfe_flips": 41,
+    "loud_fallbacks": 19
+   }
+  }
+ },
+ "deltas_by_name": {
+  "O3": {
+   "codegen_flips_gained": [
+    "env::native_reducers_float::f64_to_nat",
+    "env::native_reducers_float::nat_to_f64",
+    "expr::meta::ExprMeta::has_loose_bvars"
+   ],
+   "codegen_flips_lost": [],
+   "markers_exact_gained": [
+    "env::native_reducers_float::f64_to_nat",
+    "env::native_reducers_float::nat_to_f64",
+    "expr::meta::ExprMeta::has_loose_bvars"
+   ],
+   "markers_exact_lost": [],
+   "derived_mir_agreed_gained": [],
+   "derived_mir_agreed_lost": []
+  },
+  "O0": {
+   "codegen_flips_gained": [],
+   "codegen_flips_lost": [],
+   "markers_exact_gained": [
+    "env::native_reducers_float::f64_to_nat",
+    "env::native_reducers_float::nat_to_f64",
+    "expr::meta::ExprMeta::has_loose_bvars"
+   ],
+   "markers_exact_lost": [],
+   "derived_mir_agreed_gained": [],
+   "derived_mir_agreed_lost": []
+  }
+ },
+ "target_body": "expr::meta::ExprMeta::has_loose_bvars",
+ "target_rows": {
+  "control": {
+   "O3": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+   },
+   "O0": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+   },
+   "O3_noflip": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+   },
+   "O3_switchmap": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+   },
+   "flipped_O3": false
+  },
+  "subject": {
+   "O3": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   },
+   "O0": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   },
+   "O3_noflip": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   },
+   "O3_mcplan": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `mk b0.0:live s0:adt:clean_kernel::expr::meta::ExprMeta`"
+   },
+   "O3_switchmap": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   },
+   "flipped_O3": true
+  }
+ },
+ "mc_plan_control": {
+  "subject": {
+   "target_line": "trust-sat-perturb: def=DefId(0:16174 ~ clean_kernel[ab17]::expr::meta::{impl#0}::has_loose_bvars) class=McPlan applications=1",
+   "bodies_seen": 1788,
+   "applications_gt0": 1
+  }
+ },
+ "ten_criteria": {
+  "control": {
+   "target": "expr::meta::ExprMeta::has_loose_bvars",
+   "wc": "$HOME/trust/scratchpad/laneMK/wc-ctl",
+   "A0": {
+    "lowered": [
+     "PASS",
+     "coverage.lowered=True"
+    ],
+    "spliced": [
+     "PASS",
+     "coverage.spliced=True"
+    ],
+    "zero_unsupported": [
+     "PASS",
+     "coverage.unsupported=[]"
+    ],
+    "DerivedAgreed": [
+     "PASS",
+     "derived_mir.verdict=agreed (5 canonical line(s) identical)"
+    ],
+    "bodyful_reachable_closure": [
+     "PASS",
+     "2 reachable func ordinal(s), all inside the 6390-body prefix"
+    ],
+    "flip_event_observed_for_this_body": [
+     "FAIL",
+     "no event, no fallback"
+    ]
+   },
+   "A6": {
+    "flip_fires_for_this_body": [
+     "FAIL",
+     "no event"
+    ],
+    "digest_in_event": [
+     "FAIL",
+     "coverage lineage=sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21  event lineage=None"
+    ],
+    "fail_closed": [
+     "UNMEASURED",
+     "run absent"
+    ],
+    "negative_control": [
+     "PASS",
+     "-Ztrust-ir-flip=no: 0 codegen flip(s) crate-wide"
+    ]
+   },
+   "extra_controls": {
+    "O3_switchmap": [
+     "PASS",
+     "verdict=agreed markers_exact=False detail='markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`' | flipped=False | crate flips=169"
+    ]
+   },
+   "row": {
+    "def_index": 16174,
+    "func_id": 3650,
+    "lineage": "sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21",
+    "instr_count": 4,
+    "derived_mir": {
+     "verdict": "agreed",
+     "detail": "5 canonical line(s) identical",
+     "markers_exact": false,
+     "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`"
+    }
+   },
+   "crate": {
+    "codegen_flips_O3": 182,
+    "bodies": 13079
+   }
+  },
+  "subject": {
+   "target": "expr::meta::ExprMeta::has_loose_bvars",
+   "wc": "$HOME/trust/scratchpad/laneMK/wc-sub",
+   "A0": {
+    "lowered": [
+     "PASS",
+     "coverage.lowered=True"
+    ],
+    "spliced": [
+     "PASS",
+     "coverage.spliced=True"
+    ],
+    "zero_unsupported": [
+     "PASS",
+     "coverage.unsupported=[]"
+    ],
+    "DerivedAgreed": [
+     "PASS",
+     "derived_mir.verdict=agreed (5 canonical line(s) identical)"
+    ],
+    "bodyful_reachable_closure": [
+     "PASS",
+     "2 reachable func ordinal(s), all inside the 6390-body prefix"
+    ],
+    "flip_event_observed_for_this_body": [
+     "PASS",
+     "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16174 ~ clean_kernel[ab17]::expr::meta::{impl#0}::has_loose_bvars), asserts=0, lineage=sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21, flipped_so_far=60"
+    ]
+   },
+   "A6": {
+    "flip_fires_for_this_body": [
+     "PASS",
+     "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16174 ~ clean_kernel[ab17]::expr::meta::{impl#0}::has_loose_bvars), asserts=0, lineage=sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21, flipped_so_far=60"
+    ],
+    "digest_in_event": [
+     "PASS",
+     "coverage lineage=sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21  event lineage=sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21"
+    ],
+    "fail_closed": [
+     "PASS",
+     "verdict=agreed markers_exact=False detail='markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `mk b0.0:live s0:adt:clean_' | flipped=False | crate flips=184"
+    ],
+    "negative_control": [
+     "PASS",
+     "-Ztrust-ir-flip=no: 0 codegen flip(s) crate-wide"
+    ]
+   },
+   "extra_controls": {
+    "O3_switchmap": [
+     "FAIL",
+     "verdict=agreed markers_exact=True detail='4 marker line(s) identical' | flipped=True | crate flips=172"
+    ]
+   },
+   "row": {
+    "def_index": 16174,
+    "func_id": 3650,
+    "lineage": "sha256:49a829cbd0966473cb0736dbb40b016549b23eb109ac4ecf32ca91bfef6cac21",
+    "instr_count": 4,
+    "derived_mir": {
+     "verdict": "agreed",
+     "detail": "5 canonical line(s) identical",
+     "markers_exact": true,
+     "markers_detail": "4 marker line(s) identical"
+    }
+   },
+   "crate": {
+    "codegen_flips_O3": 185,
+    "bodies": 13079
+   }
+  },
+  "headline": {
+   "control": "A0 = 5-of-6, A6 = 1-of-4 (only the negative control passes; the body does not flip)",
+   "subject": "A0 = 6-of-6, A6 = 4-of-4"
+  }
+ },
+ "sibling_bodies_gained": {
+  "env::native_reducers_float::f64_to_nat": "A0 5-of-6 \u2014 flips, carries the digest, 2 NON-VACUOUS marker lines; bodyful_reachable_closure FAILS because its callee `f64::to_bits` lives in `core` (the same architectural block that defeats level::Level::is_zero)",
+  "env::native_reducers_float::nat_to_f64": "A0 5-of-6 \u2014 same, callee `f64::from_bits`"
+ },
+ "controls_that_do_not_reach_the_target": {
+  "switch-map": "INERT on this body and honestly so: `has_loose_bvars` has no `Inst::Switch`, so the control never reaches it (`agreed`, `markers_exact: true`, still flips under it). Crate-wide it remains live on BOTH sides: 15 DerivedMismatch and 13 flips withdrawn. This is exactly why wave-MC needed a control of its own.",
+  "marker-order / marker-drop": "would perturb an EMISSION SITE, which the marker LAW catches before the oracle speaks \u2014 the body would fail closed as `unsupported`, testing the law and not the oracle's marker channel."
+ }
+}

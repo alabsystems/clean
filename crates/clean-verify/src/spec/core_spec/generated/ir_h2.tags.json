@@ -1,0 +1,50 @@
+{
+ "chain": "ir_h2",
+ "body": "mode::CleanMode::has_cubical_layer",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Two facts are being kept apart on purpose. (1) WHICH aggregate slots a body reads, and whether two of them are the same type -- that is the canonical index, it is a property of the body, and it is producer-stable. (2) WHICH crate-level table entry the artifact happened to name -- that is `enum.13`, it is a property of the BUILD, and it moves. Measured across three producer dumps of the shipped clean-kernel: `has_cubical_layer`'s enum id did not move, `expr_path_step_clone`'s moved 181 -> 176 with not one instruction changed. Folding (2) into the module the theorems are about makes a re-interning look like a proof about a different program. Keeping it here makes a re-interning a one-line reviewed change to a table, which is what `data/crystal_enum_tag_pin.json` already exists to own.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_h2_tmode` alias (`IRTy.enum_ ir_d13`) that `ir_h2_b0` loads, so the REGISTERED term carries the crate id exactly as the 2026-08-19 load-type correction requires. `ir_mint::decode` reads it in the other direction and REFUSES an id the table does not list. `crystal_a2_mint`'s `m7` asserts the table still matches the emitted fixture and reader A's record.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print: the function's NAME, every parameter's TYPE, every `align` operand and the KINDS of trailing annotation clause. Until 2026-08-20 all of them were erased on both readers, and `data/crystal_mint_blind_slots.json` carried a CONSTRUCTED WITNESS for each -- a pair of emitted bodies denoting different programs that projected to one core module. `ir_mint::project` now refuses a body whose interface is not this one.",
+ "interface_why_not_in_the_module": "Clean's `IRFunc` carries an id, parameter SSA ids, an entry block and blocks, and NO type (`eval_ir_syntax.rs`). Putting a parameter type in the core module means changing the specification's own inductive, which moves every registered term, every core digest and every theorem that mentions one. So this follows the M7 split exactly: the fact the module cannot express is pinned in a reviewed table a gate checks against the artifact.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form -- every `<kind>.<digits>` resolved through this table's own lanes to the canonical first-use index (`enum.13` -> `enum#0`), an unlisted id to `<kind>#?`. `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED, because it moves: `expr_path_step_clone`'s join block binds `%1: enum.181` under P1/P2 and `%1: enum.176` under P3 with not one instruction changed.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "The `rustcc` in `rustcc fn @...` IS the calling convention, and the ABSENT linkage keyword IS `external`. `trust_ir`'s `Display for Function` prints each only when it is not the default (`if self.linkage != Linkage::External`, `if self.calling_conv != CallingConv::C`) and its parser restores the default on absence, so silence is a value and both are pinned as one. Until 2026-08-20 `data/crystal_mint_blind_slots.json` recorded this slot as permanently blind on the stated ground that `the producer prints neither` -- which was FALSE. The reader was pinning both by ACCIDENT, matching the literal prefix `rustcc fn @`, and would have been loosened by the first chain on an internal-linkage body.",
+  "functy": 0,
+  "functy_note": "trust-ir's FOURTH crate-level namespace, and the last numeral in the pipeline that stood for nothing. `FuncTy` is `params, returns, is_vararg` (trust-ir/src/ty.rs:751): `is_vararg` is invisible in a printed body, and `returns` is invisible in any body no `ret` reaches. Two texts differing only in this numeral are therefore a variadic and a non-variadic function -- a CONSTRUCTED WITNESS the gate accepted as one until 2026-08-20 (`functy_is_compared_and_the_vararg_pair_is_now_refused`). Pinned VERBATIM like the `funcs` lane's `@func.N`, because there is no first-use canonicalisation to be had (one header, one signature, so interning maps every body to `functy#0`) and the emitted text carries no signature table to resolve the index through. It therefore MOVES under a producer re-interning and is re-pinned under review -- the M7 bargain taken deliberately, in exchange for a numeral that denotes something.",
+  "producer": "trust",
+  "producer_note": "The ONE annotation-clause kind whose CONTENT is compared. `#loc`, `#scope` and `#names` are debug-info coordinates and `#proof` is a claim ABOUT the body; none of the four can change what the module computes, and two bodies differing only in `#loc` content are the same program -- measured, not assumed. `#producer` is different in kind: it names WHICH COMPILER emitted this function, which is the fact link 2a exists to establish, and it does not renumber. Erasing it while claiming the body is the one `trust` emitted was the one content erasure this lane could not justify.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&mode::CleanMode",
+    "note": "The receiver. This is the sharpest slot in the blind-slot list: `ptr` and `Rc<enum.13>` are a `&CleanMode` and an `Rc<CleanMode>`, the entry `load` reads the discriminant through one and the refcount header through the other, and before this lane they were the same core module."
+   }
+  ],
+  "block_params": [
+   { "block": 4, "index": 0, "ssa": 1, "ty": "bool", "observed_ty": "bool", "note": "The join block's answer." }
+  ],
+  "aligns": [ "load:None" ],
+  "aligns_note": "One entry per memory instruction, in program order, in reader A's own spelling (`format!(\"load:{align:?}\")`), so the two records compare directly. `None` is the measured value and is itself the erased one: the fragment has nowhere to put either a specified alignment or its absence. Reader B used to split the load's operand list on the first comma and discard the rest WITHOUT LOOKING, so `, align 8` and `, banana` were equally invisible.",
+  "clauses": [ "loc", "names", "producer" ],
+  "clauses_note": "The KINDS of `; #...` clause this body carries. The clause CONTENT stays erased -- `#loc` is a whole-crate file index that renumbers with no instruction changed -- but the kind set is now an allowlist, so a producer that starts emitting a trust-bearing annotation is a refusal instead of a silent erasure."
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 13,
+   "alias": "ir_h2_tmode",
+   "rust_type": "mode::CleanMode",
+   "observed_crate_id_by_producer": { "P1": 13, "P2": 13, "P3": 13 },
+   "note": "Stable across all three producer dumps recorded in ir_mint.producer_ab.json. Contrast expr_path_step_clone, whose single enum moved 181 -> 176 over the same three."
+  }
+ ],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `has_cubical_layer` calls NOTHING: reader A's `crate_func_ids_seen` for this chain is the single entry [5246] / [5246] / [4177] across the three producer dumps, which is the body's own id and nothing else (ir_mint.producer_ab.json). With no callee to disambiguate it from, there is nothing for a `funcs` row to pin, and recording that own id here would pin a BUILD fact -- it moved 5246 -> 4177 over the three dumps -- that no gate reads. An empty lane means `SelfFunc::Unpinned`, under which reader B RESERVES canonical index 0 and interns callees from 1. That is exactly reader A's numbering for any body that does not call ITSELF, so the two agree here; a body that does self-call and is read unpinned DISAGREES with reader A, which is the fail-closed behaviour. `level_is_zero` is the one chained body that calls anything -- itself included -- and its table (ir_lz.tags.json) is where this lane is non-empty."
+}

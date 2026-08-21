@@ -36,7 +36,7 @@
 
 mod core_spec;
 
-pub use core_spec::{IR_FS_MODULE_DEFS, IR_H2_MODULE_DEFS, IR_KO_MODULE_DEFS};
+pub use core_spec::{ir_h2_module_defs, ir_pv_module_defs, IR_FS_MODULE_DEFS, IR_KO_MODULE_DEFS};
 mod declaration_registration;
 mod definition;
 mod definition_registration;

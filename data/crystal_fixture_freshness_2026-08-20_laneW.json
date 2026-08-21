@@ -1,0 +1,509 @@
+{
+ "schema": "clean.crystal.fixture_freshness/v1",
+ "measured_utc_date": "2026-08-20",
+ "lane": "LANE W - width: the gep chain, and every other fixture re-derived on the same dump",
+ "what_this_is": "`scripts/crystal_fixture_freshness.py` run against a LIVE whole-crate dump of the shipped clean-kernel, taken in this lane's own worktree at the revision this commit's parent names. It covers all twelve committed trust-ir fixtures -- the eleven chains that existed and the one this commit adds -- so the new chain enters the tree with the same live-dump check every other chain has, taken on the same dump rather than inherited.",
+ "provenance": {
+  "clean_rev": "d1d465d456f337c1982ba8239af32d73ddd7d602",
+  "clean_kernel_tree": "a3ae6c21fc8aa61b7c19274e84622eb6c8c99c05",
+  "trust_driver_seal": "$HOME/trust/scratchpad/laneTM/seal-head",
+  "trust_driver_rev": "26d0a0e8eefd88505463c63ccaf8db6ba6c7fe02",
+  "trust_driver_dylib_sha256": "50879dc8cf7f0e528eb907dd1882e46e7260fd68ec62dc90120a69903832ba98",
+  "guard": "PASS before every arm",
+  "sysroot": "laneW composite: laneMV v12 rlibs (symlinked) + stage0 rustlib bin",
+  "profile": "cargo release, -Cdebuginfo=0, -Ztrust-ir-lower=on",
+  "reproduction": "three clean non-incremental builds in three CARGO_TARGET_DIRs, all three byte-identical: coverage d897e951..., trust-ir.txt 5b8d21e7..., bin 91ec95c9...",
+  "dump_coverage_sha256": "d897e95184308d8be7e5fd8c9f877a6747f386f26c8c66cbf45ce17ec2869c50",
+  "dump_trust_ir_txt_sha256": "5b8d21e7785e03e9913e3590ef040da6b4c6cfba6973039feaa50108ff849178",
+  "dump_trust_ir_bin_sha256": "91ec95c9d2faaf4c6712c6944118de46bacd6ee9aa9774049340ff4bb7d3389a"
+ },
+ "headline": "FRESH: no chained body's instructions have moved. `simp_priority_value` is IDENTICAL with an EMPTY drift-class list -- not even whole-crate numbering moved on it, because its fixture was taken from this dump. Every other body is NUMBERING-ONLY (functy-index / type-table-index / callee-index / global-index) plus a moved lineage digest, which is a per-BUILD identity and expected: this dump's crate disambiguator is `ab17` where the fixtures' builds were others.",
+ "dump": "laneW wc3/dump_O3a (path recorded below, machine-local prefix redacted)",
+ "dump_path_as_run": "<scratchpad>/laneW/wc3/dump_O3a",
+ "bodies": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "at_head": {
+    "lineage": "sha256:e44b56bebec56eccb40943c2d6ba7c36155f1766ad92fca16f216da42f4f4cb7",
+    "def_index": 17985,
+    "func_id": 4179,
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
+    "def_index": 17971,
+    "func_id": 5247,
+    "instr_count": 10
+   }
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "classes": [
+    "functy-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @level::Level::kind_ord(functy.470) {  ->  rustcc fn @level::Level::kind_ord(functy.305) {"
+    ]
+   },
+   "diff": "--- fixture level_kind_ord.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @level::Level::kind_ord(functy.470) {\n+rustcc fn @level::Level::kind_ord(functy.305) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:93b768040feb430297a0e31b077d7301780818ca0936de12df4f827762f62dd0",
+    "def_index": 17098,
+    "func_id": 3900,
+    "instr_count": 14,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:c2d6ef14a416ae797875e23c48f280060ab8a0f6978f2e4fea09a5f3040a419c",
+    "def_index": 17084,
+    "func_id": 4929,
+    "instr_count": 14
+   }
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "classes": [
+    "functy-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @mode::CleanMode::from_source_system(functy.732) {  ->  rustcc fn @mode::CleanMode::from_source_system(functy.551) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: enum.175):  ->  bb0(%0: enum.176):"
+    ]
+   },
+   "diff": "--- fixture from_source_system.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @mode::CleanMode::from_source_system(functy.732) {\n+rustcc fn @mode::CleanMode::from_source_system(functy.551) {\n     ; #producer: trust\n     ; #names: %0=\"system\"\n-bb0(%0: enum.175):\n+bb0(%0: enum.176):\n     %2 = extractfield u8 %0, 0  ; #loc: 399 186 8\n     switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 399 186 8\n bb1:\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:b2a1fb2d0b0209f20fa9b2186d48bc1bee4bb5522df0c3cb2d3af653f1ec7461",
+    "def_index": 17980,
+    "func_id": 4177,
+    "instr_count": 27,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+    "def_index": 17966,
+    "func_id": 5244,
+    "instr_count": 27
+   }
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "classes": [
+    "functy-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @flat::types::FlatFlags::contains(functy.661) {  ->  rustcc fn @flat::types::FlatFlags::contains(functy.485) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: struct.1012, %1: struct.1012):  ->  bb0(%0: struct.1017, %1: struct.1017):"
+    ]
+   },
+   "diff": "--- fixture flat_flags_contains.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @flat::types::FlatFlags::contains(functy.661) {\n+rustcc fn @flat::types::FlatFlags::contains(functy.485) {\n     ; #producer: trust\n     ; #names: %0=\"self\", %1=\"other\"\n-bb0(%0: struct.1012, %1: struct.1012):\n+bb0(%0: struct.1017, %1: struct.1017):\n     %2 = extractfield u8 %0, 0  ; #loc: 386 90 9\n     %3 = extractfield u8 %1, 0  ; #loc: 386 90 18\n     %4 = and u8 %2, %3  ; #loc: 386 90 8\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:0ea2d9e879bca059add6e18247a3ba34b1baa04b9ab8608df1b39b54844b928c",
+    "def_index": 16850,
+    "func_id": 3833,
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f",
+    "def_index": 16836,
+    "func_id": 4861,
+    "instr_count": 6
+   }
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "classes": [
+    "functy-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @expr::bvar_in_range(functy.641) {  ->  rustcc fn @expr::bvar_in_range(functy.464) {"
+    ]
+   },
+   "diff": "--- fixture bvar_in_range.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @expr::bvar_in_range(functy.641) {\n+rustcc fn @expr::bvar_in_range(functy.464) {\n     ; #producer: trust\n     ; #names: %0=\"idx\", %1=\"start\", %2=\"end\"\n bb0(%0: u32, %1: u32, %2: u32):\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:47a8ea9ce596d9b232a24ee4daa7cffb5840a2ff61170fe31b7cf4c07c3e3769",
+    "def_index": 16580,
+    "func_id": 3751,
+    "instr_count": 13,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+    "def_index": 16566,
+    "func_id": 4777,
+    "instr_count": 13
+   }
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "classes": [
+    "functy-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {  ->  rustcc fn @env::native_reducers_char::is_valid_char(functy.374) {"
+    ]
+   },
+   "diff": "--- fixture is_valid_char.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {\n+rustcc fn @env::native_reducers_char::is_valid_char(functy.374) {\n     ; #producer: trust\n     ; #names: %0=\"n\"\n bb0(%0: u64):\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:4a59abbff1908991bcd7ebf337d0ead92e60b697c8ad28e2bda6ed31f8707bc5",
+    "def_index": 15095,
+    "func_id": 3345,
+    "instr_count": 15,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+    "def_index": 15081,
+    "func_id": 4359,
+    "instr_count": 15
+   }
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "classes": [
+    "functy-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {  ->  rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.856) {"
+    ],
+    "type-table-index": [
+     "%2 = load enum.181, ptr %0  ; #loc: 425 20 16  ->  %2 = load enum.182, ptr %0  ; #loc: 425 20 16",
+     "%4 = const enum.181 { 0 }  ; #loc: 425 20 16  ->  %4 = const enum.182 { 0 }  ; #loc: 425 20 16",
+     "%5 = const enum.181 { 1 }  ; #loc: 425 20 16  ->  %5 = const enum.182 { 1 }  ; #loc: 425 20 16",
+     "%6 = const enum.181 { 2 }  ; #loc: 425 20 16  ->  %6 = const enum.182 { 2 }  ; #loc: 425 20 16",
+     "%7 = const enum.181 { 3 }  ; #loc: 425 20 16  ->  %7 = const enum.182 { 3 }  ; #loc: 425 20 16",
+     "%8 = const enum.181 { 4 }  ; #loc: 425 20 16  ->  %8 = const enum.182 { 4 }  ; #loc: 425 20 16",
+     "%9 = const enum.181 { 5 }  ; #loc: 425 20 16  ->  %9 = const enum.182 { 5 }  ; #loc: 425 20 16",
+     "%10 = const enum.181 { 6 }  ; #loc: 425 20 16  ->  %10 = const enum.182 { 6 }  ; #loc: 425 20 16",
+     "%11 = const enum.181 { 7 }  ; #loc: 425 20 16  ->  %11 = const enum.182 { 7 }  ; #loc: 425 20 16",
+     "%12 = const enum.181 { 8 }  ; #loc: 425 20 16  ->  %12 = const enum.182 { 8 }  ; #loc: 425 20 16",
+     "%13 = const enum.181 { 9 }  ; #loc: 425 20 16  ->  %13 = const enum.182 { 9 }  ; #loc: 425 20 16",
+     "%14 = const enum.181 { 10 }  ; #loc: 425 20 16  ->  %14 = const enum.182 { 10 }  ; #loc: 425 20 16",
+     "bb12(%1: enum.181):  ->  bb12(%1: enum.182):"
+    ]
+   },
+   "diff": "--- fixture expr_path_step_clone.trust-ir.txt\n+++ live dump\n@@ -1,43 +1,43 @@\n-rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {\n+rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.856) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.181, ptr %0  ; #loc: 425 20 16\n+    %2 = load enum.182, ptr %0  ; #loc: 425 20 16\n     %3 = extractfield u8 %2, 0  ; #loc: 425 20 16\n     switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 425 20 16\n bb1:\n-    %4 = const enum.181 { 0 }  ; #loc: 425 20 16\n+    %4 = const enum.182 { 0 }  ; #loc: 425 20 16\n     br bb12(%4)  ; #loc: 425 20 16\n bb2:\n-    %5 = const enum.181 { 1 }  ; #loc: 425 20 16\n+    %5 = const enum.182 { 1 }  ; #loc: 425 20 16\n     br bb12(%5)  ; #loc: 425 20 16\n bb3:\n-    %6 = const enum.181 { 2 }  ; #loc: 425 20 16\n+    %6 = const enum.182 { 2 }  ; #loc: 425 20 16\n     br bb12(%6)  ; #loc: 425 20 16\n bb4:\n-    %7 = const enum.181 { 3 }  ; #loc: 425 20 16\n+    %7 = const enum.182 { 3 }  ; #loc: 425 20 16\n     br bb12(%7)  ; #loc: 425 20 16\n bb5:\n-    %8 = const enum.181 { 4 }  ; #loc: 425 20 16\n+    %8 = const enum.182 { 4 }  ; #loc: 425 20 16\n     br bb12(%8)  ; #loc: 425 20 16\n bb6:\n-    %9 = const enum.181 { 5 }  ; #loc: 425 20 16\n+    %9 = const enum.182 { 5 }  ; #loc: 425 20 16\n     br bb12(%9)  ; #loc: 425 20 16\n bb7:\n-    %10 = const enum.181 { 6 }  ; #loc: 425 20 16\n+    %10 = const enum.182 { 6 }  ; #loc: 425 20 16\n     br bb12(%10)  ; #loc: 425 20 16\n bb8:\n-    %11 = const enum.181 { 7 }  ; #loc: 425 20 16\n+    %11 = const enum.182 { 7 }  ; #loc: 425 20 16\n     br bb12(%11)  ; #loc: 425 20 16\n bb9:\n-    %12 = const enum.181 { 8 }  ; #loc: 425 20 16\n+    %12 = const enum.182 { 8 }  ; #loc: 425 20 16\n     br bb12(%12)  ; #loc: 425 20 16\n bb10:\n-    %13 = const enum.181 { 9 }  ; #loc: 425 20 16\n+    %13 = const enum.182 { 9 }  ; #loc: 425 20 16\n     br bb12(%13)  ; #loc: 425 20 16\n bb11:\n-    %14 = const enum.181 { 10 }  ; #loc: 425 20 16\n+    %14 = const enum.182 { 10 }  ; #loc: 425 20 16\n     br bb12(%14)  ; #loc: 425 20 16\n-bb12(%1: enum.181):\n+bb12(%1: enum.182):\n     ret %1  ; #loc: 425 20 16\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:38a8064f2f7cdd80ecd9596c8dbf5c752c9f740b600ce458febba1c811c327c0",
+    "def_index": 35597,
+    "func_id": 6303,
+    "instr_count": 26,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+    "def_index": 35579,
+    "func_id": 7477,
+    "instr_count": 26
+   }
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "classes": [
+    "functy-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {  ->  rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.378) {"
+    ]
+   },
+   "diff": "--- fixture float_div.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.551) {\n+rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.378) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:02e12c6b582db3cececc2d4e029b6662a459bf9421b2abb97aaa773a48bff8b3",
+    "def_index": 15302,
+    "func_id": 3401,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+    "def_index": 15288,
+    "func_id": 4415,
+    "instr_count": 2
+   }
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "classes": [
+    "functy-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {  ->  rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.367) {"
+    ]
+   },
+   "diff": "--- fixture get_char_val_trunc.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.540) {\n+rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.367) {\n     ; #producer: trust\n     ; #names: %1=\"n\"\n bb0(%0: (), %1: u64):\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:4d2deeeb33af77e0f357f001c351937beade60c4d1c25049b0445a17bc97ddb4",
+    "def_index": 14934,
+    "func_id": 3288,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+    "def_index": 14930,
+    "func_id": 4302,
+    "instr_count": 2
+   }
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "classes": [
+    "functy-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {  ->  rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.118) {"
+    ]
+   },
+   "diff": "--- fixture meta_tag_shl.trust-ir.txt\n+++ live dump\n@@ -1,4 +1,4 @@\n-rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {\n+rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.118) {\n     ; #producer: trust\n bb0:\n     %0 = const u64 1  ; #loc: 435 157 30\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:a915a1e754a30ac506553653af11cec24ad657e5d7b13db1cc8cc66e40779e2f",
+    "def_index": 19646,
+    "func_id": 4633,
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+    "def_index": 19642,
+    "func_id": 5758,
+    "instr_count": 9
+   }
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "classes": [
+    "callee-index"
+   ],
+   "detail": {
+    "callee-index": [
+     "%12 = call @func.4914(%9)  ; #loc: 389 528 34  ->  %12 = call @func.3886(%9)  ; #loc: 389 528 34",
+     "%13 = call @func.4925(%12)  ; #loc: 389 528 37  ->  %13 = call @func.3897(%12)  ; #loc: 389 528 37",
+     "%16 = call @func.4914(%15)  ; #loc: 389 529 34  ->  %16 = call @func.3886(%15)  ; #loc: 389 529 34",
+     "%17 = call @func.4925(%16)  ; #loc: 389 529 37  ->  %17 = call @func.3897(%16)  ; #loc: 389 529 37",
+     "%18 = call @func.4914(%11)  ; #loc: 389 528 50  ->  %18 = call @func.3886(%11)  ; #loc: 389 528 50",
+     "%19 = call @func.4925(%18)  ; #loc: 389 528 53  ->  %19 = call @func.3897(%18)  ; #loc: 389 528 53"
+    ]
+   },
+   "diff": "--- fixture level_is_zero.trust-ir.txt\n+++ live dump\n@@ -19,20 +19,20 @@\n     %9 = gep inbounds i8, ptr %0, %8  ; #loc: 389 525 8\n     %10 = const i64 16  ; #loc: 389 525 8\n     %11 = gep inbounds i8, ptr %0, %10  ; #loc: 389 525 8\n-    %12 = call @func.4914(%9)  ; #loc: 389 528 34\n-    %13 = call @func.4925(%12)  ; #loc: 389 528 37\n+    %12 = call @func.3886(%9)  ; #loc: 389 528 34\n+    %13 = call @func.3897(%12)  ; #loc: 389 528 37\n     condbr %13, bb7, bb8  ; #loc: 389 528 34\n bb5:\n     %14 = const i64 16  ; #loc: 389 525 8\n     %15 = gep inbounds i8, ptr %0, %14  ; #loc: 389 525 8\n-    %16 = call @func.4914(%15)  ; #loc: 389 529 34\n-    %17 = call @func.4925(%16)  ; #loc: 389 529 37\n+    %16 = call @func.3886(%15)  ; #loc: 389 529 34\n+    %17 = call @func.3897(%16)  ; #loc: 389 529 37\n     br bb6(%17)  ; #loc: 389 525 8\n bb6(%1: bool):\n     ret %1  ; #loc: 389 531 5\n bb7:\n-    %18 = call @func.4914(%11)  ; #loc: 389 528 50\n-    %19 = call @func.4925(%18)  ; #loc: 389 528 53\n+    %18 = call @func.3886(%11)  ; #loc: 389 528 50\n+    %19 = call @func.3897(%18)  ; #loc: 389 528 53\n     br bb9(%19)  ; #loc: 389 528 34\n bb8:\n     %20 = const bool false  ; #loc: 389 528 34\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:c2d8563265b016e788e93c6a3fb1c002f69e86385857e583d8657f0c6319f354",
+    "def_index": 17092,
+    "func_id": 3897,
+    "instr_count": 28,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 6,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+    "def_index": 17078,
+    "func_id": 4926,
+    "instr_count": 28
+   }
+  },
+  "simp_priority_value": {
+   "def_path": "env::types::SimpPriority::value",
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "at_head": {
+    "lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+    "def_index": 13411,
+    "func_id": 3014,
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": null
+   },
+   "pinned": {
+    "lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+    "def_index": 13411,
+    "func_id": 3014,
+    "instr_count": 10
+   }
+  },
+  "level_is_zero_deref_callee": {
+   "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+   "classes": [
+    "callee-index",
+    "functy-index",
+    "global-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.53) {  ->  rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {"
+    ],
+    "callee-index": [
+     "%1 = call @func.8369(%0)  ; #loc: 389 60 13  ->  %1 = call @func.7170(%0)  ; #loc: 389 60 13",
+     "%5 = call @func.7675(%1, %4)  ; #loc: 389 61 13  ->  %5 = call @func.6477(%1, %4)  ; #loc: 389 61 13"
+    ],
+    "global-index": [
+     "%2 = global_addr @global.4527  ; #loc: 389 61 20  ->  %2 = global_addr @global.4524  ; #loc: 389 61 20"
+    ]
+   },
+   "diff": "--- fixture level_is_zero_deref_callee.trust-ir.txt\n+++ live dump\n@@ -1,11 +1,11 @@\n-rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.53) {\n+rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %1 = call @func.8369(%0)  ; #loc: 389 60 13\n-    %2 = global_addr @global.4527  ; #loc: 389 61 20\n+    %1 = call @func.7170(%0)  ; #loc: 389 60 13\n+    %2 = global_addr @global.4524  ; #loc: 389 61 20\n     %3 = const u64 34  ; #loc: 389 61 20\n     %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 389 61 20\n-    %5 = call @func.7675(%1, %4)  ; #loc: 389 61 13\n+    %5 = call @func.6477(%1, %4)  ; #loc: 389 61 13\n     ret %5  ; #loc: 389 62 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:2c015d4703d032fdf22b17dbae256d30bb897f8c2e596b76f5b34800ffe4d57f",
+    "def_index": 17041,
+    "func_id": 3886,
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 2,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "unsupported",
+    "markers_exact": false,
+    "flip_event": null
+   }
+  }
+ }
+}

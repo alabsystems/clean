@@ -155,6 +155,18 @@ impl TargetTriple {
         &self.raw
     }
 
+    /// Is this a WebAssembly target?
+    ///
+    /// Wasm is not a variation on the native pipeline: it has no shared
+    /// libraries, no `dlopen`, and no host C ABI, so the planners below refuse
+    /// it rather than emitting a host command with `--target=wasm32-…` glued
+    /// on. Its emission path is [`crate::emit_wasm`], which produces a
+    /// self-contained module directly and needs no external toolchain.
+    #[must_use]
+    pub(crate) fn is_wasm(&self) -> bool {
+        matches!(self.arch, Arch::Wasm32)
+    }
+
     /// Shared library file extension for this target.
     #[must_use]
     pub(crate) fn shared_lib_ext(&self) -> &'static str {
@@ -162,6 +174,20 @@ impl TargetTriple {
             Os::Darwin => "dylib",
             Os::Windows => "dll",
             _ => "so",
+        }
+    }
+
+    /// Extension of the self-contained deployable module for this target.
+    ///
+    /// Distinct from [`Self::shared_lib_ext`]: a Wasm artifact is a `.wasm`
+    /// module loaded by a host embedder, not a `.so`/`.dylib` resolved by a
+    /// dynamic linker.
+    #[must_use]
+    pub(crate) fn module_ext(&self) -> &'static str {
+        if self.is_wasm() {
+            "wasm"
+        } else {
+            self.shared_lib_ext()
         }
     }
 
@@ -474,6 +500,16 @@ pub(crate) fn plan_jit_compile(
     target: &TargetTriple,
     optimize: bool,
 ) -> Result<(CompilerCommand, LinkerCommand, PathBuf), NativeCompileError> {
+    // FAIL-CLOSED: this planner emits a host C compile plus a shared-library
+    // link, neither of which exists for Wasm — there is no `cc -shared` that
+    // produces a `.wasm`, and no `dlopen` that would load one. Emitting the
+    // command anyway would produce a plan that cannot run, so refuse and point
+    // at the backend that actually targets Wasm (`crate::emit_wasm`).
+    if target.is_wasm() {
+        return Err(NativeCompileError::UnsupportedTarget(
+            target.as_str().to_owned(),
+        ));
+    }
     if !source.exists() {
         return Err(NativeCompileError::SourceNotFound(source.to_owned()));
     }

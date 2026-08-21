@@ -1,0 +1,334 @@
+{
+ "schema": "clean.crystal.remeasure_tip/1",
+ "lane": "LANE RM - the owed TIPxTIP re-measure at the guarded tip (wave-MC landed, oracle 709a7794)",
+ "provenance": {
+  "measured_utc_date": "2026-08-21",
+  "trust_rev": "111bd87608b2b733baa948fb90af469181201a16",
+  "trust_tree": "clean",
+  "driver_seal": "$HOME/trust/scratchpad/laneRM/seal-tip",
+  "driver_dylib_sha256": "fc3f5661a6d4d79db303a69543721044a551967bd6d0152a06d93975cd6b6565",
+  "clean_rev": "b576eadebe912bfaca932c379311de67daed3a31",
+  "clean_kernel_tree": "a3ae6c21fc8aa61b7c19274e84622eb6c8c99c05",
+  "clean_kernel_tree_note": "byte-identical to the tree under BOTH baselines (laneMV wc-head @ clean 7558a86c8b; wave-MC @ submodule d93b2fbb90) - the corpus did not move, deltas attribute to the producer",
+  "oracle_blob": "crates/trust-thir-lower/src/mir_differential.rs @ 709a7794 (refuse-more guard f429bb245c, ratified a0447fa6b2) - NOT in the wc-head baseline driver",
+  "sysroot": "$HOME/trust/scratchpad/laneRM/sysroot-v12t (build-std by the seal-tip driver itself, dispatch route of reports/metadata-v12-sysroot.md)",
+  "sysroot_note": "the 2026-08-20 laneMV v12 sysroot is UNDECODABLE by this driver: trust f24fdb2fdb added Statement.trust_modular_arith to the MIR encoding without a METADATA_VERSION bump, so decoding std MIR ICEs (StmtDebugInfo tag 15, expected 0..2) while sysrootcheck still reports 12=12 OK - the header byte is not a sufficient compatibility oracle for unversioned encoding changes",
+  "sysrootcheck": "OK - driver=12 sysroot=12, std resolves",
+  "guard": "PASS before every run",
+  "perturb_classes": [
+   "enum-reshape",
+   "enum-case-value",
+   "enum-ctor",
+   "enum-disc-index",
+   "switch-map",
+   "enum-payload",
+   "marker-order",
+   "marker-drop",
+   "agg-field-order",
+   "marker-arm",
+   "payload-tramp",
+   "dr-tramp",
+   "dr-retire",
+   "mc-plan"
+  ],
+  "baseline_for_deltas": "laneMV wc-head: clean 7558a86c8b x driver 26d0a0e8 (TREE dirty, dylib 50879dc8...), the 2026-08-20 tip record (223/182 at -O3, 648/606 at -O0)",
+  "profile_O3": "cargo release, -Cdebuginfo=0, -Ztrust-ir-lower=on",
+  "profile_O0": "-Copt-level=0 -Cdebug-assertions=off"
+ },
+ "whole_crate": {
+  "O3": {
+   "bodies": 13778,
+   "derived_mir_agreed": 1555,
+   "derived_mir_mismatch": 0,
+   "markers_exact": 1099,
+   "markers_exact_nonvacuous": 42,
+   "codegen_flips": 184,
+   "ctfe_flips": 41,
+   "loud_fallbacks": 18
+  },
+  "O0": {
+   "bodies": 13778,
+   "derived_mir_agreed": 1555,
+   "derived_mir_mismatch": 0,
+   "markers_exact": 1099,
+   "markers_exact_nonvacuous": 42,
+   "codegen_flips": 604,
+   "ctfe_flips": 41,
+   "loud_fallbacks": 54
+  },
+  "O3_noflip": {
+   "bodies": 13778,
+   "derived_mir_agreed": 1555,
+   "derived_mir_mismatch": 0,
+   "markers_exact": 1099,
+   "markers_exact_nonvacuous": 42,
+   "codegen_flips": 0,
+   "ctfe_flips": 0,
+   "loud_fallbacks": 0
+  },
+  "O3_pswitch": {
+   "bodies": 13778,
+   "derived_mir_agreed": 1540,
+   "derived_mir_mismatch": 15,
+   "markers_exact": 1086,
+   "markers_exact_nonvacuous": 39,
+   "codegen_flips": 171,
+   "ctfe_flips": 41,
+   "loud_fallbacks": 18
+  },
+  "O3_pmcplan": {
+   "bodies": 13778,
+   "derived_mir_agreed": 1555,
+   "derived_mir_mismatch": 0,
+   "markers_exact": 1098,
+   "markers_exact_nonvacuous": 41,
+   "codegen_flips": 183,
+   "ctfe_flips": 41,
+   "loud_fallbacks": 18
+  }
+ },
+ "deltas_by_name_vs_baseline": {
+  "O3": {
+   "codegen_flips_gained": [
+    "env::native_reducers_float::f64_to_nat",
+    "env::native_reducers_float::nat_to_f64",
+    "expr::meta::ExprMeta::has_loose_bvars"
+   ],
+   "codegen_flips_lost": [
+    "expr::bvar_in_range"
+   ],
+   "ctfe_flips_gained": [],
+   "ctfe_flips_lost": []
+  },
+  "O0": {
+   "codegen_flips_gained": [],
+   "codegen_flips_lost": [
+    "expr::bvar_in_range",
+    "tc::heartbeat_profiler::types::clamp_u32"
+   ],
+   "ctfe_flips_gained": [],
+   "ctfe_flips_lost": [
+    "env::ext_instance::PRIORITY_BYTES"
+   ]
+  }
+ },
+ "negative_control": {
+  "flip_events": 0,
+  "artifact_identity": {
+   "clean_kernel.trust-ir.bin": true,
+   "clean_kernel.coverage.json": true
+  }
+ },
+ "targets": {
+  "expr::meta::ExprMeta::has_loose_bvars": {
+   "O3": {
+    "def_index": 16174,
+    "func_id": 3650,
+    "lineage": "sha256:446663acce34f8ddb2f5e5f5291e59b5845eb0895ed7ffaade5fe43c9f7436be",
+    "instr_count": 4,
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:446663acce34f8ddb2f5e5f5291e59b5845eb0895ed7ffaade5fe43c9f7436be",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "O0": {
+    "def_index": 16174,
+    "func_id": 3650,
+    "lineage": "sha256:446663acce34f8ddb2f5e5f5291e59b5845eb0895ed7ffaade5fe43c9f7436be",
+    "instr_count": 4,
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:446663acce34f8ddb2f5e5f5291e59b5845eb0895ed7ffaade5fe43c9f7436be",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "perturb_run": "O3_pmcplan",
+   "under_perturbation": {
+    "def_index": 16174,
+    "func_id": 3650,
+    "lineage": "sha256:446663acce34f8ddb2f5e5f5291e59b5845eb0895ed7ffaade5fe43c9f7436be",
+    "instr_count": 4,
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `mk b0.0:live s0:adt:clean_kernel::expr::meta::ExprMeta`",
+    "flip_event": false,
+    "event_lineage": null,
+    "event_lineage_equals_row": null,
+    "perturb_applications": [
+     "McPlan",
+     1
+    ]
+   }
+  },
+  "level::Level::is_zero": {
+   "O3": {
+    "def_index": 17092,
+    "func_id": 3897,
+    "lineage": "sha256:5e9c0f36b2057ac276d2077bbb3aaa438f51b81a9051cddfc868261fd34c15a0",
+    "instr_count": 28,
+    "verdict": "agreed",
+    "detail": "18 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "28 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:5e9c0f36b2057ac276d2077bbb3aaa438f51b81a9051cddfc868261fd34c15a0",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "O0": {
+    "def_index": 17092,
+    "func_id": 3897,
+    "lineage": "sha256:5e9c0f36b2057ac276d2077bbb3aaa438f51b81a9051cddfc868261fd34c15a0",
+    "instr_count": 28,
+    "verdict": "agreed",
+    "detail": "18 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "28 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:5e9c0f36b2057ac276d2077bbb3aaa438f51b81a9051cddfc868261fd34c15a0",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "perturb_run": "O3_pswitch",
+   "under_perturbation": {
+    "def_index": 17092,
+    "func_id": 3897,
+    "lineage": "sha256:5e9c0f36b2057ac276d2077bbb3aaa438f51b81a9051cddfc868261fd34c15a0",
+    "instr_count": 28,
+    "verdict": "mismatch",
+    "detail": "line 3: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`",
+    "markers_exact": false,
+    "markers_detail": "",
+    "flip_event": false,
+    "event_lineage": null,
+    "event_lineage_equals_row": null,
+    "perturb_applications": [
+     "SwitchMap",
+     1
+    ]
+   }
+  },
+  "level::Level::is_nonzero": {
+   "O3": {
+    "def_index": 17093,
+    "func_id": 3898,
+    "lineage": "sha256:121e19938bc8a7b0888e3c86ef10fee7f7aa2442c0f0ed4358ac62f4f3c36ba7",
+    "instr_count": 28,
+    "verdict": "agreed",
+    "detail": "18 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "28 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:121e19938bc8a7b0888e3c86ef10fee7f7aa2442c0f0ed4358ac62f4f3c36ba7",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "O0": {
+    "def_index": 17093,
+    "func_id": 3898,
+    "lineage": "sha256:121e19938bc8a7b0888e3c86ef10fee7f7aa2442c0f0ed4358ac62f4f3c36ba7",
+    "instr_count": 28,
+    "verdict": "agreed",
+    "detail": "18 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "28 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:121e19938bc8a7b0888e3c86ef10fee7f7aa2442c0f0ed4358ac62f4f3c36ba7",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "perturb_run": "O3_pswitch",
+   "under_perturbation": {
+    "def_index": 17093,
+    "func_id": 3898,
+    "lineage": "sha256:121e19938bc8a7b0888e3c86ef10fee7f7aa2442c0f0ed4358ac62f4f3c36ba7",
+    "instr_count": 28,
+    "verdict": "mismatch",
+    "detail": "line 3: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`",
+    "markers_exact": false,
+    "markers_detail": "",
+    "flip_event": false,
+    "event_lineage": null,
+    "event_lineage_equals_row": null,
+    "perturb_applications": [
+     "SwitchMap",
+     1
+    ]
+   }
+  },
+  "env::types::SimpPriority::value": {
+   "O3": {
+    "def_index": 13411,
+    "func_id": 3014,
+    "lineage": "sha256:9d3c71cf08a375f35e2f966ef06cdb1deddce2936a00083bdc5b420a966733ae",
+    "instr_count": 10,
+    "verdict": "agreed",
+    "detail": "7 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:9d3c71cf08a375f35e2f966ef06cdb1deddce2936a00083bdc5b420a966733ae",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "O0": {
+    "def_index": 13411,
+    "func_id": 3014,
+    "lineage": "sha256:9d3c71cf08a375f35e2f966ef06cdb1deddce2936a00083bdc5b420a966733ae",
+    "instr_count": 10,
+    "verdict": "agreed",
+    "detail": "7 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical",
+    "flip_event": true,
+    "event_lineage": "sha256:9d3c71cf08a375f35e2f966ef06cdb1deddce2936a00083bdc5b420a966733ae",
+    "event_lineage_equals_row": true,
+    "perturb_applications": null
+   },
+   "perturb_run": "O3_pswitch",
+   "under_perturbation": {
+    "def_index": 13411,
+    "func_id": 3014,
+    "lineage": "sha256:9d3c71cf08a375f35e2f966ef06cdb1deddce2936a00083bdc5b420a966733ae",
+    "instr_count": 10,
+    "verdict": "mismatch",
+    "detail": "line 4: built `b1: return c:uint:1000:w32` vs derived `b1: return fld(downcast(deref(a1),1),0)`",
+    "markers_exact": false,
+    "markers_detail": "",
+    "flip_event": false,
+    "event_lineage": null,
+    "event_lineage_equals_row": null,
+    "perturb_applications": [
+     "SwitchMap",
+     1
+    ]
+   }
+  }
+ },
+ "findings": {
+  "regression": {
+   "headline": "expr::bvar_in_range - a COMPLETE five-link chain, the first computing chain, 21 non-vacuous marker lines - loses links 1/2b at the guarded tip: verdict agreed->unsupported, flip gone at BOTH levels",
+   "lost_agreed_O3": [
+    "env::ext_instance::PRIORITY_BYTES",
+    "expr::bvar_in_range",
+    "expr::types::FVarId::SENTINEL_RANGE_START",
+    "tc::heartbeat_profiler::types::clamp_u32"
+   ],
+   "new_verdict_detail": "unsupported: comparator(built): constant outside fragment: OpaqueScalar { width: 32|64, signed: false }",
+   "culprit": "trust 2239682f9c (fix(trust-ir): break the CTFE query cycles): the ctfe_reentrancy freeze declines forced const-evaluation of LOCAL mir::Const::Unevaluated operands during mir_built lowering, so local associated constants reach the comparator as OpaqueScalar; the frozen oracle (709a7794) then refuses them - fail-closed and loud, so agreed drops rather than anything being admitted wrong",
+   "direction": "the refusal is the fail-closed direction and is correct oracle behaviour; the fix is a PRODUCER build item (evaluate non-cyclic local consts, or carry their identity), never a comparator relaxation",
+   "not_the_oracle_guard": "the refuse-more Rvalue::Ref guard (f429bb245c) fired on NOTHING: zero other rows moved, and wave-MC's class is untouched as its report predicted"
+  },
+  "instrument": {
+   "sysrootcheck_is_not_sufficient": "the tip driver ICEs decoding the 2026-08-20 laneMV v12 sysroot (invalid enum variant tag while decoding StmtDebugInfo, expected 0..2, actual 15) because trust f24fdb2fdb added Statement.trust_modular_arith to the MIR encoding WITHOUT a METADATA_VERSION bump; seal_driver.sh sysrootcheck reports driver=12 sysroot=12 OK on that very pair. METADATA_VERSION equality is necessary, not sufficient; this lane proved its pair with a real optimized compile instead, and rebuilt the sysroot with the measured driver itself"
+  }
+ }
+}

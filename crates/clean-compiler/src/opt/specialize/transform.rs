@@ -39,7 +39,7 @@ pub(crate) fn specialize_code(
             };
 
             // Drain local specializations generated for this call site
-            let local_specs: Vec<FunDecl> = state.pending_local_specs.drain(..).collect();
+            let local_specs: Vec<FunDecl> = std::mem::take(&mut state.pending_local_specs);
             for spec in &local_specs {
                 ctx.scope.insert(spec.fvar_id);
                 ctx.local_funs.insert(spec.fvar_id, spec.clone());
@@ -217,7 +217,7 @@ pub(crate) fn specialize_code_with_index(
             };
 
             // Drain local specializations generated for this call site
-            let local_specs: Vec<FunDecl> = state.pending_local_specs.drain(..).collect();
+            let local_specs: Vec<FunDecl> = std::mem::take(&mut state.pending_local_specs);
             for spec in &local_specs {
                 ctx.scope.insert(spec.fvar_id);
                 ctx.local_funs.insert(spec.fvar_id, spec.clone());

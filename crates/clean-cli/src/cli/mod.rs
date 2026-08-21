@@ -24,7 +24,7 @@ pub mod promote;
 
 use std::path::PathBuf;
 
-use clap::Args;
+use clap::{Args, ValueEnum};
 use clean_features::{Category, Example, FeatureDescriptor, RefKind, Reference, Stability};
 
 /// Arguments accepted by `clean sorry-trace`.
@@ -134,7 +134,22 @@ pub struct RunArgs {
     pub keep_temp: bool,
 }
 
-/// Arguments for `clean extract` — width-1 differential-checked C
+/// Target language for `clean extract`.
+///
+/// Both backends run the SAME extraction gate, the SAME battery and the SAME
+/// differential against kernel-side evaluation; they differ only in the emitted
+/// artifact. `c` links against the embedded `clean-runtime`; `rust` emits a
+/// self-contained, `unsafe`-free module with plain scalar signatures.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum ExtractBackend {
+    /// Emit C through the `clean compile --emit c` closure (default).
+    #[default]
+    C,
+    /// Emit readable, safe Rust with plain `u8`/`u16`/`u32`/`u64`/`bool` types.
+    Rust,
+}
+
+/// Arguments for `clean extract` — width-1 differential-checked
 /// extraction (`designs/2026-08-06-clean-extract-width1.md`). The battery
 /// always runs; a refusal or differential mismatch writes no artifacts.
 #[derive(Debug, Clone, Args)]
@@ -145,9 +160,12 @@ pub struct ExtractArgs {
     /// Name of the first-order computational declaration to extract.
     #[arg(long, value_name = "NAME")]
     pub decl: String,
-    /// Output directory for the C file + manifest (must not exist).
+    /// Output directory for the emitted source + manifest (must not exist).
     #[arg(long, value_name = "DIR")]
     pub out: PathBuf,
+    /// Target language of the emitted artifact.
+    #[arg(long, value_enum, default_value_t = ExtractBackend::C)]
+    pub backend: ExtractBackend,
     /// Keep the scratch build directory and print its path.
     #[arg(long)]
     pub keep_temp: bool,

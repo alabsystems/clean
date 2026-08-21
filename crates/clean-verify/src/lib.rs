@@ -71,6 +71,7 @@ pub mod ffi;
 /// `bootstrap::spec_registration`).
 pub mod fidelity_gate;
 pub mod interval_arith;
+pub mod ir_mint;
 pub mod ir_semdiff;
 pub mod neural_surgery;
 pub mod nn_verify;

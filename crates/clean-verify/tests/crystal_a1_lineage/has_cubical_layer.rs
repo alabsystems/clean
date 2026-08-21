@@ -24,7 +24,12 @@ fn proved_module_matches_the_emitted_artifact() {
     let text = fixture("has_cubical_layer.trust-ir.txt");
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_mode.rs", "const SRC_IR_H2_B"),
+        // The registered blocks are now the MINTED script, not seven hand-
+        // written constants (crystal A2, `src/ir_mint`). The comparator itself
+        // is unchanged and still an independent reader: it reads the emitted
+        // TEXT on one side and Clean spec source on the other, and neither
+        // path goes through the minter.
+        &clean_block_sources("generated/ir_h2.defs.txt", "def ir_h2_"),
         "def ir_h2_b",
     );
 
@@ -118,7 +123,7 @@ fn proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_mode.rs", "const SRC_IR_H2_FUNC"),
+        &clean_block_sources("generated/ir_h2.defs.txt", "def ir_h2_func"),
         "has_cubical_layer",
     );
     assert_lanes(&emitted, &clean, "has_cubical_layer");

@@ -204,6 +204,48 @@ const INT_PRELUDE_SHIMS: &[PreludeShim] = &[
     },
 ];
 
+/// `UInt32` shims for the fixed-width externs the L5 emitter lowers to.
+///
+/// CALLING CONVENTION, measured rather than assumed. `emit_type` maps
+/// `IRType::UInt32` to an unboxed `uint32_t`, but the extraction path reaches
+/// these symbols through the BOXED object path — the emitted C is
+/// `clean_obj* _x5 = l_UInt32_ofNat(_x4);`. An unboxed signature compiles to
+/// `-Wint-conversion` errors on every call site, so both shims take and return
+/// `clean_obj*`. The differential battery (kernel whnf vs executed binary) is
+/// what confirms the representation actually agrees, rather than this comment.
+///
+/// Why they are needed at all: the prelude's `UInt32.add`/`mul` are compiled
+/// FROM SOURCE, and their bodies route through `UInt32.ofNat`. So every UIntW
+/// extraction — including the design's own V1 pick
+/// `def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b`, and
+/// even the minimal `def duo (a b : UInt32) : UInt32 := UInt32.add a b` —
+/// bailed with "uncovered extern in emitted C: `l_UInt32_ofNat`". That one
+/// missing symbol blocked the whole UIntW lane
+/// (`designs/2026-08-06-clean-extract-width1.md`, rank 5).
+///
+/// `UInt32.ofNat n` is `n % 2^32`: read the Nat at full width through the
+/// heap-aware helper, then truncate. Truncation IS the semantics, not a
+/// lossy shortcut — `ofNat` is total and wraps, so a Nat above `2^32` must
+/// reduce mod `2^32` rather than saturate or trap. Reading via
+/// `clean_nat_to_u128` (not tagged-only `clean_unbox`) keeps that exact for a
+/// heap-boxed argument. Consumes its argument per the all-owned ABI.
+const UINT32_PRELUDE_SHIMS: &[PreludeShim] = &[
+    PreludeShim {
+        symbol: "l_UInt32_ofNat",
+        definition: "clean_obj* l_UInt32_ofNat(clean_obj* n) {\n  \
+            unsigned __int128 v = clean_nat_to_u128(n);\n  \
+            clean_dec(n);\n  \
+            return clean_nat_of_u64((uint64_t)(v & 0xFFFFFFFFu));\n}\n",
+    },
+    PreludeShim {
+        symbol: "l_UInt32_toNat",
+        definition: "clean_obj* l_UInt32_toNat(clean_obj* v) {\n  \
+            unsigned __int128 x = clean_nat_to_u128(v);\n  \
+            clean_dec(v);\n  \
+            return clean_nat_of_u64((uint64_t)(x & 0xFFFFFFFFu));\n}\n",
+    },
+];
+
 /// All prelude shim tables, in one place. The union of these symbols is the
 /// `PRIMITIVE_DENYLIST` the #14 dependency-closure boundary treats as never
 /// compiled-from-source even if their bodies lower, so the shim always wins and
@@ -211,6 +253,7 @@ const INT_PRELUDE_SHIMS: &[PreludeShim] = &[
 const ALL_PRELUDE_SHIM_TABLES: &[&[PreludeShim]] = &[
     NAT_PRELUDE_SHIMS,
     INT_PRELUDE_SHIMS,
+    UINT32_PRELUDE_SHIMS,
     BOOL_PRELUDE_SHIMS,
     TYPECLASS_PRELUDE_SHIMS,
     IO_PRELUDE_SHIMS,

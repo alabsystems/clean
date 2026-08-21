@@ -1,0 +1,143 @@
+{
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "def_path": "env::types::SimpPriority::value",
+ "measured": "2026-08-20",
+ "lane": "LANE W - width: the first chained body that COMPUTES AN ADDRESS AND DEREFERENCES IT",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "build": {
+  "clean_repo_rev_of_the_dump": "d1d465d456f337c1982ba8239af32d73ddd7d602",
+  "clean_kernel_tree": "a3ae6c21fc8aa61b7c19274e84622eb6c8c99c05",
+  "clean_kernel_tree_note": "The dumps were taken IN THIS LANE'S OWN WORKTREE at that revision, with `git status --porcelain -- crates/clean-kernel` EMPTY, so the provenance is direct rather than inherited from a sibling lane's checkout.",
+  "trust_driver_seal": "$HOME/trust/scratchpad/laneTM/seal-head",
+  "trust_driver_rev": "26d0a0e8eefd88505463c63ccaf8db6ba6c7fe02",
+  "trust_driver_dylib_sha256": "50879dc8cf7f0e528eb907dd1882e46e7260fd68ec62dc90120a69903832ba98",
+  "trust_driver_rev_note": "wave-W3b, the producer TIP. trust origin/main 847ea219c0 differs from it only under docs/, reports/ and scripts/ - no compiler source, so the seal is compiler-identical to trust HEAD.",
+  "sysroot": "laneW composite: laneMV's v12 rlibs (symlinked, unmodified) + stage0's rustlib bin",
+  "sysroot_metadata_version": 12,
+  "sysroot_note": "METADATA_VERSION 12. laneMV's sysroot-v12 could not be used directly: its `lib/rustlib/<host>/bin` symlinks all point into `build/<host>/stage1`, which ANOTHER LANE REBUILT during this session -- `rust-objcopy` vanished and every build script died with `unable to run rust-objcopy`. The same rebuild also removed the libstd the SEALED driver is linked against, so `rustc-main` would not even load until DYLD was pointed at stage0/lib. Neither change touches the v12 rlibs, which are the same files by symlink, and `guard` passes on the new DYLD path. This is the contamination hazard `seal_driver.sh` exists for, observed live.",
+  "guard": "PASS before every run, --dyld <stage1>/lib, --snapshot-root <seal>",
+  "verify": "SPLIT, and the split is recorded rather than smoothed. `seal_driver.sh verify` bundles a dylib-integrity leg and a `sysrootcheck` leg, and the second REFUSES this pair: it reports `METADATA_VERSION driver=unknown sysroot=12` with an EMPTY resolution-error list -- it could not read the DRIVER's own version and found nothing wrong with the sysroot. The pair demonstrably compiles clean-kernel (five arms below). So the integrity leg was run as `guard` before every arm and PASSED, the sysroot leg is recorded as UNPROVEN, and identification is BY OUTPUT DIGEST, which is what the standing rule requires when a self-check is UNPROVEN.",
+  "selftest": "UNPROVEN (control and subject register the same ten perturbation classes). Identification is BEHAVIOURAL, by output digest, exactly as the standing rule requires.",
+  "recipe": "laneW wholecrate3.sh (three O3 arms in three CARGO_TARGET_DIRs + the two controls)",
+  "run_log": "laneW wc3.log",
+  "profile": "cargo release (-C opt-level=3) -Cdebuginfo=0 -Ztrust-ir-lower=on -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build - only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info has measured nothing.",
+  "crate_totals": "bodies 13778 / lowered 8872 / spliced 6392 / declarations 1102 / instr 396471 / derived-MIR agreed 1559 / markers_exact 1098 (38 non-vacuous) / codegen flips 182 / CTFE flips 41 / loud fallbacks 19",
+  "census": "data/crystal_frontier_census_2026-08-20.json, re-derived from this dump by scripts/crystal_frontier_census.py"
+ },
+ "def_index": 13411,
+ "func_id": 3014,
+ "instr_count": 10,
+ "lowered": true,
+ "spliced": true,
+ "lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "7 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "2 marker line(s) identical"
+ },
+ "markers_exact_is_vacuous_here": "NOT VACUOUS. `markers_detail` is `2 marker line(s) identical`, so markers_exact here compares two NON-EMPTY marker sequences and finds them equal line for line. That is materially different from the vacuous majority: measured on THIS dump, 1,098 rows carry markers_exact true and only 38 of them are non-vacuous; this body is one of the 38. `mode::CleanMode::has_cubical_layer` -- the chain the crystal's complete five-link example runs on -- reads `0 marker line(s) identical`, i.e. a comparison of two EMPTY sequences.",
+ "bodyful_reachable_closure": "PASS - the body makes NO calls (resolved 0, extern_decls 0, unresolved 0) and the emitted text contains no `call` instruction, so the reachable callee closure is the body itself and contains no declaration-only entry. This is the A0 criterion that FAILS for level::Level::is_zero, whose closure reaches `<LevelArc as Deref>::deref` and through it two entries that are DECLARATIONS in the module (ordinals at or above the 6,392-body prefix), which is why that body's links 3/4 cannot hold and this one's can.",
+ "flip_event": {
+  "fired": true,
+  "seam": "codegen",
+  "ctfe": false,
+  "asserts": 0,
+  "flipped_so_far": 63,
+  "lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+  "matches_artifact_lineage": true,
+  "matches_artifact_lineage_note": "The flip event's lineage and the coverage row's lineage are the SAME string, character for character. This is the A6 lineage-equality check, and it is a comparison of two recorded values -- neither side recomputes trust's digest from the artifact.",
+  "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:13411 ~ clean_kernel[ab17]::env::types::{impl#1}::value), asserts=0, lineage=sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71, flipped_so_far=63",
+  "occurrences_of_this_did_in_flip_log": 1
+ },
+ "flip_event_at_O0": {
+  "measured_in_a_separate_arm": true,
+  "note": "The -O0 arm is a separate run (laneW wholecrate_o0.sh) and feeds data/crystal_frontier_census_2026-08-20.json. This chain is stated at the DEPLOYED profile and nothing below depends on the -O0 arm."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "event_for_this_body_present": false,
+  "note": "ZERO events in the whole crate, not merely zero for this body. A control that only checked this row could not tell 'the flag works' from 'the log filter changed'."
+ },
+ "perturbation_control": {
+  "flag": "-Ztrust-sat-perturb=switch-map",
+  "reached_this_body": true,
+  "applications": 1,
+  "raw": "trust-sat-perturb: def=DefId(0:13411 ~ clean_kernel[ab17]::env::types::{impl#1}::value) class=SwitchMap applications=1",
+  "verdict_under_perturbation": "mismatch",
+  "markers_exact_under_perturbation": false,
+  "detail_under_perturbation": "line 4: built `b1: return c:uint:1000:w32` vs derived `b1: return fld(downcast(deref(a1),1),0)`",
+  "flip_event_under_perturbation": false,
+  "crate_wide_effect": "24 of 1,773 perturbation sites took an application; codegen flips fell 182 -> 169 and this body is one of the 13 that lost theirs.",
+  "why_this_body_and_not_Reducibility_height": "*** THIS IS THE REASON THIS BODY WAS CHAINED. *** `env::types::Reducibility::height` is the other gep-carrying, markers_exact, bodyful-closure codegen flip at HEAD and is otherwise an equally good target -- but the switch-map perturbation records `applications=0` on it TWICE in the same run, its derived-MIR verdict stays `agreed`, and IT STILL FLIPS under perturbation (flipped_so_far=62). The control never reaches the body, so on `height` a green perturbation row would be a statement about nothing. A fail-closed control that cannot reach what it controls is not a control, and the difference is recorded rather than worked around."
+ },
+ "candidate_selection": {
+  "criteria": "derived-MIR agreed AND markers_exact AND markers_exact NON-VACUOUS AND unsupported [] AND spliced AND a bodyful reachable closure AND a codegen flip event at the DEPLOYED profile whose lineage equals the coverage row's AND a `gep` or a `call` in the emitted body AND a switch-map perturbation that reaches the body and turns it mismatch",
+  "chainable_codegen_flips_at_O3": 180,
+  "of_those_carrying_a_gep_or_a_call": 2,
+  "the_two": [
+   "env::types::Reducibility::height",
+   "env::types::SimpPriority::value"
+  ],
+  "gep_carrying_O3_codegen_flips_total": 4,
+  "the_other_two": [
+   "level::Level::is_zero",
+   "level::Level::is_nonzero"
+  ],
+  "why_the_other_two_are_not_chainable": "Their reachable closure is NOT bodyful: `<level::LevelArc as std::ops::Deref>::deref` calls two entries that the emitted module carries as body-less DECLARATIONS. `ir_call_exec` goes stuck on a callee with no body, so links 3/4 are not merely unproved for them, they are refutable - which docs/CRYSTAL_STATUS.md records under `a0_criteria.bodyful_reachable_closure == FAIL`.",
+  "call_carrying_bodies_with_a_bodyful_closure": 52,
+  "of_those_flipping_at_O3": 0,
+  "of_those_markers_exact": 0,
+  "of_those_flipping_at_O0": 8,
+  "call_search_conclusion": "There is NO chainable `call`-carrying body in clean-kernel at the deployed profile today. The full 52-row enumeration is in data/crystal_frontier_census_2026-08-20.json under `call_bodies_with_a_bodyful_closure`; every one of them is markers_exact FALSE. So this lane chained a `gep` body, and says so.",
+  "measured_utc_date": "2026-08-20",
+  "measurement_provenance": "Re-derived by this lane from the whole-crate dump named in `build`, by scripts/crystal_frontier_census.py, which joins flip events to coverage rows by def_index WITHIN the compile. def_index is NOT stable across HEADs and the script never joins across two."
+ },
+ "what_this_body_adds_that_no_earlier_chain_had": [
+  "A `gep`: the machine computes an address from the receiver and a materialised byte offset.",
+  "A LOAD THROUGH THAT ADDRESS: the value returned on the Custom arm is read from a cell the machine addressed itself, not from the pointer it was handed.",
+  "A SECOND memory lookup in one body, which is why the proof needs two nested Eq.substs and a named intermediate configuration (`ir_pv_cfg1`) rather than the single `after_load` device every earlier chain used.",
+  "A representation relation with TWO cells on one arm (`EncodesSimpPriority.custom`), and a kernel-checked witness that dropping the second one makes the machine `ub bad_addr` rather than silently answering something."
+ ],
+ "what_this_does_NOT_establish": [
+  "That Rust's layout puts `SimpPriority::Custom`'s u32 at byte 4. That is a PREMISE of EncodesSimpPriority, not a theorem.",
+  "That a byte offset is a cell offset. EvalIR's heap is cell-addressed and inherits the producer's `+4` as `+4`.",
+  "That the lineage digest is what trust would recompute from the artifact. It is RECORDED on both sides and compared; neither side recomputes it.",
+  "Anything past the flip seam: the MIR optimisation pipeline, LLVM and linking are downstream of everything here."
+ ],
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "separate_cargo_target_dirs": true,
+  "cargo_incremental": 0,
+  "coverage_json_sha256": "d897e95184308d8be7e5fd8c9f877a6747f386f26c8c66cbf45ce17ec2869c50",
+  "trust_ir_txt_sha256": "5b8d21e7785e03e9913e3590ef040da6b4c6cfba6973039feaa50108ff849178",
+  "trust_ir_bin_sha256": "91ec95c9d2faaf4c6712c6944118de46bacd6ee9aa9774049340ff4bb7d3389a",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_byte_identical_across_all_three": true,
+  "note": "Three arms, three CARGO_TARGET_DIRs, CARGO_INCREMENTAL=0, `guard` PASS before each, all three digests identical on all three artifacts. `lineage` is therefore a measurement rather than one observation."
+ },
+ "lineage_is_a_PER_BUILD_identity": {
+  "observed_here": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+  "observed_in_the_sibling_lane_dump": "sha256:cbdd069b78098fbc76ff257cc3d20012c2be0e42002c64d60a31aa0f0d106452",
+  "what_was_identical_across_the_two": "The emitted body TEXT (byte-identical, checked line for line -- it is the committed fixture), the projected CORE MODULE (byte-identical, reader A's digest a92f873584d4878ea10be6d1c47d28f4ea3fafec3a297f0a96d2afe5c8c8c3b5 both times), the def_index (13411), the func_id (3014), the instr_count (10), the derived-MIR verdict, and the whole-crate totals.",
+  "what_differed": "The crate DISAMBIGUATOR: `clean_kernel[124c]` there, `clean_kernel[ab17]` here. The two builds are of byte-identical clean-kernel source through the same sealed driver; they differ in the CHECKOUT PATH, which cargo folds into `-C metadata`.",
+  "the_finding": "*** A CHAINED BODY'S LINEAGE DIGEST IS NOT A FUNCTION OF THE BODY. *** It moved while every instruction, the core module and the coverage row stayed identical. Read this against data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json, which measured the OPPOSITE invariance for `flat_flags_contains`: its digest did NOT move across a 33-commit producer change on byte-identical source. Both are measurements. Together they say the digest is stable under a producer change and unstable under a crate-metadata change, so it identifies a BUILD, exactly as its own docs say -- and any gate that compares two lineages must compare two values from ONE build, which is what A6 does and what this fixture records."
+ },
+ "head_measurement": {
+  "record": "data/crystal_fixture_freshness_2026-08-20_laneW.json",
+  "verdict": "IDENTICAL",
+  "what_it_means": "This fixture is not a dated pin that a later lane re-checked -- it IS the live-dump comparison. `scripts/crystal_fixture_freshness.py` was run against the very dump the fixture was cut from, over ALL twelve committed fixtures, and this body came back IDENTICAL with an EMPTY drift-class list. Every other chain came back NUMBERING-ONLY on the same dump, which is what says the run was real and not a self-comparison of one file.",
+  "why_there_is_no_superseded_at_head_block": "The other eleven chains carry `superseded_at_head` and `reconfirmed_at_newer_producer`, each naming a committed revalidation record measured LATER than the fixture's own build. There is no such record for this chain because there is no later build yet: it landed after the most recent one. `crystal_a1_lineage/freshness.rs` lists it in HEAD_MEASURED and gates it on the block above instead -- which is an additional requirement, not an exemption. The next lane that runs the freshness script records this body like every other and the row leaves that list.",
+  "at_head_lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71"
+ }
+}

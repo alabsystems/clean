@@ -1,0 +1,37 @@
+# READER A of the crystal-A2 mint gate: the offline projector.
+#
+# It reads the trust-ir binary `trustc` emitted for a whole crate, finds ONE
+# function by name, and projects it onto the fragment Clean's `IRModule`
+# encodes, printing the canonical CORE MODULE that
+# `crates/clean-verify/src/spec/core_spec/generated/ir_*.core.txt` commits.
+#
+# It is NOT a workspace member and cannot be: it depends on `trust-ir`, which is
+# not a dependency of anything Clean ships. It is committed here so the
+# derivation of a committed artifact is reviewable and re-runnable rather than
+# folklore. It is pinned to the same immutable TrustIR authority as Clean's
+# trust-ir-contract dependency and has a committed standalone lock, so
+# reproducing an authority-bearing projection never consults a mutable sibling
+# checkout or a freshly resolved graph:
+#
+#   cargo build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml
+#   ./target/release/a2project <crate.trust-ir.bin> <fn-name> <out-dir> [slug]
+#
+# Nothing in the Clean test suite runs it. `tests/crystal_a2_mint.rs` checks its
+# OUTPUT against two independent in-tree readers, which is the whole point: a
+# defect here shows up as a disagreement, not as a silent pass.
+
+[workspace]
+
+[package]
+name = "a2mint-project"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+trust-ir = { path = "../../vendor/trust-ir/crates/trust-ir", default-features = false, features = ["binary", "fmt"] }
+sha2 = { version = "0.10", default-features = false }
+
+[[bin]]
+name = "a2project"
+path = "src/main.rs"

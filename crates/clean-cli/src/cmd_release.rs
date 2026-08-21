@@ -142,7 +142,7 @@ impl ReleaseReadinessSmokeRunner {
             "clean bench publication-check --launch --json",
         );
         self.require_text("docs/RELEASE_READINESS.md", "## Aggregate Gate Map");
-        self.require_text("docs/RELEASE_READINESS.md", "## clean Clone");
+        self.require_text("docs/RELEASE_READINESS.md", "## Clean Clone");
         self.require_text("docs/RELEASE_READINESS.md", "## Issue Hygiene");
         self.require_text("docs/PUBLIC_DEMO.md", "./scripts/run_public_demo.sh");
         self.require_text("docs/BENCHMARKS.md", "Last audited:");

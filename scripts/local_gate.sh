@@ -46,8 +46,40 @@ FAST=0
 [[ "${1:-}" == "--fast" ]] && FAST=1
 fail() { echo "LOCAL GATE: FAIL — $1" >&2; exit 1; }
 
+# ── PYTHON RESOLUTION (fail-closed) ─────────────────────────────────────────
+#
+# This gate's legs are `$GATE_PYTHON scripts/*.py`, and five of the scripts they
+# reach need `tomllib` (Python >= 3.11). On this machine `/usr/bin/python3` is
+# 3.9.6 and sits AHEAD of Homebrew's 3.14 on PATH, so the VERY FIRST leg died at
+# import with ModuleNotFoundError and the whole gate exited 1 — before the
+# soundness certificate, the ratchets, or the workspace lint ever ran. Measured
+# 2026-08-20: the lint frontend had just been repaired (scripts/rust_frontend.sh)
+# and still could not run from here, because nothing downstream of leg 1 ran.
+#
+# Resolved to an explicit interpreter rather than a PATH shim on purpose. A
+# generated `python3` wrapper in a bin dir was measured to BLOCK for >60 s at 0%
+# CPU on first exec (macOS evaluates a newly written executable; load average
+# was 21), and a wrapper that silently fails to exec would turn every python leg
+# into a no-op that PASSES — the exact failure this gate exists to prevent.
+# Nested gate scripts keep the ambient `python3`: none of them reach a
+# tomllib-dependent script (checked 2026-08-20).
+_gate_python() {
+  local cand
+  for cand in "${CLEAN_GATE_PYTHON:-}" python3 python3.14 python3.13 python3.12 python3.11 \
+              /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+    [[ -n "$cand" ]] || continue
+    command -v "$cand" >/dev/null 2>&1 || continue
+    if "$cand" -c 'import tomllib' >/dev/null 2>&1; then command -v "$cand"; return 0; fi
+  done
+  return 1
+}
+GATE_PYTHON="$(_gate_python)" \
+  || fail "no python3 with 'tomllib' (needs >= 3.11, or 'tomli' installed); five of this gate's scripts parse TOML, so the gate cannot run. Set CLEAN_GATE_PYTHON=/path/to/python3."
+[[ "$(command -v python3 2>/dev/null)" == "$GATE_PYTHON" ]] \
+  || echo "== local gate: python — $GATE_PYTHON ($("$GATE_PYTHON" -V 2>&1)); PATH python3 is $(python3 -V 2>&1) =="
+
 echo "== local gate: cross-repo dependency boundary =="
-python3 scripts/check_workspace_dependency_boundary.py \
+"$GATE_PYTHON" scripts/check_workspace_dependency_boundary.py \
   || fail "Clean must consume shared verification vocabulary through trust-ir-contract, never the Trust workspace"
 
 # Lint-coverage invariant (~0.1s, metadata only — safe in the --fast path). The
@@ -56,7 +88,7 @@ python3 scripts/check_workspace_dependency_boundary.py \
 # a gate site that drops --workspace/--all-targets re-opens the blind spot where
 # non-default members' test targets are never compiled.
 echo "== local gate: lint coverage (every tracked crate, every target) =="
-python3 scripts/check_lint_coverage.py \
+"$GATE_PYTHON" scripts/check_lint_coverage.py \
   || fail "lint coverage — a tracked crate escaped [workspace] members, or a gate site dropped --workspace/--all-targets (scripts/check_lint_coverage.py)"
 
 echo "== local gate: first-party Rust contains no ignored tests or doctests =="
@@ -89,7 +121,7 @@ cargo test --locked -p clean-cli --test feature_coverage -q \
   || fail "CLI feature coverage"
 
 echo "== local gate: ratchet surfaces =="
-python3 - <<'EOF' || exit 1
+"$GATE_PYTHON" - <<'EOF' || exit 1
 import json, sys
 r = json.load(open('data/unchecked_decl_ratchet.json'))
 tcb = json.load(open('data/soundness_tcb.json'))
@@ -105,27 +137,27 @@ print(f"  axiom_audit.json mirror: domain_axiom_count={mirror.get('domain_axiom_
 EOF
 
 echo "== local gate: extend_constants bypass ratchet =="
-python3 scripts/check_extend_constants_ratchet.py \
+"$GATE_PYTHON" scripts/check_extend_constants_ratchet.py \
   || fail "extend_constants_* bypass ratchet — a new unaccounted bulk-import bypass; add a // SOUNDNESS: comment + a data/unchecked_decl_ratchet.json entry"
 
 echo "== local gate: trust-verdict emitter discipline (Pillar 1) =="
-python3 scripts/check_trust_verdict_emitters.py \
+"$GATE_PYTHON" scripts/check_trust_verdict_emitters.py \
   || fail "trust-verdict emitter discipline — a new unclassified KernelVerified green in clean-kernel, a mislabeled kernel-rechecked entry, an un-justified asserts-own-authority emitter, or a raised own-authority ratchet; classify it in data/trust_verdict_emitters.json (Pillar-1 gate)"
 
 echo "== local gate: path-to-3 TCB ratchet =="
-python3 scripts/tcb_target_ratchet.py \
+"$GATE_PYTHON" scripts/tcb_target_ratchet.py \
   || fail "path-to-3 TCB ratchet — a domain axiom was added (moving away from the 3-axiom goal) or the foundational set drifted; see data/tcb_target_ratchet.json"
 
 echo "== local gate: prelude/.olean collision ratchet =="
-python3 scripts/check_prelude_collision_ratchet.py \
+"$GATE_PYTHON" scripts/check_prelude_collision_ratchet.py \
   || fail "prelude/.olean collision ratchet — a prelude name now shadows (and discards) a differently-typed Lean declaration at import, so tactics see a statement the user never wrote; see data/prelude_collision_census.json"
 
 echo "== local gate: prelude instance-priority ratchet =="
-python3 scripts/check_prelude_instance_priority_ratchet.py \
+"$GATE_PYTHON" scripts/check_prelude_instance_priority_ratchet.py \
   || fail "prelude instance-priority ratchet — a hand-registered instance carries a priority the shipped .olean contradicts (or the measured denominator shrank), so synthInstance reaches a different candidate first and elaborated terms change shape; see data/prelude_instance_priority_census.json"
 
 echo "== local gate: silent-tactic ratchet =="
-python3 scripts/check_silent_tactic_ratchet.py \
+"$GATE_PYTHON" scripts/check_silent_tactic_ratchet.py \
   || fail "silent-tactic ratchet — a tactic now fails with NO diagnostic naming it, so the declaration degrades to an unattributable synthetic sorry and every UnknownTactic-keyed coverage script under-reports the gap; see data/silent_tactic_census.json"
 
 echo "== local gate: tactic family gates (G-AUTO, G-SIMP) =="
@@ -139,9 +171,9 @@ echo "== local gate: tactic family gates (G-AUTO, G-SIMP) =="
 # design, with the SKIPPED verdict line printed by the gate itself.
 # Fail-closed (any other nonzero exit is a hard failure) when the binary
 # exists.
-python3 scripts/tactic_parity/family_gate.py --family g_auto --static \
+"$GATE_PYTHON" scripts/tactic_parity/family_gate.py --family g_auto --static \
   || fail "G-AUTO fixture/manifest integrity (tests/fixtures/tactic_families/g_auto)"
-python3 scripts/tactic_parity/family_gate.py --family g_simp --static \
+"$GATE_PYTHON" scripts/tactic_parity/family_gate.py --family g_simp --static \
   || fail "G-SIMP fixture/manifest integrity (tests/fixtures/tactic_families/g_simp)"
 if [[ $FAST -eq 1 ]]; then
   echo "  G-AUTO=SKIPPED reason=fast-mode (measured gate runs in full mode, or directly: scripts/tactic_parity/g_auto.sh)"
@@ -170,7 +202,7 @@ fi
 # (byte-identity proven against the Rust-minted pin at 93670bb91) and fails
 # loudly on any mismatch. Prints TRUSTCORE_STALENESS=fresh|stale|skipped:<reason>.
 echo "== local gate: trust-core evidence staleness tripwire =="
-python3 scripts/check_trustcore_evidence_staleness.py \
+"$GATE_PYTHON" scripts/check_trustcore_evidence_staleness.py \
   || fail "trust-core evidence staleness — a cmd_replacement/ gate-logic edit outdated the pinned digests in reports/{kernel-soundness,deny-sorry,axiom-audit}-launch-evidence.json; regenerate with a HEAD-built clean binary (clean replacement trust-core-evidence --kernel-soundness / --deny-sorry, clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json) and commit the refreshed artifacts in the SAME change as the gate edit"
 
 # Crystal revalidation SCOPE. Every link-2a gate compares a spec module to a
@@ -187,7 +219,7 @@ python3 scripts/check_trustcore_evidence_staleness.py \
 # revalidation DEBT and does not fail: a gate that reddens on renumbering is a
 # gate that gets switched off, taking the content case with it. ~0.24 s.
 echo "== local gate: crystal revalidation scope (chained-body source drift) =="
-python3 scripts/crystal_freshness_scope.py \
+"$GATE_PYTHON" scripts/crystal_freshness_scope.py \
   || fail "crystal revalidation scope — either a chained body's own clean-kernel source moved since the newest data/crystal_chain_revalidation_*.json (the spec module may no longer transcribe the emitted body; re-derive with scripts/crystal_fixture_freshness.py against a fresh dump and commit a new record) or the def_path->source mapping went stale (scripts/crystal_freshness_scope.py)"
 
 # Crystal ENUM TAG PIN. Four of the eleven chained bodies are matches over a
@@ -199,18 +231,18 @@ python3 scripts/crystal_freshness_scope.py \
 # program and fails no other gate, while moving Cubical off 2 and leaving the
 # registered module, the fixture and the lineage digest byte-identical. ~0.05 s.
 echo "== local gate: crystal enum tag pin =="
-python3 scripts/check_enum_tag_pin.py \
+"$GATE_PYTHON" scripts/check_enum_tag_pin.py \
   || fail "crystal enum tag pin — a chained enum's declaration order, discriminants, serde-index coherence, reflected tag def or recorded switch arms moved, so a registered crystal module now proves something about a body that is no longer shipped; see data/crystal_enum_tag_pin.json"
 
 echo "== local gate: paragon quality ratchet =="
 scripts/paragon_ratchet.sh || fail "paragon quality ratchet (see data/paragon_ratchet.json)"
 
 echo "== local gate: portable Isabelle/Trust operations =="
-python3 scripts/test_isabelle_ops_portability.py \
+"$GATE_PYTHON" scripts/test_isabelle_ops_portability.py \
   || fail "Isabelle/Trust operations portability regression"
 
 echo "== local gate: Aristotle model-guide corpus (static) =="
-python3 scripts/aristotle_corpus_gate.py --fast \
+"$GATE_PYTHON" scripts/aristotle_corpus_gate.py --fast \
   || fail "Aristotle corpus gate — a banned construct in code, a new vacuous Classical.propDecidable inhabitant of a Decidable target, a rung that gained an undischarged hypothesis, or composition byte-identity drift (which silently breaks the cross-file confluence discharge); see data/aristotle_corpus_ratchet.json. Elaboration is checked separately by 'just corpus-gate-full'."
 
 if [[ $FAST -eq 0 ]]; then
@@ -224,9 +256,24 @@ if [[ $FAST -eq 0 ]]; then
   # applied. Measured 2026-08-12 on an 18-core box: 233 s from an empty target
   # dir, 172 s on top of a warm default-members clippy. Default features only —
   # feature-gated code still needs its own `-p <crate> --features` run.
+  #
+  # Driven through scripts/rust_frontend.sh since 2026-08-20: the pinned
+  # `trust` toolchain has no `cargo-clippy`, so a bare `cargo clippy` exits
+  # before linting anything. The resolver picks the frontend the pinned
+  # toolchain ships (`targo-tippy` here, plain `cargo clippy` upstream) and
+  # passes these flags through untouched.
   echo "== local gate: workspace lint (27/27 crates, all targets) =="
-  cargo clippy --locked --workspace --all-targets -q -- -D warnings \
+  scripts/rust_frontend.sh clippy --locked --workspace --all-targets -q -- -D warnings \
     || fail "workspace clippy (--workspace --all-targets) — a warning or error outside the default-members inner loop"
+
+  # Format gate. CLAUDE.md has documented `fmt --all --check` as a pre-push leg
+  # for months, but NO script ran it, so a fmt-dirty main could and did reach
+  # origin (bc0941514, "main was fmt-dirty", three clean-elab files). Same
+  # frontend resolver as the clippy leg above. Full mode only: measured 39 s
+  # wall, too slow for the <30 s --fast path.
+  echo "== local gate: workspace format =="
+  scripts/rust_frontend.sh fmt --all --check \
+    || fail "workspace rustfmt (--all --check) — run 'just fmt' and commit the result"
 
   # Dependency trust-boundary gate (paragon axis 1: "every dependency verified,
   # continuously gated"). Runs the cargo-deny policy in deny.toml over the whole
@@ -372,10 +419,10 @@ fi
 # compiler and ~0.1 s, and it puts that number in front of a human on EVERY gate
 # run, opted in or not.
 echo "== local gate: trust-ir axis comparator (no compiler; ~0.1s) =="
-python3 scripts/trust_ir_axes.py selftest \
+"$GATE_PYTHON" scripts/trust_ir_axes.py selftest \
   || fail "trust-ir axis comparator selftest — the ratchet's own comparator is broken (scripts/trust_ir_axes.py)"
 TRUST_IR_AXES_VERDICT="$(
-  python3 - <<'PY'
+  "$GATE_PYTHON" - <<'PY'
 import datetime, json, subprocess, sys
 try:
     doc = json.load(open("data/trust_ir_build_baseline.json"))

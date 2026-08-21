@@ -34,7 +34,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use super::freshness::{read_json, repo_root, EVIDENCE, RECORD, RECORD_2, SCRIPT};
+use super::freshness::{read_json, repo_root, EVIDENCE, HEAD_MEASURED, RECORD, RECORD_2, SCRIPT};
 
 /// The THIRD revalidation: trust `28fb5dd812` (origin/main, 2026-08-19), 68
 /// commits past `RECORD_2`'s producer, spanning wave-GS, wave-CP, wave-AF and
@@ -124,10 +124,15 @@ fn every_revalidation_record_records_no_structural_drift() {
             .unwrap_or_else(|| panic!("{path} must carry a `chains` object"));
         assert_eq!(
             chains.len(),
-            EVIDENCE.len(),
-            "{path} must cover every chained body and nothing else"
+            EVIDENCE.len() - HEAD_MEASURED.len(),
+            "{path} must cover every chained body THAT EXISTED WHEN IT WAS TAKEN, and nothing \
+             else. A record is a dated measurement and cannot cover a later chain; \
+             `freshness::HEAD_MEASURED` names those, each gated on its own live-dump record."
         );
         for (stem, _) in EVIDENCE {
+            if HEAD_MEASURED.contains(stem) {
+                continue;
+            }
             let body = &chains[*stem]["emitted_body_vs_committed_fixture"];
             let verdict = body["verdict"].as_str().unwrap_or("<missing>");
             assert!(

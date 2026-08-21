@@ -179,6 +179,26 @@ pub(crate) struct Cfg {
     /// the semantics ignores it converts a stale-transcription problem into a
     /// coarse-model problem rather than closing either.
     pub(crate) extract_tys: BTreeMap<u32, Vec<(u32, String)>>,
+    /// block id -> the ordered `(result, TYPE, base, INDICES, inbounds)` of its
+    /// `gep`s.
+    ///
+    /// **Added 2026-08-20 by the ELEVENTH chain, which is the first chained
+    /// body that contains a `gep` at all.** Until then this lane was absent for
+    /// the reason every absent lane in this file was absent — nothing chained
+    /// exercised the instruction — and that is exactly the failure mode the
+    /// header calls "the same defect as a missing lane": `env::types::
+    /// SimpPriority::value` computes an address with
+    /// `gep inbounds i8, ptr %0, %5` and LOADS THROUGH IT, and with no lane
+    /// here a transcription that geps a different base, by a different index,
+    /// at a different type, or that dropped the `inbounds` flag, would have
+    /// compared equal in every other lane.
+    ///
+    /// All five slots are read, and the INDEX LIST is a `Vec` rather than a
+    /// single id on purpose: `IRInst.gep : IRTy → Nat → IRList Nat → Bool →
+    /// IRInst` takes a list, `ir_sum_idx` ADDS the whole list, and a
+    /// transcription that kept the first index and dropped the rest computes a
+    /// different address while binding the same SSA id.
+    pub(crate) geps: BTreeMap<u32, Vec<(u32, String, u32, Vec<u32>, bool)>>,
     /// block id -> the ordered `(result, pointer operand)` of its `load`s.
     pub(crate) loads: BTreeMap<u32, Vec<(u32, u32)>>,
     /// block id -> the ordered `(result, TYPE, VOLATILE)` of its `load`s.
@@ -604,6 +624,17 @@ pub(crate) fn clean_block_sources(file: &str, const_prefix: &str) -> String {
 /// per-lane assertions give a readable failure; the final equality is what makes
 /// the set of them TOTAL, for every chain and for every lane added later.
 pub(crate) fn assert_lanes(emitted: &Cfg, clean: &Cfg, who: &str) {
+    assert_eq!(
+        emitted.geps, clean.geps,
+        "{who}: GEP lane differs: emitted {:?} vs Clean {:?}. Each entry is (result, TYPE, base, \
+         INDEX LIST, inbounds). Every slot is semantic: `ir_gep_eval` offsets the BASE by the SUM \
+         of the index list, so a different base reads a different object and a dropped index \
+         reads a different field of the same one; the element type is the scale trust-ir's own \
+         semantics multiplies by; and `inbounds` is the no-wrap licence. A body that geps is the \
+         first one in this tree that computes an address rather than dereferencing the one it was \
+         handed, and before 2026-08-20 this file had no lane for it at all.",
+        emitted.geps, clean.geps
+    );
     assert_eq!(
         emitted.loads, clean.loads,
         "{who}: LOAD lane differs: emitted {:?} vs Clean {:?}. Each entry is (result id, pointer \

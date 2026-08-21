@@ -107,10 +107,52 @@ pub(crate) const EVIDENCE: &[(&str, &str)] = &[
     ("is_valid_char", "is_valid_char.lineage.json"),
     ("expr_path_step_clone", "expr_path_step_clone.lineage.json"),
     ("float_div", "float_div.lineage.json"),
+    ("float_add", "float_add.lineage.json"),
+    ("float_sub", "float_sub.lineage.json"),
+    ("float_mul", "float_mul.lineage.json"),
     ("get_char_val_trunc", "get_char_val_trunc.lineage.json"),
     ("meta_tag_shl", "meta_tag_shl.lineage.json"),
     ("level_is_zero", "level_is_zero.a0.json"),
+    ("simp_priority_value", "simp_priority_value.lineage.json"),
 ];
+
+/// Chains whose fixture **IS** the live-dump comparison rather than a dated pin
+/// a later lane re-checked.
+///
+/// The two tests below require every chain to carry `superseded_at_head` and
+/// `reconfirmed_at_newer_producer`, each naming a committed revalidation record
+/// measured LATER than the fixture's own build. A chain that lands AFTER the
+/// most recent revalidation cannot satisfy that and must not be made to look as
+/// if it did: there is no later build to point at yet.
+///
+/// So it points at the freshness report its own fixture was cut from, and
+/// `every_head_measured_chain_names_its_own_live_dump_record` gates it on
+/// that — an ADDITIONAL requirement, not an exemption. A fixture with neither
+/// kind of block still fails, and a row here whose record does not cover it, or
+/// disagrees with it, or whose build was not reproduced three times, fails too.
+/// The next lane that runs the freshness script records the body in the usual
+/// way and the row leaves this list.
+pub(crate) const HEAD_MEASURED: &[&str] = &[
+    "simp_priority_value",
+    // Chains 12-14, the 2026-08-20 float tranche. Same situation, same gate:
+    // each fixture names its own live-dump record
+    // (data/crystal_fixture_freshness_2026-08-20_lane13.json), which covers
+    // every fixture in the tree, and its coverage.json is byte-identical
+    // across three clean non-incremental builds.
+    "float_add",
+    "float_sub",
+    "float_mul",
+];
+
+/// The chains the two committed revalidation records actually measured:
+/// everything except the head-measured rows, each of which is gated instead by
+/// its own live-dump record
+/// (`head_measurement::every_head_measured_chain_names_its_own_live_dump_record`).
+fn revalidated() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
+    EVIDENCE
+        .iter()
+        .filter(|(stem, _)| !HEAD_MEASURED.contains(stem))
+}
 
 pub(crate) fn repo_root() -> PathBuf {
     // crates/clean-verify -> crates -> repo root
@@ -152,7 +194,7 @@ fn every_chain_fixture_points_at_a_revalidation_and_agrees_with_it() {
         .as_object()
         .expect("the revalidation record must carry a `chains` object");
 
-    for (stem, file) in EVIDENCE {
+    for (stem, file) in revalidated() {
         let ev = evidence(file);
         let ptr = &ev["superseded_at_head"];
         assert!(
@@ -213,11 +255,13 @@ fn the_revalidation_records_no_structural_drift() {
         .expect("the revalidation record must carry a `chains` object");
     assert_eq!(
         chains.len(),
-        EVIDENCE.len(),
-        "the record must cover every chained body and nothing else"
+        revalidated().count(),
+        "the record must cover every chained body that existed when it was taken, and nothing \
+         else. A record is a DATED measurement: it cannot cover a chain that landed after it — \
+         HEAD_MEASURED names exactly those, each covered by its own live-dump record."
     );
 
-    for (stem, _) in EVIDENCE {
+    for (stem, _) in revalidated() {
         let body = &chains[*stem]["emitted_body_vs_committed_fixture"];
         let verdict = body["verdict"].as_str().unwrap_or("<missing>");
         assert!(
@@ -321,7 +365,7 @@ fn every_chain_fixture_is_reconfirmed_against_the_newer_producer() {
          account of its own build."
     );
 
-    for (stem, file) in EVIDENCE {
+    for (stem, file) in revalidated() {
         let ev = evidence(file);
         let ptr = &ev["reconfirmed_at_newer_producer"];
         assert!(
@@ -387,11 +431,11 @@ fn the_second_revalidation_records_no_structural_drift() {
         .expect("the second revalidation record must carry a `chains` object");
     assert_eq!(
         chains.len(),
-        EVIDENCE.len(),
+        revalidated().count(),
         "the second record must cover every chained body and nothing else"
     );
 
-    for (stem, _) in EVIDENCE {
+    for (stem, _) in revalidated() {
         let body = &chains[*stem]["emitted_body_vs_committed_fixture"];
         let verdict = body["verdict"].as_str().unwrap_or("<missing>");
         assert!(
@@ -430,3 +474,6 @@ fn the_second_revalidation_records_no_structural_drift() {
         }
     }
 }
+
+#[path = "freshness_head.rs"]
+mod head_measurement;

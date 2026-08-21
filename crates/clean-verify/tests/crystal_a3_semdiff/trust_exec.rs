@@ -242,11 +242,18 @@ pub fn attach_harness(
 ///
 /// Returns the value and the SUBJECT's step count (harness overhead removed).
 /// A fault is a first-class answer — `Fault(code)` — never a skipped row.
+///
+/// `overhead_bias` perturbs the subtracted harness overhead. It is `0` on every
+/// real run; the cost-mutation battery passes a nonzero value to falsify the
+/// COST gate against the quantity the gate actually measures, rather than
+/// against a hardcoded probe. Taking it as a parameter is what makes that
+/// mutation possible without a second copy of this function.
 pub fn run(
     module: &Module,
     harness: &Function,
     shape: ArgShape,
     tag: u32,
+    overhead_bias: i64,
 ) -> (RunResult, Option<u32>) {
     let interp = Interpreter::with_module(module);
     let arg = match InterpretValue::int(Ty::U8, i128::from(tag)) {
@@ -255,7 +262,8 @@ pub fn run(
     };
     match interp.execute_function(harness, vec![arg]) {
         Ok(outcome) => {
-            let steps = u32::try_from(outcome.steps.saturating_sub(harness_steps(shape))).ok();
+            let subtract = harness_steps(shape).saturating_add_signed(overhead_bias);
+            let steps = u32::try_from(outcome.steps.saturating_sub(subtract)).ok();
             let value = match outcome.returns.first() {
                 Some(v) => match &v.kind {
                     InterpretValueKind::Bool(b) => RunResult::Bool(*b),

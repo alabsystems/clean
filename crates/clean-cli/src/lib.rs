@@ -57,6 +57,7 @@ mod cmd_tla_sem;
 mod cmd_tlaps;
 mod cmd_vendor;
 pub(crate) mod doc_render;
+mod extract_rust;
 mod factory;
 mod math_project;
 mod native_build;

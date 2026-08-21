@@ -9,9 +9,9 @@
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)"
   },
   "totals": {
-    "files_over_500": 1410,
+    "files_over_500": 1411,
     "unwrap_expect_production": 1228,
-    "bare_pub_non_lib": 13636,
+    "bare_pub_non_lib": 13691,
     "allow_dead_code_sites": 57
   },
   "crates": {
@@ -178,9 +178,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-verify": {
-      "files_over_500": 221,
+      "files_over_500": 222,
       "unwrap_expect_production": 73,
-      "bare_pub_non_lib": 2318,
+      "bare_pub_non_lib": 2373,
       "allow_dead_code_sites": 50
     }
   },
@@ -191,7 +191,7 @@
     },
     {
       "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
-      "lines": 12558
+      "lines": 12610
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
@@ -246,12 +246,12 @@
       "lines": 5595
     },
     {
-      "path": "crates/clean-verify/src/spec/core_spec/iota_core.rs",
-      "lines": 5339
+      "path": "crates/clean-elab/src/codata_cmd.rs",
+      "lines": 5437
     },
     {
-      "path": "crates/clean-elab/src/codata_cmd.rs",
-      "lines": 5334
+      "path": "crates/clean-verify/src/spec/core_spec/iota_core.rs",
+      "lines": 5339
     },
     {
       "path": "crates/clean-kernel/src/tc/reduction/kan.rs",
@@ -267,5 +267,5 @@
     }
   ],
   "generated_by": "scripts/paragon_ratchet.sh --update",
-  "last_updated": "2026-08-17"
+  "last_updated": "2026-08-20"
 }

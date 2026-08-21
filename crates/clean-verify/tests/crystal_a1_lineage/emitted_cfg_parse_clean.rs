@@ -109,6 +109,7 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
     let mut extracts: BTreeMap<u32, Vec<(u32, u32, u32)>> = BTreeMap::new();
     let mut loads: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
     let mut load_tys: BTreeMap<u32, Vec<(u32, String, bool)>> = BTreeMap::new();
+    let mut geps: BTreeMap<u32, Vec<(u32, String, u32, Vec<u32>, bool)>> = BTreeMap::new();
     let mut extract_tys: BTreeMap<u32, Vec<(u32, String)>> = BTreeMap::new();
     let mut icmps: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut binops: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
@@ -243,6 +244,47 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
                             r,
                             norm_clean_ty(t.get(1).map_or("", String::as_str), &aliases),
                             vol,
+                        ));
+                    }
+                }
+                // `IRInst.gep <ty> <base> <idxs> <inbounds>` — all four. The
+                // index slot is an `IRList Nat` and is read as a LIST, because
+                // `ir_sum_idx` adds the whole list: a term that kept one index
+                // and dropped the rest computes a different address and binds
+                // the same SSA id.
+                "IRInst.gep" => {
+                    assert_eq!(
+                        t.len(),
+                        5,
+                        "the registered gep carries {} operands ({inst}); `IRInst.gep : IRTy -> \
+                         Nat -> IRList Nat -> Bool -> IRInst` has exactly four and this parser \
+                         reads all four",
+                        t.len().saturating_sub(1)
+                    );
+                    let inb = match t.get(4).map(String::as_str) {
+                        Some("Bool.true") => true,
+                        Some("Bool.false") => false,
+                        other => panic!(
+                            "the registered gep's INBOUNDS slot is {other:?}, which is neither \
+                             Bool.true nor Bool.false ({inst}). It is compared against the \
+                             emitted `inbounds` keyword, so an unreadable value here would \
+                             compare equal to nothing rather than to the artifact."
+                        ),
+                    };
+                    let idxs = numerals_in(t.get(3).map_or("", String::as_str));
+                    assert!(
+                        !idxs.is_empty(),
+                        "the registered gep's INDEX LIST reads empty ({inst}); an empty list \
+                         offsets by zero, and a slot that parses to nothing on one side would \
+                         compare equal to a dropped index on the other"
+                    );
+                    if let (Some(r), Some(base)) = (result, t.get(2).and_then(|s| n(s))) {
+                        geps.entry(id).or_default().push((
+                            r,
+                            norm_clean_ty(t.get(1).map_or("", String::as_str), &aliases),
+                            base,
+                            idxs,
+                            inb,
                         ));
                     }
                 }
@@ -399,6 +441,7 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
         extract_tys,
         loads,
         load_tys,
+        geps,
         icmps,
         binops,
         condbrs,

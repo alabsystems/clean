@@ -24,6 +24,9 @@ ROOT_LOCK = ROOT / "Cargo.lock"
 CLI_RUNNER_LOCK = ROOT / "cli-runner/Cargo.lock"
 AUTOFORM_MANIFEST = ROOT / "crates/clean-autoform/Cargo.toml"
 AUTOFORM_SOURCE = ROOT / "crates/clean-autoform/src"
+CRYSTAL_A2_MANIFEST = ROOT / "scripts/crystal_a2_project/Cargo.toml"
+CRYSTAL_A2_LOCK = ROOT / "scripts/crystal_a2_project/Cargo.lock"
+CRYSTAL_A2_PACKAGE = "a2mint-project"
 CONTRACT_NAME = "trust-ir-contract"
 CONTRACT_REPOSITORY = "https://github.com/alabsystems/trust-ir.git"
 ANY_CONTRACT_DECLARATION = re.compile(
@@ -55,7 +58,13 @@ TY_LOCK_SOURCE = re.compile(
 FORBIDDEN_DEPENDENCIES = ("trust-types", "trust-verifier-api")
 FORBIDDEN_CRATE_NAMES = ("trust_types", "trust_verifier_api")
 PATH_DECLARATION = re.compile(r"\bpath\s*=\s*[\"']([^\"']+)[\"']")
-EXCLUDED_MANIFEST_DIRS = {".git", "target"}
+# `.claude/` is gitignored agent scratch: `.claude/worktrees/` holds detached
+# worktrees AND full checkouts of OTHER repositories (trust, ay, trust-ir,
+# trust-cg). Walking into it made this gate's verdict depend on which sibling
+# lanes happened to be running -- a Trust checkout legitimately declares
+# `trust-types`, so the boundary check failed on a manifest that is not Clean's
+# and is not even tracked here. Measured 2026-08-20.
+EXCLUDED_MANIFEST_DIRS = {".git", ".claude", "target"}
 
 
 class BoundaryViolation(ValueError):
@@ -147,7 +156,9 @@ def check_manifest_boundaries(manifests: dict[Path, str], root: Path) -> None:
                     )
 
 
-def check_contract_declaration(root_manifest: str, autoform_present: bool) -> None:
+def check_contract_declaration(
+    root_manifest: str, autoform_present: bool
+) -> str | None:
     """Require one immutable canonical contract pin when clean-autoform exists."""
 
     declaration_count = len(ANY_CONTRACT_DECLARATION.findall(root_manifest))
@@ -157,7 +168,7 @@ def check_contract_declaration(root_manifest: str, autoform_present: bool) -> No
             raise BoundaryViolation(
                 "bootstrap projection retained TrustIr after removing clean-autoform"
             )
-        return
+        return None
 
     if declaration_count != 1:
         raise BoundaryViolation(
@@ -181,6 +192,7 @@ def check_contract_declaration(root_manifest: str, autoform_present: bool) -> No
             "workspace trust-ir-contract must contain only the canonical "
             f"{CONTRACT_REPOSITORY} URL and an exact lowercase 40-hex rev"
         )
+    return contract["rev"]
 
 
 def check_contract_lock_revision(
@@ -450,6 +462,140 @@ def check_trust_ir_lock_inventory(
     return next(iter(revisions), None)
 
 
+def check_crystal_a2_producer(
+    manifest_text: str,
+    lock_text: str | None,
+    contract_revision: str,
+) -> None:
+    """Bind the out-of-workspace proof-artifact producer to Clean's authority."""
+
+    try:
+        manifest = tomllib.loads(manifest_text)
+    except tomllib.TOMLDecodeError as error:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_MANIFEST.relative_to(ROOT)} is not valid TOML"
+        ) from error
+    if manifest.get("workspace") != {}:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_MANIFEST.relative_to(ROOT)} must remain an empty standalone "
+            "workspace"
+        )
+    allowed_top_level = {"workspace", "package", "dependencies", "bin"}
+    if set(manifest) != allowed_top_level:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_MANIFEST.relative_to(ROOT)} must contain only its standalone "
+            "workspace, package, dependencies, and binary tables"
+        )
+    package = manifest.get("package")
+    if (
+        not isinstance(package, dict)
+        or package.get("name") != CRYSTAL_A2_PACKAGE
+        or package.get("publish") is not False
+    ):
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_MANIFEST.relative_to(ROOT)} must declare the exact unpublished "
+            f"{CRYSTAL_A2_PACKAGE} package"
+        )
+    dependencies = manifest.get("dependencies")
+    if not isinstance(dependencies, dict) or set(dependencies) != {"trust-ir", "sha2"}:
+        raise BoundaryViolation(
+            "crystal A2 producer must have exactly one TrustIR reader and sha2; "
+            "aliases or additional dependency tables could escalate reader features"
+        )
+    trust_ir = dependencies.get("trust-ir")
+    required_fields = {"git", "rev", "default-features", "features"}
+    if not isinstance(trust_ir, dict) or set(trust_ir) != required_fields:
+        raise BoundaryViolation(
+            "crystal A2 producer trust-ir dependency must contain only the exact "
+            "Git authority, feature floor, and revision"
+        )
+    features = trust_ir.get("features")
+    if (
+        trust_ir.get("git") != CONTRACT_REPOSITORY
+        or trust_ir.get("rev") != contract_revision
+        or trust_ir.get("default-features") is not False
+        or not isinstance(features, list)
+        or len(features) != 2
+        or set(features) != {"binary", "fmt"}
+    ):
+        raise BoundaryViolation(
+            "crystal A2 producer trust-ir dependency must match trust-ir-contract "
+            f"{contract_revision} with exactly binary+fmt and default features off"
+        )
+    if lock_text is None:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_LOCK.relative_to(ROOT)} must be tracked for locked reproduction"
+        )
+    lock_revision = check_trust_ir_lock_source(
+        lock_text,
+        str(CRYSTAL_A2_LOCK.relative_to(ROOT)),
+        True,
+    )
+    if lock_revision != contract_revision:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_LOCK.relative_to(ROOT)} TrustIR revision {lock_revision} "
+            f"does not match trust-ir-contract {contract_revision}"
+        )
+    try:
+        packages = tomllib.loads(lock_text).get("package")
+    except tomllib.TOMLDecodeError as error:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_LOCK.relative_to(ROOT)} is not valid TOML"
+        ) from error
+    roots = (
+        [
+            package
+            for package in packages
+            if isinstance(package, dict)
+            and package.get("name") == CRYSTAL_A2_PACKAGE
+            and package.get("source") is None
+        ]
+        if isinstance(packages, list)
+        else []
+    )
+    if len(roots) != 1:
+        raise BoundaryViolation(
+            f"{CRYSTAL_A2_LOCK.relative_to(ROOT)} must contain one local "
+            f"{CRYSTAL_A2_PACKAGE} root package"
+        )
+
+
+def check_crystal_a2_locked_metadata() -> None:
+    """Require Cargo itself to accept the standalone graph without relocking."""
+
+    command = (
+        "cargo",
+        "metadata",
+        "--locked",
+        "--no-deps",
+        "--manifest-path",
+        str(CRYSTAL_A2_MANIFEST.relative_to(ROOT)),
+        "--format-version",
+        "1",
+    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise BoundaryViolation(
+            "cannot run locked Crystal A2 Cargo metadata: " + str(error)
+        ) from error
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        if len(detail) > 1_000:
+            detail = detail[-1_000:]
+        suffix = f": {detail}" if detail else ""
+        raise BoundaryViolation(
+            "Crystal A2 Cargo.lock is not current under cargo metadata --locked"
+            + suffix
+        )
+
+
 def regression_self_test() -> None:
     fixture_root = Path("/clean-boundary-self-test/clean")
     nested_manifest = fixture_root / "crates/nested/Cargo.toml"
@@ -517,12 +663,22 @@ def regression_self_test() -> None:
         f'rev = "{exact_revision}" }}\n'
     )
     check_contract_declaration(canonical, autoform_present=True)
+    # Same pin, keys in the opposite order: the checker must not depend on
+    # `git` preceding `rev`.
+    #
+    # This fixture used to spell that as a MULTI-LINE inline table. TOML 1.0
+    # forbids newlines inside an inline table, so no conforming parser accepts
+    # it -- `tomllib.loads` raised TOMLDecodeError, `check_contract_declaration`
+    # converted that into BoundaryViolation, and this self-test failed on every
+    # Python with a working `tomllib`. On Python 3.9 (this machine's `/usr/bin/
+    # python3`) the script instead died at import for lack of `tomllib`, so the
+    # failure was masked and local_gate.sh's FIRST leg had been dead since
+    # 3477dc787. Cargo would reject the multi-line spelling in a real manifest
+    # too, so nothing of value is lost by testing the valid one.
     check_contract_declaration(
         "[workspace.dependencies]\n"
-        f"{CONTRACT_NAME} = {{\n"
-        f'  rev = "{exact_revision}",\n'
-        f'  git = "{CONTRACT_REPOSITORY}",\n'
-        "}\n",
+        f'{CONTRACT_NAME} = {{ rev = "{exact_revision}", '
+        f'git = "{CONTRACT_REPOSITORY}" }}\n',
         autoform_present=True,
     )
     check_contract_declaration("[workspace.dependencies]\n", autoform_present=False)
@@ -613,6 +769,66 @@ def regression_self_test() -> None:
         )
         == revision_a
     )
+
+    producer_manifest = (
+        "[workspace]\n\n"
+        "[package]\n"
+        f'name = "{CRYSTAL_A2_PACKAGE}"\n'
+        'version = "0.1.0"\n'
+        "publish = false\n\n"
+        "[dependencies]\n"
+        f'trust-ir = {{ git = "{CONTRACT_REPOSITORY}", rev = "{revision_a}", '
+        'default-features = false, features = ["binary", "fmt"] }\n'
+        'sha2 = { version = "0.10", default-features = false }\n\n'
+        "[[bin]]\n"
+        'name = "a2project"\n'
+        'path = "src/main.rs"\n'
+    )
+    producer_lock = lock_fixture(
+        (
+            (CRYSTAL_A2_PACKAGE, None),
+            ("trust-ir", lock_source(revision_a)),
+        )
+    )
+    check_crystal_a2_producer(producer_manifest, producer_lock, revision_a)
+    invalid_producers = (
+        (
+            producer_manifest.replace(
+                f'git = "{CONTRACT_REPOSITORY}", rev = "{revision_a}"',
+                'path = "../../../trust/first-party/trust-ir/crates/trust-ir"',
+            ),
+            producer_lock,
+            "mutable sibling path",
+        ),
+        (producer_manifest, None, "missing standalone lock"),
+        (
+            producer_manifest,
+            producer_lock.replace(revision_a, revision_b),
+            "lock/manifest authority split",
+        ),
+        (
+            producer_manifest.replace('["binary", "fmt"]', '["binary"]'),
+            producer_lock,
+            "reader feature drift",
+        ),
+        (
+            producer_manifest.replace(
+                "[dependencies]\n",
+                "[dependencies]\n"
+                f'trust-ir-full = {{ package = "trust-ir", git = "{CONTRACT_REPOSITORY}", '
+                f'rev = "{revision_a}", features = ["compiler"] }}\n',
+            ),
+            producer_lock,
+            "feature-escalating TrustIR alias",
+        ),
+    )
+    for manifest_text, lock_text, description in invalid_producers:
+        try:
+            check_crystal_a2_producer(manifest_text, lock_text, revision_a)
+        except BoundaryViolation:
+            pass
+        else:
+            raise AssertionError(f"{description} regression was not rejected")
 
     invalid_locks = (
         (
@@ -803,7 +1019,9 @@ def main() -> int:
     )
 
     try:
-        check_contract_declaration(root_manifest, bool(autoform_manifest))
+        contract_revision = check_contract_declaration(
+            root_manifest, bool(autoform_manifest)
+        )
         ay_version, ay_revision, ty_revision = check_first_party_manifest_pins(
             root_manifest
         )
@@ -838,6 +1056,16 @@ def main() -> int:
             bool(autoform_manifest),
             trust_ir_revision,
         )
+        if contract_revision is None:
+            raise BoundaryViolation(
+                "crystal A2 producer requires the workspace trust-ir-contract authority"
+            )
+        check_crystal_a2_producer(
+            CRYSTAL_A2_MANIFEST.read_text(),
+            lock_texts.get(str(CRYSTAL_A2_LOCK.relative_to(ROOT))),
+            contract_revision,
+        )
+        check_crystal_a2_locked_metadata()
         tla_core_version = check_first_party_lock_inventory(
             lock_texts,
             {

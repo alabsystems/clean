@@ -289,132 +289,6 @@ fn the_lowered_index_advances() {
     }
 }
 
-// ── the seam: lowering output feeds emission input ──
-
-/// Compile and run an emitted program, returning stdout lines.
-fn compile_and_run(src: &str, stem: &str) -> Option<Vec<String>> {
-    use std::process::Command;
-    let dir = tempfile::tempdir().expect("tempdir");
-    let src_path = dir.path().join(format!("{stem}.rs"));
-    let bin_path = dir.path().join(stem);
-    std::fs::write(&src_path, src).expect("write");
-    let out = Command::new("rustc")
-        .args(["--edition=2021", "-O", "-o"])
-        .arg(&bin_path)
-        .arg(&src_path)
-        .output()
-        .ok()?;
-    assert!(
-        out.status.success(),
-        "emitted program must compile:\n{}\n--- src ---\n{src}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let run = Command::new(&bin_path).output().expect("run");
-    assert!(
-        run.status.success(),
-        "emitted program must run cleanly:\n{}",
-        String::from_utf8_lossy(&run.stderr)
-    );
-    Some(
-        String::from_utf8_lossy(&run.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect(),
-    )
-}
-
-/// THE SEAM: the IR the LOWERING produced is the IR the EMITTER compiles.
-///
-/// This test exists because an adversarial review established that the
-/// "end to end" claim was not mechanically backed. Every emitter test fed
-/// `emit_program` a `Corec` written by hand in the test file, and
-/// `lower_recognized`'s output was only ever handed to the interpreter. The
-/// two halves of the chain were joined by the author retyping the IR.
-///
-/// The review's demonstration: replacing `lower_recognized`'s body with `None`
-/// left every emitter test green, and deleting the emitter left every chain
-/// test green. Neither half's failure was observable from the other, so
-/// "source → recognition → IR → emitted Rust → binary stdout" described a path
-/// no test walked.
-///
-/// Here the binary's stdout is produced from IR that came out of the lowering,
-/// and compared against values the KERNEL proved about the source. Break any
-/// stage — recognition, lowering, emission — and this goes red.
-#[test]
-fn the_lowered_ir_is_what_the_emitter_compiles() {
-    const SRC: &str = r#"
-codata St : Type where
-  head : Nat
-  tail : St
-
-codef count (n : Nat) : St where
-  head := n
-  tail := count (Nat.succ n)
-
-theorem k0 : St.head (count 5) = 5 := rfl
-theorem k1 : St.head (St.tail (count 5)) = 6 := rfl
-theorem k2 : St.head (St.tail (St.tail (count 5))) = 7 := rfl
-"#;
-    let env = elab(SRC);
-    let name = Name::from_string("count");
-    let value = env
-        .get_const(&name)
-        .and_then(|i| i.value.clone())
-        .expect("registered");
-
-    let rec = recognize_codata_corec(&env, &name, &value).expect("recognized");
-    let ir = clean_compiler::extraction_ir::lower::lower_recognized(&env, &rec).expect("lowers");
-
-    // The emitted source is generated FROM the lowered IR -- not from a
-    // hand-written copy of it.
-    let src = clean_compiler::extraction_ir::emit_rust::emit_program(&ir, &[5], 8);
-    let Some(lines) = compile_and_run(&src, "seam_count") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
-
-    // Kernel-proved prefix (k0/k1/k2 above), then the continuation.
-    assert_eq!(&lines[0..3], &["5", "6", "7"]);
-    for (k, line) in lines.iter().enumerate() {
-        assert_eq!(line.parse::<u64>().expect("numeric"), 5 + k as u64);
-    }
-}
-
-/// The same seam for the INDEXED lane, whose index step comes from `tgtF`.
-///
-/// Pinned separately because the index step is read from a different constant
-/// than everything else, and because the observation here never reads the
-/// index — so an index dropped entirely would be invisible without this.
-#[test]
-fn the_lowered_indexed_ir_is_what_the_emitter_compiles() {
-    let env = elab(INDEXED);
-    let name = Name::from_string("doubler");
-    let value = env
-        .get_const(&name)
-        .and_then(|i| i.value.clone())
-        .expect("registered");
-    let rec = recognize_codata_corec(&env, &name, &value).expect("recognized");
-    let ir = clean_compiler::extraction_ir::lower::lower_recognized(&env, &rec).expect("lowers");
-
-    // Observation: the kernel-proved doubling, from lowered IR.
-    let src = clean_compiler::extraction_ir::emit_rust::emit_program(&ir, &[0, 1], 8);
-    let Some(lines) = compile_and_run(&src, "seam_doubler") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
-    assert_eq!(&lines[0..4], &["1", "2", "4", "8"]);
-
-    // Index: re-point the observation at the index slot, so a dropped or
-    // mis-wired index step cannot hide behind an observation that ignores it.
-    let mut idx_ir = ir;
-    idx_ir.observe = clean_compiler::extraction_ir::Op::State(0);
-    let src = clean_compiler::extraction_ir::emit_rust::emit_program(&idx_ir, &[7, 1], 6);
-    let Some(lines) = compile_and_run(&src, "seam_index") else {
-        return;
-    };
-    assert_eq!(lines, vec!["7", "8", "9", "10", "11", "12"]);
-}
-
 /// A hand-written carrier that impersonates codata is REFUSED.
 ///
 /// This is the adversarial review's finding 6, reproduced verbatim, and it is
@@ -491,3 +365,7 @@ fn the_codata_command_marks_its_carrier() {
 // boundary without weakening any test or assertion.
 #[path = "rank7_codata_recognize_e2e/b7.rs"]
 mod b7;
+
+// The lowering-to-emission seam, moved out for the same reason.
+#[path = "rank7_codata_recognize_e2e/seam.rs"]
+mod seam;

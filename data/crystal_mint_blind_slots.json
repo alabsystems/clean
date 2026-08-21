@@ -1,0 +1,305 @@
+{
+ "what": "THE COMPLETE LIST of fields the crystal-A2 mint pipeline does not fold into the committed core module: everything the emitted artifact carries that the minted and registered `ir_<chain>_module` does not. One list, so the finite set is visible at once instead of being rediscovered one counterexample at a time. A row records what CLOSED it: `kind` is `compared` when the slot is erased from the module but pinned in the chain's tag table and checked by `ir_mint::project`, `refused` when reading it is now a hard error, `erased` when it is a justified erasure, and `unwitnessed` when one reader structurally cannot see it. As of 2026-08-20 there are SEVEN `compared`, TWO `refused` and TWO `unwitnessed`, and no row is `erased`.",
+ "why": "Each row below is a claim boundary. `read_by` names the lane that reads the row, or says NOTHING. An unwritten claim boundary is how the 2026-08-20 callee-namespace collision survived: it was an erasure nobody had written down, in a slot two writers each assumed the other owned. Writing them down is what made the closures possible at all -- a row that carries a CONSTRUCTED WITNESS (a pair of emitted bodies denoting different programs that the gate accepted as one) is a row that can be turned into a runnable acceptance test.\n\nThe second lesson of 2026-08-20 is sharper and is the reason `cc-and-linkage` reads the way it does: a row can be WRONG. That row said for months that the producer printed neither the calling convention nor the linkage, and therefore that no text reader could ever witness either. The producer prints both. Nobody had opened `trust_ir::display`. A claim boundary written from memory is a claim boundary that can rot into an excuse, so every `erased` and `unwitnessed` row now owes a citation to the producer's own source, quoted, and not a recollection of it.",
+ "how_this_file_is_kept_true": "`crystal_a2_mint`'s blind-slot lane parses this file and, for every row, asserts that each `anchors` entry still occurs VERBATIM in the named source file. A change that closes an erasure therefore BREAKS the row that claims it -- which is what happened twice on 2026-08-20: the first closure broke four anchors, and the second broke `spans-and-tags`'s `strip_comment` signature the moment the clause reader started returning content as well as kinds. The file could not be quietly outlived either time. Rows carrying a `witness` name a test that CONSTRUCTS the indistinguishable pair; for a `compared` or `refused` row that test asserts the pair is REJECTED, and it is the acceptance test for the closure.",
+ "not_covered_by_this_file": "Fields that are not erased but are UNWITNESSED BY ONE READER are a different thing and live in the mint record's ledger (`ir_<chain>.mint.json`) plus `mask_text_unwitnessed`. `switch.exhaustive_enum_unreachable` is the only such field today; it is listed here too, marked `kind: unwitnessed`, so one read covers both categories.",
+ "slots": [
+  {
+   "id": "param-type",
+   "kind": "compared",
+   "slot": "The TYPE of every function parameter and every block parameter.",
+   "artifact_carries": "`bb0(%0: ptr)`, `bb0(%0: enum.175)`, `bb0(%0: struct.1012, %1: struct.1012)`, `bb12(%1: enum.181)` -- measured across the eleven committed fixtures.",
+   "core_carries": "The SSA id alone. `(params 0)`. UNCHANGED -- no core digest moved.",
+   "erased_by": "Nothing, any more. Reader B READS the type into `ObservedTags::interface` and the chain's tag table pins it; reader A pushes it into `param_tys`, which is printed into the `.core.prov.json` provenance. What neither does is put it in the core module, because Clean's `IRFunc` has nowhere to put one.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "self.param_slots.push(ParamSlot {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "check_params(\"parameter\", &interface.params, &tags.interface.params)?;"
+    },
+    {
+     "file": "scripts/crystal_a2_project/src/main.rs",
+     "text": "self.param_tys.push(format!(\"{:?}\", p.1));"
+    }
+   ],
+   "consequence": "CLOSED 2026-08-20, as a COMPARISON rather than a module field. `bb0(%0: ptr)` and `bb0(%0: Rc<enum.13>)` still project to the identical core module -- and always will until Clean's `IRFunc` carries a type, which would move every registered term and every core digest -- but they are no longer both ACCEPTED: `ir_mint::project` refuses a body whose parameter types are not the pinned ones. This is the M7 split applied one slot out: the fact the module cannot express lives in a reviewed table a gate checks against the artifact.",
+   "read_by": "`crystal_a2_mint`'s M10 interface lane (`crystal_a2_mint/interface.rs`), against `generated/ir_<chain>.tags.json`'s `interface.params` and `interface.block_params`.",
+   "witness": "param_types_are_compared_and_the_pair_is_now_refused",
+   "live_on_chains": "all eleven",
+   "producer_invariance": "The pinned form is CANONICAL, not verbatim. `Tags::canon_ty` resolves every `<kind>.<digits>` inside a printed type through the chain's own tag lanes -- `enum.13` becomes `enum#0`, an unlisted id becomes `<kind>#?` -- so the pin is invariant under exactly the renumbering the core form is invariant under. Without this the lane would fire on `expr_path_step_clone`'s join binding `%1: enum.181` under two producers and `%1: enum.176` under the third, and would have been switched off within a week. The verbatim token is recorded as `observed_ty` and never compared.",
+   "residual": "The core module alone still cannot separate the pair, and `the_core_module_alone_still_cannot_separate_the_type_rows` measures that rather than leaving it implied. So this closes the ACCEPTANCE, not the encoding: `ir_h2_module` is the projection of `has_cubical_layer` only together with the table that says its receiver is a `ptr`."
+  },
+  {
+   "id": "function-name",
+   "kind": "compared",
+   "slot": "The function's NAME, and with it the `rustcc fn @\u2026` header line entire.",
+   "artifact_carries": "`rustcc fn @level::Level::is_zero(functy.0) {`",
+   "core_carries": "Nothing. The core module opens at the first block. UNCHANGED.",
+   "erased_by": "Nothing, any more. Reader B parses the header into `ObservedTags::interface.function_name`; reader A records `f.name` in the provenance. The module still carries no name, and the tag table's `body` field is what pins it.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "fn header(&mut self, line: &str) -> Result<(), EmittedError> {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "if interface.function_name != tags.body {"
+    },
+    {
+     "file": "scripts/crystal_a2_project/src/main.rs",
+     "text": "\\\"function_name\\\": {:?},"
+    }
+   ],
+   "consequence": "CLOSED 2026-08-20. Two different shipped functions with the same body still project to the same core module -- the digest is still name-free, which is what makes it producer-invariant across a rename -- but `ir_mint::project` refuses a body whose header does not name the chain's pinned `body`. The name is the right thing to pin because it is the half that does NOT move: measured over the three producer dumps of `ir_mint.producer_ab.json`, every `@func.N` moved and no `crate_func_names_seen` entry did.",
+   "read_by": "`crystal_a2_mint`'s M10 interface lane, against `generated/ir_<chain>.tags.json`'s `body`. Also, unchanged, the chain's provenance: `generated/ir_mint.producer_ab.json` `chain`.",
+   "witness": "the_function_name_is_compared_and_the_pair_is_now_refused",
+   "live_on_chains": "all eleven"
+  },
+  {
+   "id": "callee-name",
+   "kind": "compared",
+   "slot": "WHICH function a `call` reaches, beyond `is it this body or not`.",
+   "artifact_carries": "`call @func.4914(%9)` -- a whole-crate function-table INDEX. The artifact BINARY additionally carries the function table, so reader A can resolve the index to `<level::LevelArc as std::ops::Deref>::deref`. The emitted TEXT cannot: it prints no declaration under that name.",
+   "core_carries": "A canonical index in the ONE namespace the function's own id shares. Index 0 is the body itself; every other index denotes a distinct foreign callee and nothing more.",
+   "erased_by": "First-use interning of callee ids, on both readers -- which is still what the MODULE carries. What is new is that `ir_mint::project` refuses a canonical callee index the tag table does not pin, and refuses one whose crate id is not the pinned one.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "fn func_index(&mut self, id: u32) -> u32 {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "slot: format!(\"callee {canonical} (`{name}`)\"),"
+    },
+    {
+     "file": "scripts/crystal_a2_project/src/main.rs",
+     "text": "fn func_id(&mut self, id: u32) -> u32 {"
+    }
+   ],
+   "consequence": "CLOSED 2026-08-20 at the acceptance, half-closed before it. Two bodies calling two DIFFERENT foreign functions still project to the same core module, and `ir_func_find` refuses every foreign callee alike so the erasure stays invisible to the semantics for as long as the module is one function wide. What changed is that a body whose callee crate ids are not the pinned ones is REFUSED, and a callee index no row accounts for is refused rather than defaulted -- so the numeral can no longer stand for nothing.",
+   "read_by": "`crystal_a2_mint`'s M8 callee-identity lane, plus the M10 interface lane's callee check, both against `generated/ir_lz.tags.json`'s `funcs` lane and reader A's `crate_func_ids_seen`.",
+   "witness": "foreign_callee_identity_is_now_pinned_and_a_swap_is_refused",
+   "history": "Until 2026-08-20 this row was strictly worse: the function's own id was the literal 0 in a SEPARATE namespace from callees, which also started at 0, so index 0 denoted both the body and its first callee and the two were interchangeable. See `crystal_a2_mint/callee_identity.rs`.",
+   "live_on_chains": "level_is_zero only -- the one chained body that calls anything"
+  },
+  {
+   "id": "global-index",
+   "kind": "refused",
+   "slot": "WHICH global a `global_addr` addresses, and the module's global list entire.",
+   "artifact_carries": "`global_addr @global.4527` -- a whole-crate global-table index. Globals print as `@__trust_promoted_N`, so even the artifact text carries no name for one.",
+   "core_carries": "Nothing: a `global_addr` is no longer readable at all.",
+   "erased_by": "Nothing, any more. Reader B REFUSES a `global_addr` outright rather than interning it into a module whose `(globals)` list is hard-coded empty.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "pub(super) fn r_global(&mut self, id: u32) -> Result<u32, EmittedError> {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "Sx::tag(\"globals\", vec![]),"
+    },
+    {
+     "file": "scripts/crystal_a2_project/src/main.rs",
+     "text": "out.push_str(\"  (globals)\\n\");"
+    }
+   ],
+   "consequence": "CLOSED 2026-08-20 by REFUSAL, which is the honest close for a slot with no inhabitant. `mint` already refused a non-empty global list and `decode` already refused a module with globals in it, so a body with a global could never have been minted -- it could only have been read into an incoherent core module where `(globaladdr 0)` named an entry the module does not declare. Reader B now stops at the read. The moment a chain genuinely carries a global, this refusal is the thing that has to be lifted, deliberately, together with projecting the global list.",
+   "read_by": "`crystal_a2_mint`'s blind-slot lane, which measures that all eleven chained bodies are still global-free AND that a constructed body carrying one is now refused.",
+   "witness": "the_global_slot_is_now_a_refusal_on_every_chained_fixture",
+   "live_on_chains": "none of the eleven"
+  },
+  {
+   "id": "functy-index",
+   "kind": "compared",
+   "slot": "The function-TYPE table index in the header, `functy.N` -- trust-ir's FOURTH crate-level namespace, and the last numeral in the pipeline that stood for nothing.",
+   "artifact_carries": "`(functy.53)`. It indexes `Module::func_types`, whose entries are `FuncTy { params, returns, is_vararg }` (`trust-ir/src/ty.rs:751`). The emitted TEXT prints no `functy` table, so the index cannot be resolved from the text at all -- only compared.",
+   "core_carries": "Nothing, and that is a checked fact: the registered `IRFunc` inductive has four fields and none of them is an `IRTy`. UNCHANGED -- no core digest moved.",
+   "erased_by": "Nothing, any more. Reader B reads the index into `ObservedTags::functy` and into `Interface::functy`; `ir_mint::project` refuses a body whose header names a signature index the chain does not pin. Reader A records `f.ty.0` as `artifact_functy_id`.",
+   "anchors": [
+    {
+     "file": "scripts/crystal_a2_project/src/main.rs",
+     "text": "\\\"artifact_functy_id\\\": {},"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "if interface.functy != tags.interface.functy {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/tags.rs",
+     "text": "fn functy_lane(iface: &serde_json::Map<String, serde_json::Value>) -> Result<u32, CoreError> {"
+    }
+   ],
+   "consequence": "CLOSED 2026-08-20, as a comparison rather than a module field. Two bodies with different signatures still project to the identical core module -- and always will until Clean's `IRFunc` carries an `IRTy`, which would move every registered term and every core digest -- but they are no longer both ACCEPTED. Combined with `param-type`, the core module still states NO type information about the function's interface at all; the difference is that the TABLE now does, and the gate checks it.",
+   "read_by": "`crystal_a2_mint`'s M10 interface lane, against `generated/ir_<chain>.tags.json`'s `interface.functy`. `scripts/crystal_fixture_freshness.py` still reports drift as the AMBER class `functy-index`; that class is now a re-pin prompt rather than a report nobody acts on.",
+   "live_on_chains": "all sixteen fixtures; pinned on the three chains that have a tag table (ir_h2 functy.0, ir_lz functy.0, ir_pv functy.147).",
+   "the_counterexample_2026_08_20": "CONSTRUCTED, and it is why this row moved from `erased` to `compared`. `FuncTy` is `{ params, returns, is_vararg }`. A printed body shows its parameter types in the entry block header -- which the `param-type` lane already pins -- and shows its return types only through a `ret` an execution can reach. It shows `is_vararg` NOWHERE. So:\n\n    rustcc fn @m::f(functy.7) {        rustcc fn @m::f(functy.8) {\n    bb0(%0: ptr):                      bb0(%0: ptr):\n        unreachable                        unreachable\n    }                                  }\n\nwith `functy.7 = (ptr) -> bool` and `functy.8 = (ptr, ...) -> bool` are a NON-VARIADIC and a VARIADIC function. On AArch64 Apple and on x86-64 SysV those are different ABIs and calling one through the other's signature is undefined. Byte-identical but for one numeral, identical core module, identical interface -- and until 2026-08-20 `ir_mint::project` ACCEPTED BOTH. `functy_is_compared_and_the_vararg_pair_is_now_refused` builds the pair, asserts the core module still cannot separate it, and requires the gate to.",
+   "why_the_old_justification_did_not_hold": "The row previously justified the erasure on three grounds. Two were true and one was the wrong theorem.\n(1) STRUCTURAL -- `IRFunc` has no type field, so a signature index has no slot to occupy. TRUE, and it is a fine reason to keep it out of the MODULE. It is not a reason to accept two artifacts that differ in it.\n(2) SEMANTIC -- `ir_exec_callind_sig_irrelevant` proves `ir_exec` returns the same IRConfig at any two signature indices. TRUE, and about a DIFFERENT OBJECT: that theorem is about `callindirect`'s operand, an index inside the fragment. This row is about the FUNCTION'S OWN HEADER signature, which the fragment does not contain and the theorem does not mention. The row's own text conceded the gap -- `the only place the fragment carries a signature index at all is callindirect's operand` -- and then used the theorem anyway. The theorem is kept as an anchor of the `switch`/`callindirect` inertness set; it is no longer cited as this row's justification.\n(3) MEASURED -- `the index moves on every producer change with no instruction changed, which is why gating it would be a false-alarm generator.` NEARLY true and not decisive. Re-measured 2026-08-20 from the committed `generated/ir_mint.producer_ab.json`, reader A's independent record over three producer dumps: 9 of 11 chained bodies moved their `functy` index; 11 of 11 moved their `@func.N`. The drift rate is the same as the callee namespace's -- and the callee namespace IS pinned. Drift was never a reason not to pin; it is a reason to pin in the reviewed TABLE rather than in the module, which is exactly what the `enums`, `structs` and `funcs` lanes already do. Both designated chains are in the 2 that did NOT move: `has_cubical_layer` and `level_is_zero` are `artifact_functy_id: [0, 0, 0]` across all three dumps, so neither pin would have fired on any of the three producer changes that have actually happened.",
+   "producer_invariance": "NONE, deliberately, and this is the one lane where the M7 bargain is paid in full rather than dodged. There is no canonicalisation available: a body has exactly ONE header signature, so first-use interning would map every body to `functy#0` and pin nothing, and the emitted text carries no signature table to resolve the index through. It is therefore pinned VERBATIM -- exactly as the `funcs` lane pins a callee's `@func.N` -- and a producer re-interning is a reviewed one-line re-pin. The refusal PRINTS both the artifact's index and the pin so that re-pin is an edit and not an investigation. The cost is recorded where it is paid: `functy.N` was removed from the two `pure renumbering must not fire` negative controls (`crystal_a2_mint/mutation.rs`, `crystal_a2_mint/interface.rs`), and the second of those now ASSERTS that a moved signature index fires.",
+   "witness": "functy_is_compared_and_the_vararg_pair_is_now_refused",
+   "residual": "The index is COMPARED and still not RESOLVED. Nothing in this repo says what `functy.0` IS -- neither reader can print `(ptr) -> bool` -- so the pin establishes that two dumps name the same table entry, not that the entry means what a reader thinks. Resolving it needs reader A to record the resolved `FuncTy` from the artifact's own type table, which is a build item and is written down here rather than assumed away."
+  },
+  {
+   "id": "align",
+   "kind": "compared",
+   "slot": "The alignment operand of `load` / `store` / `alloca`.",
+   "artifact_carries": "`align N`, printed by trust-ir's `Display`.",
+   "core_carries": "Nothing. UNCHANGED -- `IRInst.load` is `IRTy -> Nat -> Bool -> IRInst`.",
+   "erased_by": "Clean's `IRInst` has no alignment field, so neither reader can put it in the module. Both now RECORD it: reader A in `aligns`, reader B in `ObservedTags::interface.aligns`, in reader A's own spelling so the two records compare directly.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+     "text": "r.r_align(format!(\"load:{align:?}\"));"
+    },
+    {
+     "file": "scripts/crystal_a2_project/src/main.rs",
+     "text": "\\\"aligns_erased\\\": {:?},"
+    }
+   ],
+   "consequence": "HALF-CLOSED 2026-08-20. The alignment cannot reach the module and the IR machine has no alignment notion to make a misaligned access observable, so this stays a fragment boundary -- one of the reasons the machine's memory model is not a claim about the real one. What changed is that the value is no longer thrown away unread: until 2026-08-20 reader B's `load` took `tail.split(',').next()` and discarded everything after the pointer WITHOUT LOOKING AT IT, so `, align 8` and `, banana` were equally invisible. It is now read, pinned, compared, and an unrecognised trailing operand is a refusal.",
+   "read_by": "`crystal_a2_mint`'s M10 interface lane, against `generated/ir_<chain>.tags.json`'s `interface.aligns`.",
+   "live_on_chains": "four of the eleven carry an alignment SLOT -- has_cubical_layer, expr_path_step_clone, level_is_zero and level_kind_ord, each `load:None` on both readers. `None` is itself the erased value: the fragment has nowhere to put either a specified alignment or its absence."
+  },
+  {
+   "id": "spans-and-tags",
+   "kind": "compared",
+   "slot": "`; #loc:`, `; #scope:`, `; #proof:`, `; #names:` and `; #producer:` trailing clauses.",
+   "artifact_carries": "`  ; #loc: 389 525 8`, `; #names: %0=\"self\"`",
+   "core_carries": "Nothing of any clause CONTENT. The set of clause KINDS is pinned, and since 2026-08-20 the CONTENT of one kind -- `#producer` -- is pinned too.",
+   "erased_by": "Reader B strips the clause before parsing the line, after checking its KIND against an allowlist and after reading the content of the one kind whose content is compared; reader A never reads spans into the projection.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "pub const CLAUSE_KINDS: [&str; 5] = [\"loc\", \"names\", \"producer\", \"proof\", \"scope\"];"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "fn strip_comment(line: &str) -> (&str, Vec<(&str, &str)>) {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "if kind == \"producer\" {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "if interface.producer != tags.interface.producer {"
+    }
+   ],
+   "consequence": "The CONTENT erasure is deliberate and load-bearing, and stays: the `#loc` file index is a whole-crate table that renumbers with no instruction changed, and `Module::stable_digest` excludes it upstream for the same reason. Erasing it is what makes the core digest producer-invariant. What was WRONG before 2026-08-20 is that the erasure was unbounded -- every `  ; #...` suffix was dropped whatever it said -- so a producer that started annotating an instruction with something trust-bearing would have been erased in silence. That is the exact failure the `exhaustive_enum_unreachable` flag demonstrates one level in. The kind set is now an allowlist of five, each inert for a stated reason, and an unlisted kind is a refusal.",
+   "read_by": "`crystal_a2_mint`'s M10 interface lane, against `interface.clauses` (the kind set) and `interface.producer` (the one compared content). The reader's own `CLAUSE_KINDS` allowlist refuses an unlisted kind. `scripts/crystal_fixture_freshness.py` still reports `#loc` drift as the AMBER `loc-file-index` class.",
+   "witness": "the_producer_clause_content_is_compared_and_the_other_four_are_measured_inert",
+   "live_on_chains": "all eleven",
+   "the_content_question_2026_08_20": "ASKED: can clause CONTENT be compared modulo renumbering, the way `Tags::canon_ty` resolves `enum.13 -> enum#0`? ANSWERED, per kind, because the five kinds are not one thing. (1) `#loc` is `<file> <line> <col>` (`trust-ir/src/display.rs`: `write!(f, \"  ; #loc: {} {} {}\", span.file, span.line, span.col)`). Only `file` is a renumbering -- a whole-crate table index, exactly the shape `canon_ty` handles, and it COULD be first-use interned through a new `files` lane. `line` and `col` are not a renumbering at all: they are the source coordinates, they move when the SOURCE moves (any edit above the function shifts every line), and there is no table to resolve them through. The most that survives both motions is the loc PARTITION -- which instructions share a position -- and that is invariant under a file re-intern and under a uniform line shift, and measurable. (2) The decision is NO for `loc`, `scope` and `names`, and the reason is a measurement rather than a preference: two bodies differing only in `#loc` content DENOTE THE SAME PROGRAM (`the_producer_clause_content_is_compared_and_the_other_four_are_measured_inert` constructs the pair and requires it to be ACCEPTED and to project to one core module). A gate that refused that pair would be refusing something it has no business refusing, which is how a lane gets switched off. The lineage half of the fact already has a lane -- `scripts/crystal_fixture_freshness.py`'s AMBER `loc-file-index` class -- and that is the right home for it. (3) `#proof` stays erased for a different reason, stated rather than assumed: it is a claim ABOUT the body, not part of it, and `ir_exec` has no proof notion, so its content cannot change what the module computes. (4) `#producer` is the ONE kind whose content is now COMPARED. It names WHICH COMPILER emitted the function, it does not renumber, and erasing it while claiming the body is the one `trust` emitted was the one content erasure this lane could not justify. It was free until 2026-08-20: a body annotated `; #producer: llvm` projected to the same core module and the same interface as the same body annotated `; #producer: trust`, and the gate accepted both.",
+   "residual": "The file index inside `#loc` is a renumbering that COULD be canonicalised and is not. Nothing depends on it and nothing claims it is inert for any reason other than that debug-info coordinates cannot change what a module computes -- which is why the honest classification of the remaining erasure is LINEAGE, not semantics."
+  },
+  {
+   "id": "cc-and-linkage",
+   "kind": "compared",
+   "slot": "Calling convention and linkage of the FUNCTION (closed) and of each direct call site (open, and open for a different reason than the row used to give).",
+   "artifact_carries": "`rustcc fn @level::Level::is_zero(functy.0) {` -- the `rustcc` IS the calling convention. `trust_ir::display`'s `impl Display for Function` prints the linkage when it is not `External` and the convention when it is not `C`, in that order, before `fn @`. All sixteen committed fixtures are `external` + `rustcc`, the first suppressed and the second printed.",
+   "core_carries": "Nothing for the function. UNCHANGED. `callindirect` DOES carry a convention operand in the fragment; a direct `call` does not, because `trust_ir::Inst::Call` has no such field.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "pub const LINKAGES: [&str; 5] = [\"external\", \"internal\", \"linkonce\", \"private\", \"weak\"];"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "pub const CALLING_CONVS: [&str; 5] = [\"ccc\", \"coldcc\", \"fastcc\", \"rustcc\", \"swiftcc\"];"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "(&LINKAGES[..], &mut self.linkage),"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/shape.rs",
+     "text": "shape!(\"call\", \"IRInst.call\", [Arg::Nat, Arg::Vals(\"args\")]),"
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+     "text": "def ir_exec_callind_conv_irrelevant (m : IRModule) (cid : Nat) (sig : "
+    }
+   ],
+   "consequence": "CLOSED 2026-08-20 for the FUNCTION, as a comparison. A body whose header names a different convention or a different linkage is refused BY NAME (`calling convention: the artifact carries [ccc]; the chain's tag table pins [rustcc]`), and a header with no keyword at all is read as `external`/`ccc` -- a value -- rather than as whatever the pin says. An unrecognised leading token is refused rather than skipped, so a linkage or convention trust-ir grows later cannot be read as `no token`.",
+   "read_by": "`crystal_a2_mint`'s M10 interface lane, against `generated/ir_<chain>.tags.json`'s `interface.linkage` and `interface.calling_conv`.",
+   "live_on_chains": "all sixteen fixtures; pinned on the three chains that have a tag table (ir_h2, ir_lz, ir_pv).",
+   "erased_by": "Nothing, any more -- and the correction matters more than the closure. Reader B now READS both keywords off the header into `ObservedTags::interface.linkage` / `.calling_conv`, defaulting each to the value the producer SUPPRESSES, and `ir_mint::project` compares both against the chain's pinned table.",
+   "the_premise_was_false_2026_08_20": "Until 2026-08-20 this row read: `OPEN ... this is not closable in this repo: it needs a producer change (print the convention and the linkage)`, and `read_by: NOTHING. Permanently blind to readers B and C; closable only by a producer change.` THAT WAS WRONG, and it was wrong about a fact anybody could have checked in the producer's own source. `trust_ir::display::Display for Function` is six lines long and two of them are `if self.linkage != Linkage::External { write!(f, \"{} \", self.linkage)?; }` and `if self.calling_conv != CallingConv::C { write!(f, \"{} \", self.calling_conv)?; }`. The producer prints BOTH. It suppresses each only when it holds its default, and `trust_ir::parser`'s `try_parse_calling_conv` and `is_func_prefix` read both back, so the encoding round-trips and ABSENCE IS A VALUE. The `rustcc` at the head of every committed fixture has been the calling convention the whole time. WHY IT SURVIVED: reader B matched the literal prefix `\"rustcc fn @\"`, which pinned both slots BY ACCIDENT -- correct behaviour, arrived at for no reason, and unable to say what it had refused (`ccc fn @m::f` was rejected with `expected the rustcc fn @... header first`, a message about the header's SHAPE). An accidental pin is not a closed slot: the first chain on an `internal`-linkage body would have been unblocked by widening the prefix, and the widening would have re-opened both slots in silence. This is the same failure class as the `exhaustive_enum_unreachable` transcription -- a claim about the producer that nobody had checked against the producer -- and it is the reason this file exists.",
+   "witness": "the_calling_convention_and_linkage_are_read_from_the_header_not_assumed",
+   "residual": "STILL OPEN, and now stated at its real shape: the calling convention of a DIRECT CALL's callee. `trust_ir::Inst::Call` is `{ callee, args }` and carries no convention field at all, so this is not an erasure by the printer -- it is absent from the IR. The convention of a direct callee is a property of the callee's own `Function`, which is not in a one-function fragment, so the slot becomes witnessable when the fragment grows past one function and not before. The one convention the fragment DOES carry, on `callindirect`, is proved inert: `ir_exec_callind_conv_irrelevant` proves `ir_exec` returns the same IRConfig at any two conventions. So the residual is a CROSS-FUNCTION residual, not a text-reader blindness.",
+   "single_witness_caveat": "Reader A does not yet record the linkage, the convention or the producer token in `.core.prov.json`, so these three comparisons stand on reader B's reading of the emitted TEXT alone -- the mirror image of the `switch-exhaustive-flag` row, which stands on reader A alone. `scripts/crystal_a2_project` gained the three `writeln!` lines that fix this, but that reader is not a workspace member (it depends on the sibling `trust` checkout) and was NOT compiled or re-run in this commit, so the second witness is a BUILD ITEM and not a measurement."
+  },
+  {
+   "id": "switch-exhaustive-flag",
+   "kind": "unwitnessed",
+   "slot": "`Inst::Switch.exhaustive_enum_unreachable`.",
+   "artifact_carries": "A real `bool` field of the emitted instruction. trust-ir's `Display` matches `Inst::Switch { .., .. }` and NEVER prints it.",
+   "core_carries": "The measured flag, from reader A. Reader B writes `?`, and `?` cannot be minted.",
+   "erased_by": "Not erased -- unwitnessed by one reader. Listed here so one read covers both categories.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/mod.rs",
+     "text": "*last = Sx::a(\"?\");"
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+     "text": "def ir_exec_switch_exh_irrelevant (m : IRModule) (v : Nat) (dflt : Nat) "
+    }
+   ],
+   "consequence": "This slot has exactly ONE in-repo witness, the binary projection, and it is the slot the hand transcription got WRONG: `SRC_IR_H2_B0` carried `Bool.true` against a measured `false` on three producers and four sibling chains. `eval_ir_machine` drops the flag -- PROVED, see `the_decision_2026_08_20` -- so no theorem moved, but a theorem was being stated about a module the compiler does not emit.",
+   "read_by": "`crystal_a2_mint`'s M2 (as a named ledger entry, masked so the comparison stays exact) and M3/M4, which DO see it because they go through the minted and elaborated term. `ir_exec_switch_exh_irrelevant` proves the machine does not.",
+   "live_on_chains": "has_cubical_layer, level_is_zero, level_kind_ord and every other chain with a `switch`",
+   "the_decision_2026_08_20": "The three options were: PRINT it, DROP it from the model, or record it as permanently blind. The answer is NONE OF THE THREE ALONE -- it is KEPT in the model, kept unprinted, and PROVED INERT. Dropping it would lose a field the artifact carries and the model can hold, and would move every registered term. Printing it is a producer-side change in the `trust` repo that this lane cannot land safely and that would not help until every fixture is re-dumped; it remains the right long-term fix and is the only thing that would give the slot a second in-repo witness. So the slot stays single-witness -- reader A, the artifact binary -- and what was a COMMENT (`eval_ir_machine` drops the flag, so no theorem moved) is now a kernel-checked theorem: `ir_exec_switch_exh_irrelevant` proves `ir_exec m (IRInst.switch v d da cs Bool.true) rs s` and `... Bool.false ...` are the SAME IRConfig, at every module, state, selector, default, argument list and case list. The flag's value is therefore a LINEAGE fact about which module was emitted, and provably not a fact about what that module computes -- which is exactly why the hand transcription being WRONG about it moved no theorem, now stated as a proof instead of an observation."
+  },
+  {
+   "id": "entry-block",
+   "kind": "unwitnessed",
+   "slot": "WHICH block a function is entered at.",
+   "artifact_carries": "`trust_ir::Function` has an `entry: BlockId` field SEPARATE from its `blocks: Vec<Block>`. The emitted TEXT prints the blocks in vector order and prints NO entry marker at all.",
+   "core_carries": "`(entry N)` -- the id of the FIRST block reader B encountered, and reader A's reading of the real `func.entry`.",
+   "erased_by": "Not erased by a reader -- UNPRINTED by the producer, and unprinted in a way that makes trust-ir's own text round trip lossy. `trust_ir::parser` closes the gap by assumption too: `func.entry = first.id;`. So the text format is total only under the invariant `entry == blocks[0].id`, which the producer maintains and does not state.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "if entry.is_none() {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "let entry = entry.ok_or_else(|| self.syn(\"no block in the body\"))?;"
+    }
+   ],
+   "consequence": "OPEN, and open at the PRODUCER rather than at this gate -- which is why it is a row and not a defect. Two functions differing only in their entry block have BYTE-IDENTICAL emitted text, so no text reader can separate them and no amount of work on reader B can change that. What keeps it from being a hole is that reader A does NOT assume: it reads `func.entry` off the binary. So a body whose entry is not its first block makes readers A and B DISAGREE, and M2 is the check that fires. The assumption is therefore CHECKED rather than merely made -- but it was checked by accident, and until 2026-08-20 nothing said so.",
+   "read_by": "`crystal_a2_mint`'s M2, structurally: reader A's `(entry N)` comes from `func.entry` and reader B's from block order, so the two agree only when the invariant holds. Nothing states the invariant, and no lane asserts it directly.",
+   "live_on_chains": "all sixteen fixtures -- every one of them opens at its first printed block, which is why the assumption has never been tested against a body that violates it.",
+   "residual": "There is no in-repo witness. Constructing one needs a `trust_ir::Module` built by hand with `entry != blocks[0]`, serialised and re-read, which is a producer-side test in the `trust` repo. Until then this is a single-assumption slot whose only defence is that two readers derive it differently and are compared."
+  },
+  {
+   "id": "trailing-content",
+   "kind": "refused",
+   "slot": "EVERYTHING in the emitted text after the body's closing brace -- and, in the other direction, a body that has no closing brace at all.",
+   "artifact_carries": "Whatever the file holds after `}`. A real trust-ir module text carries the rest of the module there: more functions, the `global` declarations, the `file` table, the type tables.",
+   "core_carries": "Nothing, and until 2026-08-20 nothing SAID nothing. `Reader::run` matched the first line equal to `}` and `break`, so the remainder was neither read nor refused.",
+   "erased_by": "Nothing, any more. A non-blank line after the close is a hard refusal naming the line, and a body that runs out without a close is refused as truncated. Trailing BLANK lines are still accepted, so this refuses content and not whitespace.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "if closed {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
+     "text": "\"the body has no closing brace. `Display for Function` always emits one, so text \\"
+    }
+   ],
+   "the_counterexample_2026_08_20": "CONSTRUCTED, and it is the sharper of the third pass's two. Measured before the fix, ALL FOUR accepted and all four projecting to the IDENTICAL core module as the one-function body: `m::f` followed by a whole second function `m::g`; `m::f` followed by a `global` declaration; followed by a `file` table; followed by arbitrary prose. And the sharp one -- a `}` appearing MID-BODY truncated the function and dropped every instruction after it IN SILENCE, so `bb0(%0: ptr): unreachable } %9 = load i64, ptr %0  ret %9` read as a body whose only instruction is `unreachable`.",
+   "why_this_one_matters_more_than_a_missing_field": "Because it is the assumption the rest of this file rests on. `blind_slots.rs`'s own module docs say the list cannot be PROVED complete and that what holds completeness up is both readers being TOTAL-OR-REFUSING -- `an unrecognised construct is a hard error in both readers, so a field can only be erased by a line someone wrote to erase it, and those lines are what the anchors point at.` A `break` that ignores the remainder of the input is precisely a reader that is not total, and it erases things nobody enumerated, so no anchor could ever have pointed at them. The nine rows above were each a field somebody chose to drop. This one was the reader quietly ending early.",
+   "consequence": "CLOSED 2026-08-20 by REFUSAL, which is the right close for a reader whose contract is ONE body per text: there is nothing in a second function for a one-function projection to say, so the honest answer is to stop rather than to ignore. If a chain ever needs to project a whole module, this refusal is the thing that has to be lifted deliberately, together with projecting the function list.",
+   "read_by": "`crystal_a2_mint`'s blind-slot lane, which constructs all five bodies and requires each to be refused, AND requires trailing blank lines to still be accepted so the refusal is about content rather than whitespace.",
+   "witness": "content_after_the_closing_brace_is_now_refused_rather_than_dropped_unread",
+   "live_on_chains": "none of the sixteen committed fixtures carries anything after its close -- which is exactly why this was latent, and exactly the position `global-index` was in before it was closed.",
+   "residual": "Reader A is unaffected: it projects one `trust_ir::Function` out of a decoded module and never sees text, so it could not have had this defect and gains nothing from the fix. The two readers were therefore NOT in agreement about what the fixture file means, and nothing had noticed."
+  }
+ ],
+ "justification_standard": "A row that stays `erased` or `unwitnessed` must justify itself with a KERNEL-CHECKED THEOREM, a MEASURED FACT, or a QUOTED LINE of the producer's source -- never with a recollection. The standard for a theorem is `ir_ty_is_agg_enum_any` (`spec/core_spec/eval_ir_ops.rs`), which proves `ir_ty_is_agg (IRTy.enum_ n) = Bool.true` at EVERY whole-crate id and is why a type-table renumbering cannot reach the value the machine computes; `ir_exec_switch_exh_irrelevant`, `ir_exec_callind_conv_irrelevant` and `ir_exec_callind_sig_irrelevant` (`spec/core_spec/eval_ir_machine.rs`) are the same standard for three dropped operands. And a theorem must be about THE OBJECT THE ROW IS ABOUT: `functy-index` cited `ir_exec_callind_sig_irrelevant` for four months, which proves something true about `callindirect`'s operand and nothing at all about the function's own header signature. That mismatch is what let a variadic and a non-variadic function be accepted as one program."
+}

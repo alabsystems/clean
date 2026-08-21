@@ -26,14 +26,39 @@ use serde::{Deserialize, Serialize};
 /// Different mathematical traditions have different logical foundations.
 /// Rather than pick one, clean supports multiple modes with proven-safe
 /// combinations.
+///
+/// # Discriminants are PINNED — do not renumber, do not reorder silently
+///
+/// `#[repr(u8)]` and the explicit `= N` values are load-bearing, not decoration.
+/// The crystal chains for `CleanMode::has_cubical_layer` and
+/// `CleanMode::from_source_system` prove theorems about the trust-ir that
+/// `trustc` emits for these bodies, and that IR **switches on the numeric
+/// discriminant**: `switch %3 [ 2: bb1 3: bb2 default: bb3 ]` for
+/// `has_cubical_layer`, `const enum.13 { k }` for every arm of
+/// `from_source_system`. Clean's side of the proof encodes the same numbers in
+/// `clean_mode_tag` (`crates/clean-verify/src/spec/core_spec/eval_ir_mode.rs`).
+///
+/// Without explicit discriminants those numbers were rustc's choice for a
+/// default-repr enum: the *values* were guaranteed to be 0.. in declaration
+/// order by the language, but nothing stopped a future edit from REORDERING the
+/// variants, which would silently move `Cubical` off 2 and make the registered
+/// module a theorem about a body that is no longer shipped. `#[repr(u8)]`
+/// additionally pins the tag ENCODING to the `u8` the emitted
+/// `extractfield u8 %2, 0` reads.
+///
+/// The pin is enforced by `crate::crystal_tag_pin` (compile-time) and by
+/// `scripts/check_enum_tag_pin.py` against `data/crystal_enum_tag_pin.json`,
+/// which also cross-checks the recorded artifacts under
+/// `crates/clean-verify/tests/fixtures/`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[repr(u8)]
 pub enum CleanMode {
     /// Pure Martin-Löf Type Theory - no axioms, decidable type checking.
     /// Compatible with: All modes (most restrictive)
     ///
     /// This is the default mode and corresponds to Lean 4's core type theory.
     #[default]
-    Constructive,
+    Constructive = 0,
 
     /// Calculus of Inductive Constructions - impredicative Prop, restricted large elimination.
     /// Compatible with: Constructive, Classical, SetTheoretic
@@ -42,7 +67,7 @@ pub enum CleanMode {
     /// - Impredicative Prop (quantification over Prop stays in Prop)
     /// - SProp (strict propositions, always proof-irrelevant)
     /// - Restricted large elimination from Prop
-    Impredicative,
+    Impredicative = 1,
 
     /// Cubical Type Theory - Path types, hcomp, transp, Glue, univalence provable.
     /// Compatible with: Constructive only (NOT with Classical or Impredicative)
@@ -58,7 +83,7 @@ pub enum CleanMode {
     /// because it uses different equality/computation rules (Path/Glue/hcomp/transp) that are
     /// not available in the other modes. Note: univalence itself is compatible with classical
     /// axioms like LEM; the isolation here is a kernel/translation boundary.
-    Cubical,
+    Cubical = 2,
 
     /// Directed / simplicial type theory (Riehl–Shulman) — **Rung 2** (frontier).
     /// Compatible with: Constructive only (isolated, like Cubical).
@@ -84,7 +109,7 @@ pub enum CleanMode {
     /// has open metatheoretic questions); Segal/Rezk composition and ∞-Yoneda are
     /// roadmap, not yet built. See
     /// `docs/plans/RUNG2_DIRECTED_DESIGN.md`.
-    Directed,
+    Directed = 3,
 
     /// Classical logic - LEM, Choice as axioms.
     /// Compatible with: Constructive, Impredicative
@@ -94,7 +119,7 @@ pub enum CleanMode {
     /// - Axiom of Choice
     /// - Function extensionality
     /// - Propositional extensionality
-    Classical,
+    Classical = 4,
 
     /// ZFC set theory - sets as first-class, no dependent types required.
     /// Compatible with: Classical (inherits all classical axioms)
@@ -103,7 +128,7 @@ pub enum CleanMode {
     /// - ZFC axioms (Extensionality, Pairing, Union, PowerSet, etc.)
     /// - Set membership as primitive
     /// - Set comprehension
-    SetTheoretic,
+    SetTheoretic = 5,
 }
 
 impl CleanMode {
@@ -332,32 +357,42 @@ impl CleanMode {
 }
 
 /// Source proof system for imported declarations.
+///
+/// # Discriminants are PINNED
+///
+/// See [`CleanMode`]. `CleanMode::from_source_system` is a registered crystal
+/// chain; the emitted body switches on this enum's discriminant
+/// (`switch %2 [ 0: bb1 … 9: bb10 11: bb11 default: bb12 ]`, with `10` — `PVS` —
+/// deliberately folded into the default alongside `ACL2`'s explicit `11`).
+/// Renumbering or reordering these variants changes which arm each system
+/// reaches without changing one line of the registered module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum SourceSystem {
     /// Lean 4
-    Lean4,
+    Lean4 = 0,
     /// Coq proof assistant
-    Coq,
+    Coq = 1,
     /// Agda (standard)
-    Agda,
+    Agda = 2,
     /// Cubical Agda
-    CubicalAgda,
+    CubicalAgda = 3,
     /// Isabelle/HOL
-    IsabelleHOL,
+    IsabelleHOL = 4,
     /// HOL Light
-    HOLLight,
+    HOLLight = 5,
     /// HOL4
-    HOL4,
+    HOL4 = 6,
     /// Mizar
-    Mizar,
+    Mizar = 7,
     /// Metamath with ZFC axioms
-    MetamathZFC,
+    MetamathZFC = 8,
     /// Metamath set.mm (classical logic)
-    MetamathSet,
+    MetamathSet = 9,
     /// PVS
-    PVS,
+    PVS = 10,
     /// ACL2
-    ACL2,
+    ACL2 = 11,
 }
 
 impl SourceSystem {

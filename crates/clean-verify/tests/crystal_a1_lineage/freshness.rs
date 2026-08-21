@@ -92,6 +92,17 @@ pub(crate) const RECORD: &str = "data/crystal_chain_revalidation_2026-08-19.json
 /// is a correct, internally consistent account of ONE build. Merging them would
 /// manufacture a record describing neither.
 pub(crate) const RECORD_2: &str = "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json";
+/// The newest current-source revalidation. It is append-only: older records
+/// remain the evidence for the exact builds they measured.
+pub(crate) const CURRENT_RECORD: &str = "data/crystal_chain_revalidation_2026-08-21_b03937e74.json";
+/// The append-only old->new ledger produced by the source-bound fixture
+/// rebaseline that makes strict freshness derivably green.
+pub(crate) const CURRENT_REBASELINE: &str =
+    "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json";
+/// The reviewed load-bearing proof/spec/tag bindings required before the
+/// rebaseline tool will move any fixture.
+pub(crate) const CURRENT_REBASELINE_BINDINGS: &str =
+    "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json";
 /// The mechanism that produces it.
 pub(crate) const SCRIPT: &str = "scripts/crystal_fixture_freshness.py";
 
@@ -114,6 +125,9 @@ pub(crate) const EVIDENCE: &[(&str, &str)] = &[
     ("meta_tag_shl", "meta_tag_shl.lineage.json"),
     ("level_is_zero", "level_is_zero.a0.json"),
     ("simp_priority_value", "simp_priority_value.lineage.json"),
+    ("strict_monads", "strict_monads.lineage.json"),
+    ("flat_flags_with", "flat_flags_with.lineage.json"),
+    ("node_id_index", "node_id_index.lineage.json"),
 ];
 
 /// Chains whose fixture **IS** the live-dump comparison rather than a dated pin
@@ -142,6 +156,13 @@ pub(crate) const HEAD_MEASURED: &[&str] = &[
     "float_add",
     "float_sub",
     "float_mul",
+    // Chains 15-17, the 2026-08-20 second tranche — same dump cohort as the
+    // floats, same reproduction trio, same record (regenerated from the same
+    // dump after its BODIES table grew; the float rows are unchanged by that,
+    // which the float gates keep asserting).
+    "strict_monads",
+    "flat_flags_with",
+    "node_id_index",
 ];
 
 /// The chains the two committed revalidation records actually measured:
@@ -333,6 +354,39 @@ fn the_freshness_script_covers_exactly_the_chained_bodies() {
     );
 }
 
+/// The live-dump driver must really evict the subject before it claims a fresh
+/// measurement.  A Trust-pinned checkout passes a `-Z` option through Cargo's
+/// target config, so even `cargo clean` has to query the measured Trust
+/// compiler.  The old best-effort cleanup used the host stable compiler,
+/// discarded its error with `|| true`, and could leave a reused clean-kernel
+/// artifact untouched.  The later missing-coverage check failed closed, but
+/// only after the driver had failed to uphold its advertised precondition.
+#[test]
+fn the_live_dump_driver_cleans_with_the_measured_compiler_and_fails_closed() {
+    let rel = "scripts/trust_ir_build.sh";
+    let path = repo_root().join(rel);
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("{} is missing or unreadable ({e})", path.display()));
+    assert!(
+        source.contains("if ! RUSTC=\"$TRUSTC_BIN\" CARGO_TARGET_DIR=\"$TDIR\""),
+        "{rel} must make Cargo's cleanup query the same sealed compiler as the measured build"
+    );
+    assert!(
+        source.contains("cargo clean --locked --release -p clean-kernel"),
+        "{rel} must evict the measured clean-kernel package before rebuilding it"
+    );
+    assert!(
+        source.contains(
+            "fail \"could not remove the clean-kernel subject artifacts with the measured compiler\""
+        ),
+        "{rel} must fail closed when subject eviction fails"
+    );
+    assert!(
+        !source.contains("cargo clean --locked --release -p clean-kernel >/dev/null 2>&1 || true"),
+        "{rel} silently ignores a failed subject eviction"
+    );
+}
+
 /// **A revalidation is a dated measurement, so "does it still hold?" needs an
 /// answer in the tree — not a re-read of the same file.**
 ///
@@ -475,5 +529,7 @@ fn the_second_revalidation_records_no_structural_drift() {
     }
 }
 
+#[path = "freshness_enum_tag_stage2.rs"]
+mod enum_tag_stage2;
 #[path = "freshness_head.rs"]
 mod head_measurement;

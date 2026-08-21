@@ -1,24 +1,24 @@
-rustcc fn @expr::bvar_in_range(functy.641) {
+rustcc fn @expr::bvar_in_range(functy.467) {
     ; #producer: trust
     ; #names: %0="idx", %1="start", %2="end"
 bb0(%0: u32, %1: u32, %2: u32):
-    %5 = const u32 4294967295  ; #loc: 378 103 14
-    %6 = icmp eq u32 %2, %5  ; #loc: 378 103 7
-    condbr %6, bb1, bb2  ; #loc: 378 103 4
+    %5 = const u32 4294967295  ; #loc: 380 103 14
+    %6 = icmp eq u32 %2, %5  ; #loc: 380 103 7
+    condbr %6, bb1, bb2  ; #loc: 380 103 4
 bb1:
-    %7 = icmp uge u32 %0, %1  ; #loc: 378 104 8
-    br bb3(%7)  ; #loc: 378 103 4
+    %7 = icmp uge u32 %0, %1  ; #loc: 380 104 8
+    br bb3(%7)  ; #loc: 380 103 4
 bb2:
-    %8 = icmp uge u32 %0, %1  ; #loc: 378 106 8
-    condbr %8, bb4, bb5  ; #loc: 378 106 8
+    %8 = icmp uge u32 %0, %1  ; #loc: 380 106 8
+    condbr %8, bb4, bb5  ; #loc: 380 106 8
 bb3(%3: bool):
-    ret %3  ; #loc: 378 108 1
+    ret %3  ; #loc: 380 108 1
 bb4:
-    %9 = icmp ult u32 %0, %2  ; #loc: 378 106 24
-    br bb6(%9)  ; #loc: 378 106 8
+    %9 = icmp ult u32 %0, %2  ; #loc: 380 106 24
+    br bb6(%9)  ; #loc: 380 106 8
 bb5:
-    %10 = const bool false  ; #loc: 378 106 8
-    br bb6(%10)  ; #loc: 378 106 8
+    %10 = const bool false  ; #loc: 380 106 8
+    br bb6(%10)  ; #loc: 380 106 8
 bb6(%4: bool):
-    br bb3(%4)  ; #loc: 378 103 4
+    br bb3(%4)  ; #loc: 380 103 4
 }

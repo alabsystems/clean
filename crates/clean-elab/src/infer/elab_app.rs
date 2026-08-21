@@ -2686,13 +2686,19 @@ impl<'a> ElabCtx<'a> {
                             {
                                 coerced
                             } else {
-                                // Special case: expected is Nat (from metavariable solved by literal)
-                                // but actual is Real - this means a previous literal constrained
-                                // the type parameter incorrectly. Try coercing the literals to Real.
+                                // Special case for Real: an earlier Nat literal
+                                // solved a shared carrier metavar to `Nat`, but
+                                // this later argument is `Real`. As in the Int
+                                // lane below, `local_arg_ty` may already be the
+                                // concrete `Nat`: the first operand's solution
+                                // was instantiated into the function type. The
+                                // literal history and rigid Real argument are
+                                // the discriminating evidence; requiring a
+                                // surviving metavar here incorrectly disabled
+                                // the retry for `LT.lt 0 x` with `x : Real`.
                                 if self.is_nat_type(&expected_arg_ty)
                                     && self.is_real_type(&arg_type)
                                     && !nat_literal_indices.is_empty()
-                                    && self.has_metavars(&local_arg_ty)
                                     && self
                                         .env
                                         .get_const(&Name::from_string("Real.ofNat"))

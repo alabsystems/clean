@@ -46,10 +46,13 @@
 //! claimed.
 //!
 //! And the A0/A6 evidence for this body is **weaker than the eighth chain's and
-//! says so in its own file**: ONE build rather than the sealed driver's three,
-//! no negative control, no reproduction stanza. The last test below pins it at
-//! that strength — no lower and no higher — including the two respects in which
-//! the eighth chain's census row for this same closure DISAGREES with it.
+//! says so in its own file**: three clean non-incremental builds with
+//! byte-identical `coverage.json`, but using one unsealed local-stage1 producer
+//! rather than a sealed driver, and with no negative control. The reproduction
+//! stanza is pinned for add/subtract/multiply by the focused float-evidence
+//! test. The last test below records the remaining evidence at its actual
+//! strength — no lower and no higher — including the two respects in which the
+//! eighth chain's census row for this same closure DISAGREES with it.
 
 use super::*;
 
@@ -63,7 +66,7 @@ fn float_add_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_float_add.rs", "const SRC_IR_FA_B"),
+        &clean_named_const_source("eval_ir_float_add.rs", "SRC_IR_FA_B0"),
         "def ir_fa_b",
     );
 
@@ -296,7 +299,7 @@ fn float_add_the_new_lanes_catch_what_every_old_lane_misses() {
 #[test]
 fn float_add_the_lanes_catch_a_drifted_spec_module_too() {
     let emitted = parse_emitted(&fixture("float_add.trust-ir.txt"));
-    let src = clean_block_sources("eval_ir_float_add.rs", "const SRC_IR_FA_B");
+    let src = clean_named_const_source("eval_ir_float_add.rs", "SRC_IR_FA_B0");
     let good = parse_clean(&src, "def ir_fa_b");
     assert_eq!(
         emitted.binops, good.binops,
@@ -360,12 +363,9 @@ fn float_add_the_lanes_catch_a_drifted_spec_module_too() {
 /// is NOT the eighth chain's.**
 ///
 /// `float_add.lineage.json` is not the shape `assert_a0_a6` reads and must not
-/// be forced into it: it records ONE build via `scripts/trust_ir_build.sh
-/// --print-only` instead of the sealed driver's three clean non-incremental
-/// builds, it carries no negative control and no reproduction stanza, and it
-/// records `flip_lineage_equals_coverage: true`. Every one of those is
-/// asserted here as written, so a later re-pin under the sealed protocol has to
-/// come through this test rather than around it.
+/// be forced into it. The shared float-evidence test pins its three-build
+/// reproduction; this test pins its body, lineage join, unsealed-driver
+/// control, and disagreement with the eighth chain's census row.
 #[test]
 fn float_add_a0_evidence_is_recorded_at_the_strength_it_was_measured() {
     let j = fixture("float_add.lineage.json");
@@ -445,16 +445,6 @@ fn float_add_a0_evidence_is_recorded_at_the_strength_it_was_measured() {
          or not"
     );
 
-    // The provenance, stated as the file states it.
-    assert!(
-        ev["build"]["provenance_strength"]
-            .as_str()
-            .is_some_and(|s| s.contains("THREE clean non-incremental builds")
-                && s.contains("unsealed local stage1")),
-        "the provenance must be carried in the evidence at the strength it was measured — \
-         three byte-identical clean builds of an UNSEALED local driver, which is stronger \
-         than one build and weaker than the sealed-driver protocol, and the text must say so"
-    );
     assert!(
         ev["build"]["control"]
             .as_str()

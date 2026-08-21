@@ -1,0 +1,9 @@
+rustcc fn @env::Environment::set_lean4_core_strict_monads(functy.404) {
+    ; #producer: trust
+    ; #names: %0="self", %1="strict"
+bb0(%0: ptr, %1: bool):
+    %2 = load struct.441, ptr %0  ; #loc: 368 3479 8
+    %3 = insertfield struct.441 %2, 81, %1  ; #loc: 368 3479 8
+    store struct.441 %3, ptr %0  ; #loc: 368 3479 8
+    ret  ; #loc: 368 3480 5
+}

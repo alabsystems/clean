@@ -177,6 +177,11 @@ BODIES: dict[str, str] = {
     "float_add": "env::native_reducers_float::reduce_float_add::{closure#0}",
     "float_sub": "env::native_reducers_float::reduce_float_sub::{closure#0}",
     "float_mul": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+    # Chains 15-17, the 2026-08-20 second tranche (same dump cohort, same
+    # reproduction trio as the floats).
+    "strict_monads": "env::Environment::set_lean4_core_strict_monads",
+    "flat_flags_with": "flat::types::FlatFlags::with",
+    "node_id_index": "cert::builder::state::NodeId::index",
     # The ELEVENTH chain, 2026-08-20 -- the first chained body that computes an
     # address and dereferences it.  Its fixture was taken from a live dump on
     # the day it was committed, and it enters this table so the NEXT lane
@@ -292,6 +297,51 @@ def classify(old: str, new: str) -> tuple[str, ...]:
     return touched or ("STRUCTURAL",)
 
 
+def selftest_classifier() -> None:
+    """Fail closed if composed renumbering or a real edit is misclassified."""
+    cases = [
+        (
+            "%2 = load enum.181, ptr %0  ; #loc: 425 20 16",
+            "%2 = load enum.182, ptr %0  ; #loc: 426 28 16",
+            ("type-table-index", "loc-file-index"),
+        ),
+        (
+            "%12 = call @func.4914(%9)  ; #loc: 389 528 34",
+            "%12 = call @func.3890(%9)  ; #loc: 390 548 34",
+            ("callee-index", "loc-file-index"),
+        ),
+        (
+            "%2 = global_addr @global.4527  ; #loc: 389 61 20",
+            "%2 = global_addr @global.4556  ; #loc: 390 61 20",
+            ("global-index", "loc-file-index"),
+        ),
+        (
+            "%3 = extractfield u8 %2, 0  ; #loc: 425 20 16",
+            "%3 = extractfield u8 %2, 0  ; #loc: 426 28 16",
+            ("loc-file-index",),
+        ),
+        # A changed payload or argument remains structural even alongside an
+        # otherwise admissible table/location renumbering.
+        (
+            "%4 = const enum.181 { 0 }  ; #loc: 425 20 16",
+            "%4 = const enum.182 { 1 }  ; #loc: 426 28 16",
+            ("STRUCTURAL",),
+        ),
+        (
+            "%12 = call @func.4914(%9)  ; #loc: 389 528 34",
+            "%12 = call @func.3890(%10)  ; #loc: 390 548 34",
+            ("STRUCTURAL",),
+        ),
+    ]
+    for old, new, expected in cases:
+        got = classify(old, new)
+        if got != expected:
+            raise RuntimeError(
+                f"classifier selftest failed: expected {expected}, got {got}: "
+                f"{old!r} -> {new!r}"
+            )
+
+
 def signature_of(fixture_text: str) -> str:
     """`rustcc fn @NAME(functy.N) {` -> `rustcc fn @NAME(`."""
     head = fixture_text.splitlines()[0]
@@ -318,6 +368,7 @@ def extract(dump_text: str, sig: str) -> list[str]:
 
 
 def main() -> int:
+    selftest_classifier()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("dump", type=Path, help="a TRUST_IR_BUILD_DUMP directory")
     ap.add_argument(
@@ -434,7 +485,13 @@ def main() -> int:
         }
         lf = FIXTURES / LINEAGE_FIXTURE.get(stem, f"{stem}.lineage.json")
         if lf.is_file():
-            pinned = json.loads(lf.read_text(encoding="utf-8"))
+            evidence = json.loads(lf.read_text(encoding="utf-8"))
+            # Historical top-level measurements remain queryable forever.  A
+            # reviewed source-bound fixture rebaseline adds a complete current
+            # pin instead of mixing new lineage fields into that old build
+            # record.  Strict freshness compares against the current pin when
+            # present and falls back to the historical schema for old records.
+            pinned = evidence.get("current_source_bound_pin") or evidence
             entry["pinned"] = {
                 "lineage": pinned.get("lineage"),
                 "def_index": pinned.get("def_index"),
@@ -479,10 +536,10 @@ def main() -> int:
         print(
             "  These indices renumber on any clean-kernel or producer change. They are NOT\n"
             "  read by the semantics: ir_ty_is_agg_enum_any / ir_ty_is_agg_struct_any prove\n"
-            "  the type index cannot reach the machine's answer. Refreshing a fixture for one\n"
-            "  of these re-records a moving target — and would go RED against the registered\n"
-            "  spec, which spells the OLD index. See\n"
-            "  data/crystal_chain_revalidation_2026-08-19.json."
+            "  the type index cannot reach the machine's answer. Do not copy a live body over\n"
+            "  the fixture: that can break a registered proof/tag binding. A reviewed strict\n"
+            "  re-pin uses scripts/crystal_fixture_rebaseline.py, which requires every such\n"
+            "  binding before it writes and preserves the old identity in an append-only ledger."
         )
     if red:
         print("\nRED:")

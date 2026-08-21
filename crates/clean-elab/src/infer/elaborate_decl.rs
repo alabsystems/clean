@@ -114,7 +114,8 @@ impl<'a> ElabCtx<'a> {
                     ))
                 }
             } else {
-                let used = used_section_binders(&self.section_binder_stack, inner);
+                let used =
+                    used_section_binders(&self.section_binder_stack, inner, Some(&self.macro_ctx));
                 if used.is_empty() {
                     None
                 } else {
@@ -178,7 +179,8 @@ impl<'a> ElabCtx<'a> {
         // exactly how `elab_namespace` (above) already reports its inner declarations.
         let mut results: Vec<ElabResult> = Vec::new();
         for decl in decls {
-            let used = used_section_binders(&self.section_binder_stack, decl);
+            let used =
+                used_section_binders(&self.section_binder_stack, decl, Some(&self.macro_ctx));
             let processed = if used.is_empty() {
                 None
             } else {
@@ -1139,6 +1141,7 @@ fn decl_free_surface_idents(
 pub(crate) fn used_section_binders(
     section_binders: &[clean_parser::SurfaceBinder],
     decl: &SurfaceDecl,
+    macro_ctx: Option<&crate::macro_integration::MacroCtx>,
 ) -> Vec<clean_parser::SurfaceBinder> {
     use crate::where_desugar_ext::collect_free_idents;
     if section_binders.is_empty() {
@@ -1171,6 +1174,9 @@ pub(crate) fn used_section_binders(
     let Some((mut used, own_binders)) = decl_free_surface_idents(decl) else {
         return Vec::new();
     };
+    if let Some(macro_ctx) = macro_ctx {
+        macro_ctx.close_over_simple_notation_dependencies(&mut used);
+    }
     for name in &own_binders {
         used.remove(name);
     }

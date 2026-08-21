@@ -112,7 +112,7 @@ fn expr_path_step_clone_proved_module_matches_the_emitted_artifact() {
         (0..11u32)
             .map(|k| (k + 1, vec![(k + 4, k)]))
             .collect::<BTreeMap<u32, Vec<(u32, u32)>>>(),
-        "arm bbK+1 materialises `const enum.181 {{ K }}` — eleven DISTINCT constants; a clone \
+        "arm bbK+1 materialises `const enum.184 {{ K }}` — eleven DISTINCT constants; a clone \
          that answered the same variant twice would be caught here and nowhere else"
     );
     assert_eq!(
@@ -155,7 +155,7 @@ fn expr_path_step_clone_proved_module_matches_the_emitted_artifact() {
     assert_eq!(
         emitted.int_consts, clean.int_consts,
         "per-block INTEGER constants differ: emitted {:?} vs Clean {:?}. This body's answers are \
-         `const enum.181 {{ k }}` aggregates, NOT `const u8 k`; the two route through different \
+         `const enum.184 {{ k }}` aggregates, NOT `const u8 k`; the two route through different \
          evaluators and both sides of this lane must be empty.",
         emitted.int_consts, clean.int_consts
     );

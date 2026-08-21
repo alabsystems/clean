@@ -1,7 +1,7 @@
-rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.551) {
+rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.381) {
     ; #producer: trust
     ; #names: %1="a", %2="b"
 bb0(%0: ptr, %1: f64, %2: f64):
-    %3 = fmul f64 %1, %2  ; #loc: 354 218 33
-    ret %3  ; #loc: 354 218 38
+    %3 = fmul f64 %1, %2  ; #loc: 356 218 33
+    ret %3  ; #loc: 356 218 38
 }

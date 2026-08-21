@@ -126,6 +126,22 @@ pub(crate) enum RuleView {
     /// `cong`: premised congruence. Unit conclusion (= (f ā) (f b̄)) from
     /// per-argument premise equalities; reconstructs a congrArg/congr chain.
     Cong,
+    /// `eq_transitive`: tautology clause `{¬(t₁=t₂), …, ¬(tₙ₋₁=tₙ), (t₁=tₙ)}`.
+    /// Bounded all-edges-used paths reconstruct via nested `Classical.em` + `Eq.trans`.
+    EqTransitive,
+    /// `implies`: premise ⊢ (=> a b); clause ⊢ [(not a), b]. Identity on the
+    /// premise proof (ay stores `=> a b` as the desugared `(or (not a) b)`).
+    Implies,
+    /// `implies_pos`: ⊢ [¬(=> a b), ¬a, b]. Premiseless Tseitin tautology.
+    ImpliesPos,
+    /// `implies_neg1`: ⊢ [(=> a b), a]. Premiseless Tseitin tautology via Classical.em.
+    ImpliesNeg1,
+    /// `implies_neg2`: ⊢ [(=> a b), (not b)]. Premiseless Tseitin tautology via Classical.em.
+    ImpliesNeg2,
+    /// `not_implies1`: premise ⊢ (not (=> a b)); clause ⊢ [a]. Classical.em case-split.
+    NotImplies1,
+    /// `not_implies2`: premise ⊢ (not (=> a b)); clause ⊢ [(not b)]. Lambda into the premise.
+    NotImplies2,
     Trust,
     Hole,
     Other,

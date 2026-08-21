@@ -110,6 +110,8 @@ mod tests_e2e_lra_weighted_constructor;
 #[cfg(test)]
 mod tests_em_combinator;
 #[cfg(test)]
+mod tests_eq_transitive;
+#[cfg(test)]
 mod tests_farkas_certificate;
 #[cfg(test)]
 mod tests_or_pos;
@@ -137,6 +139,8 @@ mod tests_trust;
 mod tests_tseitin;
 #[cfg(test)]
 mod tests_tseitin_equiv;
+#[cfg(test)]
+mod tests_tseitin_implies;
 #[cfg(test)]
 mod tests_tseitin_xor;
 

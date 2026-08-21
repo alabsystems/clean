@@ -75,7 +75,7 @@ fn main() {
 
     let mut p = Projector::default();
     let core = p
-        .project(func, &names)
+        .project(func)
         .unwrap_or_else(|e| panic!("projection refused: {e}"));
     let text = core;
     let digest = core_digest(&text);
@@ -112,11 +112,13 @@ fn main() {
         " \"artifact_calling_conv\": \"{}\",",
         func.calling_conv
     );
-    let _ = writeln!(
-        prov,
-        " \"artifact_producer\": {:?},",
-        func.producer.as_ref().map(ToString::to_string)
-    );
+    let producer = func
+        .producer
+        .as_ref()
+        .map(ToString::to_string)
+        .map(|value| json_string(&value))
+        .unwrap_or_else(|| "null".to_owned());
+    let _ = writeln!(prov, " \"artifact_producer\": {producer},");
     let _ = writeln!(prov, " \"core_digest\": \"{digest}\",");
     let _ = writeln!(prov, " \"crate_enum_ids_seen\": {:?},", p.enum_order);
     let _ = writeln!(prov, " \"crate_struct_ids_seen\": {:?},", p.struct_order);
@@ -147,11 +149,52 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// Quote one UTF-8 string as JSON without adding a serialization dependency to
+/// this sealed standalone projector. Rust's `Option<String>:?` is not JSON
+/// (`Some("trust")` caused the current provenance bug), and `String`'s debug
+/// escaping is not a promised JSON encoding either.
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch <= '\u{1f}' => {
+                use std::fmt::Write as _;
+                let _ = write!(out, "\\u{:04x}", u32::from(ch));
+            }
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
+}
+
 fn core_digest(text: &str) -> String {
     let mut h = Sha256::new();
     h.update(b"clean.ir_mint.core.v1\0");
     h.update(text.as_bytes());
     hex(&h.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::json_string;
+
+    #[test]
+    fn producer_values_are_json_strings_not_rust_option_debug() {
+        assert_eq!(json_string("trust"), r#""trust""#);
+        assert_eq!(
+            json_string("quoted \" producer\\line\n\u{0001}"),
+            r#""quoted \" producer\\line\n\u0001""#
+        );
+    }
 }
 
 #[derive(Default)]
@@ -197,7 +240,7 @@ impl Projector {
         *self.globals.entry(id).or_insert(n)
     }
 
-    fn project(&mut self, f: &trust_ir::Function, names: &BTreeMap<u32, String>) -> R<String> {
+    fn project(&mut self, f: &trust_ir::Function) -> R<String> {
         let mut out = String::new();
         out.push_str("(module\n");
         out.push_str("  (funcs\n");

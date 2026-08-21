@@ -69,6 +69,72 @@ pub(super) fn emitted_load(
     ));
 }
 
+/// Read a `store` — **every slot it prints**, and refuse the two it cannot
+/// compare.
+///
+/// The printed form is
+/// `[volatile ]store {ty} %{value}, ptr %{ptr}[, align {a}]`
+/// (`trust-ir/src/display.rs:697`); the registered constructor is
+/// `IRInst.store : IRTy → Nat → Nat → Bool → IRInst` — **pointer first,
+/// value second**, the reverse of the printed operand order. The lane both
+/// sides are normalized into is `(POINTER, TYPE, value)`, so a single-side
+/// swap is a lane difference rather than an accident of reading order.
+///
+/// Two refusals, both the `?usize` rule:
+///
+/// * `align` is refused exactly as it is on `load`: Clean's `store` has no
+///   alignment operand, so the slot cannot be compared, and a slot that
+///   cannot be compared must never parse to nothing on both sides.
+/// * `volatile` is refused HERE even though the registered term has a `Bool`
+///   for it, because the lane deliberately carries no volatile slot (no
+///   chained or candidate body stores volatile — see `Cfg::stores`). The
+///   Clean parser refuses `Bool.true` symmetrically, so a volatile pair
+///   cannot agree by both being dropped; whichever side appears first fails
+///   loudly and names the repair (widen the lane).
+pub(super) fn emitted_store(
+    b: u32,
+    t: &[String],
+    stores: &mut BTreeMap<u32, Vec<(u32, String, u32)>>,
+) {
+    assert_ne!(
+        t.first().map(String::as_str),
+        Some("volatile"),
+        "a VOLATILE store ({t:?}), which the store lane has no slot for. Widen the lane to carry \
+         the flag (as `load_tys` does) rather than dropping it into nothing on both sides."
+    );
+    assert_eq!(
+        t.first().map(String::as_str),
+        Some("store"),
+        "emitted_store called on a line that is not a store: {t:?}"
+    );
+    assert_eq!(
+        t.get(3).map(String::as_str),
+        Some("ptr"),
+        "a `store`'s pointer operand is printed as `ptr %N` and this one is not: {t:?}"
+    );
+    assert_eq!(
+        t.len(),
+        5,
+        "a `store` carries {} tokens ({t:?}), and this parser reads exactly the type, the stored \
+         value and the pointer. The extra slot is almost certainly `, align N`, which Clean's \
+         `IRInst.store : IRTy -> Nat -> Nat -> Bool -> IRInst` has NO operand for — so it cannot \
+         be compared, and a slot that cannot be compared is refused here rather than dropped \
+         into nothing on both sides.",
+        t.len()
+    );
+    let Some(value) = t.get(2).and_then(|s| id_of(s)) else {
+        panic!("a `store`'s value operand is not an SSA id: {t:?}");
+    };
+    let Some(ptr) = t.get(4).and_then(|s| id_of(s)) else {
+        panic!("a `store`'s pointer operand is not an SSA id: {t:?}");
+    };
+    stores.entry(b).or_default().push((
+        ptr,
+        norm_emitted_ty(t.get(1).map_or("", String::as_str)),
+        value,
+    ));
+}
+
 /// Read a `gep` — **every slot it prints**, and refuse anything it does not.
 ///
 /// The printed form is `gep [inbounds ]{ty}, ptr %{base}, %{i0}[, %{i1}…]`

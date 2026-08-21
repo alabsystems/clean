@@ -56,7 +56,29 @@ use clean_macro::{
 use clean_parser::{
     LevelExpr, MacroArm, NotationItem, NotationKind, SurfaceArg, SurfaceExpr, SyntaxPatternItem,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+/// A nullary notation expansion plus the lexical section variables it captured.
+///
+/// Surface expressions carry identifier spellings but not Lean's syntax-scope
+/// marks.  Retaining the stable FileContext identities here supplies the one
+/// distinction that matters at the file boundary: after a captured variable's
+/// scope ends, the alias is inert instead of rebinding its spelling to an
+/// unrelated global or later section variable.
+#[derive(Clone)]
+struct SimpleNotationAlias {
+    expansion: SurfaceExpr,
+    captured_variable_ids: Vec<u64>,
+}
+
+enum SimpleNotationLookup<'a> {
+    Active(&'a SurfaceExpr),
+    /// Lean keeps the notation registered after a captured variable expires,
+    /// but its hygienically marked reference is no longer resolvable.  Keep
+    /// that state distinct from an absent alias: treating it as absent could
+    /// let the notation literal be auto-bound as a fresh identifier.
+    Expired,
+}
 
 // Types only used by tests via `use super::*`
 #[cfg(test)]
@@ -81,7 +103,7 @@ struct ScopedNotation {
     /// For nullary literal notation (`scoped notation "x" => e`): the bare
     /// identifier alias, gated exactly like `simple_notations` but only while
     /// the declaring namespace is active.
-    simple_alias: Option<(String, SurfaceExpr)>,
+    simple_alias: Option<(String, SimpleNotationAlias)>,
 }
 
 /// Macro expansion context for elaboration
@@ -96,7 +118,13 @@ pub struct MacroCtx {
     /// Statistics from last expansion
     last_stats: Option<clean_macro::expand::ExpansionStats>,
     /// File-scoped aliases for nullary notation parsed as bare identifiers.
-    simple_notations: HashMap<String, SurfaceExpr>,
+    simple_notations: HashMap<String, SimpleNotationAlias>,
+    /// Active lexical section-variable identities, synchronized from the
+    /// FileContext before each declaration is elaborated.
+    active_variable_ids: HashSet<u64>,
+    /// Innermost active identity for each spelling, used when a notation is
+    /// registered to record exactly which binding its expansion captures.
+    active_variable_by_name: HashMap<String, u64>,
     /// `scoped notation` declarations, tagged with their declaring namespace.
     /// Kept OUT of `registry`; active ones are merged into
     /// `effective_registry` on every activation-state change.
@@ -135,6 +163,8 @@ impl MacroCtx {
             hygienic: true,
             last_stats: None,
             simple_notations: HashMap::new(),
+            active_variable_ids: HashSet::new(),
+            active_variable_by_name: HashMap::new(),
             scoped_notations: Vec::new(),
             scoped_activation_frames: vec![Vec::new()],
             current_namespace: String::new(),
@@ -262,11 +292,77 @@ impl MacroCtx {
         self.effective_registry = Some(registry);
     }
 
+    /// Synchronize the lexical section-variable bindings visible at the current
+    /// source position.  Later entries with the same spelling are innermost.
+    pub(crate) fn set_active_variable_bindings(
+        &mut self,
+        bindings: impl IntoIterator<Item = (String, u64)>,
+    ) {
+        self.active_variable_ids.clear();
+        self.active_variable_by_name.clear();
+        for (name, id) in bindings {
+            self.active_variable_ids.insert(id);
+            self.active_variable_by_name.insert(name, id);
+        }
+    }
+
+    fn alias_is_active(&self, alias: &SimpleNotationAlias) -> bool {
+        alias
+            .captured_variable_ids
+            .iter()
+            .all(|id| self.active_variable_ids.contains(id))
+    }
+
+    fn alias_expansion<'a>(&self, alias: &'a SimpleNotationAlias) -> SimpleNotationLookup<'a> {
+        if self.alias_is_active(alias) {
+            SimpleNotationLookup::Active(&alias.expansion)
+        } else {
+            SimpleNotationLookup::Expired
+        }
+    }
+
+    /// Add the free identifiers introduced by active nullary aliases referenced
+    /// by `names`, recursively.  Declaration preprocessing uses this closure so
+    /// a theorem mentioning `A`, where `notation "A" => id x`, includes the
+    /// captured section binder `x` in its kernel telescope.
+    pub(crate) fn close_over_simple_notation_dependencies(&self, names: &mut HashSet<String>) {
+        loop {
+            let mut introduced = HashSet::new();
+            for name in names.iter() {
+                if let Some(SimpleNotationLookup::Active(expansion)) =
+                    self.lookup_simple_notation(name)
+                {
+                    introduced.extend(crate::where_desugar_ext::collect_free_idents(expansion));
+                }
+            }
+            let before = names.len();
+            names.extend(introduced);
+            if names.len() == before {
+                break;
+            }
+        }
+    }
+
+    fn capture_simple_alias(&self, expansion: SurfaceExpr) -> SimpleNotationAlias {
+        let mut referenced = crate::where_desugar_ext::collect_free_idents(&expansion);
+        self.close_over_simple_notation_dependencies(&mut referenced);
+        let mut captured_variable_ids: Vec<u64> = referenced
+            .iter()
+            .filter_map(|name| self.active_variable_by_name.get(name).copied())
+            .collect();
+        captured_variable_ids.sort_unstable();
+        captured_variable_ids.dedup();
+        SimpleNotationAlias {
+            expansion,
+            captured_variable_ids,
+        }
+    }
+
     /// Look up a nullary-notation alias for a bare identifier: the file-scoped
     /// table first, then ACTIVE scoped-notation aliases.
-    fn lookup_simple_notation(&self, name: &str) -> Option<&SurfaceExpr> {
-        if let Some(expansion) = self.simple_notations.get(name) {
-            return Some(expansion);
+    fn lookup_simple_notation(&self, name: &str) -> Option<SimpleNotationLookup<'_>> {
+        if let Some(alias) = self.simple_notations.get(name) {
+            return Some(self.alias_expansion(alias));
         }
         self.scoped_notations.iter().find_map(|scoped| {
             scoped
@@ -275,7 +371,7 @@ impl MacroCtx {
                 .filter(|(literal, _)| {
                     literal.as_str() == name && self.scoped_namespace_active(&scoped.namespace)
                 })
-                .map(|(_, expansion)| expansion)
+                .map(|(_, alias)| self.alias_expansion(alias))
         })
     }
 
@@ -431,7 +527,8 @@ impl MacroCtx {
         let (def, simple_alias) = Self::build_notation_def(kind, precedence, pattern, expansion)?;
         self.registry.register(def);
         if let Some((literal, alias_expansion)) = simple_alias {
-            self.simple_notations.insert(literal, alias_expansion);
+            let alias = self.capture_simple_alias(alias_expansion);
+            self.simple_notations.insert(literal, alias);
         }
         self.rebuild_effective_registry();
         Ok(())
@@ -450,6 +547,8 @@ impl MacroCtx {
         expansion: &SurfaceExpr,
     ) -> Result<(), MacroRegistrationError> {
         let (def, simple_alias) = Self::build_notation_def(kind, precedence, pattern, expansion)?;
+        let simple_alias = simple_alias
+            .map(|(literal, expansion)| (literal, self.capture_simple_alias(expansion)));
         self.scoped_notations.push(ScopedNotation {
             namespace: namespace.to_owned(),
             def,
@@ -631,7 +730,7 @@ pub fn expand_surface_macros(
     ctx: &mut MacroCtx,
     expr: &SurfaceExpr,
 ) -> Result<SurfaceExpr, MacroExpansionError> {
-    let expr = expand_simple_notation_aliases(ctx, expr);
+    let expr = expand_simple_notation_aliases(ctx, expr)?;
 
     // Convert to macro syntax
     let syntax = surface_to_syntax(&expr);
@@ -645,32 +744,41 @@ pub fn expand_surface_macros(
     syntax_to_surface(&expanded).ok_or(MacroExpansionError::ConversionFailed)
 }
 
-fn expand_simple_notation_aliases(ctx: &MacroCtx, expr: &SurfaceExpr) -> SurfaceExpr {
+fn expand_simple_notation_aliases(
+    ctx: &MacroCtx,
+    expr: &SurfaceExpr,
+) -> Result<SurfaceExpr, MacroExpansionError> {
     match expr {
-        SurfaceExpr::Ident(_, name) => ctx
-            .lookup_simple_notation(name)
-            .cloned()
-            .unwrap_or_else(|| expr.clone()),
-        SurfaceExpr::App(span, func, args) => SurfaceExpr::App(
+        SurfaceExpr::Ident(_, name) => match ctx.lookup_simple_notation(name) {
+            Some(SimpleNotationLookup::Active(expansion)) => Ok(expansion.clone()),
+            Some(SimpleNotationLookup::Expired) => {
+                Err(MacroExpansionError::ExpiredNotationCapture(name.clone()))
+            }
+            None => Ok(expr.clone()),
+        },
+        SurfaceExpr::App(span, func, args) => Ok(SurfaceExpr::App(
             *span,
-            Box::new(expand_simple_notation_aliases(ctx, func)),
+            Box::new(expand_simple_notation_aliases(ctx, func)?),
             args.iter()
-                .map(|arg| SurfaceArg {
-                    span: arg.span,
-                    expr: expand_simple_notation_aliases(ctx, &arg.expr),
-                    name: arg.name.clone(),
+                .map(|arg| {
+                    Ok::<SurfaceArg, MacroExpansionError>(SurfaceArg {
+                        span: arg.span,
+                        expr: expand_simple_notation_aliases(ctx, &arg.expr)?,
+                        name: arg.name.clone(),
+                    })
                 })
-                .collect(),
-        ),
-        SurfaceExpr::Paren(span, inner) => {
-            SurfaceExpr::Paren(*span, Box::new(expand_simple_notation_aliases(ctx, inner)))
-        }
-        SurfaceExpr::Ascription(span, value, ty) => SurfaceExpr::Ascription(
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        SurfaceExpr::Paren(span, inner) => Ok(SurfaceExpr::Paren(
             *span,
-            Box::new(expand_simple_notation_aliases(ctx, value)),
-            Box::new(expand_simple_notation_aliases(ctx, ty)),
-        ),
-        _ => expr.clone(),
+            Box::new(expand_simple_notation_aliases(ctx, inner)?),
+        )),
+        SurfaceExpr::Ascription(span, value, ty) => Ok(SurfaceExpr::Ascription(
+            *span,
+            Box::new(expand_simple_notation_aliases(ctx, value)?),
+            Box::new(expand_simple_notation_aliases(ctx, ty)?),
+        )),
+        _ => Ok(expr.clone()),
     }
 }
 
@@ -684,4 +792,9 @@ pub enum MacroExpansionError {
     /// Could not convert expanded syntax back to surface expression
     #[error("could not convert expanded syntax to surface expression")]
     ConversionFailed,
+    /// A persistent notation refers to a lexical section variable whose scope
+    /// has ended.  This is an unknown hygienic reference in Lean, not a fresh
+    /// auto-bound identifier.
+    #[error("Unknown identifier in expired notation capture: {0}")]
+    ExpiredNotationCapture(String),
 }

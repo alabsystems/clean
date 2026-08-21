@@ -40,14 +40,14 @@
 //!
 //! **A0/A6 are NOT asserted here, deliberately.** The evidence for this body is
 //! committed at `fixtures/float_sub.lineage.json`, and it is a weaker
-//! measurement than `float_div.lineage.json`: ONE build via
-//! `scripts/trust_ir_build.sh --print-only`, not the sealed-driver
-//! three-clean-non-incremental-build protocol, and it carries neither a
-//! negative control nor a reproduction block. `assert_a0_a6` would therefore
-//! fail on it for a reason that has nothing to do with this chain. Wiring that
-//! file into `freshness.rs`'s `EVIDENCE` table and into an A0/A6 test is a
-//! separate, honest piece of work; recording the gap here is better than
-//! asserting a strength nobody measured.
+//! measurement than `float_div.lineage.json`: three clean non-incremental
+//! builds via `scripts/trust_ir_build.sh --print-only` have byte-identical
+//! coverage and are recorded in a reproduction block, but they use an unsealed
+//! local-stage1 producer rather than a sealed driver and carry no negative
+//! control. `assert_a0_a6` would therefore fail on the missing sealed provenance
+//! and control, not on reproducibility. Wiring that file into `freshness.rs`'s
+//! `EVIDENCE` table and into an A0/A6 test is a separate, honest piece of work;
+//! recording the gap here is better than asserting a strength nobody measured.
 
 use super::*;
 
@@ -61,7 +61,7 @@ fn float_sub_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_float_sub.rs", "const SRC_IR_FS2_B"),
+        &clean_named_const_source("eval_ir_float_sub.rs", "SRC_IR_FS2_B0"),
         "def ir_fs2_b",
     );
 
@@ -311,7 +311,7 @@ fn float_sub_is_float_div_with_exactly_one_token_changed() {
     let normalised = sub_text
         .replace("reduce_float_sub", "reduce_float_div")
         .replace("fsub", "fdiv")
-        .replace("354 214 ", "354 222 ");
+        .replace("356 214 ", "356 222 ");
     assert_eq!(
         normalised,
         fixture("float_div.trust-ir.txt"),

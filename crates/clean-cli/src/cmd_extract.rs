@@ -217,6 +217,7 @@ pub(crate) fn handle_extract_command(args: &ExtractArgs) -> anyhow::Result<()> {
     match args.backend {
         ExtractBackend::C => handle_extract_c(args),
         ExtractBackend::Rust => handle_extract_rust(args),
+        ExtractBackend::Wasm => handle_extract_wasm(args),
     }
 }
 
@@ -368,6 +369,199 @@ fn handle_extract_rust(args: &ExtractArgs) -> anyhow::Result<()> {
         println!("scratch build kept at {}", build_dir.display());
     }
     install_staged(args, &staging, battery.len())
+}
+
+/// The Wasm backend: lower the SAME IR the C lane emits from, then run the
+/// battery on a real Wasm host.
+///
+/// `emit_wasm` was a library entry point with nothing driving it. This is the
+/// verb, and it keeps the lane's contract intact rather than relaxing it for a
+/// new backend:
+///
+/// * FIXED-WIDTH ONLY. Wasm `i32`/`i64` arithmetic is modular, which is exactly
+///   Lean's `UIntW` semantics. Lean `Nat` is unbounded and has no faithful Wasm
+///   scalar, so a `Nat` in the signature REFUSES here rather than silently
+///   adopting a 64-bit model — the Rust backend makes that model explicit in its
+///   manifest, and a wasm module has nowhere to say it.
+/// * THE BATTERY ALWAYS RUNS. Executing needs a Wasm host on PATH. Without one
+///   the extraction REFUSES; it does not write an artifact whose `differential`
+///   field would be a claim nobody checked.
+fn handle_extract_wasm(args: &ExtractArgs) -> anyhow::Result<()> {
+    let decl_name = Name::from_string(&args.decl);
+
+    // 1-2. Same front half and same gate as the other two lanes.
+    let compile_args = compile_args_for(args);
+    let (lcnf, env, pipeline) = select_lcnf_decl(&compile_args)?;
+    let sig = extraction_gate(&env, &decl_name).map_err(|r| anyhow::anyhow!("{r}"))?;
+
+    // 3. Fixed-width-only refusal, BEFORE any emission.
+    for ty in sig.params.iter().chain(std::iter::once(&sig.ret)) {
+        if matches!(ty, ScalarTy::Nat | ScalarTy::Bool) {
+            bail!(
+                "E_WASM_SCALAR: `{}` has a `{ty:?}` in its signature; the wasm backend \
+                 handles fixed-width integers only (Wasm i32/i64 are modular like Lean \
+                 UIntW; Lean Nat is unbounded and Bool has no settled ABI here). Use \
+                 `--backend rust` for those.",
+                args.decl
+            );
+        }
+    }
+
+    // 4. Lower to the SAME `boxed_ir_decls` the C emitter consumes, then emit.
+    let artifacts = clean_compiler::pass_manager::compile_lcnf_decls(&lcnf, &env, &pipeline)
+        .context("lower LCNF to IR for wasm emission")?;
+    let wat = clean_compiler::emit_wasm::emit_wat(&artifacts.boxed_ir_decls)
+        .map_err(|e| anyhow::anyhow!("wasm emission refused: {e}"))?;
+    let module = clean_compiler::emit_wasm::emit_wasm_binary(&artifacts.boxed_ir_decls)
+        .map_err(|e| anyhow::anyhow!("wasm emission refused: {e}"))?;
+
+    // 5-6. Battery on a real host.
+    let tmp = tempfile::Builder::new()
+        .prefix("clean-extract-wasm-")
+        .tempdir()
+        .context("create scratch dir")?;
+    let battery = build_battery(&sig);
+    let native_results = run_wasm_battery(&module, &args.decl, &sig, &battery, tmp.path())?;
+    if native_results.len() != battery.len() {
+        bail!(
+            "wasm host produced {} results for {} inputs",
+            native_results.len(),
+            battery.len()
+        );
+    }
+
+    // 7. The SAME differential as the other lanes.
+    differential_check(&env, &args.decl, &sig, &battery, &native_results)?;
+
+    // 8. Manifest + atomic install.
+    let staging = tmp.path().join("out");
+    std::fs::create_dir_all(&staging)?;
+    std::fs::write(staging.join(format!("{}.wat", args.decl)), &wat)?;
+    std::fs::write(staging.join(format!("{}.wasm", args.decl)), &module)?;
+    let manifest = serde_json::json!({
+        "schema": "clean-extract-v1",
+        "decl": args.decl,
+        "backend": "wasm",
+        "wat_file": format!("{}.wat", args.decl),
+        "wasm_file": format!("{}.wasm", args.decl),
+        "wat_digest_blake3": blake3::hash(wat.as_bytes()).to_hex().to_string(),
+        "wasm_digest_blake3": blake3::hash(&module).to_hex().to_string(),
+        "battery_points": battery.len(),
+        "differential": "PASSED — every battery point agrees with kernel-side evaluation",
+        "claim": "differential check over the recorded battery; NOT a proof of \
+                  translation correctness (see designs/2026-08-06-clean-extract-width1.md)",
+        "model": "Lean UIntW is modular and Wasm i32/i64 arithmetic is modular at the \
+                  same widths, so no overflow model is interposed; narrower widths are \
+                  masked to their declared width",
+    });
+    std::fs::write(
+        staging.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
+    if args.keep_temp {
+        println!("scratch build kept at {}", tmp.path().display());
+    }
+    install_staged(args, &staging, battery.len())
+}
+
+/// Run the battery against `module` on a Wasm host, returning one unsigned
+/// decimal per input tuple.
+///
+/// Refuses when no host is on PATH: a wasm artifact whose battery never ran
+/// would ship a `differential: PASSED` nobody earned.
+fn run_wasm_battery(
+    module: &[u8],
+    export: &str,
+    sig: &GateSig,
+    battery: &[Vec<u64>],
+    dir: &Path,
+) -> anyhow::Result<Vec<String>> {
+    let host = ["node", "wasmtime", "wasmer"]
+        .into_iter()
+        .find(|h| {
+            Command::new(h)
+                .arg("--version")
+                .output()
+                .is_ok_and(|o| o.status.success())
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "E_WASM_NO_HOST: no Wasm host found on PATH (tried node, wasmtime, \
+                 wasmer). `clean extract --backend wasm` runs the differential battery \
+                 on a real host and refuses rather than shipping an unchecked module."
+            )
+        })?;
+    if host != "node" {
+        bail!(
+            "E_WASM_NO_HOST: found `{host}`, but only `node` has a wired driver today; \
+             install node or extend run_wasm_battery."
+        );
+    }
+
+    let wasm_path = dir.join("module.wasm");
+    std::fs::write(&wasm_path, module).context("write wasm module")?;
+
+    // `>>> 0` reinterprets the i32 result as unsigned, matching the kernel-side
+    // readback; i64 results arrive as BigInt and stringify directly.
+    let unsigned = if matches!(sig.ret, ScalarTy::UInt64) {
+        "BigInt.asUintN(64, r).toString()"
+    } else {
+        "(r >>> 0).toString()"
+    };
+    let cases: Vec<String> = battery
+        .iter()
+        .map(|inputs| {
+            let args: Vec<String> = inputs
+                .iter()
+                .zip(&sig.params)
+                .map(|(v, t)| {
+                    if matches!(t, ScalarTy::UInt64) {
+                        format!("{v}n")
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .collect();
+            format!("[{}]", args.join(","))
+        })
+        .collect();
+    let js = format!(
+        r#"const fs = require('fs');
+const bytes = fs.readFileSync({path:?});
+const inst = new WebAssembly.Instance(new WebAssembly.Module(bytes), {{}});
+const f = inst.exports[{export:?}];
+if (typeof f !== 'function') {{
+  console.error('export ' + {export:?} + ' not found');
+  process.exit(1);
+}}
+for (const a of [{cases}]) {{
+  const r = f(...a);
+  console.log({unsigned});
+}}
+"#,
+        path = wasm_path.to_string_lossy(),
+        export = export,
+        cases = cases.join(","),
+        unsigned = unsigned,
+    );
+    let js_path = dir.join("run.js");
+    std::fs::write(&js_path, js).context("write wasm battery driver")?;
+
+    let out = Command::new(host)
+        .arg(&js_path)
+        .output()
+        .context("spawn wasm host")?;
+    if !out.status.success() {
+        bail!(
+            "wasm host rejected the module: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect())
 }
 
 /// Move a fully-built staging directory into `--out`, refusing to overwrite.
@@ -648,6 +842,158 @@ mod tests {
             err.to_string().contains("DIFFERENTIAL MISMATCH"),
             "expected a differential mismatch, got: {err}"
         );
+    }
+
+    /// The WASM backend is REACHABLE — `clean extract --backend wasm` runs the
+    /// whole chain, differential included.
+    ///
+    /// `emit_wat`/`emit_wasm_binary` were public library entry points with no verb
+    /// driving them. A backend nobody can invoke is not a feature, and its tests
+    /// were built from hand-written `IRDecl`s, so nothing checked that the real
+    /// pipeline ever produces IR inside the emitter's fragment.
+    ///
+    /// Uses the identity declaration deliberately: see
+    /// `test_extract_wasm_refuses_uintw_arithmetic_through_the_boxed_nat_path`
+    /// for why arithmetic does not reach the emitter yet.
+    ///
+    /// Running the battery needs a Wasm host. Rather than skip silently when
+    /// there is none — the failure mode that lets a lane rot unnoticed — this
+    /// asserts the OTHER branch explicitly: no host must produce the specific
+    /// `E_WASM_NO_HOST` refusal, never a written artifact.
+    #[test]
+    fn test_extract_wasm_backend_runs_the_whole_chain() {
+        let tmp = tempfile::Builder::new()
+            .prefix("clean-extract-wasm-e2e-")
+            .tempdir()
+            .expect("scratch dir");
+        let src_path = tmp.path().join("idu.lean");
+        std::fs::write(&src_path, "def idU (a : UInt32) : UInt32 := a\n").expect("write source");
+        let out_dir = tmp.path().join("out");
+
+        let args = ExtractArgs {
+            file: src_path,
+            decl: "idU".to_string(),
+            out: out_dir.clone(),
+            backend: ExtractBackend::Wasm,
+            keep_temp: false,
+        };
+        match handle_extract_command(&args) {
+            Ok(()) => {
+                let wat = std::fs::read_to_string(out_dir.join("idU.wat")).expect("emitted wat");
+                assert!(
+                    wat.contains(r#"(export "idU")"#),
+                    "the module must export the declaration; got:\n{wat}"
+                );
+                assert!(
+                    wat.contains("param $v0 i32") && wat.contains("result i32"),
+                    "UInt32 must lower to i32 in and out; got:\n{wat}"
+                );
+                assert!(
+                    out_dir.join("idU.wasm").exists(),
+                    "the binary module must be written alongside the text"
+                );
+                let manifest: serde_json::Value = serde_json::from_str(
+                    &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+                )
+                .expect("manifest is JSON");
+                assert_eq!(manifest["backend"], "wasm");
+                assert!(
+                    manifest["differential"]
+                        .as_str()
+                        .is_some_and(|d| d.starts_with("PASSED")),
+                    "the differential must have RUN on a host, not been assumed: {manifest}"
+                );
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(
+                    msg.contains("E_WASM_NO_HOST"),
+                    "without a Wasm host the ONLY acceptable outcome is the explicit \
+                     no-host refusal (never a written artifact); got: {msg}"
+                );
+                assert!(!out_dir.exists(), "a refused extraction must write nothing");
+            }
+        }
+    }
+
+    /// `Nat` is refused BEFORE emission, with its own diagnostic.
+    ///
+    /// Wasm i32/i64 arithmetic is modular, which is exactly Lean `UIntW`. Lean
+    /// `Nat` is unbounded and has no faithful Wasm scalar — the Rust backend
+    /// makes its u64 model explicit in the manifest, and a wasm module has
+    /// nowhere to say that. So this refuses rather than adopting a silent model.
+    #[test]
+    fn test_extract_wasm_refuses_nat_signatures() {
+        let tmp = tempfile::Builder::new()
+            .prefix("clean-extract-wasm-nat-")
+            .tempdir()
+            .expect("scratch dir");
+        let src_path = tmp.path().join("dbl.lean");
+        std::fs::write(&src_path, "def double (n : Nat) : Nat := Nat.add n n\n")
+            .expect("write source");
+        let out_dir = tmp.path().join("out");
+
+        let args = ExtractArgs {
+            file: src_path,
+            decl: "double".to_string(),
+            out: out_dir.clone(),
+            backend: ExtractBackend::Wasm,
+            keep_temp: false,
+        };
+        let err = handle_extract_command(&args).expect_err("a Nat signature must refuse");
+        assert!(
+            err.to_string().contains("E_WASM_SCALAR"),
+            "expected the fixed-width refusal, got: {err}"
+        );
+        assert!(!out_dir.exists(), "a refused extraction must write nothing");
+    }
+
+    /// MEASURED GAP: UIntW ARITHMETIC does not reach the emitter yet.
+    ///
+    /// `def duo (a b : UInt32) : UInt32 := UInt32.add a b` refuses, because the
+    /// prelude's `UInt32.add` is compiled FROM SOURCE and routes through boxed
+    /// `Nat` (`clean_box_uint32` → `l_UInt32_toNat` → `l_Nat_add` →
+    /// `l_UInt32_ofNat`), so `boxed_ir_decls` carries `Object`-typed bindings
+    /// that are outside the Wasm fragment.
+    ///
+    /// This is a REAL build item, and it is exactly what wiring the verb
+    /// exposed: rank 11's emitter was tested against hand-built `IRDecl`s, so
+    /// nothing had ever checked whether the pipeline actually produces IR in its
+    /// fragment. Closing it means lowering saturated UIntW ops to native BinOps
+    /// (as `emit_trust_ir`'s `uint_arith_binop` already does) instead of through
+    /// boxed Nat.
+    ///
+    /// Pinned as a test so the day that lowering lands, this FAILS and says so.
+    #[test]
+    fn test_extract_wasm_refuses_uintw_arithmetic_through_the_boxed_nat_path() {
+        let tmp = tempfile::Builder::new()
+            .prefix("clean-extract-wasm-gap-")
+            .tempdir()
+            .expect("scratch dir");
+        let src_path = tmp.path().join("duo.lean");
+        std::fs::write(
+            &src_path,
+            "def duo (a b : UInt32) : UInt32 := UInt32.add a b\n",
+        )
+        .expect("write source");
+        let out_dir = tmp.path().join("out");
+
+        let args = ExtractArgs {
+            file: src_path,
+            decl: "duo".to_string(),
+            out: out_dir.clone(),
+            backend: ExtractBackend::Wasm,
+            keep_temp: false,
+        };
+        let err = handle_extract_command(&args)
+            .expect_err("UIntW arithmetic does not reach the Wasm fragment today");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("outside the Wasm fragment"),
+            "expected the emitter's own fragment refusal (the boxed-Nat route), \
+             got: {msg}"
+        );
+        assert!(!out_dir.exists(), "a refused extraction must write nothing");
     }
 
     /// END-TO-END: the design's canonical V1 pick actually extracts.

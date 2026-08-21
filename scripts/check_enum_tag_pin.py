@@ -208,7 +208,7 @@ def check_pin_tables(manifest: dict, errors: list[str]) -> None:
         table = spec.get("pin_table")
         if table is None:
             continue
-        m = re.search(rf"pub const {re.escape(table)}: \[\(&str, u8\); (\d+)\] = \[(.*?)\];",
+        m = re.search(rf"const {re.escape(table)}: \[\(&str, u8\); (\d+)\] = \[(.*?)\];",
                       text, re.S)
         if m is None:
             errors.append(f"{spec['rust_path']}: pin table {table} is missing from crystal_tag_pin.rs")

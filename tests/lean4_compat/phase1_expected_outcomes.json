@@ -154,8 +154,8 @@
       "decl": 0,
       "name": "foo.a",
       "outcome": "fail",
-      "contains": "UnknownFVar(FVarId(2))",
-      "reason": "current frontend reconstruction blocker reached quickly before termination classification"
+      "contains": "Unknown identifier: foo.a",
+      "reason": "recursive reference remains unsupported before termination classification, but now fails with a stable user-facing identifier diagnostic instead of leaking an internal FVar id"
     }
   ]
 }

@@ -17,31 +17,40 @@ use std::fmt;
 /// A single step in the path from the root expression to a sub-expression.
 ///
 /// Each variant represents a descent into a child of a composite expression.
+///
+/// # Discriminants are PINNED
+///
+/// See [`crate::mode::CleanMode`]. The derived `Clone` for this enum is a
+/// registered crystal chain: the emitted body switches on the discriminant
+/// (`switch %3 [ 0: bb1 … 9: bb10 default: bb11 ]`) and materialises
+/// `const enum.181 { k }` in each arm, so the numbers below are the ones the
+/// registered module in `eval_ir_path_step.rs` proves about.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(u8)]
 #[non_exhaustive]
 pub enum ExprPathStep {
     /// In the function position of App(fn, arg)
-    AppFn,
+    AppFn = 0,
     /// In the argument position of App(fn, arg)
-    AppArg,
+    AppArg = 1,
     /// In the body of a Lambda binder
-    LamBody,
+    LamBody = 2,
     /// In the type annotation of a Lambda binder
-    LamType,
+    LamType = 3,
     /// In the domain type of a Pi binder
-    PiDom,
+    PiDom = 4,
     /// In the codomain/body of a Pi binder
-    PiBody,
+    PiBody = 5,
     /// In the type annotation of a Let binding
-    LetType,
+    LetType = 6,
     /// In the value expression of a Let binding
-    LetVal,
+    LetVal = 7,
     /// In the body of a Let binding
-    LetBody,
+    LetBody = 8,
     /// In the inner expression of MData
-    MDataExpr,
+    MDataExpr = 9,
     /// In the expression being projected
-    ProjExpr,
+    ProjExpr = 10,
 }
 
 impl fmt::Display for ExprPathStep {

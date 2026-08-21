@@ -1,0 +1,13 @@
+{
+ "schema": "clean.crystal.fixture_rebaseline_bindings/v1",
+ "binding_mode": "identical-fixtures-successor",
+ "what_this_binds": "The Clean 0.4.0 workspace release changes the embedded CARGO_PKG_VERSION global and therefore every per-build lineage digest, binary artifact identity, and coverage artifact identity. All nineteen chained/helper fixture bodies are byte-identical to the fresh dump, so no proof/spec/tag numeral moves. This successor inherits the complete reviewed a152 binding manifest only after the generator authenticates every predecessor pin against its append-only ledger and rechecks every inherited anchor in the current tree.",
+ "clean_source_rev": "b03937e748123cc115bfd159694fd64f0ce8538a",
+ "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+ "dump_bin_sha256": "19ad6224a4c84f2b35ed9163b9777f448805327d5db2e3863c6f729842e61665",
+ "dump_ir_sha256": "324550ca66045236ddaf40da90642258e4c02e07e3c9ed12d59e767c201b0ccc",
+ "pre_report_sha256": "c1f13a591ae464cc5b17a3ce298cd923d584e4f3932de7d266f85a2879422a91",
+ "prior_rebaseline_record": "data/crystal_fixture_rebaseline_2026-08-20_a152ab39e.json",
+ "prior_binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-20_a152ab39e.json",
+ "bindings": []
+}

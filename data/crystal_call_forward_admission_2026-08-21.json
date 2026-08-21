@@ -1,0 +1,152 @@
+{
+ "schema": "clean.crystal.call_forward_admission/1",
+ "date": "2026-08-21",
+ "lane": "LANE FR \u2014 the fragment admission: wave-CF's emission revived on wave-MC's tip, plus the flip-gate admission both lanes named",
+ "question": "wave-MC (landed) and wave-CF (measured, net loss: +19 markers but 16 flips LOST at -O0 to `local type outside fragment: &'{erased} T`) converged on one item: admit a plan-minted reference-typed local defined by `Rvalue::Ref` of a deref of a PARAMETER place and consumed once as a bare Move call argument. Does the admission return the 16 without losing anything?",
+ "headline": "YES, AND STRICTLY: -O3 184+41 -> 200+41 (+16 gained, 0 lost), -O0 604+41 -> 604+41 (0 gained, 0 lost), markers_exact 1099 -> 1116, verdict regressions 0. The 16 gained BY NAME are exactly wave-CF's 16 lost. Landed as trust a75907ef0d.",
+ "provenance": {
+  "trust_base_rev": "111bd87608b2b733baa948fb90af469181201a16",
+  "trust_landed_rev": "a75907ef0d54f97406a27fbccbb355cbb84dd6df",
+  "trust_landed_parent": "c539e91770a3aaa0d0658ce98113ed42a054bb7d",
+  "clean_rev_compiled": "d93b2fbb906a08768ed29a860feca4f1f09affb6",
+  "landed_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "294c66f737ff1522e76d837c595d879393b780f0",
+   "crates/trust-thir-lower/src/to_mir.rs": "7b38184b5cad641df41ce3614e4371758d13d23e"
+  },
+  "driver_digests": {
+   "base": "4789e50f6c0eeecca9e80670d0dbaa393c51a3639faf7a87a756ed55b9753957",
+   "subj": "0b313f553f7d46b95713fb76c7f2f4dc5f1fdae14727480c3eb246ac71e82549",
+   "mdel": "157b1305c389e436e4ba4d745a3bc26e382be3bd063feff2773512e75768ccde"
+  },
+  "evidence_dir": "$HOME/trust/scratchpad/laneFR (drv-*.log carry per-file blob provenance; wc-base / wc-subj / wc-mdel are the runs; sealed drivers verified + sysrootcheck + dyld-guard before every run)",
+  "note": "Sealed drivers built at 111bd87608 where mir_differential.rs is the pinned 709a7794. Tip since moved it to 13cd4f2586 (f904f8b692) \u2014 Terminator::TailCall REFUSALS only, a terminator these bodies never contain; the measurement transfers. The two landed files were byte-unchanged on origin/main between base and landing (verified by blob), so the control is exact."
+ },
+ "whole_crate_row_exact": {
+  "base": "wc-base",
+  "subject": "wc-subj",
+  "O3": {
+   "codegen_base": 184,
+   "codegen_subject": 200,
+   "ctfe_base": 41,
+   "ctfe_subject": 41,
+   "gained": 16,
+   "lost": 0,
+   "gained_names": [
+    "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::def_eq",
+    "<env::decl_add::MmAxiomOnlyGuard as std::ops::Drop>::drop::{closure#0}::{closure#0}",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::discharge_axiom_stub_for_inductive_import",
+    "env::inductive_fixed_indices::fixed_indices_to_params::{closure#2}",
+    "env::native_reducers_name::lean4_name_hash",
+    "expr::kind::ExprKind::compute_meta::{closure#0}",
+    "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+    "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+    "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+    "level::Level::leq",
+    "sorry::accounting::reset_local_ay_reconstruction_success_counter::{closure#0}",
+    "tc::branch_sharing::RecursorApp::<'a>::major_idx",
+    "tc::equiv_manager::EquivManager::is_equiv",
+    "tc::heartbeat::<impl tc::TypeChecker<'env>>::heartbeat_spent",
+    "tc::reduction::cofib::Cofib::is_top::{closure#0}",
+    "tc::reduction::int::contains_big_nat_lit"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 604,
+   "codegen_subject": 604,
+   "ctfe_base": 41,
+   "ctfe_subject": 41,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 17
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::def_eq",
+   "cert::expr_eq::CertExprEqContext::level_eq",
+   "<env::decl_add::MmAxiomOnlyGuard as std::ops::Drop>::drop::{closure#0}::{closure#0}",
+   "<env::Environment as env::trusted_ext::TrustedEnvExt>::discharge_axiom_stub_for_inductive_import",
+   "env::inductive_fixed_indices::fixed_indices_to_params::{closure#2}",
+   "env::native_reducers_name::lean4_name_hash",
+   "expr::kind::ExprKind::compute_meta::{closure#0}",
+   "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "level::Level::leq",
+   "sorry::accounting::reset_local_ay_reconstruction_success_counter::{closure#0}",
+   "tc::branch_sharing::RecursorApp::<'a>::major_idx",
+   "tc::equiv_manager::EquivManager::is_equiv",
+   "tc::heartbeat::<impl tc::TypeChecker<'env>>::heartbeat_spent",
+   "tc::reduction::cofib::Cofib::is_top::{closure#0}",
+   "tc::reduction::int::contains_big_nat_lit"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1555,
+   "subject_agreed": 1555,
+   "base_markers_exact": 1099,
+   "subject_markers_exact": 1116
+  }
+ },
+ "mutation_proofs": {
+  "M-DEL (delete the admission, keep the emission)": {
+   "whole_crate_O0": {
+    "codegen_base": 604,
+    "codegen_subject": 588,
+    "ctfe_base": 41,
+    "ctfe_subject": 41,
+    "gained": 0,
+    "lost": 16,
+    "gained_names": [],
+    "lost_names": [
+     "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::def_eq",
+     "<env::decl_add::MmAxiomOnlyGuard as std::ops::Drop>::drop::{closure#0}::{closure#0}",
+     "<env::Environment as env::trusted_ext::TrustedEnvExt>::discharge_axiom_stub_for_inductive_import",
+     "env::inductive_fixed_indices::fixed_indices_to_params::{closure#2}",
+     "env::native_reducers_name::lean4_name_hash",
+     "expr::kind::ExprKind::compute_meta::{closure#0}",
+     "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+     "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+     "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+     "level::Level::leq",
+     "sorry::accounting::reset_local_ay_reconstruction_success_counter::{closure#0}",
+     "tc::branch_sharing::RecursorApp::<'a>::major_idx",
+     "tc::equiv_manager::EquivManager::is_equiv",
+     "tc::heartbeat::<impl tc::TypeChecker<'env>>::heartbeat_spent",
+     "tc::reduction::cofib::Cofib::is_top::{closure#0}",
+     "tc::reduction::int::contains_big_nat_lit"
+    ]
+   },
+   "verdict": "the SAME 16 lost again at -O0 (604 -> 588), name-exact vs wave-CF's loss list \u2014 the admission is load-bearing for every one of the 16. Probe: all six S1 shapes lost at BOTH levels."
+  },
+  "M-COR (admission also accepts a twice-consumed temp, mentions==3, + accomplice emitter reusing one temp for a repeated argument)": {
+   "reachable": "the corrupt derived shape appears in the marker comparison (probe ctl_repeat, seal-mcor)",
+   "caught_by": "the marker channel of the differential: built `mk b0.1:live s1` (second live slot) vs derived `mk b1.0:dead s0` (early retirement) \u2014 markers_exact false, flip refused at -O. Honest siblings s1_* still flip, so the catch is specific to the corrupt path.",
+   "verdict": "NEVER LANDS; caught row-exactly."
+  }
+ },
+ "oracle_guard": {
+  "pin": "709a7794 (A6 fail-closed guard: refuses any projection-free Rvalue::Ref in a derived body)",
+  "verified": "both emission sites borrow tcx.mk_place_deref(..) \u2014 never a bare local; 0 'bare-local borrow in derived body' refusals across all four whole-crate flip logs; the 16 flips landed, which a DerivedUnsupported would have blocked."
+ },
+ "probe": {
+  "file": "laneFR/probe/fr.rs",
+  "subj_O3_flips": [
+   "s1_unit",
+   "s1_one",
+   "s1_three",
+   "s1_const",
+   "s1_scalar",
+   "s1_free"
+  ],
+  "controls_stay_refused": "ctl_repeat (repeated arg), ctl_let (wave-MF firewall), ctl_post (wave-MC's class), ctl_fat (&str fat reborrow \u2014 fragment-refused, no O0 loss)",
+  "O0_parity": "base and subj identical at O0 (9 flips each)"
+ },
+ "tests": "trust-thir-lower lib 654/654 green at the landed blobs (Measured-on trailers in the landed commit); repairs two invariant tests wave-MC landed RED (walk-count pin 3->5; the MfPlans needle rebuilt from per-field lines).",
+ "not_taken": "wall-B sibling admissions from clean 5bdb4ee6a \u00a74c-iv (lone-source relay, str/slice fat-pointer locals, enum-temp into insertfield \u2014 8 bodies) and a flip for the CF_STR &str-literal class (emission compiled + marker-modelled; its argument temp is fat and stays fragment-refused). Each needs its own fail-closed mutation proof.",
+ "residual": "cert::expr_eq::CertExprEqContext::level_eq gained markers_exact but does not flip \u2014 refused by a later wall (the never-flip family); named, not pursued here."
+}

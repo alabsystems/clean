@@ -84,11 +84,14 @@
 #[path = "crystal_a1_lineage/emitted_cfg.rs"]
 mod emitted_cfg;
 
+#[path = "crystal_a1_lineage/float_evidence.rs"]
+mod float_evidence;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) use emitted_cfg::{
-    assert_entry_params, assert_lanes, clean_block_sources, fixture, parse_clean, parse_emitted,
-    spec_source, Cfg,
+    assert_entry_params, assert_lanes, clean_block_sources, clean_named_const_source, fixture,
+    parse_clean, parse_emitted, spec_source, Cfg,
 };
 
 /// A0 and A6, asserted for a chain in one place: every criterion of the
@@ -304,6 +307,33 @@ mod float_add;
 mod float_mul;
 #[path = "crystal_a1_lineage/float_sub.rs"]
 mod float_sub;
+// The WITH chain — `flat::types::FlatFlags::with`, the sibling of
+// `flat_flags_contains` and the first chained body that BUILDS its returned
+// aggregate (or + const-struct template + insertfield). Its interpreter
+// differential is NOT-RUN (0 samples) and the gate pins that record in both
+// directions.
+#[path = "crystal_a1_lineage/flat_flags_with.rs"]
+mod flat_flags_with;
+// add to crates/clean-verify/tests/crystal_a1_lineage.rs after the flat_flags_contains mod (line ~249)
+// The zext chain — `cert::builder::state::NodeId::index`: one field read, one
+// `zext u32 -> usize`, one ret. Its gate owns THE `usize` DECISION: the raw
+// parse is asserted to carry the loud `?usize` token, then resolved to
+// `uint64` (a target assumption anchored to the recorded aarch64 producer in
+// the lineage fixture), and only then lane-compared. The shared parser keeps
+// refusing `?usize`, so the unchained twin (ExtensionIdx::index, struct.848)
+// still fails closed. Interpreter differential NOT-RUN — pinned as recorded.
+#[path = "crystal_a1_lineage/node_id_index.rs"]
+mod node_id_index;
+
+// placement: crates/clean-verify/tests/crystal_a1_lineage.rs, with the other
+// per-chain modules (e.g. after `mod meta_tag_shl;`).
+// The strict_monads chain — the first MUTATING body (load → insertfield at
+// field 81 → store → void ret) and the first user of the insertfields/stores
+// write lanes; its evidence pins the interpreter differential as NOT-RUN.
+#[path = "crystal_a1_lineage/strict_monads.rs"]
+mod strict_monads;
+
+// ^ insert into crates/clean-verify/tests/crystal_a1_lineage.rs alongside the other per-chain `#[path]` mod declarations (e.g. after `mod simp_priority_value;` / the float trio)
 
 // The NINTH chain, 2026-08-16 —
 // `env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}`, the first

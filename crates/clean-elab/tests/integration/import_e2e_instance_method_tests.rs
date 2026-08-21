@@ -26,8 +26,8 @@
 //!    kernel `Proj`, exactly like Lean's own projection functions.
 //! 3. Each instance is registered via
 //!    `register_instances_from_extension` -> `Environment::register_instance`
-//!    with `type_: None, value: None`; the elaborator reconstructs the instance
-//!    expression from `env.get_const(name)` (see
+//!    with `type_: None, value: None`; the elaborator reconstructs its type and
+//!    keeps the Lean-faithful constant expression from `env.get_const(name)` (see
 //!    `clean_elab::infer::init_instances_from_env`, #443).
 //!
 //! We reproduce *exactly* that configuration by building the kernel decls with
@@ -65,8 +65,8 @@
 //! `Pick.chosen` is a method whose result type *is* the carrier, so the
 //! `B` return annotation pins `α := B`, instance synthesis must find
 //! `instPickB` (not `instPickC`), and the whole thing must reduce — through the
-//! imported instance's reconstructed body and the kernel `Proj` reduction — to
-//! `B.b2`.
+//! imported instance constant's delta reduction and the kernel `Proj` reduction
+//! — to `B.b2`.
 //!
 //! ## The bug this probe found (and the fix)
 //!
@@ -388,13 +388,10 @@ fn test_method_call_on_imported_instance_reduces_to_correct_result() {
         .as_ref()
         .expect("pickedB is a definition with a body");
 
-    // Proof the chain is genuinely wired through the imported pieces. The
-    // elaborator resolves the instance-implicit and *inlines* the imported
-    // instance's reconstructed value (`Pick.mk B B.b2` — its body, recovered
-    // from `env.get_const` per #443's import path) rather than leaving the bare
-    // `instPickB` constant. So the discriminating signal is the instance's
-    // *content*: the carrier `B` and the chosen field `B.b2` — NOT the decoy's
-    // `C` / `C.c1`.
+    // Proof the chain is genuinely wired through the imported pieces. Lean's
+    // synthesized instance term is the `instPickB` CONSTANT, not its unfolded
+    // `Pick.mk B B.b2` body. Kernel reduction below still observes B.b2, while
+    // this shape check rejects both the decoy constant and eager inlining.
     let referenced = body.collect_constants();
     assert!(
         referenced.contains(&Name::from_string("Pick.chosen")),
@@ -402,15 +399,17 @@ fn test_method_call_on_imported_instance_reduces_to_correct_result() {
          got: {referenced:?}"
     );
     assert!(
-        referenced.contains(&Name::from_string("Pick.mk"))
-            && referenced.contains(&Name::from_string("B.b2")),
-        "pickedB's body should inline the synthesized IMPORTED instance for B \
-         (Pick.mk B B.b2), got: {referenced:?}"
+        referenced.contains(&Name::from_string("instPickB"))
+            && !referenced.contains(&Name::from_string("Pick.mk"))
+            && !referenced.contains(&Name::from_string("B.b2")),
+        "pickedB's body should retain the synthesized imported instance constant, \
+         got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("C.c1"))
+        !referenced.contains(&Name::from_string("instPickC"))
+            && !referenced.contains(&Name::from_string("C.c1"))
             && !referenced.contains(&Name::from_string("C")),
-        "instance synthesis must NOT pull in the decoy carrier C's instance content, \
+        "instance synthesis must NOT select the decoy carrier C's instance or content, \
          got: {referenced:?}"
     );
 
@@ -445,18 +444,20 @@ fn test_method_call_on_imported_instance_discriminates_carrier() {
         .as_ref()
         .expect("pickedC is a definition with a body")
         .collect_constants();
-    // The synthesized instance is inlined as its content `Pick.mk C C.c1`; the
-    // discriminating signal is the carrier C and chosen field C.c1, NOT B.b2.
+    // The synthesized instance remains the `instPickC` constant; its content
+    // appears only after reduction. The B instance is the decoy here.
     assert!(
-        referenced.contains(&Name::from_string("Pick.mk"))
-            && referenced.contains(&Name::from_string("C.c1")),
-        "pickedC : C must synthesize the imported instance for C (Pick.mk C C.c1), \
+        referenced.contains(&Name::from_string("instPickC"))
+            && !referenced.contains(&Name::from_string("Pick.mk"))
+            && !referenced.contains(&Name::from_string("C.c1")),
+        "pickedC : C must retain the imported instPickC constant, \
          got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("B.b2"))
+        !referenced.contains(&Name::from_string("instPickB"))
+            && !referenced.contains(&Name::from_string("B.b2"))
             && !referenced.contains(&Name::from_string("B")),
-        "pickedC : C must NOT pull in carrier B's instance content, got: {referenced:?}"
+        "pickedC : C must NOT select carrier B's instance or content, got: {referenced:?}"
     );
 
     assert_eq!(

@@ -149,6 +149,12 @@ fn the_scope_file_names_a_committed_record_and_a_pinned_rev() {
         "{SCOPE} names {record}, which is not in the tree. A scope bound to a record nobody \
          can read is a pin to nothing."
     );
+    assert_eq!(
+        record,
+        super::freshness::CURRENT_RECORD,
+        "{SCOPE} must bind the record the current-source lineage gate reads"
+    );
+    let record_json = super::freshness::read_json(record);
     let rev = scope["covered_clean_rev"]
         .as_str()
         .expect("the scope file must pin the clean rev it was emitted at");
@@ -156,12 +162,22 @@ fn the_scope_file_names_a_committed_record_and_a_pinned_rev() {
         rev.len() == 40 && rev.chars().all(|c| c.is_ascii_hexdigit()),
         "covered_clean_rev must be a full 40-character sha, not `{rev}`"
     );
+    assert_eq!(
+        Some(rev),
+        record_json["provenance"]["clean_source_rev"].as_str(),
+        "{SCOPE} and its named record disagree on which Clean source was measured"
+    );
     let digest = scope["clean_kernel_src_sha256"]
         .as_str()
         .expect("the scope file must pin the kernel source digest");
     assert!(
         digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit()),
         "clean_kernel_src_sha256 must be a sha256 hex digest, not `{digest}`"
+    );
+    assert_eq!(
+        Some(digest),
+        record_json["provenance"]["clean_kernel_src_sha256"].as_str(),
+        "{SCOPE} and its named record disagree on the measured kernel digest"
     );
     assert!(
         scope["digest_definition"]

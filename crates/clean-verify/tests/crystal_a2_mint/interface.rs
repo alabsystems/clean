@@ -158,7 +158,7 @@ const ROWS: &[Row] = &[
     },
     Row {
         slot: "annotation kind: an undeclared trailing clause",
-        from: "  ; #loc: 399 313 5",
+        from: "  ; #loc: 401 338 5",
         to: "  ; #trustme: 1",
         expect: "trustme",
     },
@@ -299,7 +299,7 @@ fn the_core_module_alone_still_cannot_separate_the_type_rows() {
 #[test]
 fn renumbering_does_not_fire_the_interface_lane() {
     let t = tags();
-    let renumbered = FIXTURE.replace("#loc: 399", "#loc: 12");
+    let renumbered = FIXTURE.replace("#loc: 401", "#loc: 12");
     assert_ne!(renumbered, FIXTURE, "the substitution must bite");
     let p = ir_mint::project(&renumbered, &t)
         .expect("pure debug-info renumbering must NOT be refused by the interface lane");

@@ -110,7 +110,7 @@ FIXTURE_SCRIPT = "scripts/crystal_fixture_freshness.py"
 
 # The record whose scope this file binds. Dated records are never rewritten;
 # this is a separate, derivable statement ABOUT the newest one.
-RECORD = "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json"
+RECORD = "data/crystal_chain_revalidation_2026-08-21_b03937e74.json"
 
 # chain stem -> (defining source file, a pattern that must occur in it).
 #
@@ -139,6 +139,10 @@ BODY_SOURCES: dict[str, tuple[str, str]] = {
     "float_add": ("src/env/native_reducers_float.rs", "fn reduce_float_add"),
     "float_sub": ("src/env/native_reducers_float.rs", "fn reduce_float_sub"),
     "float_mul": ("src/env/native_reducers_float.rs", "fn reduce_float_mul"),
+    # Chains 15-17, the 2026-08-20 second tranche.
+    "strict_monads": ("src/env/mod.rs", "fn set_lean4_core_strict_monads"),
+    "flat_flags_with": ("src/flat/types.rs", "fn with"),
+    "node_id_index": ("src/cert/builder/state.rs", "fn index"),
 }
 
 
@@ -322,7 +326,17 @@ def main() -> int:
         rev = args.at
         if rev is None:
             record = json.loads((REPO / RECORD).read_text(encoding="utf-8"))
-            rev = record["provenance"]["clean_worktree_rev"]
+            provenance = record.get("provenance") or {}
+            rev = provenance.get("clean_source_rev") or provenance.get(
+                "clean_worktree_rev"
+            )
+            if not rev:
+                print(
+                    "SCOPE UNUSABLE: %s carries neither provenance.clean_source_rev nor "
+                    "provenance.clean_worktree_rev." % RECORD,
+                    file=sys.stderr,
+                )
+                return 2
         return emit(rev)
 
     if not SCOPE_FILE.is_file():

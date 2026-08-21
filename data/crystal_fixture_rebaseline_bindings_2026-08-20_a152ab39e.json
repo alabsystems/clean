@@ -1,0 +1,138 @@
+{
+ "schema": "clean.crystal.fixture_rebaseline_bindings/v1",
+ "clean_source_rev": "a152ab39e42a71da35dfbe3729d5581f0c42300a",
+ "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+ "dump_bin_sha256": "5ae43d59bc57dbb3c172ea724060a8e198dfb82b8598f5281f6285639702a350",
+ "dump_ir_sha256": "69e841c4e4ee65bbaa029543025efa8296f549084f48022727f1e1d7dc9d2284",
+ "pre_report_sha256": "17622b4197eb58dfa9a89571e53e7efff36b28b7bf45db49cdab45122ea7aab4",
+ "what_this_binds": "The complete set of live numbering changes whose concrete token is consumed by a registered proof/spec/tag lane. The rebaseline tool refuses fixture replacement unless every mapping is present in the exact live delta and every listed new binding is already present exactly at its fail-closed anchor.",
+ "bindings": [
+  {
+   "stem": "from_source_system",
+   "class": "type-table-index",
+   "old": "enum.175",
+   "new": "enum.178",
+   "reason": "The semantic differential must declare and pass the same SourceSystem aggregate type the emitted entry parameter names.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/tests/crystal_a3_semdiff/chains.rs",
+     "must_contain": "arg_enum: 178",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_contains",
+   "class": "type-table-index",
+   "old": "struct.1012",
+   "new": "struct.1017",
+   "reason": "ir_fc_tflags is the registered type alias pinned directly against the emitted entry parameter types.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_contains.rs",
+     "must_contain": "def ir_fc_tflags : IRTy := IRTy.struct_ 1017",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "expr_path_step_clone",
+   "class": "type-table-index",
+   "old": "enum.181",
+   "new": "enum.184",
+   "reason": "ir_ep_tstep reaches the load and all eleven aggregate constants; leaving it stale breaks link 2a even though the numeric identity is semantically first-use invariant.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_path_step.rs",
+     "must_contain": "def ir_ep_tstep : IRTy := IRTy.enum_ 184",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "callee-index",
+   "old": "@func.4914",
+   "new": "@func.3894",
+   "reason": "Reader B needs the reviewed crate-id-to-name binding for LevelArc::deref; first-use canonicalization cannot recover that name from emitted text.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 3894",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/tests/crystal_a2_mint/callee_identity.rs",
+     "must_contain": "let (a, b) = (\"@func.3894\", \"@func.3905\")",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "callee-index",
+   "old": "@func.4925",
+   "new": "@func.3905",
+   "reason": "Reader B must pin the body's own recursive function id before interning callees, or the constructed call-order counterexample collapses again.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 3905",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/tests/crystal_a2_mint/callee_identity.rs",
+     "must_contain": "SelfFunc::Pinned(3905)",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "strict_monads",
+   "class": "type-table-index",
+   "old": "struct.433",
+   "new": "struct.441",
+   "reason": "The registered Environment aggregate type reaches load, insertfield, and store and is compared in all three write lanes.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_strict_monads.rs",
+     "must_contain": "def ir_sm_tenv : IRTy := IRTy.struct_ 441",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_with",
+   "class": "type-table-index",
+   "old": "struct.1012",
+   "new": "struct.1017",
+   "reason": "The with module intentionally reuses ir_fc_tflags and reaches it in the aggregate constant and insertfield; both bodies must move as one type binding.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_contains.rs",
+     "must_contain": "def ir_fc_tflags : IRTy := IRTy.struct_ 1017",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_flat_flags_with.rs",
+     "must_contain": "IRInst.const_ ir_fc_tflags",
+     "count": 2
+    }
+   ]
+  },
+  {
+   "stem": "node_id_index",
+   "class": "type-table-index",
+   "old": "struct.317",
+   "new": "struct.323",
+   "reason": "ir_ni_tself is the registered receiver identity and the only artifact-side discriminator from the same-shaped ExtensionIdx::index body.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/eval_ir_node_id_index.rs",
+     "must_contain": "def ir_ni_tself : IRTy := IRTy.struct_ 323",
+     "count": 1
+    }
+   ]
+  }
+ ]
+}

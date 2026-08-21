@@ -147,6 +147,14 @@ pub enum ExtractBackend {
     C,
     /// Emit readable, safe Rust with plain `u8`/`u16`/`u32`/`u64`/`bool` types.
     Rust,
+    /// Emit WebAssembly (`.wat` text plus the matching `.wasm` module).
+    ///
+    /// Fixed-width integer declarations only: Wasm `i32`/`i64` arithmetic is
+    /// modular, which matches Lean's `UIntW`, whereas Lean `Nat` is unbounded
+    /// and has no faithful Wasm scalar. Running the battery needs a Wasm host
+    /// on PATH; without one the extraction REFUSES rather than shipping an
+    /// artifact whose differential never ran.
+    Wasm,
 }
 
 /// Arguments for `clean extract` — width-1 differential-checked

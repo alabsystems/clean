@@ -330,21 +330,23 @@ fn test_method_call_on_imported_instance_respects_priority() {
         .as_ref()
         .expect("pickedByPriority is a definition with a body");
 
-    // The synthesized instance is inlined as its content `Pick.mk B B.hi`; the
-    // discriminating signal is the chosen field `B.hi`, NOT the decoy `B.lo`.
+    // Lean keeps the synthesized instance as the constant `instPickBHi`; its
+    // `Pick.mk B B.hi` body unfolds only when the method projection reduces.
     let referenced = body.collect_constants();
     assert!(
         referenced.contains(&Name::from_string("Pick.chosen")),
         "body should go through the imported method projection Pick.chosen, got: {referenced:?}"
     );
     assert!(
-        referenced.contains(&Name::from_string("Pick.mk"))
-            && referenced.contains(&Name::from_string("B.hi")),
-        "body should inline the HIGH-priority imported instance (Pick.mk B B.hi), got: {referenced:?}"
+        referenced.contains(&Name::from_string("instPickBHi"))
+            && !referenced.contains(&Name::from_string("Pick.mk"))
+            && !referenced.contains(&Name::from_string("B.hi")),
+        "body should retain the HIGH-priority imported instance constant, got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("B.lo")),
-        "the LOW-priority instance's content (B.lo) must NOT be selected, got: {referenced:?}"
+        !referenced.contains(&Name::from_string("instPickBLo"))
+            && !referenced.contains(&Name::from_string("B.lo")),
+        "the LOW-priority instance must NOT be selected, got: {referenced:?}"
     );
 
     assert_eq!(
@@ -379,13 +381,15 @@ fn test_method_call_on_imported_instance_priority_flip() {
         .expect("pickedFlip is a definition with a body")
         .collect_constants();
     assert!(
-        referenced.contains(&Name::from_string("B.lo")),
-        "with priorities flipped, the now-HIGH-priority instPickBLo (B.lo) must win, \
+        referenced.contains(&Name::from_string("instPickBLo"))
+            && !referenced.contains(&Name::from_string("B.lo")),
+        "with priorities flipped, the now-HIGH-priority instPickBLo constant must win, \
          got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("B.hi")),
-        "the now-LOW-priority instPickBHi (B.hi) must NOT be selected, got: {referenced:?}"
+        !referenced.contains(&Name::from_string("instPickBHi"))
+            && !referenced.contains(&Name::from_string("B.hi")),
+        "the now-LOW-priority instPickBHi must NOT be selected, got: {referenced:?}"
     );
 
     assert_eq!(

@@ -291,7 +291,7 @@ fn reader_b_reads_every_committed_chain_fixture_or_says_why() {
 /// The design's falsifiable prediction, run.
 ///
 /// `docs/CRYSTAL_STATUS.md` records `expr_path_step_clone`'s fixture refresh
-/// failing on `emitted enum176` vs registered `IRTy.enum_ 181` — a pure
+/// failing on `emitted enum176` vs registered `IRTy.enum_ 184` — a pure
 /// crate-level re-interning artifact. Under first-use normalization that index
 /// is local and the whole failure class disappears; here is the proof, over the
 /// committed fixture and a copy of it with the enum id moved.
@@ -299,7 +299,7 @@ fn reader_b_reads_every_committed_chain_fixture_or_says_why() {
 fn enum_reinterning_is_absorbed_by_first_use_normalization() {
     let text = include_str!("../../tests/fixtures/expr_path_step_clone.trust-ir.txt");
     let a = core::print(&read_emitted(text).expect("as committed")).expect("print");
-    let moved = text.replace("enum.181", "enum.176");
+    let moved = text.replace("enum.184", "enum.176");
     assert_ne!(moved, text, "the substitution must actually move the id");
     let b = core::print(&read_emitted(&moved).expect("with the enum id moved")).expect("print");
     assert_eq!(
@@ -308,7 +308,7 @@ fn enum_reinterning_is_absorbed_by_first_use_normalization() {
     );
     assert!(a.contains("(enum 0)"), "the normalized id is local:\n{a}");
     assert!(
-        !a.contains("181") && !a.contains("176"),
+        !a.contains("184") && !a.contains("176"),
         "no crate id survives:\n{a}"
     );
 }

@@ -1,176 +1,176 @@
 {
-    "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
-    "lineage_domain": "trust_thir_lower.body_lineage.v2",
-    "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
-    "measured": "2026-08-16",
-    "build": {
-        "clean_repo_HEAD": "73d2f05ad",
-        "clean_repo_HEAD_vs_landing_base": "The chain lands on c81e0e8d6, three commits later. `git diff 73d2f05ad..c81e0e8d6 -- crates/clean-kernel Cargo.lock` is EMPTY -- those three commits touch clean-verify's float-finite and bits spec stages only -- so the artifact this fixture records is byte for byte the one the landing tree compiles. The measured HEAD is left as measured rather than rewritten to the landing commit.",
-        "trust_repo_rev_of_sealed_compiler": "304ec590ca46a1aa0e06e2e32796548232289873",
-        "trustc": "<scratchpad>/f16/seal-f16/tc (SEALED snapshot, unique dylib leaf; `seal_driver.sh verify` OK and `guard` PASS immediately before EVERY one of the three builds)",
-        "trustc_dylib_sha256": "5bf053210d87221a04cef162baefd93b07e8909c56f1022196d9c78f28f5d323",
-        "trustc_rustc_main_sha256": "c08f03ebedf4aad5ecfe57399a833815e7dbd19085bd621fb9f1a0b34b84f934",
-        "compiler_identified_by_behaviour_not_stamp": "NOT identified by `trustc -vV`, whose stamp reads 94147b34f (2026-08-11) and is pinned by the build script rather than by source. `seal_driver.sh selftest` reports UNPROVEN on this driver -- its ten perturbation classes are the same list every driver in the range registers. Identification is BY OUTPUT: this lane's coverage.json / trust-ir.txt / trust-ir.bin hash to 6cf26ef8... / 23b06227... / 8ca71527..., and the first two are byte for byte the digests data/crystal_frontier_census_2026-08-16.json records for its O3 subject driver.",
-        "command": "TRUSTC=<sealed tc> TRUST_IR_BUILD_DUMP=<dir> TRUST_IR_BUILD_TARGET_DIR=<own target dir> scripts/trust_ir_build.sh --print-only",
-        "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build -- only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
-        "flip_event_shape_is_load_bearing": "A flip event is a line reading `compiled from trust-ir` carrying BOTH a lineage digest AND a `flipped_so_far` counter. Matching every line with a `DefId` also picks up the FALLBACK lines and yields 581 'flips' instead of 178 + 32.",
-        "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -Cdebug-assertions=off PINNED IN THE ARGV -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
-        "release_shape_proof": "the build's own profile assertion passed: `release-only inference spine present (6/6)`, so debug_assertions was OFF and the DEPLOYED cfg-split bodies were compiled rather than their debug twins",
-        "crate_totals": "bodies 13774 / spliced 7571 / derived-MIR agreed 1543 / mismatch 0 / markers_exact 1085 (27 NON-vacuous) / 178 codegen + 32 CTFE flips / 0 foreign / 0 lineage mismatches",
-        "flip_events_clean_kernel": 210,
-        "flip_events_codegen": 178,
-        "flip_events_ctfe": 32,
-        "flip_events_foreign_crate": 0,
-        "flip_events_lineage_mismatch": 0
+ "crate": "clean-kernel (THE SHIPPED KERNEL, not a probe)",
+ "lineage_domain": "trust_thir_lower.body_lineage.v2",
+ "lineage_domain_note": "The digest scheme is versioned by the `trust_thir_lower.body_lineage.<v>` domain constant. It is recorded here so a future bump is visible by INSPECTION rather than only by a diff of the digest, which no gate in this repo can recompute. A digest and a domain travel together or neither means anything.",
+ "measured": "2026-08-16",
+ "build": {
+  "clean_repo_HEAD": "73d2f05ad",
+  "clean_repo_HEAD_vs_landing_base": "The chain lands on c81e0e8d6, three commits later. `git diff 73d2f05ad..c81e0e8d6 -- crates/clean-kernel Cargo.lock` is EMPTY -- those three commits touch clean-verify's float-finite and bits spec stages only -- so the artifact this fixture records is byte for byte the one the landing tree compiles. The measured HEAD is left as measured rather than rewritten to the landing commit.",
+  "trust_repo_rev_of_sealed_compiler": "304ec590ca46a1aa0e06e2e32796548232289873",
+  "trustc": "<scratchpad>/f16/seal-f16/tc (SEALED snapshot, unique dylib leaf; `seal_driver.sh verify` OK and `guard` PASS immediately before EVERY one of the three builds)",
+  "trustc_dylib_sha256": "5bf053210d87221a04cef162baefd93b07e8909c56f1022196d9c78f28f5d323",
+  "trustc_rustc_main_sha256": "c08f03ebedf4aad5ecfe57399a833815e7dbd19085bd621fb9f1a0b34b84f934",
+  "compiler_identified_by_behaviour_not_stamp": "NOT identified by `trustc -vV`, whose stamp reads 94147b34f (2026-08-11) and is pinned by the build script rather than by source. `seal_driver.sh selftest` reports UNPROVEN on this driver -- its ten perturbation classes are the same list every driver in the range registers. Identification is BY OUTPUT: this lane's coverage.json / trust-ir.txt / trust-ir.bin hash to 6cf26ef8... / 23b06227... / 8ca71527..., and the first two are byte for byte the digests data/crystal_frontier_census_2026-08-16.json records for its O3 subject driver.",
+  "command": "TRUSTC=<sealed tc> TRUST_IR_BUILD_DUMP=<dir> TRUST_IR_BUILD_TARGET_DIR=<own target dir> scripts/trust_ir_build.sh --print-only",
+  "log_level_is_load_bearing": "A SUCCESSFUL flip logs at INFO and is therefore INVISIBLE in a default build -- only the WARN `FALLBACK to built MIR` lines survive the default filter. Any re-measurement that omits RUSTC_LOG=...trust_ir_flip=info has measured nothing.",
+  "flip_event_shape_is_load_bearing": "A flip event is a line reading `compiled from trust-ir` carrying BOTH a lineage digest AND a `flipped_so_far` counter. Matching every line with a `DefId` also picks up the FALLBACK lines and yields 581 'flips' instead of 178 + 32.",
+  "profile": "-C opt-level=3 (cargo release) -Cdebuginfo=0 -Cdebug-assertions=off PINNED IN THE ARGV -- the DEPLOYED profile, at which emit_lifetime_markers() is true and the markers_exact gate is consulted",
+  "release_shape_proof": "the build's own profile assertion passed: `release-only inference spine present (6/6)`, so debug_assertions was OFF and the DEPLOYED cfg-split bodies were compiled rather than their debug twins",
+  "crate_totals": "bodies 13774 / spliced 7571 / derived-MIR agreed 1543 / mismatch 0 / markers_exact 1085 (27 NON-vacuous) / 178 codegen + 32 CTFE flips / 0 foreign / 0 lineage mismatches",
+  "flip_events_clean_kernel": 210,
+  "flip_events_codegen": 178,
+  "flip_events_ctfe": 32,
+  "flip_events_foreign_crate": 0,
+  "flip_events_lineage_mismatch": 0
+ },
+ "reproduction": {
+  "clean_non_incremental_builds": 3,
+  "coverage_json_sha256": "6cf26ef8155ca7beb2ff36de0161b02797490ba8a931f5adff09dd9a94925c1a",
+  "coverage_json_byte_identical_across_all_three": true,
+  "trust_ir_txt_sha256": "23b0622772029c4b5e87757c11450c1a9fd624216e2f9f627acbe973837fc7e6",
+  "trust_ir_bin_sha256": "8ca71527430101e256f43face2a493921a0da7a8d20e72ceb3e748099ea7784a",
+  "note": "Three builds in three separate CARGO_TARGET_DIRs: two flip builds and the negative control. All three emit a byte-identical coverage.json and trust-ir dump."
+ },
+ "negative_control": {
+  "flag": "-Ztrust-ir-flip=no",
+  "flip_events_crate_wide": 0,
+  "ctfe_flip_events_crate_wide": 0,
+  "coverage_json_byte_identical_to_flip_build": true,
+  "event_for_this_body_present": false
+ },
+ "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+ "def_index": 19642,
+ "func_id": 5758,
+ "kind": "const-init",
+ "instr_count": 9,
+ "lowered": true,
+ "spliced": true,
+ "symbolic": false,
+ "lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+ "unsupported": [],
+ "calls": {
+  "resolved": 0,
+  "extern_decls": 0,
+  "unresolved": 0
+ },
+ "deferred_to_seam": false,
+ "derived_mir": {
+  "verdict": "agreed",
+  "detail": "4 canonical line(s) identical",
+  "markers_exact": true,
+  "markers_detail": "0 marker line(s) identical",
+  "markers_exact_is_vacuous": true,
+  "vacuity_note": "TWO EMPTY SEQUENCES. Unlike the ninth chain (2 REAL marker lines) this row is in the 1,058 vacuous ones -- a const initializer has no StorageLive/StorageDead to compare. markers_exact: true is therefore a gate this body PASSES and not evidence this body SUPPLIES, and it must never be quoted without the qualifier."
+ },
+ "interpreter_differential": {
+  "verdict": "agreed",
+  "samples": 1,
+  "detail": "THIR-trust-ir == MIR-trust-ir on 1 sampled input(s) (differential interpretation)"
+ },
+ "flip_event": {
+  "fired": true,
+  "seam": "ctfe",
+  "asserts": 1,
+  "flipped_so_far": 18,
+  "lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+  "matches_artifact_lineage": true,
+  "raw": " INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: CTFE compiled from trust-ir, did=DefId(0:19642 ~ clean_kernel[4676]::tc::local_context::{impl#0}::push_low_local::META_TAG), asserts=1, lineage=sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738, flipped_so_far=18"
+ },
+ "link_2b_on_the_ctfe_seam": {
+  "question": "The nine existing chains' link 2b is a CODEGEN flip. What is it for a CTFE flip?",
+  "seam": "mir_for_ctfe (trust_ir_flip.rs:194, try_flip_ctfe), gated on hir_body_const_context being Const or Static -- a const FN is NOT a candidate here, it belongs to the codegen seam",
+  "consumer": "the const-eval INTERPRETER, not codegen",
+  "what_it_binds": "the VALUE. The const-eval interpreter evaluated MIR re-derived from THIS trust-ir module, and the constant every use site of META_TAG is given is that evaluation's output.",
+  "what_it_does_NOT_bind": "no machine code corresponds to these nine instructions. The comparison, the assert and the shift all ran at COMPILE TIME; the artifact carries 1u64 << 63 as a baked value. A theorem about this module is a theorem about a computation that PRODUCED part of the artifact, not about one the artifact performs.",
+  "is_weaker_than_the_codegen_form": true,
+  "same_registry_writer": "record_green -- the sole writer, on DerivedAgreed, for BOTH seams",
+  "same_markers_gate": "flip_registry.rs:641 -- emit_lifetime_markers() && !markers_exact, consulted identically on both seams",
+  "why_panic_arms_flip_at_CTFE_and_not_at_CODEGEN": "A POPULATION difference, not a gate difference, and this was measured rather than assumed. record_green is the sole registry writer for both seams and consults markers_exact identically. Of the 39 agreed assert-carrying bodies, 23 have markers_exact true and they are ALL const initializers -- vacuously, over two empty marker sequences. The 16 that are not are the runtime bodies, whose marker plans are refused by to_mir.rs:3202/:3780 (the func.scopes firewall) or by operands_of. So the asymmetry is: const initializers pass the marker gate for free, and the four runtime assert-carrying candidates do not pass it at all.",
+  "one_axis_where_it_is_STRONGER": {
+   "what": "verify_assert_parity (flip.rs:1767) verified 1 assert; on all 178 codegen flips that check is vacuous at 0",
+   "detail": "Both seams run verify_assert_parity, which walks the derived and built bodies in canonical DFS preorder and requires the assert sequences to match in COUNT, KIND CLASS (AssertClass::Overflow(BinOp) / DivByZero / RemByZero) and POLARITY. asserts=N in the event is the number VERIFIED. Every codegen flip in this crate reports asserts=0, so for all nine earlier chains that check establishes nothing; here it establishes one Overflow-class assert."
+  },
+  "the_honest_summary": "More producer-side checking on the assert axis, and less artifact-shaped binding on the instruction axis. Neither sentence substitutes for the other, and this chain is not claimed to have link 2b in the codegen sense."
+ },
+ "build_items": {
+  "was_the_assert_a_build_item": "NO",
+  "why_not": "IRInst.assert : Nat -> IRInst has been a constructor since eval_ir_syntax was written, and ir_exec has always had the case IRInst.assert c => ir_assert_exec s (ir_getd s c). ir_assert_exec is not a stub: it reads the scrutinee through ir_as_bool, faults type_error not_bool on anything that is not a Bool, and hands a decided Bool to ir_assert_b, whose false minor is IRConfig.halted (IROutcome.ub IRFault.assert_failed) and whose true minor is ir_advance.",
+  "semantics_build_item": {
+   "what": "IRCastOp.bitcast, which was a blanket ir_width_fault",
+   "why_the_old_refusal_did_not_cover_this": "Its stated reason -- a cell-addressed model has no representation to reinterpret -- is still right for the cases it was written about. It does not cover the only bitcast the shipped kernel emits: i32 -> u32, two INTEGER types at the SAME width, where IRScalar.int_ n already IS the canonical width-w bit pattern (that is what makes ir_sext_value and ir_wrap mean anything) and nothing is reinterpreted.",
+   "what_was_added": "ir_bitcast_int / ir_bitcast_eval in eval_ir_ops, plus four kernel-executed theorems",
+   "what_stays_refused": [
+    "a WIDTH MISMATCH (ir_nat_eqb sw dw) -- ir_bitcast_width_mismatch_fails_closed, for every scalar",
+    "a FLOAT on either side -- ir_ty_int_width declines IRTy.float_, so bitcast f64 -> u64 is refused AT THE SAME WIDTH (ir_bitcast_float_still_refused)",
+    "a POINTER or aggregate on either side, for the same reason",
+    "IRCastOp.transmute entirely -- a different constructor, so transmute::<f64, u64>, the counterexample the original refusal names, is untouched (ir_transmute_still_refused)"
+   ],
+   "accelerated_constants_added": 0,
+   "new_trust_added": "none -- ir_wrap, ir_nat_eqb, ir_ty_int_width and ir_int1 were all already relied on by the integer arithmetic lane"
+  },
+  "gate_build_items": [
+   "the  lane: Inst::Assert binds no result, carries no type and has no branch target, so it was in NO lane -- deleting it from a transcription changed nothing the gate read",
+   "the three constant VALUE lanes, de-collapsed from one-per-BLOCK to per-INSTRUCTION: this body materializes THREE constants in one block and the no_overflow shape FOUR, and the block-keyed lanes kept one of each kind. assert_lanes' one-constant-per-block ratchet refused such a body and named this repair in its own message; it is replaced by a stronger check that no constant is left unread by all three lanes",
+   "the program-order lane's RESULT SLOT, widened from one u32 read with unwrap_or(u32::MAX) to a LIST: a node binding two ids scored MAX on both sides whatever it bound, which is the shape of nine of the twenty-one candidates"
+  ]
+ },
+ "correction_to_the_ninth_chain": {
+  "where": "tests/fixtures/get_char_val_trunc.lineage.json -> cast_semantics_wall.refused_and_why['bitcast / transmute / inttoptr']",
+  "claim": "still the tagged unmodelled width_bounded outcome; no body in clean-kernel flips one, so a semantics for them would be modelling with no artifact to be about.",
+  "is_false_at_HEAD": true,
+  "why": "It is the SAME codegen-only reading error the panic-arm claim had. Twelve of the crate's 32 CTFE flips carry a bitcast -- every shift_in_range body does -- so a bitcast semantics has twelve artifacts to be about. The ninth chain's census ran over codegen flips only, and the sentence generalized past its own denominator.",
+  "the_ninth_chain_record_is_NOT_rewritten": "It is a correct record of what that lane measured. The correction is recorded here and in docs/CRYSTAL_STATUS.md, which is the same discipline the 2026-08-11 lineage fixture is kept under."
+ },
+ "candidate_selection": {
+  "source": "docs/analysis/frontier-2026-08-16.md \u00a72 -- '\"Panic arms 0\" is a statement about CODEGEN flips only. 21 of the 32 CTFE flips carry an Inst::Assert'",
+  "re_derived_by_this_lane": true,
+  "markers_exact_rows_total": 1085,
+  "markers_exact_rows_that_are_NON_vacuous": 27,
+  "codegen_flips": 178,
+  "ctfe_flips": 32,
+  "codegen_flips_carrying_an_assert": 0,
+  "ctfe_flips_carrying_an_assert": 21,
+  "note": "Re-derived by a parser written for this job over this lane's own whole-crate dump, joining flip events to coverage rows on def_index and IR bodies to coverage rows on func_id (7,571 of 7,571 bodyful fn bodies, 0 join defects). The assert count comes from the event's own asserts= field, which is the number verify_assert_parity VERIFIED.",
+  "the_twenty_one_by_shape": {
+   "no_overflow": {
+    "count": 9,
+    "shape": "%2, %3 = mul.overflow usize %0, %1 ; %6 = select bool %3, false, true ; assert %6 ; ret %2",
+    "refused_because": "every operand is `usize`, which the CFG type lane deliberately leaves as the loud `?usize` rather than deciding the target's pointer width, and assert_lanes refuses an unresolved type on EITHER side. Chaining one would mean assuming a width. The ninth chain established that refusal for its two unchained zext siblings and this lane inherits it rather than reopening it.",
+    "what_a_later_lane_would_also_owe": "IRInst.overflow, which is one of exactly TWO arms of the 28-arm dispatch that are the tagged unmodelled outcome, plus a multi-result binder. The syntax already has IROverflowOp at 3/3 and IRNode already carries a result LIST, so the missing pieces are an evaluator and a binder -- and, first, a decision about usize."
+   },
+   "shift_in_range": {
+    "count": 12,
+    "shape": "%0 = const u64 1 ; %1 = const i32 K ; %2 = bitcast i32 %1 to u32 ; %3 = const u32 64 ; %4 = icmp ult u32 %2, %3 ; assert %4 ; %5 = sext i32 %1 to u64 ; %6 = shl u64 %0, %5 ; ret %6",
+    "every_width_resolves": true,
+    "shift_amounts": {
+     "8": 2,
+     "16": 2,
+     "32": 3,
+     "9": 2,
+     "21": 1,
+     "63": 1,
+     "127": 1
     },
-    "reproduction": {
-        "clean_non_incremental_builds": 3,
-        "coverage_json_sha256": "6cf26ef8155ca7beb2ff36de0161b02797490ba8a931f5adff09dd9a94925c1a",
-        "coverage_json_byte_identical_across_all_three": true,
-        "trust_ir_txt_sha256": "23b0622772029c4b5e87757c11450c1a9fd624216e2f9f627acbe973837fc7e6",
-        "trust_ir_bin_sha256": "8ca71527430101e256f43face2a493921a0da7a8d20e72ceb3e748099ea7784a",
-        "note": "Three builds in three separate CARGO_TARGET_DIRs: two flip builds and the negative control. All three emit a byte-identical coverage.json and trust-ir dump."
-    },
-    "negative_control": {
-        "flag": "-Ztrust-ir-flip=no",
-        "flip_events_crate_wide": 0,
-        "ctfe_flip_events_crate_wide": 0,
-        "coverage_json_byte_identical_to_flip_build": true,
-        "event_for_this_body_present": false
-    },
-    "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
-    "def_index": 19642,
-    "func_id": 5758,
-    "kind": "const-init",
-    "instr_count": 9,
-    "lowered": true,
-    "spliced": true,
-    "symbolic": false,
-    "lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
-    "unsupported": [],
-    "calls": {
-        "resolved": 0,
-        "extern_decls": 0,
-        "unresolved": 0
-    },
-    "deferred_to_seam": false,
-    "derived_mir": {
-        "verdict": "agreed",
-        "detail": "4 canonical line(s) identical",
-        "markers_exact": true,
-        "markers_detail": "0 marker line(s) identical",
-        "markers_exact_is_vacuous": true,
-        "vacuity_note": "TWO EMPTY SEQUENCES. Unlike the ninth chain (2 REAL marker lines) this row is in the 1,058 vacuous ones -- a const initializer has no StorageLive/StorageDead to compare. markers_exact: true is therefore a gate this body PASSES and not evidence this body SUPPLIES, and it must never be quoted without the qualifier."
-    },
-    "interpreter_differential": {
-        "verdict": "agreed",
-        "samples": 1,
-        "detail": "THIR-trust-ir == MIR-trust-ir on 1 sampled input(s) (differential interpretation)"
-    },
-    "flip_event": {
-        "fired": true,
-        "seam": "ctfe",
-        "asserts": 1,
-        "flipped_so_far": 18,
-        "lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
-        "matches_artifact_lineage": true,
-        "raw": " INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: CTFE compiled from trust-ir, did=DefId(0:19642 ~ clean_kernel[4676]::tc::local_context::{impl#0}::push_low_local::META_TAG), asserts=1, lineage=sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738, flipped_so_far=18"
-    },
-    "link_2b_on_the_ctfe_seam": {
-        "question": "The nine existing chains' link 2b is a CODEGEN flip. What is it for a CTFE flip?",
-        "seam": "mir_for_ctfe (trust_ir_flip.rs:194, try_flip_ctfe), gated on hir_body_const_context being Const or Static -- a const FN is NOT a candidate here, it belongs to the codegen seam",
-        "consumer": "the const-eval INTERPRETER, not codegen",
-        "what_it_binds": "the VALUE. The const-eval interpreter evaluated MIR re-derived from THIS trust-ir module, and the constant every use site of META_TAG is given is that evaluation's output.",
-        "what_it_does_NOT_bind": "no machine code corresponds to these nine instructions. The comparison, the assert and the shift all ran at COMPILE TIME; the artifact carries 1u64 << 63 as a baked value. A theorem about this module is a theorem about a computation that PRODUCED part of the artifact, not about one the artifact performs.",
-        "is_weaker_than_the_codegen_form": true,
-        "same_registry_writer": "record_green -- the sole writer, on DerivedAgreed, for BOTH seams",
-        "same_markers_gate": "flip_registry.rs:641 -- emit_lifetime_markers() && !markers_exact, consulted identically on both seams",
-        "why_panic_arms_flip_at_CTFE_and_not_at_CODEGEN": "A POPULATION difference, not a gate difference, and this was measured rather than assumed. record_green is the sole registry writer for both seams and consults markers_exact identically. Of the 39 agreed assert-carrying bodies, 23 have markers_exact true and they are ALL const initializers -- vacuously, over two empty marker sequences. The 16 that are not are the runtime bodies, whose marker plans are refused by to_mir.rs:3202/:3780 (the func.scopes firewall) or by operands_of. So the asymmetry is: const initializers pass the marker gate for free, and the four runtime assert-carrying candidates do not pass it at all.",
-        "one_axis_where_it_is_STRONGER": {
-            "what": "verify_assert_parity (flip.rs:1767) verified 1 assert; on all 178 codegen flips that check is vacuous at 0",
-            "detail": "Both seams run verify_assert_parity, which walks the derived and built bodies in canonical DFS preorder and requires the assert sequences to match in COUNT, KIND CLASS (AssertClass::Overflow(BinOp) / DivByZero / RemByZero) and POLARITY. asserts=N in the event is the number VERIFIED. Every codegen flip in this crate reports asserts=0, so for all nine earlier chains that check establishes nothing; here it establishes one Overflow-class assert."
-        },
-        "the_honest_summary": "More producer-side checking on the assert axis, and less artifact-shaped binding on the instruction axis. Neither sentence substitutes for the other, and this chain is not claimed to have link 2b in the codegen sense."
-    },
-    "build_items": {
-        "was_the_assert_a_build_item": "NO",
-        "why_not": "IRInst.assert : Nat -> IRInst has been a constructor since eval_ir_syntax was written, and ir_exec has always had the case IRInst.assert c => ir_assert_exec s (ir_getd s c). ir_assert_exec is not a stub: it reads the scrutinee through ir_as_bool, faults type_error not_bool on anything that is not a Bool, and hands a decided Bool to ir_assert_b, whose false minor is IRConfig.halted (IROutcome.ub IRFault.assert_failed) and whose true minor is ir_advance.",
-        "semantics_build_item": {
-            "what": "IRCastOp.bitcast, which was a blanket ir_width_fault",
-            "why_the_old_refusal_did_not_cover_this": "Its stated reason -- a cell-addressed model has no representation to reinterpret -- is still right for the cases it was written about. It does not cover the only bitcast the shipped kernel emits: i32 -> u32, two INTEGER types at the SAME width, where IRScalar.int_ n already IS the canonical width-w bit pattern (that is what makes ir_sext_value and ir_wrap mean anything) and nothing is reinterpreted.",
-            "what_was_added": "ir_bitcast_int / ir_bitcast_eval in eval_ir_ops, plus four kernel-executed theorems",
-            "what_stays_refused": [
-                "a WIDTH MISMATCH (ir_nat_eqb sw dw) -- ir_bitcast_width_mismatch_fails_closed, for every scalar",
-                "a FLOAT on either side -- ir_ty_int_width declines IRTy.float_, so bitcast f64 -> u64 is refused AT THE SAME WIDTH (ir_bitcast_float_still_refused)",
-                "a POINTER or aggregate on either side, for the same reason",
-                "IRCastOp.transmute entirely -- a different constructor, so transmute::<f64, u64>, the counterexample the original refusal names, is untouched (ir_transmute_still_refused)"
-            ],
-            "accelerated_constants_added": 0,
-            "new_trust_added": "none -- ir_wrap, ir_nat_eqb, ir_ty_int_width and ir_int1 were all already relied on by the integer arithmetic lane"
-        },
-        "gate_build_items": [
-            "the  lane: Inst::Assert binds no result, carries no type and has no branch target, so it was in NO lane -- deleting it from a transcription changed nothing the gate read",
-            "the three constant VALUE lanes, de-collapsed from one-per-BLOCK to per-INSTRUCTION: this body materializes THREE constants in one block and the no_overflow shape FOUR, and the block-keyed lanes kept one of each kind. assert_lanes' one-constant-per-block ratchet refused such a body and named this repair in its own message; it is replaced by a stronger check that no constant is left unread by all three lanes",
-            "the program-order lane's RESULT SLOT, widened from one u32 read with unwrap_or(u32::MAX) to a LIST: a node binding two ids scored MAX on both sides whatever it bound, which is the shape of nine of the twenty-one candidates"
-        ]
-    },
-    "correction_to_the_ninth_chain": {
-        "where": "tests/fixtures/get_char_val_trunc.lineage.json -> cast_semantics_wall.refused_and_why['bitcast / transmute / inttoptr']",
-        "claim": "still the tagged unmodelled width_bounded outcome; no body in clean-kernel flips one, so a semantics for them would be modelling with no artifact to be about.",
-        "is_false_at_HEAD": true,
-        "why": "It is the SAME codegen-only reading error the panic-arm claim had. Twelve of the crate's 32 CTFE flips carry a bitcast -- every shift_in_range body does -- so a bitcast semantics has twelve artifacts to be about. The ninth chain's census ran over codegen flips only, and the sentence generalized past its own denominator.",
-        "the_ninth_chain_record_is_NOT_rewritten": "It is a correct record of what that lane measured. The correction is recorded here and in docs/CRYSTAL_STATUS.md, which is the same discipline the 2026-08-11 lineage fixture is kept under."
-    },
-    "candidate_selection": {
-        "source": "docs/analysis/frontier-2026-08-16.md \u00a72 -- '\"Panic arms 0\" is a statement about CODEGEN flips only. 21 of the 32 CTFE flips carry an Inst::Assert'",
-        "re_derived_by_this_lane": true,
-        "markers_exact_rows_total": 1085,
-        "markers_exact_rows_that_are_NON_vacuous": 27,
-        "codegen_flips": 178,
-        "ctfe_flips": 32,
-        "codegen_flips_carrying_an_assert": 0,
-        "ctfe_flips_carrying_an_assert": 21,
-        "note": "Re-derived by a parser written for this job over this lane's own whole-crate dump, joining flip events to coverage rows on def_index and IR bodies to coverage rows on func_id (7,571 of 7,571 bodyful fn bodies, 0 join defects). The assert count comes from the event's own asserts= field, which is the number verify_assert_parity VERIFIED.",
-        "the_twenty_one_by_shape": {
-            "no_overflow": {
-                "count": 9,
-                "shape": "%2, %3 = mul.overflow usize %0, %1 ; %6 = select bool %3, false, true ; assert %6 ; ret %2",
-                "refused_because": "every operand is `usize`, which the CFG type lane deliberately leaves as the loud `?usize` rather than deciding the target's pointer width, and assert_lanes refuses an unresolved type on EITHER side. Chaining one would mean assuming a width. The ninth chain established that refusal for its two unchained zext siblings and this lane inherits it rather than reopening it.",
-                "what_a_later_lane_would_also_owe": "IRInst.overflow, which is one of exactly TWO arms of the 28-arm dispatch that are the tagged unmodelled outcome, plus a multi-result binder. The syntax already has IROverflowOp at 3/3 and IRNode already carries a result LIST, so the missing pieces are an evaluator and a binder -- and, first, a decision about usize."
-            },
-            "shift_in_range": {
-                "count": 12,
-                "shape": "%0 = const u64 1 ; %1 = const i32 K ; %2 = bitcast i32 %1 to u32 ; %3 = const u32 64 ; %4 = icmp ult u32 %2, %3 ; assert %4 ; %5 = sext i32 %1 to u64 ; %6 = shl u64 %0, %5 ; ret %6",
-                "every_width_resolves": true,
-                "shift_amounts": {
-                    "8": 2,
-                    "16": 2,
-                    "32": 3,
-                    "9": 2,
-                    "21": 1,
-                    "63": 1,
-                    "127": 1
-                },
-                "unique_shift_amounts": [
-                    21,
-                    63,
-                    127
-                ],
-                "note": "127 is TWO_POW_127 and is u128 rather than u64."
-            }
-        },
-        "chosen_on": "CONTENT: the shift amount 63 is exactly ONE BELOW the assert's own boundary, so the failing side is ADJACENT and the boundary can be pinned from both sides by execution -- ir_mt_exact returns a value at 63 and ir_mt_oob_traps panics at 64. It is also unique among the twelve rather than one of a duplicated pair (seven of the twelve share a shift amount with another), and it is load-bearing in the kernel: META_TAG is the metavariable tag bit of the type checker's local context and push_low_local's own printed contract quotes it (ENSURES: result.as_u64() < (1u64 << 63))."
-    },
-    "cost": {
-        "ir_mt_exact_seconds": 360,
-        "measured_at_three_spellings": [
-            368.578,
-            379.368,
-            357.116
-        ],
-        "harness": "cargo test -p clean-verify --test evalir_scratchpad (the EvalIr bundle, not the full spec)",
-        "note": "The expensive declaration is the nine-step Eq.refl. Three different spellings of the right-hand side -- the readable reflected constant, a near-exact residual and the EXACT residual in the machine's own vocabulary -- all cost the same ~360 s, so the cost is the run and the residue fold rather than a mis-spelled RHS. The ANSWER is never computed: ir_nat_mul recurses on its second argument, so normalizing ir_nat_mul 1 (ir_nat_pow2 63) would cost 2^63 Nat.rec unfoldings, and it stays an unreduced application on both sides. The counterfactual at shift 64 halts at step 6 and costs 0.045 s, which is the measurement that localizes the cost to the last three steps."
-    },
+    "unique_shift_amounts": [
+     21,
+     63,
+     127
+    ],
+    "note": "127 is TWO_POW_127 and is u128 rather than u64."
+   }
+  },
+  "chosen_on": "CONTENT: the shift amount 63 is exactly ONE BELOW the assert's own boundary, so the failing side is ADJACENT and the boundary can be pinned from both sides by execution -- ir_mt_exact returns a value at 63 and ir_mt_oob_traps panics at 64. It is also unique among the twelve rather than one of a duplicated pair (seven of the twelve share a shift amount with another), and it is load-bearing in the kernel: META_TAG is the metavariable tag bit of the type checker's local context and push_low_local's own printed contract quotes it (ENSURES: result.as_u64() < (1u64 << 63))."
+ },
+ "cost": {
+  "ir_mt_exact_seconds": 360,
+  "measured_at_three_spellings": [
+   368.578,
+   379.368,
+   357.116
+  ],
+  "harness": "cargo test -p clean-verify --test evalir_scratchpad (the EvalIr bundle, not the full spec)",
+  "note": "The expensive declaration is the nine-step Eq.refl. Three different spellings of the right-hand side -- the readable reflected constant, a near-exact residual and the EXACT residual in the machine's own vocabulary -- all cost the same ~360 s, so the cost is the run and the residue fold rather than a mis-spelled RHS. The ANSWER is never computed: ir_nat_mul recurses on its second argument, so normalizing ir_nat_mul 1 (ir_nat_pow2 63) would cost 2^63 Nat.rec unfoldings, and it stays an unreduced application on both sides. The counterfactual at shift 64 halts at step 6 and costs 0.045 s, which is the measurement that localizes the cost to the last three steps."
+ },
  "superseded_at_head": {
   "record": "data/crystal_chain_revalidation_2026-08-19.json",
   "measured": "2026-08-19",
@@ -215,5 +215,148 @@
   "nothing_here_is_superseded": "The `superseded_at_head` block above is NOT stale and has NOT been rewritten. Its head_lineage and head_def_index are the values this body still carries under a producer 33 commits newer, measured on byte-identical clean-kernel source. Only func_id moved (4635 -> 4632), and func_id is a whole-crate ordinal read by no gate lane. A lineage digest is a per-BUILD artifact identity; this run is what ESTABLISHES that for a chained body it is stable under a producer change, rather than assuming it. Overwriting the earlier block would have destroyed exactly that evidence.",
   "how_to_re_derive": "scripts/crystal_fixture_freshness.py <dump-dir>  (seal the driver first; see its header)",
   "emitted_body_note": "Instruction-for-instruction identical to the text pinned in meta_tag_shl.trust-ir.txt. Only whole-crate NUMBERING moved (functy-index), and by MORE than at the previous revalidation -- which is itself the argument for not re-recording it: those ordinals move on every producer wave while the body does not."
+ },
+ "current_source_bound_pin": {
+  "schema": "clean.crystal.current_source_bound_pin/v1",
+  "record": "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json",
+  "binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json",
+  "measured_utc": "2026-08-21T08:19:49Z",
+  "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+  "def_index": 19706,
+  "func_id": 4641,
+  "instr_count": 9,
+  "lineage": "sha256:2f407371c81250375dfab5b7be1111c2232ceb0baec702a113d65cd252f3ef6d",
+  "lowered": true,
+  "spliced": true,
+  "unsupported": [],
+  "calls": {
+   "resolved": 0,
+   "extern_decls": 0,
+   "unresolved": 0
+  },
+  "derived_mir": {
+   "verdict": "agreed",
+   "detail": "4 canonical line(s) identical",
+   "markers_exact": true,
+   "markers_detail": "0 marker line(s) identical"
+  },
+  "interpreter": {
+   "verdict": "agreed",
+   "samples": 1,
+   "detail": "THIR-trust-ir == MIR-trust-ir on 1 sampled input(s) (differential interpretation)"
+  },
+  "flip_event": {
+   "fired": true,
+   "seam": "codegen",
+   "lineage": "sha256:2f407371c81250375dfab5b7be1111c2232ceb0baec702a113d65cd252f3ef6d",
+   "matches_artifact_lineage": true,
+   "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: CTFE compiled from trust-ir, did=DefId(0:19706 ~ clean_kernel[99b6]::tc::local_context::{impl#0}::push_low_local::META_TAG), asserts=1, lineage=sha256:2f407371c81250375dfab5b7be1111c2232ceb0baec702a113d65cd252f3ef6d, flipped_so_far=27"
+  },
+  "emitted_body": {
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "sha256": "e0b1c891839276fd931ff821e212e8c48bfa8d3b71641d96ae5935147fb05629"
+  },
+  "build": {
+   "clean_source_rev": "b03937e748123cc115bfd159694fd64f0ce8538a",
+   "clean_source_tree": "0d5d4b7116745b8060e61e044fa7fb499d0e18c0",
+   "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+   "trust_worktree_rev": "8ea68367816ce49a7c3026f1e19c7ee4285e7737",
+   "trustc_sha256": "c4b91deb28f50697883de56664595a5afc86f8ec8af8de9d357b6757a7867e80",
+   "librustc_driver_sha256": "a2e495e3e4918964c071d18c420d24f69b781f55829ff63c72fdeaa904d9fce5",
+   "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off",
+   "recipe": "TRUSTC=<sealed stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> TRUST_IR_BUILD_TARGET_DIR=<exact-driver prewarm> scripts/trust_ir_build.sh --print-only",
+   "driver_seal": "Trust seal_driver guard passed with the sole resolved driver inside the read-only snapshot; sysrootcheck reported metadata v12/v12 and compiled std.",
+   "artifacts": {
+    "clean_kernel.trust-ir.bin": {
+     "sha256": "19ad6224a4c84f2b35ed9163b9777f448805327d5db2e3863c6f729842e61665",
+     "bytes": 3749392
+    },
+    "clean_kernel.trust-ir.txt": {
+     "sha256": "324550ca66045236ddaf40da90642258e4c02e07e3c9ed12d59e767c201b0ccc",
+     "bytes": 5441006
+    },
+    "clean_kernel.coverage.json": {
+     "sha256": "0b44fb1a7ea9b4d2ce2dfabe9cfb4654c24d43cbee60d007c1e1803e54d3dc82",
+     "bytes": 17518829
+    },
+    "clean_kernel.build.log": {
+     "sha256": "a7418a940461f362eed539369f587c66e17c48d70baaf28d15c253d3ec62d468",
+     "bytes": 73060
+    },
+    "clean_kernel.axes.json": {
+     "sha256": "b27d7947d8201150c10110dc87a9ea873c32159cb7b148dc665021ac9b3cc68c",
+     "bytes": 76462
+    },
+    "clean_kernel.argv": {
+     "sha256": "9a1160930d859287d263f9da8ae2e12f27c4e9a4b84f120bbb352c44a1dcc655",
+     "bytes": 4728
+    }
+   },
+   "whole_crate_measurement": {
+    "schema": "trust.thir-lower.crate-module.coverage.v2",
+    "crate": "clean_kernel",
+    "direct_obligation_capability": "structural-parity-only-v1",
+    "proof_authority": false,
+    "native_verification_requests": false,
+    "bodies": 13844,
+    "lowered": 8914,
+    "symbolic": 1580,
+    "spliced": 6431,
+    "declarations": 1104,
+    "initializer_bodies": 1843,
+    "instr_count": 397210,
+    "unsupported": 54771,
+    "calls_resolved": 8154,
+    "calls_extern_decls": 3244,
+    "calls_unresolved": 3240,
+    "interpreter_agreed": 1141,
+    "interpreter_mismatch": 9,
+    "interpreter_not_run": 7791,
+    "interpreter_unsupported": 4903,
+    "interpreter_samples_total": 2273,
+    "seam_agreed": 24,
+    "seam_mismatch": 0,
+    "seam_not_run": 7343,
+    "seam_resolved": 7367,
+    "seam_samples_total": 52,
+    "derived_mir_agreed": 1590,
+    "mismatch": 0,
+    "derived_mir_unsupported": 12254,
+    "markers_exact": 1129,
+    "markers_exact_nonvacuous": 40,
+    "markers_exact_vacuous": 1089,
+    "markers_lines_total": 185,
+    "markers_differ_derived_empty": 460,
+    "markers_differ_content": 0,
+    "markers_channel_skipped": 1,
+    "markers_agreed_prefix_lines": 0,
+    "markers_unparseable": 0,
+    "lineage_rows": 13216,
+    "lineage_rows_in_artifact": 6431,
+    "flip_lineage_equal": 225,
+    "flip_spliced": 225,
+    "func_id_rows": 6431,
+    "flip_events_total": 225,
+    "flip_events_codegen": 184,
+    "flip_events_ctfe": 41,
+    "flip_backed_total": 206,
+    "flip_backed_codegen": 165,
+    "flip_backed_ctfe": 41
+   },
+   "fatal_invariants": {
+    "foreign_flip_events": 0,
+    "flip_events_unparsed": 0,
+    "flip_events_unjoinable": 0,
+    "flip_lineage_mismatch": 0,
+    "flip_lineage_row_absent": 0,
+    "flip_lineage_digest_unknown": 0,
+    "flip_events_unspliced": 0,
+    "lineage_digest_collisions": 0,
+    "lineage_rows_malformed": 0
+   }
+  },
+  "historical_top_level_preserved": true,
+  "how_to_re_derive": "Run the exact live dump recipe in build.recipe, then scripts/crystal_fixture_freshness.py <dump> --strict and the source-bound scripts/crystal_fixture_rebaseline.py workflow."
  }
 }

@@ -24,9 +24,9 @@
 //! 2. The method projection (`Coe.coe`) is a plain imported `def` whose body is
 //!    a kernel `Proj`, exactly like Lean's own projection functions.
 //! 3. Each instance is registered via `register_instance` with
-//!    `type_: None, value: None`; the elaborator reconstructs the instance from
-//!    `env.get_const(name)` (see `infer/elab_init.rs::init_instances_from_env`,
-//!    #443).
+//!    `type_: None, value: None`; the elaborator reconstructs its type and keeps
+//!    the Lean-faithful constant expression from `env.get_const(name)` (see
+//!    `infer/elab_init.rs::init_instances_from_env`, #443).
 //!
 //! We reproduce *exactly* that configuration with the same primitive kernel APIs
 //! the importer calls, and *deliberately do not* register any clean-side
@@ -65,8 +65,8 @@
 //! The inner ascription `(A.a : B)` makes the elaborator unify `A` with the
 //! expected `B`; that fails, so it must consult coercion insertion, find the
 //! imported `Coe A B` instance (NOT the decoy `Coe A D`), and wrap `A.a` so the
-//! whole thing reduces — through the imported instance's reconstructed body and
-//! the kernel `Proj` reduction — to `B.b2`.
+//! whole thing reduces — by unfolding the imported instance constant at the
+//! kernel `Proj` reduction — to `B.b2`.
 
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_kernel::env::Environment;
@@ -453,10 +453,9 @@ fn test_coercion_insertion_uses_imported_coe_instance_and_reduces_correctly() {
         .as_ref()
         .expect("coercedB is a definition with a body");
 
-    // The elaborated body must go through the imported coercion machinery:
-    // `Coe.coe` (the projection) applied to the synthesized imported instance,
-    // whose reconstructed content names `Coe.mk` and the target-B coercion fn
-    // `aToB` — NOT the decoy target D's `aToD`.
+    // The elaborated body must retain the same constant-form instance term Lean
+    // emits: `Coe.coe` applied to `instCoeAB`, not its unfolded `Coe.mk`/`aToB`
+    // body and not the target-D decoy.
     let referenced = body.collect_constants();
     assert!(
         referenced.contains(&Name::from_string("Coe.coe")),
@@ -464,14 +463,16 @@ fn test_coercion_insertion_uses_imported_coe_instance_and_reduces_correctly() {
          got: {referenced:?}"
     );
     assert!(
-        referenced.contains(&Name::from_string("aToB")),
-        "coercedB's body should inline the synthesized IMPORTED Coe A B instance \
-         (which references the B-targeting coercion fn aToB), got: {referenced:?}"
+        referenced.contains(&Name::from_string("instCoeAB"))
+            && !referenced.contains(&Name::from_string("aToB")),
+        "coercedB's body should retain the synthesized imported instance constant \
+         instCoeAB without eagerly unfolding it, got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("aToD"))
+        !referenced.contains(&Name::from_string("instCoeAD"))
+            && !referenced.contains(&Name::from_string("aToD"))
             && !referenced.contains(&Name::from_string("D")),
-        "coercion insertion must NOT pull in the decoy target D's coercion content, \
+        "coercion insertion must NOT select the decoy target D's instance or content, \
          got: {referenced:?}"
     );
 
@@ -509,14 +510,16 @@ fn test_coercion_insertion_discriminates_target_type() {
         .collect_constants();
     assert!(
         referenced.contains(&Name::from_string("Coe.coe"))
-            && referenced.contains(&Name::from_string("aToD")),
-        "coercedD : D must insert the imported Coe A D coercion (referencing aToD), \
+            && referenced.contains(&Name::from_string("instCoeAD"))
+            && !referenced.contains(&Name::from_string("aToD")),
+        "coercedD : D must retain the imported instCoeAD constant without unfolding it, \
          got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("aToB"))
+        !referenced.contains(&Name::from_string("instCoeAB"))
+            && !referenced.contains(&Name::from_string("aToB"))
             && !referenced.contains(&Name::from_string("B")),
-        "coercedD : D must NOT pull in target B's coercion content, got: {referenced:?}"
+        "coercedD : D must NOT select target B's instance or content, got: {referenced:?}"
     );
 
     assert_eq!(

@@ -53,10 +53,12 @@
 //! `body.derived_mir.markers_exact = true`, `body.interpreter.verdict =
 //! "agreed"` over 64 samples, and a full-digest
 //! `flip_lineage_equals_coverage: true` — but its own `provenance_strength`
-//! field records ONE local stage1 build rather than the sealed-driver,
-//! three-clean-build protocol behind `float_div.lineage.json`. Asserting A0
-//! over it here would dress a weaker-PROVENANCE measurement in a stronger
-//! gate's clothes; the criteria themselves are present and true.
+//! field records three clean non-incremental builds with byte-identical coverage
+//! and a reproduction stanza, but all three use one unsealed local-stage1
+//! producer rather than the sealed driver behind `float_div.lineage.json`, and
+//! there is no negative control. Asserting A0 over it here would dress a
+//! weaker-PROVENANCE measurement in a stronger gate's clothes; the criteria
+//! themselves are present and true.
 //!
 //! The eighth chain's evidence file separately records this closure as a
 //! SIBLING row (`the_other_three_float_closures`, `def_index` 15286) — a census
@@ -76,7 +78,7 @@ fn float_mul_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_float_mul.rs", "const SRC_IR_FM_B0"),
+        &clean_named_const_source("eval_ir_float_mul.rs", "SRC_IR_FM_B0"),
         "def ir_fm_b",
     );
 
@@ -305,7 +307,7 @@ fn float_mul_operand_order_is_gated_structurally_even_though_it_is_unobservable(
 #[test]
 fn float_mul_the_lanes_catch_a_drifted_spec_module_too() {
     let emitted = parse_emitted(&fixture("float_mul.trust-ir.txt"));
-    let src = clean_block_sources("eval_ir_float_mul.rs", "const SRC_IR_FM_B0");
+    let src = clean_named_const_source("eval_ir_float_mul.rs", "SRC_IR_FM_B0");
     let good = parse_clean(&src, "def ir_fm_b");
     assert_eq!(
         emitted.binops, good.binops,

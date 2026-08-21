@@ -1,11 +1,11 @@
-rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.53) {
+rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {
     ; #producer: trust
     ; #names: %0="self"
 bb0(%0: ptr):
-    %1 = call @func.8369(%0)  ; #loc: 389 60 13
-    %2 = global_addr @global.4527  ; #loc: 389 61 20
-    %3 = const u64 34  ; #loc: 389 61 20
-    %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 389 61 20
-    %5 = call @func.7675(%1, %4)  ; #loc: 389 61 13
-    ret %5  ; #loc: 389 62 5
+    %1 = call @func.7211(%0)  ; #loc: 391 60 13
+    %2 = global_addr @global.4557  ; #loc: 391 61 20
+    %3 = const u64 34  ; #loc: 391 61 20
+    %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 391 61 20
+    %5 = call @func.6516(%1, %4)  ; #loc: 391 61 13
+    ret %5  ; #loc: 391 62 5
 }

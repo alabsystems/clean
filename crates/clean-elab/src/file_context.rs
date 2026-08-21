@@ -38,6 +38,14 @@ use std::path::PathBuf;
 pub struct FileContext {
     /// Accumulated variables from `variable` commands
     variables: Vec<SurfaceBinder>,
+    /// Stable lexical identity for each entry in `variables`.
+    ///
+    /// Nullary notation may capture a section variable.  Tracking identity
+    /// separately from spelling prevents that captured `x` from silently
+    /// rebinding to an unrelated outer/global `x` after the section ends.
+    variable_scope_ids: Vec<u64>,
+    /// Monotone source of lexical variable identities (zero is never used).
+    next_variable_scope_id: u64,
     /// Accumulated universe parameter names from `universe` commands
     universe_params: Vec<String>,
     /// Section scope stack - each entry is the index into `variables` at section start
@@ -169,6 +177,10 @@ impl FileContext {
     /// - `current_variables().len()` increases by `binders.len()`
     /// - Variables are appended (order preserved)
     pub fn add_variables(&mut self, binders: &[SurfaceBinder]) {
+        for _ in binders {
+            self.next_variable_scope_id = self.next_variable_scope_id.saturating_add(1);
+            self.variable_scope_ids.push(self.next_variable_scope_id);
+        }
         self.variables.extend(binders.iter().cloned());
     }
 
@@ -204,6 +216,7 @@ impl FileContext {
     pub fn exit_section(&mut self) {
         if let Some(marker) = self.section_stack.pop() {
             self.variables.truncate(marker);
+            self.variable_scope_ids.truncate(marker);
         }
         if let Some(marker) = self.universe_section_stack.pop() {
             self.universe_params.truncate(marker);
@@ -374,6 +387,16 @@ impl FileContext {
     /// the first, silently un-registering the file's notation mid-batch.
     pub(crate) fn macro_ctx(&self) -> &MacroCtx {
         &self.macro_ctx
+    }
+
+    /// Active section-variable spellings paired with stable lexical identities.
+    /// Kept parallel to `variables` by `add_variables`/`exit_section`.
+    pub(crate) fn active_variable_bindings(&self) -> impl Iterator<Item = (&str, u64)> {
+        debug_assert_eq!(self.variables.len(), self.variable_scope_ids.len());
+        self.variables
+            .iter()
+            .zip(self.variable_scope_ids.iter().copied())
+            .map(|(binder, id)| (binder.name.as_str(), id))
     }
 
     /// Mutable access to the persisted macro context, for the driver's

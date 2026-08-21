@@ -283,6 +283,57 @@ fn test_register_notation_prefix() {
 }
 
 #[test]
+fn test_nullary_notation_capture_requires_same_lexical_variable() {
+    let mut ctx = MacroCtx::new();
+    ctx.set_active_variable_bindings([("x".to_string(), 41)]);
+    let pattern = vec![NotationItem::Literal("A".to_string())];
+    let expansion = SurfaceExpr::Ident(Span::dummy(), "x".to_string());
+    ctx.register_notation(NotationKind::Notation, None, &pattern, &expansion)
+        .expect("nullary notation should register");
+
+    assert!(
+        matches!(
+            ctx.lookup_simple_notation("A"),
+            Some(SimpleNotationLookup::Active(SurfaceExpr::Ident(_, name))) if name == "x"
+        ),
+        "alias is active while its captured section variable is active"
+    );
+    let mut dependencies = HashSet::from(["A".to_string()]);
+    ctx.close_over_simple_notation_dependencies(&mut dependencies);
+    assert!(
+        dependencies.contains("x"),
+        "section-binder use analysis must see identifiers introduced by the alias"
+    );
+
+    ctx.set_active_variable_bindings(std::iter::empty());
+    assert!(
+        matches!(
+            ctx.lookup_simple_notation("A"),
+            Some(SimpleNotationLookup::Expired)
+        ),
+        "expired alias must remain registered as an unavailable hygienic capture"
+    );
+
+    ctx.set_active_variable_bindings([("x".to_string(), 99)]);
+    assert!(
+        matches!(
+            ctx.lookup_simple_notation("A"),
+            Some(SimpleNotationLookup::Expired)
+        ),
+        "same spelling in a later scope must not reactivate the captured alias"
+    );
+
+    ctx.set_active_variable_bindings([("x".to_string(), 41), ("x".to_string(), 99)]);
+    assert!(
+        matches!(
+            ctx.lookup_simple_notation("A"),
+            Some(SimpleNotationLookup::Active(SurfaceExpr::Ident(_, name))) if name == "x"
+        ),
+        "an inner shadow must not retire the still-live captured outer binding"
+    );
+}
+
+#[test]
 fn test_scoped_notation_gated_by_current_namespace_and_activation() {
     let mut ctx = MacroCtx::new();
     let pattern = vec![NotationItem::Literal("two".to_string())];

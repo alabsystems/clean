@@ -2,17 +2,17 @@ rustcc fn @env::types::SimpPriority::value(functy.147) {
     ; #producer: trust
     ; #names: %0="self"
 bb0(%0: ptr):
-    %2 = load enum.127, ptr %0  ; #loc: 321 229 8
-    %3 = extractfield u32 %2, 0  ; #loc: 321 229 8
-    switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 321 229 8
+    %2 = load enum.127, ptr %0  ; #loc: 322 229 8
+    %3 = extractfield u32 %2, 0  ; #loc: 322 229 8
+    switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 322 229 8
 bb1:
-    %4 = const u32 1000  ; #loc: 321 230 37
-    br bb3(%4)  ; #loc: 321 229 8
+    %4 = const u32 1000  ; #loc: 322 230 37
+    br bb3(%4)  ; #loc: 322 229 8
 bb2:
-    %5 = const i64 4  ; #loc: 321 229 8
-    %6 = gep inbounds i8, ptr %0, %5  ; #loc: 321 229 8
-    %7 = load u32, ptr %6  ; #loc: 321 231 39
-    br bb3(%7)  ; #loc: 321 229 8
+    %5 = const i64 4  ; #loc: 322 229 8
+    %6 = gep inbounds i8, ptr %0, %5  ; #loc: 322 229 8
+    %7 = load u32, ptr %6  ; #loc: 322 231 39
+    br bb3(%7)  ; #loc: 322 229 8
 bb3(%1: u32):
-    ret %1  ; #loc: 321 233 5
+    ret %1  ; #loc: 322 233 5
 }

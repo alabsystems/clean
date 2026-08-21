@@ -1,11 +1,11 @@
-rustcc fn @flat::types::FlatFlags::contains(functy.661) {
+rustcc fn @flat::types::FlatFlags::contains(functy.488) {
     ; #producer: trust
     ; #names: %0="self", %1="other"
-bb0(%0: struct.1012, %1: struct.1012):
-    %2 = extractfield u8 %0, 0  ; #loc: 386 90 9
-    %3 = extractfield u8 %1, 0  ; #loc: 386 90 18
-    %4 = and u8 %2, %3  ; #loc: 386 90 8
-    %5 = extractfield u8 %1, 0  ; #loc: 386 90 30
-    %6 = icmp eq u8 %4, %5  ; #loc: 386 90 8
-    ret %6  ; #loc: 386 91 5
+bb0(%0: struct.1017, %1: struct.1017):
+    %2 = extractfield u8 %0, 0  ; #loc: 388 90 9
+    %3 = extractfield u8 %1, 0  ; #loc: 388 90 18
+    %4 = and u8 %2, %3  ; #loc: 388 90 8
+    %5 = extractfield u8 %1, 0  ; #loc: 388 90 30
+    %6 = icmp eq u8 %4, %5  ; #loc: 388 90 8
+    ret %6  ; #loc: 388 91 5
 }

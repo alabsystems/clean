@@ -39,6 +39,30 @@ EXPECTED_FALSE_KINDS = {
     "sentinel_accumulator_overflow_must_not_prove": "overflow:add",
 }
 
+# A source span is not a unique obligation identity. In particular, rustc's
+# division/remainder lowering has long emitted two same-kind transport rows at
+# the same expression span: the genuinely false zero-divisor row and an
+# independently provable auxiliary row. Pin the full producer-owned obligation
+# suffix (family plus local ordinal), as well as kind and line, so an auxiliary
+# proof neither false-alarms nor masks a proof of the actual canary.
+EXPECTED_FALSE_SUFFIXES = {
+    "sentinel_oob_index_must_not_prove": "bounds_check:0",
+    "sentinel_div_by_zero_must_not_prove": "arithmetic_safety:0",
+    "sentinel_lossy_narrowing_cast_must_not_prove": "bounds_check:0",
+    "sentinel_unguarded_add_overflow_must_not_prove": "arithmetic_safety:0",
+    "sentinel_remainder_by_zero_must_not_prove": "arithmetic_safety:0",
+    "sentinel_sub_underflow_must_not_prove": "arithmetic_safety:0",
+    "sentinel_mul_overflow_must_not_prove": "arithmetic_safety:0",
+    "sentinel_slice_range_oob_must_not_prove": "bounds_check:0",
+    "sentinel_shift_overflow_must_not_prove": "arithmetic_safety:0",
+    "sentinel_loop_off_by_one_must_not_prove": "bounds_check:0",
+    "sentinel_clamp_still_oob_must_not_prove": "bounds_check:0",
+    "sentinel_multivar_guard_lossy_must_not_prove": "bounds_check:1",
+    "sentinel_stale_guard_must_not_prove": "bounds_check:0",
+    "sentinel_intrinsic_bound_must_not_prove": "bounds_check:0",
+    "sentinel_accumulator_overflow_must_not_prove": "arithmetic_safety:0",
+}
+
 
 class GateError(ValueError):
     """The transport is incomplete, malformed, or falsely proves a canary."""
@@ -61,9 +85,9 @@ def sentinel_names_from_source(source: Path) -> set[str]:
     return names
 
 
-def false_markers_from_source(source: Path) -> dict[str, tuple[str, int]]:
-    """Map each canary to its explicitly marked false VC family and source line."""
-    markers: dict[str, tuple[str, int]] = {}
+def false_markers_from_source(source: Path) -> dict[str, tuple[str, str, int]]:
+    """Map each canary to its marked VC kind, exact suffix, and source line."""
+    markers: dict[str, tuple[str, str, int]] = {}
     current: str | None = None
     for line_number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
         stripped = line.strip()
@@ -74,10 +98,23 @@ def false_markers_from_source(source: Path) -> dict[str, tuple[str, int]]:
             continue
         if current is None or current not in EXPECTED_FALSE_KINDS:
             raise GateError(f"false-canary marker on line {line_number} is outside a canary")
-        kind = line.split(marker, 1)[1].strip().split()[0]
+        token = line.split(marker, 1)[1].strip().split()[0]
+        try:
+            kind, suffix = token.rsplit("#", 1)
+            family, ordinal_text = suffix.rsplit(":", 1)
+            ordinal = int(ordinal_text)
+        except (ValueError, IndexError) as error:
+            raise GateError(
+                f"false-canary marker on line {line_number} must be "
+                "`kind#family:ordinal`"
+            ) from error
+        if not kind or not family or ordinal < 0:
+            raise GateError(
+                f"false-canary marker on line {line_number} has an invalid kind or suffix"
+            )
         if current in markers:
             raise GateError(f"{current}: multiple false-canary markers")
-        markers[current] = (kind, line_number)
+        markers[current] = (kind, suffix, line_number)
     return markers
 
 
@@ -105,6 +142,8 @@ def transport_messages(log: Path) -> list[dict[str, Any]]:
 def check(log: Path, source: Path) -> tuple[int, int, int, int, int]:
     declared = sentinel_names_from_source(source)
     expected = set(EXPECTED_FALSE_KINDS)
+    if set(EXPECTED_FALSE_SUFFIXES) != expected:
+        raise GateError("false-canary suffix inventory does not match kind inventory")
     if declared != expected:
         missing = sorted(declared - expected)
         stale = sorted(expected - declared)
@@ -120,10 +159,16 @@ def check(log: Path, source: Path) -> tuple[int, int, int, int, int]:
         missing = sorted(expected - set(markers))
         raise GateError("canaries missing an exact false-obligation marker: " + ", ".join(missing))
     for name, expected_kind in EXPECTED_FALSE_KINDS.items():
-        marker_kind, _ = markers[name]
+        marker_kind, marker_suffix, _ = markers[name]
         if marker_kind != expected_kind:
             raise GateError(
                 f"{name}: source marker names `{marker_kind}`, expected `{expected_kind}`"
+            )
+        expected_suffix = EXPECTED_FALSE_SUFFIXES[name]
+        if marker_suffix != expected_suffix:
+            raise GateError(
+                f"{name}: source marker names suffix `{marker_suffix}`, "
+                f"expected `{expected_suffix}`"
             )
 
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in expected}
@@ -149,7 +194,8 @@ def check(log: Path, source: Path) -> tuple[int, int, int, int, int]:
             raise GateError(f"{name}: missing non-empty obligation result inventory")
 
         expected_kind = EXPECTED_FALSE_KINDS[name]
-        _, expected_line = markers[name]
+        expected_suffix = EXPECTED_FALSE_SUFFIXES[name]
+        _, _, expected_line = markers[name]
         matching = [
             row
             for row in results
@@ -157,18 +203,22 @@ def check(log: Path, source: Path) -> tuple[int, int, int, int, int]:
             and row.get("kind") == expected_kind
             and isinstance(row.get("location"), dict)
             and row["location"].get("line_start") == expected_line
+            and isinstance(row.get("obligation_id"), str)
+            and row["obligation_id"].endswith(f":{expected_suffix}")
         ]
-        if not matching:
+        if len(matching) != 1:
             observed = sorted(
                 {
                     f"{row.get('kind')}@{(row.get('location') or {}).get('line_start')}"
+                    f"#{':'.join(str(row.get('obligation_id', '')).rsplit(':', 2)[-2:])}"
                     for row in results
                     if isinstance(row, dict)
                 }
             )
             raise GateError(
-                f"{name}: false `{expected_kind}` obligation was not emitted at source line "
-                f"{expected_line} (observed kind@line: {', '.join(observed) or '<none>'})"
+                f"{name}: expected exactly one false `{expected_kind}#{expected_suffix}` "
+                f"obligation at source line {expected_line}, found {len(matching)} "
+                f"(observed kind@line#suffix: {', '.join(observed) or '<none>'})"
             )
         proved = [row for row in matching if row.get("outcome") == "proved"]
         if proved:

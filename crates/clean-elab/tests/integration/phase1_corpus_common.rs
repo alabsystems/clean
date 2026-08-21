@@ -170,6 +170,10 @@ pub(crate) fn phase1_elab_env() -> Environment {
     env.init_sigma().ok();
     env.init_ordering().ok();
     env.init_decidable().ok();
+    // `init_nat` no longer seeds the equality-decision cluster implicitly.
+    // Phase-1 fixtures call `Nat.decEq` directly and use equality conditions in
+    // `ite`, so initialize the constructive DecidableEq surface explicitly.
+    env.init_decidable_eq().ok();
     // `1079.lean` and other compat files rely on if-expressions lowering
     // through `ite`, which is not implied by `Decidable` alone.
     env.init_ite().ok();
@@ -206,13 +210,23 @@ fn init_prelude_id(env: &mut Environment) {
 fn try_elab_per_decl_inner(decls: &[SurfaceDecl]) -> Vec<DeclElabOutcome> {
     let mut env = phase1_elab_env();
     let mut file_ctx = clean_elab::FileContext::new();
+    // The Phase 1 corpus is a Clean frontend authority lane.  Resolve imports
+    // through Clean's deterministic native prelude providers instead of
+    // searching for and loading an arbitrary host Lean installation.  Besides
+    // making the result host-dependent, loading Lean.Elab.Tactic's external
+    // transitive closure can consume the entire per-file timeout before the
+    // declarations under test are reached.
+    file_ctx.disable_external_import_search();
     let mut outcomes = Vec::with_capacity(decls.len());
 
     for (index, decl) in decls.iter().enumerate() {
         let result =
             clean_elab::elaborate_decl_and_register_with_context(&mut env, decl, &mut file_ctx);
         let (status, error) = match result {
-            Ok(_) => (DeclStatus::Pass, None),
+            Ok(result) => match first_nested_failure(&result) {
+                Some(error) => (DeclStatus::Fail, Some(error.to_string())),
+                None => (DeclStatus::Pass, None),
+            },
             Err(e) => (DeclStatus::Fail, Some(format!("{e}"))),
         };
         outcomes.push(DeclElabOutcome {
@@ -223,6 +237,18 @@ fn try_elab_per_decl_inner(decls: &[SurfaceDecl]) -> Vec<DeclElabOutcome> {
     }
 
     outcomes
+}
+
+/// A section/namespace block preserves successful siblings by returning a
+/// `Multiple` result with explicit `Failed` leaves.  The corpus lane profiles
+/// each top-level source declaration, so a block containing such a leaf is a
+/// failed declaration even though the recovery-oriented driver returned `Ok`.
+fn first_nested_failure(result: &clean_elab::ElabResult) -> Option<&clean_elab::ElabError> {
+    match result {
+        clean_elab::ElabResult::Failed { error, .. } => Some(error),
+        clean_elab::ElabResult::Multiple(results) => results.iter().find_map(first_nested_failure),
+        _ => None,
+    }
 }
 
 /// Run per-declaration elaboration with a per-file timeout.

@@ -208,6 +208,50 @@ fn cases_core(
                 if let (ExprKind::FVar(b_fvar), ExprKind::FVar(beta_fvar)) =
                     (b_val.kind(), beta.kind())
                 {
+                    // generalizeIndices, the `revert` half. A hypothesis whose
+                    // type mentions an eliminated INDEX cannot survive the
+                    // elimination in place — the eliminator abstracts that
+                    // index in its motive — so it must be a Pi binder of the
+                    // TARGET when the eliminator is applied, and be
+                    // re-introduced per branch.
+                    //
+                    // Do it by reverting through the shipped machinery rather
+                    // than folding a private "reverted target": four earlier
+                    // attempts built the telescope only for the motive while
+                    // `goal.target` stayed bare, so `close_goal_assembled`'s
+                    // def-eq compared `Pi` against `App` at the ROOT and
+                    // failed every time. `revert` replaces the goal, so after
+                    // it the assembly below is correct with no changes at all
+                    // — motive, branch target, branch context and the def-eq
+                    // check then all derive from the same target. This is the
+                    // revert/eliminate/re-intro pair `induction … generalizing`
+                    // already ships (builtins_phase3d_intro.rs).
+                    let dep_names: Vec<String> = goal
+                        .local_ctx
+                        .iter()
+                        .filter(|d| {
+                            d.fvar != hyp_fvar && d.fvar != *b_fvar && d.fvar != *beta_fvar
+                        })
+                        .filter(|d| {
+                            let fvars = crate::tactic::hypothesis::collect_fvars(&d.ty);
+                            fvars.contains(b_fvar) || fvars.contains(beta_fvar)
+                        })
+                        .map(|d| d.name.clone())
+                        .collect();
+                    let mut reverted: Vec<String> = Vec::new();
+                    for name in &dep_names {
+                        // Already pulled in as a transitive dependent of an
+                        // earlier revert.
+                        if reverted.iter().any(|r| r == name) {
+                            continue;
+                        }
+                        match crate::tactic::specialize_generalize::revert_with_deps(state, name) {
+                            Ok(names) => reverted.extend(names),
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    // Re-read: `revert` replaced the goal.
+                    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
                     // `HEq.{u}` carries α's universe on its own head; the
                     // motive's universe is the goal's, which for every case in
                     // this class is `Prop` (the goal is a proposition). Level
@@ -283,6 +327,16 @@ fn cases_core(
                         local_ctx: branch_ctx,
                         tag: Some("refl".to_string()),
                     });
+                    // …and the `intro` half: re-introduce in reverse revert
+                    // order, which is the Pi-binder order of the reverted
+                    // target. `intro` mints FRESH tactic FVars from the goal's
+                    // binder base — reusing the original elaborator ids is what
+                    // sank an earlier attempt (they sit below `fvar_base`, so
+                    // `close_fvars` leaves the binders vacuous and
+                    // `build_local_ctx` discards the branch decls).
+                    for name in reverted.iter().rev() {
+                        super::proof_term::intro(state, name)?;
+                    }
                     return Ok(());
                 }
             }

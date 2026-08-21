@@ -200,7 +200,19 @@ note "stamp:  $TRUSTC_VERSION"
 # event to count. With a reused target dir cargo would report success having
 # done nothing, so drop clean-kernel's artifacts first: the measurement is
 # defined as a non-incremental compile of the subject crate.
-CARGO_TARGET_DIR="$TDIR" cargo clean --locked --release -p clean-kernel >/dev/null 2>&1 || true
+#
+# Keep the cleanup on the SAME compiler identity as the measured build and
+# fail closed.  This is not cosmetic in a Trust-pinned checkout: Cargo queries
+# rustc even for `cargo clean`, and the workspace config carries
+# `-Ztrust-verify=off`.  A stock stable rustc rejects that query.  Until
+# 2026-08-21 the error was redirected away behind `|| true`, so a reused target
+# could retain clean-kernel and the following build could succeed without
+# emitting any dump at all.  The missing-coverage check caught that state, but
+# only after the script had falsely claimed it had forced a subject rebuild.
+if ! RUSTC="$TRUSTC_BIN" CARGO_TARGET_DIR="$TDIR" \
+    cargo clean --locked --release -p clean-kernel >/dev/null 2>&1; then
+  fail "could not remove the clean-kernel subject artifacts with the measured compiler"
+fi
 
 env -u CARGO_ENCODED_RUSTFLAGS -u CARGO_BUILD_RUSTFLAGS \
     -u TRUST_VERIFY_PRIMARY_ONLY -u SOURCE_DATE_EPOCH -u TRUST_ENUM_DECLINE_CENSUS \

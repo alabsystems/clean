@@ -2,9 +2,9 @@
  "chain": "ir_lz",
  "body": "level::Level::is_zero",
  "what": "The CRATE-LEVEL interning ids this body's aggregate types and FUNCTIONS carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
- "why": "`level_is_zero` is the only chained body that CALLS anything, so it is the only one whose `funcs` lane is non-empty -- and it is the body the 2026-08-20 callee-namespace defect was live in. The emitted text names this body by NAME (`rustcc fn @level::Level::is_zero`) and names its callees by whole-crate INDEX (`call @func.4925`), so nothing in the text says which of those indices is the body itself. Reader A, which reads the artifact binary, can see it; reader B cannot. This table is how reader B is told, and it is the only thing standing between `is_zero(deref(p))` and `deref(is_zero(p))` for a text-anchored reader.",
- "how_it_is_used": "`ir_mint::emitted::read_with_self` interns `self_crate_id` FIRST, so the body's own id takes canonical index 0 and a `call @func.4925` reads as a SELF-call at index 0 while `@func.4914` interns above it at 1. `crystal_a2_mint`'s callee-identity lane asserts this table still matches both the emitted fixture and reader A's independent `crate_func_ids_seen` record, and its counterexample test swaps the two ids in the fixture and requires the core modules to DIFFER.",
- "producer_pin": "P1/P2 of ir_mint.producer_ab.json (trust `wave-tr-fix` 2026-08-12 and `mfclose` 2026-08-13, binary format v36), which is the build the committed `tests/fixtures/level_is_zero.trust-ir.txt` was taken from. P3 (`lane2rv` 2026-08-19, v37) renumbered the whole crate table: the same two functions are 3895 and 3884 there. The NAMES did not move, which is why the name is recorded next to the id and is the half a reviewer checks.",
+ "why": "`level_is_zero` is the only chained body that CALLS anything, so it is the only one whose `funcs` lane is non-empty -- and it is the body the 2026-08-20 callee-namespace defect was live in. The emitted text names this body by NAME (`rustcc fn @level::Level::is_zero`) and names its callees by whole-crate INDEX (`call @func.3905`), so nothing in the text says which of those indices is the body itself. Reader A, which reads the artifact binary, can see it; reader B cannot. This table is how reader B is told, and it is the only thing standing between `is_zero(deref(p))` and `deref(is_zero(p))` for a text-anchored reader.",
+ "how_it_is_used": "`ir_mint::emitted::read_with_self` interns `self_crate_id` FIRST, so the body's own id takes canonical index 0 and a `call @func.3905` reads as a SELF-call at index 0 while `@func.3894` interns above it at 1. `crystal_a2_mint`'s callee-identity lane asserts this table still matches both the emitted fixture and reader A's independent `crate_func_ids_seen` record, and its counterexample test swaps the two ids in the fixture and requires the core modules to DIFFER.",
+ "producer_pin": "P1/P2 of ir_mint.producer_ab.json (trust `wave-tr-fix` 2026-08-12 and `mfclose` 2026-08-13, binary format v36) carried ids 4925/4914. P3 (`lane2rv` 2026-08-19, v37) carried 3895/3884. P4 is the sealed Trust 8ea683678 dump over exact Clean a152ab39e and carries 3905/3894. P5 uses the same sealed compiler over Clean b03937e74 (0.4.0 base 6c5050183) and carries the same ids and names; only the embedded package-version global and per-build lineage identities moved. P5 is the source-bound build named by the current fixture pin. The NAMES did not move, which is why the name is recorded next to the id and is the stable half a reviewer checks.",
  "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Same lane as ir_h2.tags.json; read the notes there.",
  "interface": {
   "linkage": "external",
@@ -45,17 +45,17 @@
  "funcs": [
   {
    "canonical": 0,
-   "crate_id": 4925,
+   "crate_id": 3905,
    "name": "level::Level::is_zero",
    "role": "SELF -- the body being read. It is called RECURSIVELY three times (once per payload read), which is why this row is load-bearing rather than ceremonial: without it a text reader cannot tell the recursive call from the call to the deref.",
-   "observed_crate_id_by_producer": { "P1": 4925, "P2": 4925, "P3": 3895 }
+   "observed_crate_id_by_producer": { "P1": 4925, "P2": 4925, "P3": 3895, "P4": 3905 }
   },
   {
    "canonical": 1,
-   "crate_id": 4914,
+   "crate_id": 3894,
    "name": "<level::LevelArc as std::ops::Deref>::deref",
    "role": "The one non-self callee. Called three times, once per payload read, and its result is immediately consumed by the recursive call -- the dataflow signature `crystal_a1_lineage/level_is_zero.rs` identifies it by.",
-   "observed_crate_id_by_producer": { "P1": 4914, "P2": 4914, "P3": 3884 }
+   "observed_crate_id_by_producer": { "P1": 4914, "P2": 4914, "P3": 3884, "P4": 3894 }
   }
  ]
 }

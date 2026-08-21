@@ -148,7 +148,13 @@ mod smt_api_surface {
         let source_path = compile_dir.join("snippet.rs");
         fs::write(&source_path, source).expect("snippet source should be writable");
 
-        let output = Command::new("rustc")
+        // Compile with the same compiler Cargo used for this test binary.  A
+        // bare PATH lookup can select an unrelated stable rustc while Cargo is
+        // driving the pinned Trust toolchain, and that compiler cannot consume
+        // the test's rlib metadata.  Cargo exports RUSTC to test processes;
+        // retain a plain `rustc` fallback for direct/non-Cargo execution.
+        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        let output = Command::new(rustc)
             .arg("--crate-type")
             .arg("lib")
             .arg("--edition")
@@ -163,7 +169,7 @@ mod smt_api_surface {
             .arg("-L")
             .arg(format!("dependency={}", deps_dir.display()))
             .output()
-            .expect("rustc should be runnable from integration tests");
+            .expect("Cargo's rustc should be runnable from integration tests");
 
         let _ = fs::remove_dir_all(&compile_dir);
         output

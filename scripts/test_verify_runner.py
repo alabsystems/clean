@@ -988,10 +988,13 @@ class MemoryAdmissionTests(unittest.TestCase):
 
     def test_a_missing_gate_never_blocks_the_suite(self):
         # The gate is a safety device, not a dependency: if it is absent the
-        # suite must still run, just without admission control.
+        # suite must still run, just without admission control, and the tuple
+        # must preserve that fact for the row's `gate_admitted` provenance.
         with mock.patch.object(vr, "HEAVY_GATE", vr.REPO_ROOT / "no" / "such"):
-            self.assertIsNone(vr._gate_acquire(4, "t"))
-            vr._gate_release(None)          # must not raise
+            token, enforced = vr._gate_acquire(4, "t")
+            self.assertIsNone(token)
+            self.assertFalse(enforced)
+            vr._gate_release(token)         # must not raise
 
     def test_peak_rss_measures_a_real_process_group(self):
         proc = subprocess.Popen(

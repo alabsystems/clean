@@ -20,14 +20,14 @@
 //! different functions in one module:
 //!
 //! ```text
-//! (func 0 …)                            ← level::Level::is_zero, artifact 4925
-//! (node (results 12) (call 0 (args 9)))  ← @func.4914 = LevelArc::deref
-//! (node (results 13) (call 1 (args 12))) ← @func.4925 = is_zero ITSELF
+//! (func 0 …)                            ← level::Level::is_zero, artifact 3905
+//! (node (results 12) (call 0 (args 9)))  ← @func.3894 = LevelArc::deref
+//! (node (results 13) (call 1 (args 12))) ← @func.3905 = is_zero ITSELF
 //! ```
 //!
 //! [`the_swap_counterexample_is_closed`] is the constructed witness: swap the
 //! two `@func.N` literals in the emitted fixture and first-use interning maps
-//! `4925 → 0`, `4914 → 1`, so the two cores come out BYTE-IDENTICAL — while
+//! `3905 → 0`, `3894 → 1`, so the two cores come out BYTE-IDENTICAL — while
 //! `P` computes `is_zero(deref(p))` and `Q` computes `deref(is_zero(p))`. Two
 //! modules the gate accepted as equal that denote different programs. That test
 //! stays here permanently; it is the proof the defect cannot come back.
@@ -53,6 +53,7 @@ use super::{canon, PRODUCER_AB};
 /// The designated target's emitted body: ten blocks, six call sites, two
 /// distinct callees — one of which is the body itself.
 const LZ_FIXTURE: &str = include_str!("../fixtures/level_is_zero.trust-ir.txt");
+const LZ_EVIDENCE: &str = include_str!("../fixtures/level_is_zero.a0.json");
 
 /// `level::Level::is_zero`'s own crate-level id in the build the fixture was
 /// taken from, read from the committed tag table rather than written here.
@@ -64,7 +65,7 @@ fn lz_tags() -> ir_mint::Tags {
 /// exchanged. Q is a DIFFERENT program — it composes the deref and the
 /// recursive call the other way round.
 fn swapped(text: &str) -> String {
-    let (a, b) = ("@func.4914", "@func.4925");
+    let (a, b) = ("@func.3894", "@func.3905");
     assert!(
         text.contains(a) && text.contains(b),
         "the swap anchors are gone, so the counterexample would be vacuous"
@@ -87,7 +88,7 @@ fn the_swap_counterexample_is_closed() {
     let pin = lz_tags().self_func();
     assert_eq!(
         pin,
-        SelfFunc::Pinned(4925),
+        SelfFunc::Pinned(3905),
         "the counterexample is about the body's OWN id; if the table stopped pinning it this test \
          would silently stop testing anything"
     );
@@ -225,9 +226,11 @@ fn m8_the_funcs_tag_table_still_describes_the_artifact() {
         );
     }
 
-    // …and reader A's independent record of the same ids. Reader A interns the
-    // body's own id FIRST, so `crate_func_ids_seen` is in canonical order and
-    // its head is the self entry.
+    // …and reader A's independent record of the same ids.  The three-producer
+    // table is historical and append-only; the exact current binary has its
+    // own source-bound row below. Reader A interns the body's own id FIRST, so
+    // `crate_func_ids_seen` is in canonical order and its head is the self
+    // entry in both records.
     let rec: serde_json::Value =
         serde_json::from_str(PRODUCER_AB).expect("the producer A/B record must parse");
     let row = rec["rows"]
@@ -240,7 +243,9 @@ fn m8_the_funcs_tag_table_still_describes_the_artifact() {
     let by_canonical: Vec<u32> = (0..u32::try_from(t.funcs.len()).expect("small"))
         .map(|c| t.func_pin(c).expect("dense").0)
         .collect();
-    let mut any_producer_matched = false;
+    let names_by_canonical: Vec<String> = (0..u32::try_from(t.funcs.len()).expect("small"))
+        .map(|c| t.func_pin(c).expect("dense").1.clone())
+        .collect();
     for (i, per_producer) in row["crate_func_ids_seen"]
         .as_array()
         .expect("ids")
@@ -274,14 +279,73 @@ fn m8_the_funcs_tag_table_still_describes_the_artifact() {
             "producer {i}: the body's own id {own} is not the head of crate_func_ids_seen {ids:?}. \
              Reader A is interning callees before itself again, which is the collision."
         );
-        if ids == by_canonical {
-            any_producer_matched = true;
-        }
+        let names: Vec<String> = row["crate_func_names_seen"].as_array().expect("names")[i]
+            .as_array()
+            .expect("one name list per producer")
+            .iter()
+            .map(|v| v.as_str().expect("function name").to_owned())
+            .collect();
+        assert_eq!(
+            names, names_by_canonical,
+            "producer {i}: stable function identities moved while only their crate ids may move"
+        );
     }
-    assert!(
-        any_producer_matched,
-        "no producer in the A/B record saw the ids the tag table pins ({by_canonical:?}). The \
-         fixture and the table must come from the same build; the pin names which one."
+
+    let current: serde_json::Value = serde_json::from_str(ir_mint::IR_LZ_B039_PROVENANCE)
+        .expect("the current reader-A provenance must parse");
+    let current_ids: Vec<u32> = current["crate_func_ids_seen"]
+        .as_array()
+        .expect("current ids")
+        .iter()
+        .map(|v| u32::try_from(v.as_u64().expect("id")).expect("small"))
+        .collect();
+    let current_names: Vec<String> = current["crate_func_names_seen"]
+        .as_array()
+        .expect("current names")
+        .iter()
+        .map(|v| v.as_str().expect("name").to_owned())
+        .collect();
+    assert_eq!(
+        current_ids, by_canonical,
+        "the current reader-A binary and tag table came from different builds"
+    );
+    assert_eq!(
+        current_names, names_by_canonical,
+        "the current reader-A binary resolved different function identities"
+    );
+    assert_eq!(
+        current["artifact_func_id"].as_u64(),
+        Some(u64::from(by_canonical[0]))
+    );
+    assert_eq!(current["artifact_func_index"], current["artifact_func_id"]);
+    assert_eq!(current["artifact_functy_id"].as_u64(), Some(0));
+    assert_eq!(
+        current["function_name"].as_str(),
+        Some("level::Level::is_zero")
+    );
+    let historical_core_digest = row["core_digest"]
+        .as_array()
+        .expect("one core digest per historical producer")[0]
+        .as_str()
+        .expect("core digest");
+    assert_eq!(
+        current["core_digest"].as_str(),
+        Some(historical_core_digest),
+        "current reader A projected a different canonical core from the three historical \
+         producers; the committed core and its reader-B equality must be reviewed as a change"
+    );
+
+    // The transient pathname in projector output is not authority.  The exact
+    // artifact bytes are joined to the exact Clean-0.4 source through the source-bound
+    // fixture pin, whose writer also binds source tree, trustc and driver.
+    let evidence: serde_json::Value =
+        serde_json::from_str(LZ_EVIDENCE).expect("the level_is_zero evidence must parse");
+    assert_eq!(
+        current["dump_sha256"].as_str(),
+        evidence["current_source_bound_pin"]["build"]["artifacts"]["clean_kernel.trust-ir.bin"]
+            ["sha256"]
+            .as_str(),
+        "reader-A provenance is not bound to the exact source-bound binary artifact"
     );
 }
 

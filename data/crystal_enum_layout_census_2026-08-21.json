@@ -1,0 +1,128 @@
+{
+  "schema": "clean.crystal.enum-layout-census.v1",
+  "measured_utc_dates": [
+    "2026-08-20",
+    "2026-08-21 (re-derived byte-identically from the retained binary dumps)"
+  ],
+  "what_this_answers": [
+    "docs/CRYSTAL_STATUS.md 4h.5: the trust-ir TEXT printer emits no enum layout descriptor,",
+    "so no committed .trust-ir.txt fixture can answer Direct-vs-Niche for any chained enum.",
+    "This record answers it from the BINARY dumps (clean_kernel.trust-ir.bin), decoded with",
+    "trust_ir::binary::deserialize_module and printed verbatim (laneETP layoutdec, an 82-line",
+    "reader over the real deserializer; it prints EnumDef.repr, discriminants and",
+    "EnumDef.layout.encoding, and invents nothing)."
+  ],
+  "headline": {
+    "level_layout": "Niche{untagged=4 (Param), niche_variants=0..=3, niche_start=3, niche_offset=0, niche_ty=u64}, size=40, align=8, repr=None",
+    "level_claim_corrected": [
+      "data/crystal_enum_tag_pin.json and docs/CRYSTAL_STATUS.md previously said Level's tag",
+      "encoding was `(Direct, u8, aggregate field 0)` -- rustc's choice, evidenced only by the",
+      "recorded artifact. MEASURED: it is NICHE-encoded, in every one of the six dumps below,",
+      "under both producers, in control, subject and iso arms alike. The model-side u8 exists",
+      "only via EnumDef::canonical_tag_repr()'s EnumTagRepr::smallest_for fallback (the",
+      "discriminants 0..4 fit a byte), never from a hint. The emitted Level bodies still read",
+      "`extractfield u8 %v, 0` and switch on discriminant VALUES 0..4 -- the committed fixtures",
+      "show it -- so the text form and the layout descriptor disagree about where that number",
+      "lives. The disagreement is PRINTED here, not smoothed; Level's layout is not changed by",
+      "any of this, only the CLAIM moved, to match the measurement."
+    ],
+    "fieldless_enums": "CleanMode, SourceSystem, ExprPathStep are Direct{tag_offset=0}, size=1, align=1 in every dump; under stage 2 their EnumDef.repr reads Some(U8) while every layout descriptor and the whole-crate census is identical to the control's on the same producer: the repr adds a HINT, not a layout."
+  },
+  "producers": {
+    "A": {
+      "seal": "$HOME/trust/scratchpad/laneETP/seal-laneETP",
+      "seal_rev_file": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+      "lane_recorded_rev": "74582b4e88",
+      "rev_note": "the lane's prose and dump directory names say trust 74582b4e88; the seal's REV file records 4854cf3a9c (a merge). The discrepancy is printed, not resolved; identity is by the driver digests below, and the census is invariant across both producers anyway.",
+      "librustc_driver_sha256": "69533b7b6e5b0b0e894eee793e95721f14b1cde84c861eb45b6dcb881919d3c0",
+      "rustc_main_sha256": "b7bb3cf1246cedc6cf8c61efe7c35e67e4da39c6b2e958947954e420f140d604",
+      "census": "CENSUS {\"Direct\": 86, \"Niche\": 113, \"Untagged\": 2, \"no-descriptor\": 4}  total=205"
+    },
+    "B": {
+      "seal": "$HOME/trust/scratchpad/laneETP/seal-laneREPR",
+      "seal_rev_file": "undetermined",
+      "lane_recorded_rev": "300a07719d (trust origin/main at build time, per laneETP build_and_seal_repr.sh; REV file undetermined, identity by digest)",
+      "librustc_driver_sha256": "24529f9c92e6c8b62e2b0155de64eecfc5a935f16e4dd65bfb6beb4dd005b5fa",
+      "rustc_main_sha256": "ca31eea751af7bd0bfb9f069ad4235aaabb9d391b5122d2b88567d061823a4e0",
+      "census": "CENSUS {\"Direct\": 87, \"Niche\": 117, \"Untagged\": 2, \"no-descriptor\": 4}  total=210",
+      "seal_verified": "seal_driver.sh verify + guard PASS before every dump (dump_repr_*.log); sysrootcheck SYSROOT_COMPAT OK"
+    }
+  },
+  "dumps": {
+    "producer_A": {
+      "ctl": {
+        "clean_tree": "11ddb4b810 (control: then-main, no stage-2 kernel edits)",
+        "trust_ir_bin_sha256": "248581edc5b25717c3ca51edf6c1131b325205b6f2535b1b8d83254f13c6e05c",
+        "coverage_sha256": "50d7ca19b4b4b456f91d78fec1097dd45ef3cc077da8c4dd960cebdf6b599d98"
+      },
+      "sub": {
+        "clean_tree": "stage-2 branch merged",
+        "trust_ir_bin_sha256": "ee4bda31b09c17a94448d8f07dc29376660899aadf0398617d59050b1c23d46b",
+        "coverage_sha256": "ee41d56a1c4f0d1f8a987ef3b2d19d2b37a3f9d3b316a729f845c5d3e7f2b0b6"
+      },
+      "iso": {
+        "clean_tree": "control + the repr/discriminant edits alone",
+        "trust_ir_bin_sha256": "a2271a76ab83ec14d66c21b80aed7cc224b2937c5864bb09274b3c4a46e949b1",
+        "coverage_sha256": "c21d748345aca694750b79f1fe8a6fb8ef4eff970513ec8e366aa134d70547b7"
+      }
+    },
+    "producer_B": {
+      "ctl": {
+        "clean_tree": "606c11a4c92dd3bf8ac5c1d62bffd6ecb5cb541a",
+        "trust_ir_bin_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+        "coverage_sha256": "3ea1b73564e1cf693028c425860e8f5cc8e52dce10770baba312be5870482de2"
+      },
+      "sub": {
+        "clean_tree": "01339942397991471c420e4419ecb28c48b6f807 (stage-2 merge)",
+        "trust_ir_bin_sha256": "a19fbc312403c98cd24fb886560de55c8f6b1f9c112818bc21e28425dfd573f6",
+        "coverage_sha256": "70f55c60300a8bfc457c2e43ad28da5efcba7226bca3cdc39ac9e823ede4846c"
+      },
+      "iso": {
+        "clean_tree": "606c11a4c + mode.rs/tc/expr_location.rs repr edits as working-tree diff",
+        "trust_ir_bin_sha256": "463a8de119b8923cf336bd114a556870223651dc0b841434e2e7f6f853e90649",
+        "coverage_sha256": "1e441cf8931059101eeb85967087003137ee06d987182f206c77511f63b83784"
+      }
+    }
+  },
+  "rows_producer_B": {
+    "ctl": {
+      "Level": "ENUM id=EnumId(2) name=Level variants=5 repr=None discriminants=[0,1,2,3,4] layout=Niche{untagged=4 range=0..=3 start=3 offset=0 ty=u64} size=40 align=8  canonical_tag_repr=Some(U8)",
+      "CleanMode": "ENUM id=EnumId(13) name=CleanMode variants=6 repr=None discriminants=[0,1,2,3,4,5] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)",
+      "SourceSystem": "ENUM id=EnumId(176) name=SourceSystem variants=12 repr=None discriminants=[0,1,2,3,4,5,6,7,8,9,10,11] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)",
+      "ExprPathStep": "ENUM id=EnumId(182) name=ExprPathStep variants=11 repr=None discriminants=[0,1,2,3,4,5,6,7,8,9,10] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)"
+    },
+    "sub": {
+      "Level": "ENUM id=EnumId(2) name=Level variants=5 repr=None discriminants=[0,1,2,3,4] layout=Niche{untagged=4 range=0..=3 start=3 offset=0 ty=u64} size=40 align=8  canonical_tag_repr=Some(U8)",
+      "CleanMode": "ENUM id=EnumId(13) name=CleanMode variants=6 repr=Some(u8) discriminants=[0,1,2,3,4,5] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)",
+      "SourceSystem": "ENUM id=EnumId(176) name=SourceSystem variants=12 repr=Some(u8) discriminants=[0,1,2,3,4,5,6,7,8,9,10,11] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)",
+      "ExprPathStep": "ENUM id=EnumId(182) name=ExprPathStep variants=11 repr=Some(u8) discriminants=[0,1,2,3,4,5,6,7,8,9,10] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)"
+    },
+    "iso": {
+      "Level": "ENUM id=EnumId(2) name=Level variants=5 repr=None discriminants=[0,1,2,3,4] layout=Niche{untagged=4 range=0..=3 start=3 offset=0 ty=u64} size=40 align=8  canonical_tag_repr=Some(U8)",
+      "CleanMode": "ENUM id=EnumId(13) name=CleanMode variants=6 repr=Some(u8) discriminants=[0,1,2,3,4,5] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)",
+      "SourceSystem": "ENUM id=EnumId(176) name=SourceSystem variants=12 repr=Some(u8) discriminants=[0,1,2,3,4,5,6,7,8,9,10,11] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)",
+      "ExprPathStep": "ENUM id=EnumId(182) name=ExprPathStep variants=11 repr=Some(u8) discriminants=[0,1,2,3,4,5,6,7,8,9,10] layout=Direct{tag_offset=0} size=1 align=1  canonical_tag_repr=Some(U8)"
+    }
+  },
+  "rows_producer_A_level_only": {
+    "ctl": "ENUM id=EnumId(2) name=Level variants=5 repr=None discriminants=[0,1,2,3,4] layout=Niche{untagged=4 range=0..=3 start=3 offset=0 ty=u64} size=40 align=8",
+    "sub": "ENUM id=EnumId(2) name=Level variants=5 repr=None discriminants=[0,1,2,3,4] layout=Niche{untagged=4 range=0..=3 start=3 offset=0 ty=u64} size=40 align=8",
+    "iso": "ENUM id=EnumId(2) name=Level variants=5 repr=None discriminants=[0,1,2,3,4] layout=Niche{untagged=4 range=0..=3 start=3 offset=0 ty=u64} size=40 align=8"
+  },
+  "all_level_rows_agree": true,
+  "census_identical_across_arms_per_producer": true,
+  "enum_id_note": [
+    "EnumIds are whole-crate numbering and differ between these dumps and the committed",
+    "fixtures at HEAD (SourceSystem 176 here vs enum.178 in the b039-rebaselined fixture;",
+    "ExprPathStep 182 vs enum.184). Level is EnumId(2) in every dump so far taken. The ids",
+    "here are the dumps' own; the manifest's ir_type pins are the committed fixtures' own;",
+    "neither is evidence about the other (see ir_type_note in data/crystal_enum_tag_pin.json)."
+  ],
+  "limitation": [
+    "These dumps predate the b039 fixture rebaseline and were taken from the laneETP/laneREPR",
+    "measurement trees, not from current main; they are evidence about ENUM LAYOUT DESCRIPTORS",
+    "(which no chained fixture pins and no gate lane reads), not about body text or lineage.",
+    "Level's descriptor is invariant across both producers, all six dumps, and is the same",
+    "enum the current fixtures still print as enum.2."
+  ]
+}

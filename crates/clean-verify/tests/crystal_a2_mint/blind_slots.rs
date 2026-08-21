@@ -650,8 +650,8 @@ fn the_producer_clause_content_is_compared_and_the_other_four_are_measured_inert
     //     refusing. `#loc` content is a lineage fact and it has a lane —
     //     `scripts/crystal_fixture_freshness.py`'s AMBER `loc-file-index`.
     let relocated = super::FIXTURE
-        .replace("; #loc: 399 312 8", "; #loc: 12 1000 3")
-        .replace("; #loc: 399 313 5", "; #loc: 12 1001 7")
+        .replace("; #loc: 401 337 8", "; #loc: 12 1000 3")
+        .replace("; #loc: 401 338 5", "; #loc: 12 1001 7")
         .replace("%0=\"self\"", "%0=\"receiver\"");
     assert_ne!(relocated, super::FIXTURE, "the substitution must bite");
     let moved = ir_mint::project(&relocated, &t)

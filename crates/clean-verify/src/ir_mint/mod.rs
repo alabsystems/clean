@@ -214,6 +214,13 @@ pub const IR_PV_TAGS: &str = include_str!("../spec/core_spec/generated/ir_pv.tag
 /// `level_is_zero_mints_only_up_to_a_named_refusal` — but read by the callee
 /// identity lane, which is the only chain in the set that CALLS anything.
 pub const IR_LZ_CORE: &str = include_str!("../spec/core_spec/generated/ir_lz.core.txt");
+/// Reader A's append-only provenance for the exact Clean-0.4 source-bound
+/// binary that produced [`IR_LZ_CORE`].  The callee-identity gate cross-links
+/// its binary hash to the fixture-rebaseline evidence rather than trusting a
+/// transient dump pathname.  The a152 predecessor remains committed beside
+/// this file as the account of its own binary.
+pub const IR_LZ_B039_PROVENANCE: &str =
+    include_str!("../spec/core_spec/generated/ir_lz.b039.prov.json");
 /// The committed tag table of the designated target. Its `funcs` lane is the
 /// only one in the tree that is non-empty, because `level_is_zero` is the only
 /// chained body that calls anything.

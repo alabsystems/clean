@@ -1,43 +1,43 @@
-rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1091) {
+rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.859) {
     ; #producer: trust
     ; #names: %0="self"
 bb0(%0: ptr):
-    %2 = load enum.181, ptr %0  ; #loc: 425 20 16
-    %3 = extractfield u8 %2, 0  ; #loc: 425 20 16
-    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 425 20 16
+    %2 = load enum.184, ptr %0  ; #loc: 427 28 16
+    %3 = extractfield u8 %2, 0  ; #loc: 427 28 16
+    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 427 28 16
 bb1:
-    %4 = const enum.181 { 0 }  ; #loc: 425 20 16
-    br bb12(%4)  ; #loc: 425 20 16
+    %4 = const enum.184 { 0 }  ; #loc: 427 28 16
+    br bb12(%4)  ; #loc: 427 28 16
 bb2:
-    %5 = const enum.181 { 1 }  ; #loc: 425 20 16
-    br bb12(%5)  ; #loc: 425 20 16
+    %5 = const enum.184 { 1 }  ; #loc: 427 28 16
+    br bb12(%5)  ; #loc: 427 28 16
 bb3:
-    %6 = const enum.181 { 2 }  ; #loc: 425 20 16
-    br bb12(%6)  ; #loc: 425 20 16
+    %6 = const enum.184 { 2 }  ; #loc: 427 28 16
+    br bb12(%6)  ; #loc: 427 28 16
 bb4:
-    %7 = const enum.181 { 3 }  ; #loc: 425 20 16
-    br bb12(%7)  ; #loc: 425 20 16
+    %7 = const enum.184 { 3 }  ; #loc: 427 28 16
+    br bb12(%7)  ; #loc: 427 28 16
 bb5:
-    %8 = const enum.181 { 4 }  ; #loc: 425 20 16
-    br bb12(%8)  ; #loc: 425 20 16
+    %8 = const enum.184 { 4 }  ; #loc: 427 28 16
+    br bb12(%8)  ; #loc: 427 28 16
 bb6:
-    %9 = const enum.181 { 5 }  ; #loc: 425 20 16
-    br bb12(%9)  ; #loc: 425 20 16
+    %9 = const enum.184 { 5 }  ; #loc: 427 28 16
+    br bb12(%9)  ; #loc: 427 28 16
 bb7:
-    %10 = const enum.181 { 6 }  ; #loc: 425 20 16
-    br bb12(%10)  ; #loc: 425 20 16
+    %10 = const enum.184 { 6 }  ; #loc: 427 28 16
+    br bb12(%10)  ; #loc: 427 28 16
 bb8:
-    %11 = const enum.181 { 7 }  ; #loc: 425 20 16
-    br bb12(%11)  ; #loc: 425 20 16
+    %11 = const enum.184 { 7 }  ; #loc: 427 28 16
+    br bb12(%11)  ; #loc: 427 28 16
 bb9:
-    %12 = const enum.181 { 8 }  ; #loc: 425 20 16
-    br bb12(%12)  ; #loc: 425 20 16
+    %12 = const enum.184 { 8 }  ; #loc: 427 28 16
+    br bb12(%12)  ; #loc: 427 28 16
 bb10:
-    %13 = const enum.181 { 9 }  ; #loc: 425 20 16
-    br bb12(%13)  ; #loc: 425 20 16
+    %13 = const enum.184 { 9 }  ; #loc: 427 28 16
+    br bb12(%13)  ; #loc: 427 28 16
 bb11:
-    %14 = const enum.181 { 10 }  ; #loc: 425 20 16
-    br bb12(%14)  ; #loc: 425 20 16
-bb12(%1: enum.181):
-    ret %1  ; #loc: 425 20 16
+    %14 = const enum.184 { 10 }  ; #loc: 427 28 16
+    br bb12(%14)  ; #loc: 427 28 16
+bb12(%1: enum.184):
+    ret %1  ; #loc: 427 28 16
 }

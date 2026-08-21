@@ -68,6 +68,16 @@ impl<'a> ReconstructionContext<'a> {
             // cong: premised congruence with a unit positive-equality conclusion —
             // builds a congrArg/congr chain from the premise argument equalities.
             RuleView::Cong => self.reconstruct_cong(clause, premises, step_id),
+            // eq_transitive: premiseless all-edges-used equality path — nested
+            // Classical.em case analysis + an oriented Eq.trans chain.
+            RuleView::EqTransitive => self.reconstruct_eq_transitive(clause, premises, step_id),
+            // Implication Tseitin family — native and desugared encodings.
+            RuleView::Implies => self.reconstruct_implies(clause, premises, step_id),
+            RuleView::ImpliesPos => self.reconstruct_implies_pos(clause, premises, step_id),
+            RuleView::ImpliesNeg1 => self.reconstruct_implies_neg1(clause, premises, step_id),
+            RuleView::ImpliesNeg2 => self.reconstruct_implies_neg2(clause, premises, step_id),
+            RuleView::NotImplies1 => self.reconstruct_not_implies1(clause, premises, step_id),
+            RuleView::NotImplies2 => self.reconstruct_not_implies2(clause, premises, step_id),
             RuleView::Resolution => self.reconstruct_resolution_rule(clause, premises, step_id),
             RuleView::Contraction => self.reconstruct_contraction(clause, premises, step_id),
             RuleView::True => self.reconstruct_true(clause, step_id),
@@ -184,6 +194,112 @@ impl<'a> ReconstructionContext<'a> {
             Expr::const_(Name::from_string("Eq.refl"), vec![level]),
             [args[0].clone(), args[1].clone()],
         ))
+    }
+
+    /// Reconstruct an `eq_transitive` tautology clause.
+    ///
+    /// The exact AY shape is `{¬E₀, ..., ¬Eₙ, lhs = rhs}`: the final
+    /// literal is the sole positive equality and every preceding literal is a
+    /// negated equality. The undirected equality edges must form a path from
+    /// `lhs` to `rhs`, and every edge must occur on that path. This mirrors AY's
+    /// strict validator, rejecting redundant, duplicate, cyclic, and disconnected
+    /// edges rather than silently proving a weaker-but-valid tautology.
+    ///
+    /// The proof is the shared EUF nested-`Classical.em` construction, ending in
+    /// an oriented `Eq.trans` chain. A resource cap keeps adversarial traces from
+    /// expanding the quadratic disjunction term without bound; larger clauses
+    /// fail closed to the ordinary trusted fallback.
+    fn reconstruct_eq_transitive(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use super::theory_lemma::ClauseEquality;
+        use crate::bridge::disjunction;
+
+        let bail = |desc: String| {
+            Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: desc,
+            })
+        };
+
+        if !premises.is_empty() {
+            return bail(format!(
+                "eq_transitive is premiseless, got {} premise(s)",
+                premises.len()
+            ));
+        }
+
+        const MAX_EQ_TRANSITIVE_EDGES: usize = 256;
+        if !(2..=MAX_EQ_TRANSITIVE_EDGES + 1).contains(&clause.len()) {
+            return bail(format!(
+                "eq_transitive requires 1..={MAX_EQ_TRANSITIVE_EDGES} equality edges plus one conclusion, got {} literals",
+                clause.len(),
+            ));
+        }
+
+        let (neg_eqs, conclusion) = {
+            let trace = self
+                .trace
+                .as_ref()
+                .ok_or(ReconstructionError::ProofNotAvailable)?;
+            let mut neg_eqs = Vec::with_capacity(clause.len() - 1);
+            for (idx, &literal) in clause[..clause.len() - 1].iter().enumerate() {
+                let inner =
+                    trace
+                        .as_not(literal)
+                        .ok_or_else(|| ReconstructionError::UnsupportedStep {
+                            step_index: step_id.0,
+                            description: format!(
+                                "eq_transitive literal {idx} is not a negated equality"
+                            ),
+                        })?;
+                let (lhs, rhs) = trace.as_equality(inner).ok_or_else(|| {
+                    ReconstructionError::UnsupportedStep {
+                        step_index: step_id.0,
+                        description: format!(
+                            "eq_transitive literal {idx} is not a negated equality"
+                        ),
+                    }
+                })?;
+                neg_eqs.push(ClauseEquality {
+                    clause_idx: idx,
+                    lhs,
+                    rhs,
+                });
+            }
+
+            let conclusion_idx = clause.len() - 1;
+            let (lhs, rhs) = trace.as_equality(clause[conclusion_idx]).ok_or_else(|| {
+                ReconstructionError::UnsupportedStep {
+                    step_index: step_id.0,
+                    description: "eq_transitive final literal is not a positive equality"
+                        .to_string(),
+                }
+            })?;
+            (
+                neg_eqs,
+                ClauseEquality {
+                    clause_idx: conclusion_idx,
+                    lhs,
+                    rhs,
+                },
+            )
+        };
+
+        let props = self.translate_clause_props(clause)?;
+        let target = disjunction::or_chain_type(&props);
+        let chain = self.order_transitivity_chain(&neg_eqs, &conclusion, step_id)?;
+        if chain.len() != neg_eqs.len() {
+            return bail(format!(
+                "eq_transitive path uses {} of {} equality edges",
+                chain.len(),
+                neg_eqs.len()
+            ));
+        }
+        self.build_em_transitivity_proof(clause, &props, &target, &chain, &conclusion, step_id)
     }
 
     /// Reconstruct a `symm` step: premise ⊢ `(= a b)`, clause ⊢ `(= b a)`.
@@ -1039,6 +1155,812 @@ impl<'a> ReconstructionContext<'a> {
             ),
         })
     }
+
+    // =======================================================================
+    // Implication rules (native `=>` / `implies` and desugared binary `or`).
+    //
+    // `mk_implies` normally stores `(or (not a) b)`, and `mk_or` both sorts and
+    // simplifies its arguments. Imported Alethe can retain a native implication.
+    // We therefore keep the encoding explicit and validate each rule against the
+    // exact clause literals before constructing a kernel term.
+    // =======================================================================
+
+    fn decode_implication_in(
+        trace: &super::trace::ProofTrace<'_>,
+        term: TermId,
+    ) -> Option<ImplicationShape> {
+        let (name, args) = trace.as_named_app(term)?;
+        match (name, args) {
+            ("=>" | "implies", [a, b]) => Some(ImplicationShape {
+                term,
+                encoding: ImplicationEncoding::Native { a: *a, b: *b },
+            }),
+            ("or", [left, right]) => Some(ImplicationShape {
+                term,
+                encoding: ImplicationEncoding::Desugared {
+                    left: *left,
+                    right: *right,
+                },
+            }),
+            _ => None,
+        }
+    }
+
+    fn decode_implication(
+        &self,
+        term: TermId,
+        step_id: ProofId,
+    ) -> ReconstructResult<ImplicationShape> {
+        let trace = self
+            .trace
+            .as_ref()
+            .ok_or(ReconstructionError::ProofNotAvailable)?;
+        Self::decode_implication_in(trace, term).ok_or_else(|| {
+            ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "implication term is neither native nor a binary disjunction"
+                    .to_string(),
+            }
+        })
+    }
+
+    /// Return the formula represented by a premise step without flattening an
+    /// assumed binary `or` into two clause literals.
+    fn premise_formula_term(&self, premise: ProofId) -> Option<TermId> {
+        let trace = self.trace.as_ref()?;
+        if let super::trace::StepView::Assume(term) = trace.step_by_id(premise) {
+            return Some(term);
+        }
+        let clause = trace.clause_of_step_by_id(premise);
+        (clause.len() == 1).then_some(clause[0])
+    }
+
+    fn decode_negated_implication_premise(
+        &self,
+        premise: ProofId,
+        step_id: ProofId,
+    ) -> ReconstructResult<ImplicationShape> {
+        let trace = self
+            .trace
+            .as_ref()
+            .ok_or(ReconstructionError::ProofNotAvailable)?;
+        let clause = trace.clause_of_step_by_id(premise);
+        if clause.len() != 1 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: format!(
+                    "not_implies premise must be a unit negated implication, got {} literals",
+                    clause.len()
+                ),
+            });
+        }
+        let inner =
+            trace
+                .as_not(clause[0])
+                .ok_or_else(|| ReconstructionError::UnsupportedStep {
+                    step_index: step_id.0,
+                    description: "not_implies premise is not a negation".to_string(),
+                })?;
+        self.decode_implication(inner, step_id)
+    }
+
+    fn match_implies_clause(
+        &self,
+        shape: ImplicationShape,
+        clause: &[TermId],
+    ) -> Option<(usize, usize)> {
+        if clause.len() != 2 {
+            return None;
+        }
+        let trace = self.trace.as_ref()?;
+        let [c0, c1] = [clause[0], clause[1]];
+        match shape.encoding {
+            ImplicationEncoding::Native { a, b } => {
+                if trace.is_negation_pair(c0, a) && c1 == b {
+                    Some((0, 1))
+                } else if trace.is_negation_pair(c1, a) && c0 == b {
+                    Some((1, 0))
+                } else {
+                    None
+                }
+            }
+            ImplicationEncoding::Desugared { left, right } => {
+                if c0 == left && c1 == right {
+                    Some((0, 1))
+                } else if c1 == left && c0 == right {
+                    Some((1, 0))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Match `implies_pos`: `{¬I, ¬a, b}` for native `I`, or
+    /// `{¬I, left, right}` when `I` is the desugared binary disjunction.
+    fn find_implies_pos_shape(
+        &self,
+        clause: &[TermId],
+        step_id: ProofId,
+    ) -> ReconstructResult<(usize, usize, usize, ImplicationShape)> {
+        if clause.len() != 3 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: format!(
+                    "implies_pos clause must have 3 literals, got {}",
+                    clause.len()
+                ),
+            });
+        }
+        let trace = self
+            .trace
+            .as_ref()
+            .ok_or(ReconstructionError::ProofNotAvailable)?;
+        for neg_imp_idx in 0..3 {
+            let Some(inner) = trace.as_not(clause[neg_imp_idx]) else {
+                continue;
+            };
+            let Some(shape) = Self::decode_implication_in(trace, inner) else {
+                continue;
+            };
+            let rest: Vec<usize> = (0..3).filter(|&idx| idx != neg_imp_idx).collect();
+            let pair = [clause[rest[0]], clause[rest[1]]];
+            let matched = match shape.encoding {
+                ImplicationEncoding::Native { a, b } => {
+                    if trace.is_negation_pair(pair[0], a) && pair[1] == b {
+                        Some((rest[0], rest[1]))
+                    } else if trace.is_negation_pair(pair[1], a) && pair[0] == b {
+                        Some((rest[1], rest[0]))
+                    } else {
+                        None
+                    }
+                }
+                ImplicationEncoding::Desugared { left, right } => {
+                    if pair == [left, right] {
+                        Some((rest[0], rest[1]))
+                    } else if pair == [right, left] {
+                        Some((rest[1], rest[0]))
+                    } else {
+                        None
+                    }
+                }
+            };
+            if let Some((first_idx, second_idx)) = matched {
+                return Ok((neg_imp_idx, first_idx, second_idx, shape));
+            }
+        }
+        Err(ReconstructionError::UnsupportedStep {
+            step_index: step_id.0,
+            description: "implies_pos clause does not match a native or desugared implication"
+                .to_string(),
+        })
+    }
+
+    fn find_implies_neg1_shape(
+        &self,
+        clause: &[TermId],
+        step_id: ProofId,
+    ) -> ReconstructResult<(usize, usize, ImplicationShape)> {
+        if clause.len() != 2 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: format!(
+                    "implies_neg1 clause must have 2 literals, got {}",
+                    clause.len()
+                ),
+            });
+        }
+        let trace = self
+            .trace
+            .as_ref()
+            .ok_or(ReconstructionError::ProofNotAvailable)?;
+        for imp_idx in 0..2 {
+            let Some(shape) = Self::decode_implication_in(trace, clause[imp_idx]) else {
+                continue;
+            };
+            let atom_idx = 1 - imp_idx;
+            let a = clause[atom_idx];
+            let matches = match shape.encoding {
+                ImplicationEncoding::Native { a: expected, .. } => a == expected,
+                ImplicationEncoding::Desugared { left, right } => {
+                    trace.is_negation_pair(left, a) || trace.is_negation_pair(right, a)
+                }
+            };
+            if matches {
+                return Ok((imp_idx, atom_idx, shape));
+            }
+        }
+        Err(ReconstructionError::UnsupportedStep {
+            step_index: step_id.0,
+            description: "implies_neg1 atom is not the implication antecedent".to_string(),
+        })
+    }
+
+    fn find_implies_neg2_shape(
+        &self,
+        clause: &[TermId],
+        step_id: ProofId,
+    ) -> ReconstructResult<(usize, usize, TermId, ImplicationShape)> {
+        if clause.len() != 2 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: format!(
+                    "implies_neg2 clause must have 2 literals, got {}",
+                    clause.len()
+                ),
+            });
+        }
+        let trace = self
+            .trace
+            .as_ref()
+            .ok_or(ReconstructionError::ProofNotAvailable)?;
+        for imp_idx in 0..2 {
+            let Some(shape) = Self::decode_implication_in(trace, clause[imp_idx]) else {
+                continue;
+            };
+            let atom_idx = 1 - imp_idx;
+            let complement = clause[atom_idx];
+            let b = match shape.encoding {
+                ImplicationEncoding::Native { b, .. } if trace.is_negation_pair(complement, b) => {
+                    Some(b)
+                }
+                ImplicationEncoding::Desugared { left, right } => {
+                    Self::desugared_consequent_for_complement(trace, left, right, complement)
+                }
+                _ => None,
+            };
+            if let Some(b) = b {
+                return Ok((imp_idx, atom_idx, b, shape));
+            }
+        }
+        Err(ReconstructionError::UnsupportedStep {
+            step_index: step_id.0,
+            description: "implies_neg2 atom is not the negated consequent".to_string(),
+        })
+    }
+
+    /// Recover the consequent of `(or (not a) b)` using both the stored raw
+    /// negation and the rule's exact `not b` literal. Trying an arbitrary
+    /// disjunct as `b` would prove a tautology but would admit an
+    /// `implies_neg1` clause under the `implies_neg2` rule name.
+    fn desugared_consequent_for_complement(
+        trace: &super::trace::ProofTrace<'_>,
+        left: TermId,
+        right: TermId,
+        complement: TermId,
+    ) -> Option<TermId> {
+        if trace.as_not(left).is_some() && trace.is_negation_pair(complement, right) {
+            Some(right)
+        } else if trace.as_not(right).is_some() && trace.is_negation_pair(complement, left) {
+            Some(left)
+        } else {
+            None
+        }
+    }
+
+    /// Convert `h : Not original` to a proof of the exact stored complement.
+    /// AY can canonicalize `Not (Not p)` to `p`; that reverse orientation needs
+    /// classical double-negation elimination rather than a definitional cast.
+    fn prove_stored_complement(
+        &mut self,
+        original: TermId,
+        complement: TermId,
+        h_not_original: &Expr,
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+        use clean_kernel::Name;
+
+        let (direct, double_negation) = {
+            let trace = self
+                .trace
+                .as_ref()
+                .ok_or(ReconstructionError::ProofNotAvailable)?;
+            (
+                trace.as_not(complement) == Some(original),
+                trace.as_not(original) == Some(complement),
+            )
+        };
+        if direct {
+            return Ok(h_not_original.clone());
+        }
+        if !double_negation {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "terms are not an exact stored negation pair".to_string(),
+            });
+        }
+
+        let proposition = self.translate_term(complement)?;
+        let false_expr = Expr::const_(Name::from_string("False"), vec![]);
+        let not_proposition = Expr::pi(BinderInfo::Default, proposition.clone(), false_expr);
+        let em = disjunction::mk_classical_em(&proposition);
+        let motive =
+            disjunction::mk_constant_or_motive(&proposition, &not_proposition, &proposition);
+        let positive = Expr::lam(BinderInfo::Default, proposition.clone(), Expr::bvar(0));
+        let contradiction = Expr::app(h_not_original.lift(1), Expr::bvar(0));
+        let negative = Expr::lam(
+            BinderInfo::Default,
+            not_proposition.clone(),
+            disjunction::mk_false_elim(&proposition, &contradiction),
+        );
+        Ok(disjunction::mk_or_rec(
+            &proposition,
+            &not_proposition,
+            &motive,
+            &positive,
+            &negative,
+            &em,
+        ))
+    }
+
+    fn implication_from_not_antecedent(
+        &mut self,
+        shape: ImplicationShape,
+        a_term: TermId,
+        h_not_a: &Expr,
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+
+        match shape.encoding {
+            ImplicationEncoding::Native { a, b } => {
+                if a != a_term {
+                    return Err(ReconstructionError::UnsupportedStep {
+                        step_index: step_id.0,
+                        description: "native implication antecedent mismatch".to_string(),
+                    });
+                }
+                let a_prop = self.translate_term(a)?;
+                let b_prop = self.translate_term(b)?;
+                let contradiction = Expr::app(h_not_a.lift(1), Expr::bvar(0));
+                Ok(Expr::lam(
+                    BinderInfo::Default,
+                    a_prop,
+                    disjunction::mk_false_elim(&b_prop, &contradiction),
+                ))
+            }
+            ImplicationEncoding::Desugared { left, right } => {
+                let (complement, complement_left) = {
+                    let trace = self
+                        .trace
+                        .as_ref()
+                        .ok_or(ReconstructionError::ProofNotAvailable)?;
+                    if trace.is_negation_pair(left, a_term) {
+                        (left, true)
+                    } else if trace.is_negation_pair(right, a_term) {
+                        (right, false)
+                    } else {
+                        return Err(ReconstructionError::UnsupportedStep {
+                            step_index: step_id.0,
+                            description: "desugared implication antecedent mismatch".to_string(),
+                        });
+                    }
+                };
+                let complement_proof =
+                    self.prove_stored_complement(a_term, complement, h_not_a, step_id)?;
+                let left_prop = self.translate_term(left)?;
+                let right_prop = self.translate_term(right)?;
+                Ok(if complement_left {
+                    disjunction::mk_or_inl(&left_prop, &right_prop, &complement_proof)
+                } else {
+                    disjunction::mk_or_inr(&left_prop, &right_prop, &complement_proof)
+                })
+            }
+        }
+    }
+
+    fn implication_from_consequent(
+        &mut self,
+        shape: ImplicationShape,
+        b_term: TermId,
+        h_b: &Expr,
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+
+        match shape.encoding {
+            ImplicationEncoding::Native { a, b } => {
+                if b != b_term {
+                    return Err(ReconstructionError::UnsupportedStep {
+                        step_index: step_id.0,
+                        description: "native implication consequent mismatch".to_string(),
+                    });
+                }
+                let a_prop = self.translate_term(a)?;
+                Ok(Expr::lam(BinderInfo::Default, a_prop, h_b.lift(1)))
+            }
+            ImplicationEncoding::Desugared { left, right } => {
+                let left_prop = self.translate_term(left)?;
+                let right_prop = self.translate_term(right)?;
+                if left == b_term {
+                    Ok(disjunction::mk_or_inl(&left_prop, &right_prop, h_b))
+                } else if right == b_term {
+                    Ok(disjunction::mk_or_inr(&left_prop, &right_prop, h_b))
+                } else {
+                    Err(ReconstructionError::UnsupportedStep {
+                        step_index: step_id.0,
+                        description: "desugared implication consequent mismatch".to_string(),
+                    })
+                }
+            }
+        }
+    }
+
+    /// Eliminate a proof of an implication into its exact two-literal clause.
+    fn implication_to_clause(
+        &mut self,
+        shape: ImplicationShape,
+        implication_proof: &Expr,
+        clause: &[TermId],
+        clause_props: &[Expr],
+        first_idx: usize,
+        second_idx: usize,
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+        use clean_kernel::Name;
+
+        let target = disjunction::or_chain_type(clause_props);
+        match shape.encoding {
+            ImplicationEncoding::Native { a, .. } => {
+                let a_prop = self.translate_term(a)?;
+                let false_expr = Expr::const_(Name::from_string("False"), vec![]);
+                let not_a = Expr::pi(BinderInfo::Default, a_prop.clone(), false_expr);
+                let em = disjunction::mk_classical_em(&a_prop);
+                let motive = disjunction::mk_constant_or_motive(&a_prop, &not_a, &target);
+                let b_proof = Expr::app(implication_proof.lift(1), Expr::bvar(0));
+                let positive = Expr::lam(
+                    BinderInfo::Default,
+                    a_prop.clone(),
+                    disjunction::inject_into_or_chain(clause_props, second_idx, b_proof),
+                );
+                let complement =
+                    self.prove_stored_complement(a, clause[first_idx], &Expr::bvar(0), step_id)?;
+                let negative = Expr::lam(
+                    BinderInfo::Default,
+                    not_a.clone(),
+                    disjunction::inject_into_or_chain(clause_props, first_idx, complement),
+                );
+                Ok(disjunction::mk_or_rec(
+                    &a_prop, &not_a, &motive, &positive, &negative, &em,
+                ))
+            }
+            ImplicationEncoding::Desugared { left, right } => {
+                let left_prop = self.translate_term(left)?;
+                let right_prop = self.translate_term(right)?;
+                let motive = disjunction::mk_constant_or_motive(&left_prop, &right_prop, &target);
+                let left_case = Expr::lam(
+                    BinderInfo::Default,
+                    left_prop.clone(),
+                    disjunction::inject_into_or_chain(clause_props, first_idx, Expr::bvar(0)),
+                );
+                let right_case = Expr::lam(
+                    BinderInfo::Default,
+                    right_prop.clone(),
+                    disjunction::inject_into_or_chain(clause_props, second_idx, Expr::bvar(0)),
+                );
+                Ok(disjunction::mk_or_rec(
+                    &left_prop,
+                    &right_prop,
+                    &motive,
+                    &left_case,
+                    &right_case,
+                    implication_proof,
+                ))
+            }
+        }
+    }
+
+    /// `implies`: from one implication premise derive its exact two disjuncts.
+    fn reconstruct_implies(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        if premises.len() != 1 || clause.len() != 2 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: format!(
+                    "implies requires one premise and two literals, got {} premise(s), {} literal(s)",
+                    premises.len(),
+                    clause.len()
+                ),
+            });
+        }
+        // Cache lookup occurs before trace inspection, so self/future/cyclic
+        // references fail closed rather than borrowing their asserted clause.
+        let premise_proof = self.get_premise_proof(premises[0], step_id)?;
+        let source = self.premise_formula_term(premises[0]).ok_or_else(|| {
+            ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "implies premise does not represent one formula".to_string(),
+            }
+        })?;
+        let shape = self.decode_implication(source, step_id)?;
+        let (first_idx, second_idx) =
+            self.match_implies_clause(shape, clause).ok_or_else(|| {
+                ReconstructionError::UnsupportedStep {
+                    step_index: step_id.0,
+                    description: "implies clause does not match its premise".to_string(),
+                }
+            })?;
+        let props = self.translate_clause_props(clause)?;
+        self.implication_to_clause(
+            shape,
+            &premise_proof,
+            clause,
+            &props,
+            first_idx,
+            second_idx,
+            step_id,
+        )
+    }
+
+    /// `implies_pos`: the premiseless Tseitin tautology `{¬I, ¬a, b}`.
+    fn reconstruct_implies_pos(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+        use clean_kernel::Name;
+
+        if !premises.is_empty() {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: format!(
+                    "implies_pos is premiseless, got {} premise(s)",
+                    premises.len()
+                ),
+            });
+        }
+        let (neg_imp_idx, first_idx, second_idx, shape) =
+            self.find_implies_pos_shape(clause, step_id)?;
+        let props = self.translate_clause_props(clause)?;
+        let target = disjunction::or_chain_type(&props);
+        let implication = self.translate_term(shape.term)?;
+        let false_expr = Expr::const_(Name::from_string("False"), vec![]);
+        let not_implication = Expr::pi(BinderInfo::Default, implication.clone(), false_expr);
+        let em = disjunction::mk_classical_em(&implication);
+        let motive = disjunction::mk_constant_or_motive(&implication, &not_implication, &target);
+        let positive_body = self.implication_to_clause(
+            shape,
+            &Expr::bvar(0),
+            clause,
+            &props,
+            first_idx,
+            second_idx,
+            step_id,
+        )?;
+        let positive = Expr::lam(BinderInfo::Default, implication.clone(), positive_body);
+        let negative = Expr::lam(
+            BinderInfo::Default,
+            not_implication.clone(),
+            disjunction::inject_into_or_chain(&props, neg_imp_idx, Expr::bvar(0)),
+        );
+        Ok(disjunction::mk_or_rec(
+            &implication,
+            &not_implication,
+            &motive,
+            &positive,
+            &negative,
+            &em,
+        ))
+    }
+
+    /// `implies_neg1`: premiseless `(a → b) ∨ a`.
+    fn reconstruct_implies_neg1(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+        use clean_kernel::Name;
+
+        if !premises.is_empty() {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "implies_neg1 is premiseless".to_string(),
+            });
+        }
+        let (imp_idx, atom_idx, shape) = self.find_implies_neg1_shape(clause, step_id)?;
+        let a_term = clause[atom_idx];
+        let a = self.translate_term(a_term)?;
+        let props = self.translate_clause_props(clause)?;
+        let target = disjunction::or_chain_type(&props);
+        let false_expr = Expr::const_(Name::from_string("False"), vec![]);
+        let not_a = Expr::pi(BinderInfo::Default, a.clone(), false_expr);
+        let em = disjunction::mk_classical_em(&a);
+        let motive = disjunction::mk_constant_or_motive(&a, &not_a, &target);
+        let positive = Expr::lam(
+            BinderInfo::Default,
+            a.clone(),
+            disjunction::inject_into_or_chain(&props, atom_idx, Expr::bvar(0)),
+        );
+        let implication =
+            self.implication_from_not_antecedent(shape, a_term, &Expr::bvar(0), step_id)?;
+        let negative = Expr::lam(
+            BinderInfo::Default,
+            not_a.clone(),
+            disjunction::inject_into_or_chain(&props, imp_idx, implication),
+        );
+        Ok(disjunction::mk_or_rec(
+            &a, &not_a, &motive, &positive, &negative, &em,
+        ))
+    }
+
+    /// `implies_neg2`: premiseless `(a → b) ∨ ¬b`.
+    fn reconstruct_implies_neg2(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+        use clean_kernel::Name;
+
+        if !premises.is_empty() {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "implies_neg2 is premiseless".to_string(),
+            });
+        }
+        let (imp_idx, atom_idx, b_term, shape) = self.find_implies_neg2_shape(clause, step_id)?;
+        let b = self.translate_term(b_term)?;
+        let props = self.translate_clause_props(clause)?;
+        let target = disjunction::or_chain_type(&props);
+        let false_expr = Expr::const_(Name::from_string("False"), vec![]);
+        let not_b = Expr::pi(BinderInfo::Default, b.clone(), false_expr);
+        let em = disjunction::mk_classical_em(&b);
+        let motive = disjunction::mk_constant_or_motive(&b, &not_b, &target);
+        let implication =
+            self.implication_from_consequent(shape, b_term, &Expr::bvar(0), step_id)?;
+        let positive = Expr::lam(
+            BinderInfo::Default,
+            b.clone(),
+            disjunction::inject_into_or_chain(&props, imp_idx, implication),
+        );
+        let complement =
+            self.prove_stored_complement(b_term, clause[atom_idx], &Expr::bvar(0), step_id)?;
+        let negative = Expr::lam(
+            BinderInfo::Default,
+            not_b.clone(),
+            disjunction::inject_into_or_chain(&props, atom_idx, complement),
+        );
+        Ok(disjunction::mk_or_rec(
+            &b, &not_b, &motive, &positive, &negative, &em,
+        ))
+    }
+
+    /// `not_implies1`: from `¬(a → b)` derive `a`.
+    fn reconstruct_not_implies1(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use crate::bridge::disjunction;
+        use clean_kernel::expr::BinderInfo;
+        use clean_kernel::Name;
+
+        if premises.len() != 1 || clause.len() != 1 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "not_implies1 requires one unit premise and one conclusion literal"
+                    .to_string(),
+            });
+        }
+        let premise_proof = self.get_premise_proof(premises[0], step_id)?;
+        let shape = self.decode_negated_implication_premise(premises[0], step_id)?;
+        let a_term = clause[0];
+        let matches = {
+            let trace = self
+                .trace
+                .as_ref()
+                .ok_or(ReconstructionError::ProofNotAvailable)?;
+            match shape.encoding {
+                ImplicationEncoding::Native { a, .. } => a == a_term,
+                ImplicationEncoding::Desugared { left, right } => {
+                    trace.is_negation_pair(left, a_term) || trace.is_negation_pair(right, a_term)
+                }
+            }
+        };
+        if !matches {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "not_implies1 conclusion is not the antecedent".to_string(),
+            });
+        }
+
+        let a = self.translate_term(a_term)?;
+        let target = self.translate_clause_props(clause)?[0].clone();
+        let false_expr = Expr::const_(Name::from_string("False"), vec![]);
+        let not_a = Expr::pi(BinderInfo::Default, a.clone(), false_expr);
+        let em = disjunction::mk_classical_em(&a);
+        let motive = disjunction::mk_constant_or_motive(&a, &not_a, &target);
+        let positive = Expr::lam(BinderInfo::Default, a.clone(), Expr::bvar(0));
+        let implication =
+            self.implication_from_not_antecedent(shape, a_term, &Expr::bvar(0), step_id)?;
+        let contradiction = Expr::app(premise_proof, implication);
+        let negative = Expr::lam(
+            BinderInfo::Default,
+            not_a.clone(),
+            disjunction::mk_false_elim(&target, &contradiction),
+        );
+        Ok(disjunction::mk_or_rec(
+            &a, &not_a, &motive, &positive, &negative, &em,
+        ))
+    }
+
+    /// `not_implies2`: from `¬(a → b)` derive the exact stored complement of `b`.
+    fn reconstruct_not_implies2(
+        &mut self,
+        clause: &[TermId],
+        premises: &[ProofId],
+        step_id: ProofId,
+    ) -> ReconstructResult<Expr> {
+        use clean_kernel::expr::BinderInfo;
+
+        if premises.len() != 1 || clause.len() != 1 {
+            return Err(ReconstructionError::UnsupportedStep {
+                step_index: step_id.0,
+                description: "not_implies2 requires one unit premise and one conclusion literal"
+                    .to_string(),
+            });
+        }
+        let premise_proof = self.get_premise_proof(premises[0], step_id)?;
+        let shape = self.decode_negated_implication_premise(premises[0], step_id)?;
+        let complement = clause[0];
+        let b_term = {
+            let trace = self
+                .trace
+                .as_ref()
+                .ok_or(ReconstructionError::ProofNotAvailable)?;
+            match shape.encoding {
+                ImplicationEncoding::Native { b, .. } if trace.is_negation_pair(complement, b) => {
+                    Some(b)
+                }
+                ImplicationEncoding::Desugared { left, right } => {
+                    Self::desugared_consequent_for_complement(trace, left, right, complement)
+                }
+                _ => None,
+            }
+        }
+        .ok_or_else(|| ReconstructionError::UnsupportedStep {
+            step_index: step_id.0,
+            description: "not_implies2 conclusion is not the negated consequent".to_string(),
+        })?;
+
+        let b = self.translate_term(b_term)?;
+        let implication =
+            self.implication_from_consequent(shape, b_term, &Expr::bvar(0), step_id)?;
+        let contradiction = Expr::app(premise_proof, implication);
+        let not_b_proof = Expr::lam(BinderInfo::Default, b, contradiction);
+        self.prove_stored_complement(b_term, complement, &not_b_proof, step_id)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ImplicationShape {
+    term: TermId,
+    encoding: ImplicationEncoding,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ImplicationEncoding {
+    Native { a: TermId, b: TermId },
+    Desugared { left: TermId, right: TermId },
 }
 
 #[cfg(test)]

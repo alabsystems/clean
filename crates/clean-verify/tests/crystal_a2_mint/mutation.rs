@@ -138,7 +138,7 @@ const MUTATIONS: &[Mutation] = &[
     Mutation {
         kind: "emitted text: ANNOTATION KIND — an undeclared trailing clause",
         target: "fixture",
-        from: "  ; #loc: 399 313 5",
+        from: "  ; #loc: 401 338 5",
         to: "  ; #trustme: 1",
     },
     // The four slots the third pass closed, all four in the ONE header line
@@ -327,7 +327,7 @@ fn mutation_matrix() {
     // re-interning must be RE-PINNED under review, exactly as an `enum.N` or a
     // callee `@func.N` re-interning already is. The price of that is paid here,
     // in this control, deliberately.
-    let renumbered = FIXTURE.replace("#loc: 399", "#loc: 12");
+    let renumbered = FIXTURE.replace("#loc: 401", "#loc: 12");
     assert_ne!(renumbered, FIXTURE, "the substitution must bite");
     let v = verdicts(ir_mint::IR_H2_CORE, &renumbered);
     report.push_str(&row(

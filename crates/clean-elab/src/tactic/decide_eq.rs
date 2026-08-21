@@ -113,13 +113,6 @@ pub(crate) fn try_close_ne_by_noconfusion(state: &mut ProofState) -> TacticResul
         ));
     };
 
-    if !decidable_type_check(&ne_ty) {
-        return Err(TacticError::ArithmeticFailed {
-            tactic: "decide".to_string(),
-            reason: format!("type {ne_ty:?} does not support noConfusion disequality"),
-        });
-    }
-
     // Universe level of the underlying equality. Infer from the carrier type
     // when possible, defaulting to `1` (the level for `Sort 1` carriers such
     // as Nat/Int/Bool) otherwise.
@@ -239,21 +232,25 @@ fn decide_eq_check(
         return Ok(());
     }
 
-    // Try to evaluate and check
-    if decidable_type_check(eq_ty) {
-        if let Some(ne_proof) = build_noconfusion_ne_proof(state.env(), eq_ty, lhs, rhs, &eq_level)
-        {
-            let is_false = Expr::app(
-                Expr::app(
-                    Expr::const_(Name::from_string("Decidable.isFalse"), vec![]),
-                    eq_prop.clone(),
-                ),
-                ne_proof,
-            );
-            state.close_goal(goal, is_false)?;
-            return Ok(());
-        }
+    // A checked noConfusion proof is sufficient to decide this particular
+    // equality even when the carrier is outside the tactic's recursive
+    // DecidableEq whitelist.  In particular, different constructors of any
+    // registered inductive are unconditionally unequal; no field equality
+    // decision is needed.
+    if let Some(ne_proof) = build_noconfusion_ne_proof(state.env(), eq_ty, lhs, rhs, &eq_level) {
+        let is_false = Expr::app(
+            Expr::app(
+                Expr::const_(Name::from_string("Decidable.isFalse"), vec![]),
+                eq_prop.clone(),
+            ),
+            ne_proof,
+        );
+        state.close_goal(goal, is_false)?;
+        return Ok(());
+    }
 
+    // Try to evaluate and check supported same-constructor / structural lanes.
+    if decidable_type_check(eq_ty) {
         let reason = if exprs_definitely_not_equal(lhs, rhs) {
             format!("structural inequality for {eq_ty:?} has no kernel proof path")
         } else {

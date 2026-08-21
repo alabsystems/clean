@@ -22,6 +22,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::emitted_cfg_types::{clean_ty_aliases, norm_clean_ty, numerals_in};
 use super::{split_top, Cfg};
 
+// The two WRITE instructions (`IRInst.insertfield`, `IRInst.store`), split out
+// at birth on 2026-08-20 for the same 500-line reason every other split in
+// this tree happened — this file was 460 lines when the lanes landed.
+#[path = "emitted_cfg_parse_clean_writes.rs"]
+mod writes;
+use writes::{clean_insertfield, clean_store};
+
 /// One Clean-side instruction: the text inside `(IRInst. … )` and the SSA id
 /// the enclosing node binds it to (`ir_nd1 (…) ir_d7` binds 7; `ir_nd (…)`
 /// binds nothing).
@@ -111,6 +118,8 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
     let mut load_tys: BTreeMap<u32, Vec<(u32, String, bool)>> = BTreeMap::new();
     let mut geps: BTreeMap<u32, Vec<(u32, String, u32, Vec<u32>, bool)>> = BTreeMap::new();
     let mut extract_tys: BTreeMap<u32, Vec<(u32, String)>> = BTreeMap::new();
+    let mut insertfields: BTreeMap<u32, Vec<(u32, String, u32, u32, u32)>> = BTreeMap::new();
+    let mut stores: BTreeMap<u32, Vec<(u32, String, u32)>> = BTreeMap::new();
     let mut icmps: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut binops: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut condbrs: BTreeMap<u32, (u32, u32, u32)> = BTreeMap::new();
@@ -288,6 +297,16 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
                         ));
                     }
                 }
+                // `IRInst.insertfield <ty> <agg> <k> <v>` /
+                // `IRInst.store <ty> <ptr> <val> <vol>` — the two WRITE
+                // instructions, in their own module; both refuse rather than
+                // half-read.
+                "IRInst.insertfield" => {
+                    clean_insertfield(id, &inst, &t, &results, &aliases, &mut insertfields);
+                }
+                "IRInst.store" => {
+                    clean_store(id, &inst, &t, &results, &aliases, &mut stores);
+                }
                 "IRInst.icmp" => {
                     if let (Some(op), Some(r), Some(a), Some(b)) = (
                         t.get(1),
@@ -439,6 +458,8 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
         blocks,
         extracts,
         extract_tys,
+        insertfields,
+        stores,
         loads,
         load_tys,
         geps,

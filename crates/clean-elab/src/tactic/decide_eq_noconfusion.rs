@@ -6,11 +6,12 @@
 //!
 //! Builds kernel-checkable proofs of `Eq ty lhs rhs → False` using
 //! `T.noConfusion` for types with visible constructor discrimination.
-//! Supports Nat, Bool, Int, Char, String, UInt8/16/32/64, List, `Option`,
-//! `Prod`, and `Sum` over supported element/component types. String literals
-//! recurse through `String -> List Char -> Char -> Nat`. `Option`/`Prod`/`Sum`
-//! recurse into their payload/component types (e.g. `Option (Prod Nat Nat)`,
-//! `Sum Nat Nat`).
+//! Supports distinct constructors of any registered inductive, plus recursive
+//! discrimination for Nat, Bool, Int, Char, String, UInt8/16/32/64, List,
+//! `Option`, `Prod`, and `Sum` over supported element/component types. String
+//! literals recurse through `String -> List Char -> Char -> Nat`.
+//! `Option`/`Prod`/`Sum` recurse into their payload/component types (e.g.
+//! `Option (Prod Nat Nat)`, `Sum Nat Nat`).
 //!
 //! Part of #302, #2154: eliminates trustedAy from decide_eq inequality branch.
 
@@ -1013,7 +1014,33 @@ fn build_ne_body(
                 }
             }
         } else {
-            None
+            // Generic finite-inductive lane: different registered constructors
+            // of the same inductive require no field-continuation.  The
+            // generated noConfusionType reduces directly to False.
+            //
+            // This deliberately does not attempt same-constructor recursion:
+            // that needs the type-specific Eq/HEq diagonal described above.
+            let lhs_head = lhs.get_app_fn();
+            let rhs_head = rhs.get_app_fn();
+            let (ExprKind::Const(lhs_name, _), ExprKind::Const(rhs_name, _)) =
+                (lhs_head.kind(), rhs_head.kind())
+            else {
+                return None;
+            };
+            if lhs_name == rhs_name {
+                return None;
+            }
+            let lhs_ctor = env.get_constructor(lhs_name)?;
+            let rhs_ctor = env.get_constructor(rhs_name)?;
+            if lhs_ctor.inductive_name != rhs_ctor.inductive_name
+                || lhs_ctor.inductive_name.to_string() != ctx.type_name
+            {
+                return None;
+            }
+
+            let eq_app = mk_eq_expr(eq_ty, lhs, rhs, eq_level);
+            let nc_app = mk_noconfusion_app(&ctx, &false_expr, lhs, rhs, eq_ty, eq_level);
+            Some(Expr::lam(clean_kernel::BinderInfo::Default, eq_app, nc_app))
         }
     })
 }

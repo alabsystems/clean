@@ -6641,50 +6641,41 @@ fn lean4_phase1_1358_tactic_elab_diagnostic() {
     };
     let decls = parse_manifest_entry(&entry, corpus_dir)
         .unwrap_or_else(|e| panic!("1358.lean did not parse: {e}"));
-    let tactic_decls: Vec<_> = decls.into_iter().skip(1).collect();
-    let outcomes = try_elab_per_decl(tactic_decls);
+    let outcomes = try_elab_per_decl(decls);
 
     assert_eq!(
         outcomes.len(),
-        2,
-        "1358.lean diagnostic should isolate the tactic-elab command and example"
+        3,
+        "1358.lean diagnostic should cover the import, tactic-elab command, and example"
     );
     assert_eq!(
         outcomes[0].status,
         DeclStatus::Pass,
-        "1358.lean tactic elaborator declaration should register without timing out, got {:?}",
+        "1358.lean Clean-native import should complete without timing out, got {:?}",
         outcomes[0]
     );
+    assert_eq!(
+        outcomes[1].status,
+        DeclStatus::Pass,
+        "1358.lean tactic elaborator declaration should register without timing out, got {:?}",
+        outcomes[1]
+    );
     assert!(
-        outcomes[1].status == DeclStatus::Fail
-            && outcomes[1]
+        outcomes[2].status == DeclStatus::Fail
+            && outcomes[2]
                 .error
                 .as_deref()
                 .is_some_and(|err| err.contains("error")),
         "1358.lean example should now fail fast at the custom tactic throwError instead of timing out, got {:?}",
-        outcomes[1]
+        outcomes[2]
     );
 
-    let mut profiled_outcomes = vec![DeclElabOutcome {
-        index: 0,
-        status: DeclStatus::Pass,
-        error: None,
-    }];
-    profiled_outcomes.extend(
-        outcomes
-            .into_iter()
-            .enumerate()
-            .map(|(offset, mut outcome)| {
-                outcome.index = offset + 1;
-                outcome
-            }),
-    );
     let profiles_path = Path::new("../../tests/lean4_compat/phase1_expected_outcomes.json");
     let profiles = load_expected_profiles(profiles_path);
     let profile = profiles
         .get("1358.lean")
         .expect("1358.lean should have an expected-failure profile");
-    let eval = evaluate_against_profile("1358.lean", &profiled_outcomes, profile);
+    let eval = evaluate_against_profile("1358.lean", &outcomes, profile);
     assert!(
         eval.artifact_mismatches.is_empty(),
         "1358.lean expected-failure profile should match exactly, got {:?}",

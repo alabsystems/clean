@@ -1740,6 +1740,21 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The WITH chain (flat::types::FlatFlags::with) — or / const-struct /
+    // insertfield. AFTER add_eval_ir_contains, and the order is load-bearing
+    // rather than alphabetical: this stage REUSES `FlatFlagsR` /
+    // `flat_flags_bits` / `flat_flags_contains` / `EncodesFlatFlags` / `ir_vl2`
+    // / `ir_fc_tflags` / `ir_fc_val` / `ir_fc_module` / `ir_fc_correct`
+    // (add_eval_ir_contains), `ir_run_le_ret` (add_eval_ir_fuel),
+    // `ir_outcome_is_ret` (add_eval_ir_correct) and `ir_outcome_disc`
+    // (add_eval_ir_from_source). Re-declaring any of them is the eighth
+    // chain's one recorded error; none is re-declared.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_flat_flags_with,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // place in STAGES after the add_eval_ir_priority stage (bundles.rs ~line 1924) — any point after add_eval_ir_contains satisfies the dependencies
     CoreSpecStage {
         apply: Specification::add_eval_ir_bvar_range,
         in_substitution: false,
@@ -1826,6 +1841,32 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The strict_monads chain, 2026-08-20: `env::Environment::
+    // set_lean4_core_strict_monads` — the first chained body that MUTATES
+    // memory: the first `store`, the first `insertfield` a lane could compare
+    // (the insertfields/stores write lanes landed ahead of it), and the first
+    // VOID return. A4 splits into an outcome half (void, at ir_eval) and a
+    // heap half (the 3-step configuration's memory IS ir_mem_update at the
+    // receiver with field 81 rewritten), because the machine's ret discards
+    // the heap; A5 holds FULLY SYMBOLICALLY at both — the float trio's defeq
+    // wall does not apply, since ir_vals_set on a symbolic spine is inert
+    // (measured in the EvalIR scratchpad, 61/61 PASS, ~5.5 s declaration
+    // time). The producer's interpreter differential is NOT-RUN on this body
+    // (0 samples) and nothing in the stage claims it.
+    //
+    // AFTER add_eval_ir_priority, and load-bearing rather than alphabetical:
+    // this stage REUSES `ir_vl2` (add_eval_ir_contains), `ir_run_le_ret`
+    // (add_eval_ir_fuel), `ir_outcome_is_ret` (add_eval_ir_correct),
+    // `ir_cfg_mach` (add_eval_ir_bvar_range) and `ir_cell` / `ir_sp0` /
+    // `ir_mem0` (add_eval_ir). Re-declaring any of them is the eighth
+    // chain's one real error. Must stay BEFORE add_premise_witnesses, which
+    // is genuinely last.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_strict_monads,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ^ insert into STAGES in crates/clean-verify/src/spec/core_spec/bundles.rs, after the add_eval_ir_priority stage (currently ends line ~1928) and before the `── premise-satisfiability witnesses ──` block
     // The float MUL chain, 2026-08-20: `env::native_reducers_float::
     // reduce_float_mul::{closure#0}` — the `fmul` row of the 2026-08-19 width
     // tranche (`data/crystal_width_tranche_2026-08-19.json`). AFTER
@@ -1864,6 +1905,31 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The zext chain, 2026-08-20: `cert::builder::state::NodeId::index` — the
+    // opcode lane the ninth chain measured and deferred, owing "only the
+    // transcription and a decision about `usize`". The decision: ir_ni_tusize
+    // := IRTy.uint_ ir_d64, a TARGET assumption anchored to the recorded
+    // aarch64-apple-darwin producer, applied once in the gate
+    // (tests/crystal_a1_lineage/node_id_index.rs), which asserts the raw
+    // `?usize` token FIRST. Interpreter differential NOT-RUN (0 samples): the
+    // evidence is agreed + markers_exact + flip-lineage equality only.
+    //
+    // AFTER add_eval_ir_priority, and load-bearing rather than alphabetical:
+    // this stage REUSES ir_d32/ir_br_tu32 (fifth chain), ir_d64 (sixth),
+    // ir_tU8 (crystal), ir_outcome_nat (second), ir_outcome_is_ret
+    // (add_eval_ir_correct), ir_run_le_ret (add_eval_ir_fuel) and
+    // ir_cast_eval/ir_sext_value (add_eval_ir_ops). Its premise witness
+    // (encodes_node_id_inhabited) is registered IN the stage, beside the
+    // relation, so the premise-witness ratchet needs no baseline change.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_node_id_index,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // placement: crates/clean-verify/src/spec/core_spec/bundles.rs, in STAGES after the
+    // add_eval_ir_priority stage and BEFORE add_premise_witnesses (which must stay last).
+    // MUST land in the same commit as the mod.rs line: either alone leaves dead_code
+    // warnings that fail the -D warnings gates.
     // The TENTH chain, 2026-08-16:
     // `tc::local_context::LocalContext::push_low_local::META_TAG` — the first
     // over a PANIC ARM and the first over a CTFE FLIP. Both were unclaimed for

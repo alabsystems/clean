@@ -161,5 +161,148 @@
   "nothing_here_is_superseded": "The `superseded_at_head` block above is NOT stale and has NOT been rewritten. Its head_lineage and head_def_index are the values this body still carries under a producer 33 commits newer, measured on byte-identical clean-kernel source. Only func_id moved (3402 -> 3400), and func_id is a whole-crate ordinal read by no gate lane. A lineage digest is a per-BUILD artifact identity; this run is what ESTABLISHES that for a chained body it is stable under a producer change, rather than assuming it. Overwriting the earlier block would have destroyed exactly that evidence.",
   "how_to_re_derive": "scripts/crystal_fixture_freshness.py <dump-dir>  (seal the driver first; see its header)",
   "emitted_body_note": "Instruction-for-instruction identical to the text pinned in float_div.trust-ir.txt. Only whole-crate NUMBERING moved (functy-index), and by MORE than at the previous revalidation -- which is itself the argument for not re-recording it: those ordinals move on every producer wave while the body does not."
+ },
+ "current_source_bound_pin": {
+  "schema": "clean.crystal.current_source_bound_pin/v1",
+  "record": "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json",
+  "binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json",
+  "measured_utc": "2026-08-21T08:19:49Z",
+  "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+  "def_index": 15362,
+  "func_id": 3409,
+  "instr_count": 2,
+  "lineage": "sha256:3add90705f009cb5669b2f52545dd54d942510b75feaa8e9ad545e8ea2beeb6b",
+  "lowered": true,
+  "spliced": true,
+  "unsupported": [],
+  "calls": {
+   "resolved": 0,
+   "extern_decls": 0,
+   "unresolved": 0
+  },
+  "derived_mir": {
+   "verdict": "agreed",
+   "detail": "6 canonical line(s) identical",
+   "markers_exact": true,
+   "markers_detail": "4 marker line(s) identical"
+  },
+  "interpreter": {
+   "verdict": "agreed",
+   "samples": 64,
+   "detail": "THIR-trust-ir == MIR-trust-ir on 64 sampled input(s) (differential interpretation; 1 proven-never-read opaque param(s) as placeholders)"
+  },
+  "flip_event": {
+   "fired": true,
+   "seam": "codegen",
+   "lineage": "sha256:3add90705f009cb5669b2f52545dd54d942510b75feaa8e9ad545e8ea2beeb6b",
+   "matches_artifact_lineage": true,
+   "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15362 ~ clean_kernel[99b6]::env::native_reducers_float::reduce_float_div::{closure#0}), asserts=0, lineage=sha256:3add90705f009cb5669b2f52545dd54d942510b75feaa8e9ad545e8ea2beeb6b, flipped_so_far=225"
+  },
+  "emitted_body": {
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "sha256": "83305365aab1588948537a2224944f1ba65a6cb0d0f3707e9311b4ef1f3759a6"
+  },
+  "build": {
+   "clean_source_rev": "b03937e748123cc115bfd159694fd64f0ce8538a",
+   "clean_source_tree": "0d5d4b7116745b8060e61e044fa7fb499d0e18c0",
+   "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+   "trust_worktree_rev": "8ea68367816ce49a7c3026f1e19c7ee4285e7737",
+   "trustc_sha256": "c4b91deb28f50697883de56664595a5afc86f8ec8af8de9d357b6757a7867e80",
+   "librustc_driver_sha256": "a2e495e3e4918964c071d18c420d24f69b781f55829ff63c72fdeaa904d9fce5",
+   "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off",
+   "recipe": "TRUSTC=<sealed stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> TRUST_IR_BUILD_TARGET_DIR=<exact-driver prewarm> scripts/trust_ir_build.sh --print-only",
+   "driver_seal": "Trust seal_driver guard passed with the sole resolved driver inside the read-only snapshot; sysrootcheck reported metadata v12/v12 and compiled std.",
+   "artifacts": {
+    "clean_kernel.trust-ir.bin": {
+     "sha256": "19ad6224a4c84f2b35ed9163b9777f448805327d5db2e3863c6f729842e61665",
+     "bytes": 3749392
+    },
+    "clean_kernel.trust-ir.txt": {
+     "sha256": "324550ca66045236ddaf40da90642258e4c02e07e3c9ed12d59e767c201b0ccc",
+     "bytes": 5441006
+    },
+    "clean_kernel.coverage.json": {
+     "sha256": "0b44fb1a7ea9b4d2ce2dfabe9cfb4654c24d43cbee60d007c1e1803e54d3dc82",
+     "bytes": 17518829
+    },
+    "clean_kernel.build.log": {
+     "sha256": "a7418a940461f362eed539369f587c66e17c48d70baaf28d15c253d3ec62d468",
+     "bytes": 73060
+    },
+    "clean_kernel.axes.json": {
+     "sha256": "b27d7947d8201150c10110dc87a9ea873c32159cb7b148dc665021ac9b3cc68c",
+     "bytes": 76462
+    },
+    "clean_kernel.argv": {
+     "sha256": "9a1160930d859287d263f9da8ae2e12f27c4e9a4b84f120bbb352c44a1dcc655",
+     "bytes": 4728
+    }
+   },
+   "whole_crate_measurement": {
+    "schema": "trust.thir-lower.crate-module.coverage.v2",
+    "crate": "clean_kernel",
+    "direct_obligation_capability": "structural-parity-only-v1",
+    "proof_authority": false,
+    "native_verification_requests": false,
+    "bodies": 13844,
+    "lowered": 8914,
+    "symbolic": 1580,
+    "spliced": 6431,
+    "declarations": 1104,
+    "initializer_bodies": 1843,
+    "instr_count": 397210,
+    "unsupported": 54771,
+    "calls_resolved": 8154,
+    "calls_extern_decls": 3244,
+    "calls_unresolved": 3240,
+    "interpreter_agreed": 1141,
+    "interpreter_mismatch": 9,
+    "interpreter_not_run": 7791,
+    "interpreter_unsupported": 4903,
+    "interpreter_samples_total": 2273,
+    "seam_agreed": 24,
+    "seam_mismatch": 0,
+    "seam_not_run": 7343,
+    "seam_resolved": 7367,
+    "seam_samples_total": 52,
+    "derived_mir_agreed": 1590,
+    "mismatch": 0,
+    "derived_mir_unsupported": 12254,
+    "markers_exact": 1129,
+    "markers_exact_nonvacuous": 40,
+    "markers_exact_vacuous": 1089,
+    "markers_lines_total": 185,
+    "markers_differ_derived_empty": 460,
+    "markers_differ_content": 0,
+    "markers_channel_skipped": 1,
+    "markers_agreed_prefix_lines": 0,
+    "markers_unparseable": 0,
+    "lineage_rows": 13216,
+    "lineage_rows_in_artifact": 6431,
+    "flip_lineage_equal": 225,
+    "flip_spliced": 225,
+    "func_id_rows": 6431,
+    "flip_events_total": 225,
+    "flip_events_codegen": 184,
+    "flip_events_ctfe": 41,
+    "flip_backed_total": 206,
+    "flip_backed_codegen": 165,
+    "flip_backed_ctfe": 41
+   },
+   "fatal_invariants": {
+    "foreign_flip_events": 0,
+    "flip_events_unparsed": 0,
+    "flip_events_unjoinable": 0,
+    "flip_lineage_mismatch": 0,
+    "flip_lineage_row_absent": 0,
+    "flip_lineage_digest_unknown": 0,
+    "flip_events_unspliced": 0,
+    "lineage_digest_collisions": 0,
+    "lineage_rows_malformed": 0
+   }
+  },
+  "historical_top_level_preserved": true,
+  "how_to_re_derive": "Run the exact live dump recipe in build.recipe, then scripts/crystal_fixture_freshness.py <dump> --strict and the source-bound scripts/crystal_fixture_rebaseline.py workflow."
  }
 }

@@ -31,7 +31,8 @@
 //! 3. Each instance — including the parent projection `C2.toC1`, which Lean
 //!    registers `@[instance]` — is registered via `register_instance` with
 //!    `type_: None, value: None`; the elaborator reconstructs the instance
-//!    expression from `env.get_const(name)` (see
+//!    type and keeps the Lean-faithful constant expression from
+//!    `env.get_const(name)` (see
 //!    `clean_elab::infer::init_instances_from_env`, #443).
 //!
 //! Crucially, we do NOT call the native `class … extends …` elaborator, which
@@ -462,17 +463,11 @@ fn test_method_call_through_imported_parent_projection_reduces_correctly() {
         .as_ref()
         .expect("parentM1 is a definition with a body");
 
-    // The elaborated body must go through the imported parent method projection
-    // AND carry the child instance's *content*. `init_instances_from_env`
-    // reconstructs each instance from its imported const's *body* (#443), so the
-    // synthesized `C1 T` instance is the parent projection's body applied to the
-    // child instance's body — beta-inlined to `Proj(C2, 0, C2.mk T (C1.mk T …) …)`.
-    // The const names `C2.toC1` / `inst2` therefore beta-reduce away, but their
-    // content (`C2.mk` from the child instance, `C1.mk` from the embedded parent)
-    // survives. That content can ONLY appear if the `C1 T` goal was satisfied by
-    // traversing the C2 instance through the parent projection — the discriminating
-    // signal that the parent-projection path was taken (and not, say, left as an
-    // unresolved `self` metavariable, which would carry no `C2.mk`).
+    // Lean's `synthInstance` keeps instance CONSTANTS in the elaborated term;
+    // their bodies unfold only when the projection reduces. The exact chain is
+    // therefore `C2.toC1 T inst2`, not beta-inlined `C2.mk`/`C1.mk` content.
+    // This is both the discriminating parent-projection path and the term shape
+    // the Lean↔Clean bridge requires (#8dfb89bb9).
     let referenced = body.collect_constants();
     assert!(
         referenced.contains(&Name::from_string("C1.m1")),
@@ -480,15 +475,16 @@ fn test_method_call_through_imported_parent_projection_reduces_correctly() {
          got: {referenced:?}"
     );
     assert!(
-        referenced.contains(&Name::from_string("C2.mk")),
+        referenced.contains(&Name::from_string("C2.toC1")),
         "instance synthesis must traverse the imported parent projection (C2.toC1) \
-         to satisfy the C1 goal from the C2 instance — its child-instance content \
-         (C2.mk) must appear in the elaborated body, got: {referenced:?}"
+         to satisfy the C1 goal from the C2 instance, got: {referenced:?}"
     );
     assert!(
-        referenced.contains(&Name::from_string("C1.mk")),
-        "the embedded parent instance (C1.mk) reached via the parent projection \
-         must appear in the elaborated body, got: {referenced:?}"
+        referenced.contains(&Name::from_string("inst2"))
+            && !referenced.contains(&Name::from_string("C2.mk"))
+            && !referenced.contains(&Name::from_string("C1.mk")),
+        "the child must remain the Lean-faithful inst2 constant until reduction, \
+         without inlining either class constructor, got: {referenced:?}"
     );
 
     // The payoff: reduce the elaborated def. It must land on T.b — the result of

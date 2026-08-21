@@ -1,0 +1,21 @@
+{
+ "reader": "A (trust-ir binary -> core), a2project",
+ "dump": "/private/tmp/clean-freshness-a152-20260820.qJvCSJ/dump-6c505018/clean_kernel.trust-ir.bin",
+ "dump_sha256": "19ad6224a4c84f2b35ed9163b9777f448805327d5db2e3863c6f729842e61665",
+ "module_name": "clean_kernel",
+ "function_name": "level::Level::is_zero",
+ "artifact_func_index": 3905,
+ "artifact_func_id": 3905,
+ "artifact_functy_id": 0,
+ "artifact_linkage": "external",
+ "artifact_calling_conv": "rustcc",
+ "artifact_producer": "trust",
+ "core_digest": "72f04d73ab7ab7da50d6eef4a56c64c3d668cc71f37381e424dcd5a06e4c5105",
+ "crate_enum_ids_seen": [2],
+ "crate_struct_ids_seen": [],
+ "crate_func_ids_seen": [3905, 3894],
+ "crate_func_names_seen": ["level::Level::is_zero", "<level::LevelArc as std::ops::Deref>::deref"],
+ "aligns_erased": ["load:None"],
+ "param_tys_erased": ["Ptr"],
+ "block_param_tys_erased": ["bb6:Bool", "bb9:Bool"]
+}

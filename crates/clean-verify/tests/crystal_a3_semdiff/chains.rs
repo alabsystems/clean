@@ -154,17 +154,17 @@ pub fn chains() -> Vec<Chain> {
             fixture: "from_source_system.trust-ir.txt",
             original_name: "@mode::CleanMode::from_source_system",
             // SourceSystem is fieldless: twelve variants, implicit 0..11.
-            // TWO declarations: the parameter is `enum.175` (SourceSystem) and
+            // TWO declarations: the parameter is `enum.178` (SourceSystem) and
             // the RESULT is `enum.13` (CleanMode). Declaring only one is a
             // `type_error`, which is how this was caught.
             enum_decls: "enum @SourceSystem repr(u8) { Lean4, Coq, Agda, CubicalAgda, \
                          IsabelleHOL, HOLLight, HOL4, Mizar, MetamathZFC, MetamathSet, \
-                         PVS, ACL2 } id=175\n\n\
+                         PVS, ACL2 } id=178\n\n\
                          enum @CleanMode repr(u8) { Constructive, Impredicative, Cubical, \
                          Directed, Classical, SetTheoretic } id=13",
-            arg_enum: 175,
+            arg_enum: 178,
             loaded_value: "%0",
-            // The subject takes `enum.175` and RETURNS `enum.13` — the two are
+            // The subject takes `enum.178` and RETURNS `enum.13` — the two are
             // different types, and conflating them is a `signature_mismatch`.
             ret_ty: Ty::Enum(trust_ir::value::EnumId::new(13)),
             // The parameter IS the aggregate: no `load` stands in front of the

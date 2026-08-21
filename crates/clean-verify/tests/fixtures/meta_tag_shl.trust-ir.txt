@@ -1,13 +1,13 @@
-rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.130) {
+rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.118) {
     ; #producer: trust
 bb0:
-    %0 = const u64 1  ; #loc: 435 157 30
-    %1 = const i32 63  ; #loc: 435 157 38
-    %2 = bitcast i32 %1 to u32  ; #loc: 435 157 30
-    %3 = const u32 64  ; #loc: 435 157 30
-    %4 = icmp ult u32 %2, %3  ; #loc: 435 157 30
-    assert %4  ; #proof: shift_in_range  ; #loc: 435 157 30
+    %0 = const u64 1  ; #loc: 437 157 30
+    %1 = const i32 63  ; #loc: 437 157 38
+    %2 = bitcast i32 %1 to u32  ; #loc: 437 157 30
+    %3 = const u32 64  ; #loc: 437 157 30
+    %4 = icmp ult u32 %2, %3  ; #loc: 437 157 30
+    assert %4  ; #proof: shift_in_range  ; #loc: 437 157 30
     %5 = sext i32 %1 to u64
-    %6 = shl u64 %0, %5  ; #loc: 435 157 30
-    ret %6  ; #loc: 435 157 40
+    %6 = shl u64 %0, %5  ; #loc: 437 157 30
+    ret %6  ; #loc: 437 157 40
 }

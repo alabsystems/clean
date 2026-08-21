@@ -109,6 +109,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
                         file_ctx.current_variables(),
                         decl,
+                        Some(file_ctx.macro_ctx()),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
@@ -165,6 +166,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
                         file_ctx.current_variables(),
                         decl,
+                        Some(file_ctx.macro_ctx()),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
@@ -217,6 +219,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
                         file_ctx.current_variables(),
                         decl,
+                        Some(file_ctx.macro_ctx()),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
@@ -412,6 +415,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
                         file_ctx.current_variables(),
                         decl,
+                        Some(file_ctx.macro_ctx()),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders

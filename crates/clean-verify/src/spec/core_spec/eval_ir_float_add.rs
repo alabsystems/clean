@@ -107,15 +107,15 @@
 //! whose float answers are refusals cannot get a bit pattern wrong.
 //!
 //! The A0/A6 evidence for this body is ALSO weaker than the eighth chain's and
-//! the fixture says so: `tests/fixtures/float_add.lineage.json` records ONE
-//! build via `scripts/trust_ir_build.sh --print-only` rather than the sealed
-//! driver's three clean non-incremental builds, and carries neither a negative
-//! control nor a reproduction stanza. What it does carry is a lowered, spliced
-//! body with `unsupported: []`, an agreed derived-MIR verdict over 4 real
-//! marker lines, an agreed interpreter differential on 64 sampled inputs, zero
-//! calls, a flip-event lineage equal to the coverage-row lineage, and a run that
-//! reproduced the pinned `float_div` artifact byte-for-byte. The gate pins that
-//! strength and no more.
+//! the fixture says so: `tests/fixtures/float_add.lineage.json` records three
+//! clean non-incremental builds with byte-identical `coverage.json` in its
+//! reproduction stanza, but all three use one unsealed local-stage1 producer
+//! rather than a sealed driver and there is no negative control. What it does
+//! carry is a lowered, spliced body with `unsupported: []`, an agreed
+//! derived-MIR verdict over 4 real marker lines, an agreed interpreter
+//! differential on 64 sampled inputs, zero calls, a flip-event lineage equal to
+//! the coverage-row lineage, and a run that reproduced the pinned `float_div`
+//! artifact byte-for-byte. The gate pins that strength and no more.
 //!
 //! The link between the proved module and the emitted one is STRUCTURAL —
 //! `tests/crystal_a1_lineage/float_add.rs`. Everything past the flip seam is
@@ -229,7 +229,7 @@ impl Specification {
         self.add_recursive_def(SRC_IR_FA_FUELOUT_ABSURD, "ir_fa_fuelout_absurd: nothing in the IMAGE of ir_fa_res is fuel_out. By IROption.rec: `none` lands on unmodelled and `some k` on ret, and each has its own discriminator -- ir_outcome_fuelout_ne_unmodelled_prop from the eighth chain, ir_outcome_fuelout_ne_ret_prop from add_eval_ir_fuel, neither re-declared here. This is what makes fuel monotonicity TRUE for this chain's outcome shape. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_RUN_SUCC, "ir_fa_run_succ: FUEL MONOTONICITY for an outcome that may be a REFUSAL. ir_run_le_ret is stated for IROutcome.ret and cannot be widened in place -- the unconditional form is false, since a run that exhausts at f may halt at succ f -- so this is the same Nat.rec-over-fuel with an IRConfig.rec convoy, at the ir_fa_res image, with ir_fa_fuelout_absurd ruling exhaustion out of the conclusion. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_RUN_LE, "ir_fa_run_le: the same at a bound rather than a successor, by Le.rec iterating ir_fa_run_succ. Note Le's first argument is a PARAMETER, so Le.rec takes it before the motive. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FA_CORRECT, "ir_fa_correct: *** THE EQUALITY THEOREM, OVER THE EMITTED SHAPE, FOR FLOAT ADDITION. *** For every pair of binary64 bit patterns a and b, every pair of values representing them, every closure environment pointer, every heap, every next-address counter and every fuel at or above 2, ir_eval on ir_fa_module returns exactly ir_fa_res (env_reduce_float_add a b). \n\nTOTAL, not restricted to the modelled fragment: where the classified addition answers -- which now includes the FINITE fragment, correctly rounded -- the machine returns that float; where it refuses, the machine returns the tagged unmodelled outcome and nothing else. \n\nA0 for this body is recorded at tests/fixtures/float_add.lineage.json and is WEAKER than the eighth chain's: lowered, spliced, unsupported [], derived_mir agreed (6 canonical lines identical), markers_exact TRUE over four real marker lines, the producer's interpreter differential agreed on 64 sampled inputs, zero calls, and a flip-event lineage equal to the coverage-row lineage -- but measured in ONE build via scripts/trust_ir_build.sh --print-only rather than under the sealed three-build protocol, with no negative control and no reproduction stanza. A1 is gated by tests/crystal_a1_lineage/float_add.rs. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_FA_CORRECT, "ir_fa_correct: *** THE EQUALITY THEOREM, OVER THE EMITTED SHAPE, FOR FLOAT ADDITION. *** For every pair of binary64 bit patterns a and b, every pair of values representing them, every closure environment pointer, every heap, every next-address counter and every fuel at or above 2, ir_eval on ir_fa_module returns exactly ir_fa_res (env_reduce_float_add a b). \n\nTOTAL, not restricted to the modelled fragment: where the classified addition answers -- which now includes the FINITE fragment, correctly rounded -- the machine returns that float; where it refuses, the machine returns the tagged unmodelled outcome and nothing else. \n\nA0 for this body is recorded at tests/fixtures/float_add.lineage.json and is WEAKER than the eighth chain's: lowered, spliced, unsupported [], derived_mir agreed (6 canonical lines identical), markers_exact TRUE over four real marker lines, the producer's interpreter differential agreed on 64 sampled inputs, zero calls, and a flip-event lineage equal to the coverage-row lineage -- measured in three clean non-incremental builds with byte-identical coverage recorded by the reproduction stanza, but using one unsealed local-stage1 producer rather than a sealed driver and with no negative control. A1 is gated by tests/crystal_a1_lineage/float_add.rs. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_HEAD_FLOAT, "ir_fa_head_float: the bit pattern of the first returned value, through ir_scalar_code -- which is the identity on IRScalar.float_ n. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_ANSWER, "ir_fa_answer: read a classified answer back out of an outcome. A `ret` carries `some` of its float's bit pattern; every fault and exhaustion carries `none`. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_ANSWER_RES, "ir_fa_answer_res: ir_fa_answer INVERTS ir_fa_res, on the nose, at both constructors. Two Eq.refl. This is what makes A5 an inversion rather than a restatement. DerivedProved, zero axiom_deps.")?;

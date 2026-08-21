@@ -179,6 +179,59 @@ pub(crate) struct Cfg {
     /// the semantics ignores it converts a stale-transcription problem into a
     /// coarse-model problem rather than closing either.
     pub(crate) extract_tys: BTreeMap<u32, Vec<(u32, String)>>,
+    /// block id -> the ordered `(result, TYPE, source aggregate, FIELD INDEX,
+    /// inserted value)` of its `insertfield`s.
+    ///
+    /// **Added 2026-08-20 AHEAD of the last three chains, two of whose bodies
+    /// are built around an instruction no lane here read**
+    /// (`flat::types::FlatFlags::with`,
+    /// `env::Environment::set_lean4_core_strict_monads` — fixtures already
+    /// committed). `IRInst.insertfield t a k v` steps to `ir_insert_field
+    /// (ir_getd s a) k (ir_getd s v)`: the FIELD INDEX selects the slot
+    /// `ir_if_at` bounds-checks and `ir_vals_set` rewrites, so
+    /// `insertfield struct.433 %2, 80, %1` and `insertfield struct.433 %2, 81,
+    /// %1` write DIFFERENT FIELDS of the same Environment and differ in no
+    /// other lane — `order` sees the same class binding the same result. The
+    /// source aggregate and the inserted value are the other two `ir_getd`
+    /// reads, and the TYPE is carried for the same artifact-transcription
+    /// reason `extract_tys` and `load_tys` carry theirs: Clean's step discards
+    /// `t`, but the artifact prints it (`insertfield {ty} %{agg}, {field},
+    /// %{value}`, `trust-ir/src/display.rs:896`) and the registered
+    /// `IRInst.insertfield : IRTy → Nat → Nat → Nat → IRInst` has the slot, so
+    /// a transcription at a type the emitted body does not name is a module
+    /// the compiler did not emit.
+    pub(crate) insertfields: BTreeMap<u32, Vec<(u32, String, u32, u32, u32)>>,
+    /// block id -> the ordered `(POINTER, TYPE, stored value)` of its `store`s.
+    ///
+    /// **Added 2026-08-20 with `insertfields`, for the same upcoming chains —
+    /// and it is the first lane since `asserts` for an instruction that binds
+    /// NO result and names NO branch target.** `store {ty} %v, ptr %p`
+    /// contributed `("store", [])` to `order` and nothing anywhere else, so a
+    /// transcription that stored a DIFFERENT VALUE, through a DIFFERENT
+    /// POINTER, or at a different type agreed with every lane this file had.
+    /// (Deleting the store outright was visible — `order` loses its `store`
+    /// entry — which is exactly as much as a class-plus-results lane can see,
+    /// and none of the operands.) `IRInst.store t p v vol` steps to
+    /// `ir_store_exec s (ir_getd s p) (ir_getd s v)`: the POINTER decides the
+    /// cell (`nullptr_` is UB `null_deref`, a missing cell is `bad_addr`), the
+    /// VALUE is what the next load returns. The TYPE is the same
+    /// artifact-side semantic input as `load_tys`': trust's own executable
+    /// semantics resolves the write size and encoding through it, Clean's step
+    /// discards it, and the lane is what stands between the registered term
+    /// and a type the artifact does not print.
+    ///
+    /// **Two traps this tuple is shaped against.** The PRINTED operand order is
+    /// value-then-pointer (`store {ty} %{value}, ptr %{ptr}`,
+    /// `trust-ir/src/display.rs:697`) while the registered constructor is
+    /// pointer-then-value (`IRInst.store : IRTy → Nat → Nat → Bool`) — both
+    /// parsers normalize to (POINTER, TYPE, value), so a single-side swap fails
+    /// here instead of comparing a value to a pointer. And there is
+    /// deliberately NO volatile slot: both parsers REFUSE a volatile store
+    /// (the `volatile ` prefix emitted-side, `Bool.true` in the registered
+    /// term) rather than dropping the flag — the `?usize` rule. No chained or
+    /// candidate body carries one; the refusal names the repair if one ever
+    /// does.
+    pub(crate) stores: BTreeMap<u32, Vec<(u32, String, u32)>>,
     /// block id -> the ordered `(result, TYPE, base, INDICES, inbounds)` of its
     /// `gep`s.
     ///
@@ -595,16 +648,70 @@ pub(crate) fn spec_source(file: &str) -> String {
 /// `file` is the `core_spec` module and `const_prefix` the shared name of its
 /// block constants (`const SRC_IR_H2_B…`, `def ir_lz_b…`).
 pub(crate) fn clean_block_sources(file: &str, const_prefix: &str) -> String {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/spec/core_spec")
-        .join(file);
-    let src = std::fs::read_to_string(&p)
-        .unwrap_or_else(|e| panic!("{} must be readable ({e})", p.display()));
+    let src = spec_source(file);
     src.lines()
         .filter(|l| l.trim_start().starts_with(const_prefix))
         .map(|l| l.trim_start().to_string())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// One registered string constant selected by its complete Rust identifier.
+///
+/// This is deliberately different from [`clean_block_sources`], whose prefix
+/// semantics are useful for multi-block modules. A one-block obligation must
+/// not silently absorb a future sibling such as `SRC_IR_FA_B1` or
+/// `SRC_IR_FA_B0_DIAGNOSTIC`; the `:` after the identifier binds the exact Rust
+/// declaration, and the cardinality check fails closed on a missing/duplicate
+/// declaration.
+pub(crate) fn clean_named_const_source(file: &str, const_name: &str) -> String {
+    exact_const_source(&spec_source(file), const_name)
+}
+
+fn exact_const_source(src: &str, const_name: &str) -> String {
+    let declaration = format!("const {const_name}:");
+    let matches = src
+        .lines()
+        .map(str::trim_start)
+        .filter(|line| line.starts_with(&declaration))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matches.len(),
+        1,
+        "expected exactly one `{declaration}` declaration, found {}",
+        matches.len()
+    );
+    matches[0].to_string()
+}
+
+#[test]
+fn exact_const_source_does_not_absorb_prefixed_siblings() {
+    let src = r#"
+const SRC_IR_FA_B0_DIAGNOSTIC: &str = "wrong-before";
+const SRC_IR_FA_B0: &str = "the obligation";
+const SRC_IR_FA_B01: &str = "wrong-after";
+"#;
+    assert_eq!(
+        exact_const_source(src, "SRC_IR_FA_B0"),
+        r#"const SRC_IR_FA_B0: &str = "the obligation";"#
+    );
+}
+
+#[test]
+#[should_panic(expected = "found 0")]
+fn exact_const_source_fails_closed_when_the_obligation_is_missing() {
+    let src = r#"const SRC_IR_FA_B0_DIAGNOSTIC: &str = "not the obligation";"#;
+    let _ = exact_const_source(src, "SRC_IR_FA_B0");
+}
+
+#[test]
+#[should_panic(expected = "found 2")]
+fn exact_const_source_fails_closed_on_duplicate_obligations() {
+    let src = r#"
+const SRC_IR_FA_B0: &str = "first";
+const SRC_IR_FA_B0: &str = "duplicate";
+"#;
+    let _ = exact_const_source(src, "SRC_IR_FA_B0");
 }
 
 /// The instruction lanes, asserted for every chain in one place.
@@ -668,6 +775,24 @@ pub(crate) fn assert_lanes(emitted: &Cfg, clean: &Cfg, who: &str) {
          `IRInst.extractfield`, so a transcription at a type the emitted body does not name is a \
          module the compiler did not emit — whatever Clean's `ir_ef_at` does or does not read.",
         emitted.extract_tys, clean.extract_tys
+    );
+    assert_eq!(
+        emitted.insertfields, clean.insertfields,
+        "{who}: INSERTFIELD lane differs: emitted {:?} vs Clean {:?}. Each entry is (result, \
+         TYPE, source aggregate, FIELD INDEX, inserted value) in emission order. The field index \
+         is the semantic payload: `ir_if_at` bounds-checks it and `ir_vals_set` rewrites exactly \
+         that slot, so `insertfield … 80, %v` and `insertfield … 81, %v` write different fields \
+         of the same aggregate and differ in NO other lane.",
+        emitted.insertfields, clean.insertfields
+    );
+    assert_eq!(
+        emitted.stores, clean.stores,
+        "{who}: STORE lane differs: emitted {:?} vs Clean {:?}. Each entry is (POINTER, TYPE, \
+         stored value) — pointer FIRST on both sides, although the artifact prints the value \
+         first, so a single-side operand swap fails here by construction. A store binds no \
+         result and has no target, so before this lane the `order` class list was the only \
+         thing that saw one at all, and none of its operands.",
+        emitted.stores, clean.stores
     );
     assert_eq!(
         emitted.icmps, clean.icmps,
@@ -855,6 +980,32 @@ pub(crate) fn assert_lanes(emitted: &Cfg, clean: &Cfg, who: &str) {
                 assert!(
                     !ty.starts_with('?'),
                     "{who}: bb{b} {side}-side load -> %{r} has an UNRESOLVED type {ty:?}."
+                );
+            }
+        }
+    }
+    // The same rule for the two write lanes, on BOTH sides, for the same
+    // reason: two `?`-prefixed tokens compare equal to each other, which is
+    // the silent-no-op mode every type slot in this file refuses.
+    for (side, m) in [
+        ("emitted", &emitted.insertfields),
+        ("Clean", &clean.insertfields),
+    ] {
+        for (b, xs) in m {
+            for (r, ty, _, _, _) in xs {
+                assert!(
+                    !ty.starts_with('?'),
+                    "{who}: bb{b} {side}-side insertfield -> %{r} has an UNRESOLVED type {ty:?}."
+                );
+            }
+        }
+    }
+    for (side, m) in [("emitted", &emitted.stores), ("Clean", &clean.stores)] {
+        for (b, xs) in m {
+            for (p, ty, _) in xs {
+                assert!(
+                    !ty.starts_with('?'),
+                    "{who}: bb{b} {side}-side store through %{p} has an UNRESOLVED type {ty:?}."
                 );
             }
         }

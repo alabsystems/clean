@@ -1,45 +1,45 @@
-rustcc fn @mode::CleanMode::from_source_system(functy.732) {
+rustcc fn @mode::CleanMode::from_source_system(functy.554) {
     ; #producer: trust
     ; #names: %0="system"
-bb0(%0: enum.175):
-    %2 = extractfield u8 %0, 0  ; #loc: 399 186 8
-    switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 399 186 8
+bb0(%0: enum.178):
+    %2 = extractfield u8 %0, 0  ; #loc: 401 211 8
+    switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 401 211 8
 bb1:
-    %3 = const enum.13 { 0 }  ; #loc: 399 187 21
-    br bb13(%3)  ; #loc: 399 186 8
+    %3 = const enum.13 { 0 }  ; #loc: 401 212 21
+    br bb13(%3)  ; #loc: 401 211 8
 bb2:
-    %4 = const enum.13 { 1 }  ; #loc: 399 188 19
-    br bb13(%4)  ; #loc: 399 186 8
+    %4 = const enum.13 { 1 }  ; #loc: 401 213 19
+    br bb13(%4)  ; #loc: 401 211 8
 bb3:
-    %5 = const enum.13 { 0 }  ; #loc: 399 189 20
-    br bb13(%5)  ; #loc: 399 186 8
+    %5 = const enum.13 { 0 }  ; #loc: 401 214 20
+    br bb13(%5)  ; #loc: 401 211 8
 bb4:
-    %6 = const enum.13 { 2 }  ; #loc: 399 190 27
-    br bb13(%6)  ; #loc: 399 186 8
+    %6 = const enum.13 { 2 }  ; #loc: 401 215 27
+    br bb13(%6)  ; #loc: 401 211 8
 bb5:
-    %7 = const enum.13 { 4 }  ; #loc: 399 191 45
-    br bb13(%7)  ; #loc: 399 186 8
+    %7 = const enum.13 { 4 }  ; #loc: 401 216 45
+    br bb13(%7)  ; #loc: 401 211 8
 bb6:
-    %8 = const enum.13 { 4 }  ; #loc: 399 191 45
-    br bb13(%8)  ; #loc: 399 186 8
+    %8 = const enum.13 { 4 }  ; #loc: 401 216 45
+    br bb13(%8)  ; #loc: 401 211 8
 bb7:
-    %9 = const enum.13 { 4 }  ; #loc: 399 191 45
-    br bb13(%9)  ; #loc: 399 186 8
+    %9 = const enum.13 { 4 }  ; #loc: 401 216 45
+    br bb13(%9)  ; #loc: 401 211 8
 bb8:
-    %10 = const enum.13 { 5 }  ; #loc: 399 192 35
-    br bb13(%10)  ; #loc: 399 186 8
+    %10 = const enum.13 { 5 }  ; #loc: 401 217 35
+    br bb13(%10)  ; #loc: 401 211 8
 bb9:
-    %11 = const enum.13 { 5 }  ; #loc: 399 192 35
-    br bb13(%11)  ; #loc: 399 186 8
+    %11 = const enum.13 { 5 }  ; #loc: 401 217 35
+    br bb13(%11)  ; #loc: 401 211 8
 bb10:
-    %12 = const enum.13 { 4 }  ; #loc: 399 193 34
-    br bb13(%12)  ; #loc: 399 186 8
+    %12 = const enum.13 { 4 }  ; #loc: 401 218 34
+    br bb13(%12)  ; #loc: 401 211 8
 bb11:
-    %13 = const enum.13 { 4 }  ; #loc: 399 193 34
-    br bb13(%13)  ; #loc: 399 186 8
+    %13 = const enum.13 { 4 }  ; #loc: 401 218 34
+    br bb13(%13)  ; #loc: 401 211 8
 bb12:
-    %14 = const enum.13 { 4 }  ; #loc: 399 194 19
-    br bb13(%14)  ; #loc: 399 186 8
+    %14 = const enum.13 { 4 }  ; #loc: 401 219 19
+    br bb13(%14)  ; #loc: 401 211 8
 bb13(%1: enum.13):
-    ret %1  ; #loc: 399 196 5
+    ret %1  ; #loc: 401 221 5
 }

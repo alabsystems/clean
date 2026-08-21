@@ -1,26 +1,26 @@
-rustcc fn @env::native_reducers_char::is_valid_char(functy.547) {
+rustcc fn @env::native_reducers_char::is_valid_char(functy.377) {
     ; #producer: trust
     ; #names: %0="n"
 bb0(%0: u64):
-    %3 = const u64 55296  ; #loc: 350 112 8
-    %4 = icmp ult u64 %0, %3  ; #loc: 350 112 4
-    condbr %4, bb2, bb1  ; #loc: 350 112 4
+    %3 = const u64 55296  ; #loc: 352 112 8
+    %4 = icmp ult u64 %0, %3  ; #loc: 352 112 4
+    condbr %4, bb2, bb1  ; #loc: 352 112 4
 bb1:
-    %5 = const u64 57343  ; #loc: 350 112 19
-    %6 = icmp ult u64 %5, %0  ; #loc: 350 112 19
-    condbr %6, bb4, bb5  ; #loc: 350 112 18
+    %5 = const u64 57343  ; #loc: 352 112 19
+    %6 = icmp ult u64 %5, %0  ; #loc: 352 112 19
+    condbr %6, bb4, bb5  ; #loc: 352 112 18
 bb2:
-    %7 = const bool true  ; #loc: 350 112 4
-    br bb3(%7)  ; #loc: 350 112 4
+    %7 = const bool true  ; #loc: 352 112 4
+    br bb3(%7)  ; #loc: 352 112 4
 bb3(%1: bool):
-    ret %1  ; #loc: 350 113 1
+    ret %1  ; #loc: 352 113 1
 bb4:
-    %8 = const u64 1114112  ; #loc: 350 112 37
-    %9 = icmp ult u64 %0, %8  ; #loc: 350 112 33
-    br bb6(%9)  ; #loc: 350 112 18
+    %8 = const u64 1114112  ; #loc: 352 112 37
+    %9 = icmp ult u64 %0, %8  ; #loc: 352 112 33
+    br bb6(%9)  ; #loc: 352 112 18
 bb5:
-    %10 = const bool false  ; #loc: 350 112 18
-    br bb6(%10)  ; #loc: 350 112 18
+    %10 = const bool false  ; #loc: 352 112 18
+    br bb6(%10)  ; #loc: 352 112 18
 bb6(%2: bool):
-    br bb3(%2)  ; #loc: 350 112 4
+    br bb3(%2)  ; #loc: 352 112 4
 }

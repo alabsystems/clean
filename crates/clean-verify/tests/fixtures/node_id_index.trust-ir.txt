@@ -1,0 +1,8 @@
+rustcc fn @cert::builder::state::NodeId::index(functy.97) {
+    ; #producer: trust
+    ; #names: %0="self"
+bb0(%0: struct.323):
+    %1 = extractfield u32 %0, 0  ; #loc: 26 23 8
+    %2 = zext u32 %1 to usize  ; #loc: 26 23 8
+    ret %2  ; #loc: 26 24 5
+}

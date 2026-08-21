@@ -69,6 +69,28 @@ fn list_nat_cons(head: u64, tail: Expr) -> Expr {
 }
 
 #[test]
+fn test_decide_eq_generic_enum_cross_constructor_uses_noconfusion() {
+    let mut env = Environment::new();
+    env.init_eq().unwrap();
+    env.init_true_false().unwrap();
+    env.init_ordering().unwrap();
+    env.init_decidable().unwrap();
+
+    let ordering_ty = Expr::const_(Name::from_string("Ordering"), vec![]);
+    let gt = Expr::const_(Name::from_string("Ordering.gt"), vec![]);
+    let lt = Expr::const_(Name::from_string("Ordering.lt"), vec![]);
+    let mut state = ProofState::new(env, make_decidable_eq_goal(ordering_ty, gt, lt));
+
+    decide_eq(&mut state).expect("different Ordering constructors should be decidably unequal");
+    assert!(state.is_complete());
+    assert_eq!(state.trusted_axiom_count(), 0);
+    let proof = state
+        .proof_term()
+        .expect("completed state should have a proof");
+    assert_eq!(count_named_const(&proof, "Ordering.noConfusion"), 1);
+}
+
+#[test]
 fn test_decide_eq_nat_inequality_proof_uses_recursive_noconfusion_shape() {
     let mut env = Environment::new();
     env.init_eq().unwrap();

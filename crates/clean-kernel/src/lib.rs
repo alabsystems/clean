@@ -64,6 +64,11 @@ pub mod cfg;
 pub mod cli;
 #[cfg(any(test, feature = "proof-import"))]
 pub mod coq_import;
+// Compile-time pin for the enum discriminants the crystal chains prove about.
+// Not behind a feature: the `const _: () = assert!(…)` blocks are the tripwire,
+// and a tripwire that only arms under a feature is not one. This is deliberately
+// private: it enforces a kernel invariant, but is not part of the kernel API.
+mod crystal_tag_pin;
 #[cfg(feature = "test-utils")]
 pub mod differential_baseline;
 pub mod env;

@@ -93,7 +93,7 @@ pub(crate) fn ptr_cell_call(module: &str, fuel: &str, tag: &str) -> String {
 }
 
 /// A body reached by passing the argument BY VALUE, with no heap at all — the
-/// shape of `CleanMode::from_source_system`, whose parameter is `enum.175`
+/// shape of `CleanMode::from_source_system`, whose parameter is `enum.178`
 /// rather than a pointer.
 ///
 /// Worth having as a separate shape rather than a special case: it exercises

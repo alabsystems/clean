@@ -101,10 +101,25 @@ impl<'a> ReconstructionContext<'a> {
                 | RuleView::True
                 | RuleView::False
                 | RuleView::EqReflexive
-                | RuleView::EqCongruent => Ok(ResidualTrustSummary::empty()),
-                // symm / trans / cong / resolution compose premise proofs with
-                // kernel primitives — zero LOCAL trust; inherit premise residuals.
-                RuleView::Symm | RuleView::Trans | RuleView::Cong | RuleView::Resolution => {
+                // eq_transitive reconstructs to kernel primitives
+                // (Eq.trans + Classical.em) — genuinely zero trust.
+                | RuleView::EqTransitive
+                | RuleView::EqCongruent
+                // implies_neg1/2 are premiseless Tseitin tautologies built
+                // entirely from kernel primitives (Classical.em + Or.inl/inr).
+                | RuleView::ImpliesPos
+                | RuleView::ImpliesNeg1
+                | RuleView::ImpliesNeg2 => Ok(ResidualTrustSummary::empty()),
+                // symm / trans / cong / resolution / implies / not_implies1/2
+                // compose premise proofs with kernel primitives — zero LOCAL
+                // trust; inherit premise residuals.
+                RuleView::Symm
+                | RuleView::Trans
+                | RuleView::Cong
+                | RuleView::Resolution
+                | RuleView::Implies
+                | RuleView::NotImplies1
+                | RuleView::NotImplies2 => {
                     let mut summary = ResidualTrustSummary::empty();
                     for &premise in premises {
                         summary.merge(self.get_premise_residual(premise, step_id)?);

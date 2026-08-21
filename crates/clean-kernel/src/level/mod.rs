@@ -169,6 +169,26 @@ pub(crate) fn level_arc(l: Level) -> LevelArc {
 // derive Serialize). PartialEq/Eq are manual impls because derived PartialEq
 // recurses through ManuallyDrop<Box<Level>> causing CBMC to unwind
 // Level::eq unboundedly. Clone/Debug work via ManuallyDrop's Deref.
+// CRYSTAL TAG PIN — the DECLARATION ORDER below is load-bearing.
+//
+// `Level::is_zero` (the designated crystal target) and `Level::kind_ord` are
+// registered chains. Their emitted trust-ir switches on the numeric
+// discriminant — `switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]` for
+// `is_zero` — and Clean's side encodes the same numbers in `level_kind_tag`
+// (`crates/clean-verify/src/spec/core_spec/eval_ir_kind_ord.rs`), which maps
+// Zero/Succ/Max/IMax/Param to 0/1/2/3/4 by DECLARATION INDEX. Reordering these
+// variants therefore silently makes both registered modules theorems about a
+// body that is no longer shipped, without changing one line of either module.
+//
+// Unlike `CleanMode`, `SourceSystem` and `ExprPathStep`, this enum carries
+// payloads, so it is pinned by `data/crystal_enum_tag_pin.json` +
+// `scripts/check_enum_tag_pin.py` and NOT by `#[repr(u8)]`: adding a repr here
+// is a layout change to the kernel's hottest type, it can move the emitted
+// bytes, and moving them would stale every recorded lineage digest on the
+// designated chain (`fixtures/level_is_zero.trust-ir.txt`,
+// `fixtures/level_is_zero.a0.json`). That flip needs its own differential
+// measurement; the gate closes the reorder hole today without taking it.
+// See `docs/CRYSTAL_STATUS.md`.
 #[must_use = "levels should be inspected or passed onward"]
 #[cfg_attr(not(kani), derive(Clone))]
 pub enum Level {

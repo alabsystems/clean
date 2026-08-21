@@ -110,7 +110,12 @@ pub(super) fn elab_ctx_for<'a>(env: &'a Environment, node: &Node) -> ElabCtx<'a>
         lex.scoped_instance_map().clone(),
         lex.default_instance_entries(),
     );
-    ctx.set_macro_ctx(lex.macro_ctx().clone());
+    let mut macro_ctx = lex.macro_ctx().clone();
+    macro_ctx.set_active_variable_bindings(
+        lex.active_variable_bindings()
+            .map(|(name, id)| (name.to_owned(), id)),
+    );
+    ctx.set_macro_ctx(macro_ctx);
     if let Some(registry) = lex.tactic_registry() {
         ctx.set_tactic_registry(registry.clone());
     }

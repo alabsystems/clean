@@ -1,25 +1,25 @@
-rustcc fn @level::Level::kind_ord(functy.470) {
+rustcc fn @level::Level::kind_ord(functy.306) {
     ; #producer: trust
     ; #names: %0="self"
 bb0(%0: ptr):
-    %2 = load enum.2, ptr %0  ; #loc: 389 599 8
-    %3 = extractfield u8 %2, 0  ; #loc: 389 599 8
-    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 389 599 8
+    %2 = load enum.2, ptr %0  ; #loc: 391 619 8
+    %3 = extractfield u8 %2, 0  ; #loc: 391 619 8
+    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 391 619 8
 bb1:
-    %4 = const u8 0  ; #loc: 389 600 27
-    br bb6(%4)  ; #loc: 389 599 8
+    %4 = const u8 0  ; #loc: 391 620 27
+    br bb6(%4)  ; #loc: 391 619 8
 bb2:
-    %5 = const u8 1  ; #loc: 389 601 30
-    br bb6(%5)  ; #loc: 389 599 8
+    %5 = const u8 1  ; #loc: 391 621 30
+    br bb6(%5)  ; #loc: 391 619 8
 bb3:
-    %6 = const u8 2  ; #loc: 389 602 32
-    br bb6(%6)  ; #loc: 389 599 8
+    %6 = const u8 2  ; #loc: 391 622 32
+    br bb6(%6)  ; #loc: 391 619 8
 bb4:
-    %7 = const u8 3  ; #loc: 389 603 33
-    br bb6(%7)  ; #loc: 389 599 8
+    %7 = const u8 3  ; #loc: 391 623 33
+    br bb6(%7)  ; #loc: 391 619 8
 bb5:
-    %8 = const u8 4  ; #loc: 389 604 31
-    br bb6(%8)  ; #loc: 389 599 8
+    %8 = const u8 4  ; #loc: 391 624 31
+    br bb6(%8)  ; #loc: 391 619 8
 bb6(%1: u8):
-    ret %1  ; #loc: 389 606 5
+    ret %1  ; #loc: 391 626 5
 }

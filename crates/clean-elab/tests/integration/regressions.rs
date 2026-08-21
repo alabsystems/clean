@@ -908,42 +908,66 @@ fn test_issue166_decidable_eq_in_prelude() {
     );
 }
 
-// Issue #166: UInt8.mod and UInt8.toFin should be available (W297)
+// Soundness regression: the old UInt8.mod axiom must stay deleted.
 //
-// This is a discriminating test for W297's addition of mod and toFin operations.
-// Without W297, UInt8.mod is not defined and this test FAILS.
+// Fixed-width arithmetic is now provided by axiom-free wrapping definitions
+// (`add`/`sub`/`mul`).  Reintroducing the historical opaque `mod` constant would
+// silently widen the trusted base, so pin both sides of the replacement here.
 #[test]
-fn test_issue166_uint8_mod_in_prelude() {
+fn test_uint8_mod_axiom_deleted_and_wrapping_mul_available() {
     let mut env = Environment::with_prelude();
 
-    // UInt8.mod : UInt8 → UInt8 → UInt8
-    let result = check_and_add_decl(
+    let rejected = check_and_add_decl(
         &mut env,
         "def test_uint8_mod : UInt8 → UInt8 → UInt8 := UInt8.mod",
     );
     assert!(
-        result.is_ok(),
-        "Issue #166 (W297): UInt8.mod should be available. Got: {:?}",
-        result.err()
+        rejected.is_err(),
+        "UInt8.mod must remain absent; an opaque modulus would add proof authority"
+    );
+    assert!(
+        env.get_const(&Name::from_string("UInt8.mod")).is_none(),
+        "UInt8.mod must not be registered in the prelude"
+    );
+
+    let wrapping = check_and_add_decl(
+        &mut env,
+        "def test_uint8_mul : UInt8 → UInt8 → UInt8 := UInt8.mul",
+    );
+    assert!(
+        wrapping.is_ok(),
+        "axiom-free UInt8.mul must be available: {wrapping:?}"
     );
 }
 
-// Issue #166: UInt64.mod and UInt64.toFin should be available (W297)
+// Same soundness lock at the widest fixed-width carrier.
 //
-// Tests that all UInt types have mod operations, not just UInt8.
+// This catches partial initializers that delete UInt8.mod but accidentally retain
+// a width-specific UInt64.mod escape hatch.
 #[test]
-fn test_issue166_uint64_mod_in_prelude() {
+fn test_uint64_mod_axiom_deleted_and_wrapping_mul_available() {
     let mut env = Environment::with_prelude();
 
-    // UInt64.mod : UInt64 → UInt64 → UInt64
-    let result = check_and_add_decl(
+    let rejected = check_and_add_decl(
         &mut env,
         "def test_uint64_mod : UInt64 → UInt64 → UInt64 := UInt64.mod",
     );
     assert!(
-        result.is_ok(),
-        "Issue #166 (W297): UInt64.mod should be available. Got: {:?}",
-        result.err()
+        rejected.is_err(),
+        "UInt64.mod must remain absent; an opaque modulus would add proof authority"
+    );
+    assert!(
+        env.get_const(&Name::from_string("UInt64.mod")).is_none(),
+        "UInt64.mod must not be registered in the prelude"
+    );
+
+    let wrapping = check_and_add_decl(
+        &mut env,
+        "def test_uint64_mul : UInt64 → UInt64 → UInt64 := UInt64.mul",
+    );
+    assert!(
+        wrapping.is_ok(),
+        "axiom-free UInt64.mul must be available: {wrapping:?}"
     );
 }
 
@@ -957,7 +981,7 @@ fn test_issue172_anonymous_constructor_elaboration() {
     let mut env = Environment::with_prelude();
 
     // First define a simple structure
-    let result = check_and_add_decl(&mut env, "structure Point where x : Nat y : Nat");
+    let result = check_and_add_decl(&mut env, "structure Point where\n  x : Nat\n  y : Nat");
     assert!(
         result.is_ok(),
         "Issue #172 setup: Structure definition should work. Got: {:?}",
@@ -1091,7 +1115,7 @@ fn test_issue155_structure_projection_still_works() {
     let mut env = Environment::with_prelude();
 
     // Define a structure
-    let result = check_and_add_decl(&mut env, "structure Point where x : Nat y : Nat");
+    let result = check_and_add_decl(&mut env, "structure Point where\n  x : Nat\n  y : Nat");
     assert!(result.is_ok(), "Point structure should work");
 
     // Structure projection should use proj, not dot notation
@@ -1111,7 +1135,7 @@ fn test_issue173_simple_structure_still_works() {
     let mut env = Environment::with_prelude();
 
     // Define a simple non-polymorphic structure
-    let result = check_and_add_decl(&mut env, "structure Point where x : Nat y : Nat");
+    let result = check_and_add_decl(&mut env, "structure Point where\n  x : Nat\n  y : Nat");
     assert!(result.is_ok(), "Point definition should work");
 
     // Anonymous constructor should still work for simple structures

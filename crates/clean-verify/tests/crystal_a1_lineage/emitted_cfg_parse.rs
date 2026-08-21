@@ -27,7 +27,7 @@ use super::{header_param_ids, id_of, split_commas_top, split_top, target_and_arg
 
 #[path = "emitted_cfg_parse_memory.rs"]
 mod memory;
-use memory::{emitted_gep, emitted_load};
+use memory::{emitted_gep, emitted_load, emitted_store};
 
 /// Every arithmetic and bitwise `binop` opcode trust-ir prints.
 const ARITH: &[&str] = &[
@@ -69,6 +69,8 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
     let mut load_tys: BTreeMap<u32, Vec<(u32, String, bool)>> = BTreeMap::new();
     let mut geps: BTreeMap<u32, Vec<(u32, String, u32, Vec<u32>, bool)>> = BTreeMap::new();
     let mut extract_tys: BTreeMap<u32, Vec<(u32, String)>> = BTreeMap::new();
+    let mut insertfields: BTreeMap<u32, Vec<(u32, String, u32, u32, u32)>> = BTreeMap::new();
+    let mut stores: BTreeMap<u32, Vec<(u32, String, u32)>> = BTreeMap::new();
     let mut icmps: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut binops: BTreeMap<u32, Vec<(String, u32, u32, u32)>> = BTreeMap::new();
     let mut condbrs: BTreeMap<u32, (u32, u32, u32)> = BTreeMap::new();
@@ -117,6 +119,34 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
                                 .entry(b)
                                 .or_default()
                                 .push((r, norm_emitted_ty(t.get(1).map_or("", String::as_str))));
+                        }
+                    }
+                    // `%6 = insertfield struct.1012 %5, 0, %4` — TYPE, source
+                    // aggregate, FIELD INDEX, inserted value
+                    // (`trust-ir/src/display.rs:896`). The arity is pinned so
+                    // a slot this parser does not read cannot appear and parse
+                    // to nothing on both sides.
+                    Some("insertfield") => {
+                        assert_eq!(
+                            t.len(),
+                            5,
+                            "an `insertfield` carries {} tokens ({t:?}); the printed form is \
+                             `insertfield {{ty}} %agg, {{field}}, %value` and this parser reads \
+                             every slot",
+                            t.len()
+                        );
+                        if let (Some(a), Some(k), Some(v)) = (
+                            t.get(2).and_then(|s| id_of(s)),
+                            t.get(3).and_then(|s| id_of(s)),
+                            t.get(4).and_then(|s| id_of(s)),
+                        ) {
+                            insertfields.entry(b).or_default().push((
+                                r,
+                                norm_emitted_ty(t.get(1).map_or("", String::as_str)),
+                                a,
+                                k,
+                                v,
+                            ));
                         }
                     }
                     // `%2 = load enum.2, ptr %0` — and, when the lowerer emits
@@ -196,6 +226,17 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
                     }
                     _ => {}
                 }
+            }
+        }
+        // `store struct.433 %3, ptr %0` — statement position: a store binds no
+        // result, so it never enters the `" = "` match above. The `volatile `
+        // prefix is matched here and REFUSED inside `emitted_store` rather
+        // than skipped: matching bare `store ` alone would let a volatile
+        // store fall through to nothing on this side while the Clean parser
+        // reads its term — the silent-drop mode the `?usize` rule closes.
+        if let Some(b) = cur {
+            if line.starts_with("store ") || line.starts_with("volatile store ") {
+                emitted_store(b, &split_top(line), &mut stores);
             }
         }
         // `assert %4`. One operand, no result, no target: the failure edge is
@@ -312,6 +353,8 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
         blocks,
         extracts,
         extract_tys,
+        insertfields,
+        stores,
         loads,
         load_tys,
         geps,
@@ -432,10 +475,20 @@ fn emitted_class(line: &str) -> Option<(String, Vec<u32>)> {
     } else if CASTS.contains(&head.as_str()) {
         "cast".to_string()
     } else if head == "volatile" {
-        // `volatile` is a FLAG on the load, printed as a prefix; the class is
-        // still `load`. Reading it as an opcode would put a class the Clean
-        // vocabulary has no constructor for into the program-order lane.
-        "load".to_string()
+        // `volatile` is a FLAG, printed as a prefix on `load` (value position)
+        // and on `store` (statement position); the class is the instruction it
+        // prefixes. Reading the flag as an opcode would put a class the Clean
+        // vocabulary has no constructor for into the program-order lane — and
+        // hardwiring `load`, as this arm did until 2026-08-20, would have
+        // called a volatile store a load. (A volatile store is then REFUSED by
+        // `emitted_store`; this arm only keeps the order lane honest about
+        // what it saw before that refusal fires.)
+        let after = line.split_once(" = ").map_or(line, |(_, r)| r);
+        after
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or("volatile")
+            .to_string()
     } else {
         head
     };

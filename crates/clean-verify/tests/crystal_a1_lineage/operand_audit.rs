@@ -66,17 +66,17 @@ use super::*;
 const PARAM_TYPES: &[(&str, &str)] = &[
     ("has_cubical_layer", "bb0(%0: ptr) bb4(%1: bool)"),
     ("level_kind_ord", "bb0(%0: ptr) bb6(%1: u8)"),
-    ("from_source_system", "bb0(%0: enum.175) bb13(%1: enum.13)"),
+    ("from_source_system", "bb0(%0: enum.178) bb13(%1: enum.13)"),
     (
         "flat_flags_contains",
-        "bb0(%0: struct.1012, %1: struct.1012)",
+        "bb0(%0: struct.1017, %1: struct.1017)",
     ),
     (
         "bvar_in_range",
         "bb0(%0: u32, %1: u32, %2: u32) bb3(%3: bool) bb6(%4: bool)",
     ),
     ("is_valid_char", "bb0(%0: u64) bb3(%1: bool) bb6(%2: bool)"),
-    ("expr_path_step_clone", "bb0(%0: ptr) bb12(%1: enum.181)"),
+    ("expr_path_step_clone", "bb0(%0: ptr) bb12(%1: enum.184)"),
     ("float_div", "bb0(%0: ptr, %1: f64, %2: f64)"),
     ("get_char_val_trunc", "bb0(%0: (), %1: u64)"),
     ("meta_tag_shl", ""),
@@ -176,9 +176,9 @@ fn the_switch_exhaustiveness_flag_is_uncomparable_and_says_so() {
 
 /// **The one registered type alias that reaches NO instruction, gated at last.**
 ///
-/// `ir_fc_tflags : IRTy := IRTy.struct_ 1012` is registered by
-/// `eval_ir_contains.rs` and its own description says what it is for: "struct.1012,
-/// the struct id the emitted body names in `bb0(%0: struct.1012, %1: struct.1012)`.
+/// `ir_fc_tflags : IRTy := IRTy.struct_ 1017` is registered by
+/// `eval_ir_contains.rs` and its own description says what it is for: "struct.1017,
+/// the struct id the emitted body names in `bb0(%0: struct.1017, %1: struct.1017)`.
 /// Transcribed for fidelity". It appears in no `IRInst` — `ir_fc_b0`'s three
 /// extractfields are all at `ir_tU8` — so no lane in `Cfg` can ever reach it,
 /// and until this test its value was compared by nothing at all.
@@ -197,7 +197,7 @@ fn the_dead_parameter_type_alias_is_pinned_against_the_fixture() {
         .find(|l| l.contains("def ir_fc_tflags : IRTy :="))
         .unwrap_or_else(|| panic!("ir_fc_tflags must still be declared in eval_ir_contains.rs"));
     assert!(
-        decl.contains("IRTy.struct_ 1012"),
+        decl.contains("IRTy.struct_ 1017"),
         "ir_fc_tflags's declaration moved: {decl}"
     );
     let header = fixture("flat_flags_contains.trust-ir.txt")
@@ -207,7 +207,7 @@ fn the_dead_parameter_type_alias_is_pinned_against_the_fixture() {
         .map(str::to_string)
         .expect("the emitted body must declare an entry block with parameters");
     assert_eq!(
-        header, "bb0(%0: struct.1012, %1: struct.1012):",
+        header, "bb0(%0: struct.1017, %1: struct.1017):",
         "the emitted PARAMETER TYPE of FlatFlags::contains moved. `ir_fc_tflags` was transcribed          from exactly this header and reaches no instruction, so nothing else in this gate — not          one lane of `Cfg` — would have noticed."
     );
 }

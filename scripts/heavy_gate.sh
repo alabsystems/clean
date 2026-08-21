@@ -106,9 +106,9 @@ _qreap() {
   done
 }
 
-# Oldest waiting ticket, excluding my own: "<gb> <ticket>". Empty if none.
-# Ticket basenames start with a zero-padded enqueue epoch, so lexical sort IS
-# time order.
+# Oldest ticket ahead of mine: its requested GB count, or empty when my ticket
+# is the head of line. Ticket basenames start with a zero-padded enqueue epoch,
+# so lexical sort IS time order.
 _qhead() {
   local mine=$1 f best=""
   for f in $(ls "$QUEUE" 2>/dev/null | sort); do

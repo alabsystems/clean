@@ -139,5 +139,148 @@
   "what_it_means": "This fixture is not a dated pin that a later lane re-checked -- it IS the live-dump comparison. `scripts/crystal_fixture_freshness.py` was run against the very dump the fixture was cut from, over ALL twelve committed fixtures, and this body came back IDENTICAL with an EMPTY drift-class list. Every other chain came back NUMBERING-ONLY on the same dump, which is what says the run was real and not a self-comparison of one file.",
   "why_there_is_no_superseded_at_head_block": "The other eleven chains carry `superseded_at_head` and `reconfirmed_at_newer_producer`, each naming a committed revalidation record measured LATER than the fixture's own build. There is no such record for this chain because there is no later build yet: it landed after the most recent one. `crystal_a1_lineage/freshness.rs` lists it in HEAD_MEASURED and gates it on the block above instead -- which is an additional requirement, not an exemption. The next lane that runs the freshness script records this body like every other and the row leaves that list.",
   "at_head_lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71"
+ },
+ "current_source_bound_pin": {
+  "schema": "clean.crystal.current_source_bound_pin/v1",
+  "record": "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json",
+  "binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json",
+  "measured_utc": "2026-08-21T08:19:49Z",
+  "def_path": "env::types::SimpPriority::value",
+  "def_index": 13423,
+  "func_id": 3018,
+  "instr_count": 10,
+  "lineage": "sha256:228542acc00cc43bdce7c38b4d764abe67d9ef2be68b391d03749e2229f00edf",
+  "lowered": true,
+  "spliced": true,
+  "unsupported": [],
+  "calls": {
+   "resolved": 0,
+   "extern_decls": 0,
+   "unresolved": 0
+  },
+  "derived_mir": {
+   "verdict": "agreed",
+   "detail": "7 canonical line(s) identical",
+   "markers_exact": true,
+   "markers_detail": "2 marker line(s) identical"
+  },
+  "interpreter": {
+   "verdict": "not-run",
+   "samples": 0,
+   "detail": "oracle lowering failed (coverage-only skip): UnsupportedOp(\"address walk into variant-bearing ADT interior\")"
+  },
+  "flip_event": {
+   "fired": true,
+   "seam": "codegen",
+   "lineage": "sha256:228542acc00cc43bdce7c38b4d764abe67d9ef2be68b391d03749e2229f00edf",
+   "matches_artifact_lineage": true,
+   "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:13423 ~ clean_kernel[99b6]::env::types::{impl#1}::value), asserts=0, lineage=sha256:228542acc00cc43bdce7c38b4d764abe67d9ef2be68b391d03749e2229f00edf, flipped_so_far=63"
+  },
+  "emitted_body": {
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "sha256": "c47bcdab045f1640b69410600accb43172f41ed3dcd16b30fcac0eb3b19a0203"
+  },
+  "build": {
+   "clean_source_rev": "b03937e748123cc115bfd159694fd64f0ce8538a",
+   "clean_source_tree": "0d5d4b7116745b8060e61e044fa7fb499d0e18c0",
+   "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+   "trust_worktree_rev": "8ea68367816ce49a7c3026f1e19c7ee4285e7737",
+   "trustc_sha256": "c4b91deb28f50697883de56664595a5afc86f8ec8af8de9d357b6757a7867e80",
+   "librustc_driver_sha256": "a2e495e3e4918964c071d18c420d24f69b781f55829ff63c72fdeaa904d9fce5",
+   "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off",
+   "recipe": "TRUSTC=<sealed stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> TRUST_IR_BUILD_TARGET_DIR=<exact-driver prewarm> scripts/trust_ir_build.sh --print-only",
+   "driver_seal": "Trust seal_driver guard passed with the sole resolved driver inside the read-only snapshot; sysrootcheck reported metadata v12/v12 and compiled std.",
+   "artifacts": {
+    "clean_kernel.trust-ir.bin": {
+     "sha256": "19ad6224a4c84f2b35ed9163b9777f448805327d5db2e3863c6f729842e61665",
+     "bytes": 3749392
+    },
+    "clean_kernel.trust-ir.txt": {
+     "sha256": "324550ca66045236ddaf40da90642258e4c02e07e3c9ed12d59e767c201b0ccc",
+     "bytes": 5441006
+    },
+    "clean_kernel.coverage.json": {
+     "sha256": "0b44fb1a7ea9b4d2ce2dfabe9cfb4654c24d43cbee60d007c1e1803e54d3dc82",
+     "bytes": 17518829
+    },
+    "clean_kernel.build.log": {
+     "sha256": "a7418a940461f362eed539369f587c66e17c48d70baaf28d15c253d3ec62d468",
+     "bytes": 73060
+    },
+    "clean_kernel.axes.json": {
+     "sha256": "b27d7947d8201150c10110dc87a9ea873c32159cb7b148dc665021ac9b3cc68c",
+     "bytes": 76462
+    },
+    "clean_kernel.argv": {
+     "sha256": "9a1160930d859287d263f9da8ae2e12f27c4e9a4b84f120bbb352c44a1dcc655",
+     "bytes": 4728
+    }
+   },
+   "whole_crate_measurement": {
+    "schema": "trust.thir-lower.crate-module.coverage.v2",
+    "crate": "clean_kernel",
+    "direct_obligation_capability": "structural-parity-only-v1",
+    "proof_authority": false,
+    "native_verification_requests": false,
+    "bodies": 13844,
+    "lowered": 8914,
+    "symbolic": 1580,
+    "spliced": 6431,
+    "declarations": 1104,
+    "initializer_bodies": 1843,
+    "instr_count": 397210,
+    "unsupported": 54771,
+    "calls_resolved": 8154,
+    "calls_extern_decls": 3244,
+    "calls_unresolved": 3240,
+    "interpreter_agreed": 1141,
+    "interpreter_mismatch": 9,
+    "interpreter_not_run": 7791,
+    "interpreter_unsupported": 4903,
+    "interpreter_samples_total": 2273,
+    "seam_agreed": 24,
+    "seam_mismatch": 0,
+    "seam_not_run": 7343,
+    "seam_resolved": 7367,
+    "seam_samples_total": 52,
+    "derived_mir_agreed": 1590,
+    "mismatch": 0,
+    "derived_mir_unsupported": 12254,
+    "markers_exact": 1129,
+    "markers_exact_nonvacuous": 40,
+    "markers_exact_vacuous": 1089,
+    "markers_lines_total": 185,
+    "markers_differ_derived_empty": 460,
+    "markers_differ_content": 0,
+    "markers_channel_skipped": 1,
+    "markers_agreed_prefix_lines": 0,
+    "markers_unparseable": 0,
+    "lineage_rows": 13216,
+    "lineage_rows_in_artifact": 6431,
+    "flip_lineage_equal": 225,
+    "flip_spliced": 225,
+    "func_id_rows": 6431,
+    "flip_events_total": 225,
+    "flip_events_codegen": 184,
+    "flip_events_ctfe": 41,
+    "flip_backed_total": 206,
+    "flip_backed_codegen": 165,
+    "flip_backed_ctfe": 41
+   },
+   "fatal_invariants": {
+    "foreign_flip_events": 0,
+    "flip_events_unparsed": 0,
+    "flip_events_unjoinable": 0,
+    "flip_lineage_mismatch": 0,
+    "flip_lineage_row_absent": 0,
+    "flip_lineage_digest_unknown": 0,
+    "flip_events_unspliced": 0,
+    "lineage_digest_collisions": 0,
+    "lineage_rows_malformed": 0
+   }
+  },
+  "historical_top_level_preserved": true,
+  "how_to_re_derive": "Run the exact live dump recipe in build.recipe, then scripts/crystal_fixture_freshness.py <dump> --strict and the source-bound scripts/crystal_fixture_rebaseline.py workflow."
  }
 }

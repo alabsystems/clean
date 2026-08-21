@@ -344,6 +344,8 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
         ("param_blocks", !c.param_blocks.is_empty()),
         ("extracts", !c.extracts.is_empty()),
         ("extract_tys", !c.extract_tys.is_empty()),
+        ("insertfields", !c.insertfields.is_empty()),
+        ("stores", !c.stores.is_empty()),
         ("loads", !c.loads.is_empty()),
         ("load_tys", !c.load_tys.is_empty()),
         ("geps", !c.geps.is_empty()),
@@ -364,7 +366,16 @@ fn lanes(c: &Cfg) -> Vec<(&'static str, bool)> {
     ]
 }
 
-/// THE MATRIX. Eleven chains x **twenty-seven** lanes, pinned cell by cell.
+/// THE MATRIX. Eleven chains x **twenty-nine** lanes, pinned cell by cell.
+///
+/// (Twenty-seven until 2026-08-20, when `insertfields` and `stores` were added
+/// AHEAD of the last three chains — two of whose committed fixtures
+/// (`flat_flags_with`, `strict_monads`) are built around instructions no lane
+/// read: an insertfield's FIELD INDEX and a store's every operand were
+/// compared by nothing, since `order` sees only class-plus-results. Every row
+/// below is pinned WITHOUT them, so both lanes are checked empty-on-both-sides
+/// across every chain in the matrix by this very test. Discrimination proofs:
+/// `lane_matrix_writes.rs`.)
 ///
 /// (Twenty-six until 2026-08-20, when the eleventh chain added `geps` — the
 /// lane for an instruction no chained body had ever contained, so a
@@ -483,3 +494,6 @@ fn every_emitted_mnemonic_has_a_lane() {
 
 #[path = "lane_matrix_shape.rs"]
 mod shape_checks;
+
+#[path = "lane_matrix_writes.rs"]
+mod writes_lane_proofs;

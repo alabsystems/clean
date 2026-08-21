@@ -407,6 +407,90 @@
     "instr_count": 2
    }
   },
+  "strict_monads": {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "at_head": {
+    "lineage": "sha256:7f10c087e235bd56f34cf1b5e847e201f3964899a5d2a466d20286554b5cb2fe",
+    "def_index": 15917,
+    "func_id": 4581,
+    "instr_count": 4,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15917 ~ clean_kernel[ac47]::env::{impl#0}::set_lean4_core_strict_monads), asserts=0, lineage=sha256:7f10c087e235bd56f34cf1b5e847e201f3964899a5d2a466d20286554b5cb2fe, flipped_so_far=52"
+   },
+   "pinned": {
+    "lineage": "sha256:7f10c087e235bd56f34cf1b5e847e201f3964899a5d2a466d20286554b5cb2fe",
+    "def_index": 15917,
+    "func_id": null,
+    "instr_count": 4
+   }
+  },
+  "flat_flags_with": {
+   "def_path": "flat::types::FlatFlags::with",
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "at_head": {
+    "lineage": "sha256:ad70b2ae9f56fa52a7be294ce5c324e927d1e18ce04cb608c58706b0b27998d3",
+    "def_index": 16851,
+    "func_id": 4865,
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:16851 ~ clean_kernel[ac47]::flat::types::{impl#1}::with), asserts=0, lineage=sha256:ad70b2ae9f56fa52a7be294ce5c324e927d1e18ce04cb608c58706b0b27998d3, flipped_so_far=152"
+   },
+   "pinned": {
+    "lineage": "sha256:ad70b2ae9f56fa52a7be294ce5c324e927d1e18ce04cb608c58706b0b27998d3",
+    "def_index": 16851,
+    "func_id": null,
+    "instr_count": 6
+   }
+  },
+  "node_id_index": {
+   "def_path": "cert::builder::state::NodeId::index",
+   "verdict": "IDENTICAL",
+   "classes": [],
+   "at_head": {
+    "lineage": "sha256:8403edf59060750d9c3299911b5b437c895b9cfee4c64ff2885c213a77e87717",
+    "def_index": 1787,
+    "func_id": 593,
+    "instr_count": 3,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:1787 ~ clean_kernel[ac47]::cert::builder::state::{impl#0}::index), asserts=0, lineage=sha256:8403edf59060750d9c3299911b5b437c895b9cfee4c64ff2885c213a77e87717, flipped_so_far=62"
+   },
+   "pinned": {
+    "lineage": "sha256:8403edf59060750d9c3299911b5b437c895b9cfee4c64ff2885c213a77e87717",
+    "def_index": 1787,
+    "func_id": null,
+    "instr_count": 3
+   }
+  },
   "simp_priority_value": {
    "def_path": "env::types::SimpPriority::value",
    "classes": [

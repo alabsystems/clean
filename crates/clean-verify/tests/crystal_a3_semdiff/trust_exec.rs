@@ -131,7 +131,7 @@ pub fn build_module(
 /// The `EnumId` of the argument enum, chosen by DECLARED id rather than by
 /// position.
 ///
-/// `from_source_system` needs two enum declarations — `enum.175` for its
+/// `from_source_system` needs two enum declarations — `enum.178` for its
 /// parameter and `enum.13` for its result — so "the first one" is not a
 /// well-defined answer, and picking wrong is a `type_error` rather than a
 /// silent mis-measurement.

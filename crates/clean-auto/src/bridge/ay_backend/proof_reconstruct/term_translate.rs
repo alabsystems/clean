@@ -215,7 +215,10 @@ impl<'a> ReconstructionContext<'a> {
             ("=", 2) => self.translate_equality_app(args),
             ("and", _) if args.len() >= 2 => self.translate_folded_bool_app(args, mk_and),
             ("or", _) if args.len() >= 2 => self.translate_folded_bool_app(args, mk_or),
-            ("implies", 2) => self.translate_implies_app(args),
+            // `mk_implies` normally desugars to `or`, but imported/native Alethe
+            // traces may retain either spelling. Both denote non-dependent
+            // implication in the kernel.
+            ("=>" | "implies", 2) => self.translate_implies_app(args),
             ("xor", 2) => self.translate_xor_app(args),
             ("<", 2) => self.translate_sorted_binary_app(args, mk_lt),
             ("<=", 2) => self.translate_sorted_binary_app(args, mk_le),

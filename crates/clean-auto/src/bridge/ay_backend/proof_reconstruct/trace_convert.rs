@@ -40,6 +40,13 @@ pub(super) fn rule_view(rule: &AletheRule) -> RuleView {
         AletheRule::Contraction => RuleView::Contraction,
         AletheRule::EqCongruent => RuleView::EqCongruent,
         AletheRule::Cong => RuleView::Cong,
+        AletheRule::EqTransitive => RuleView::EqTransitive,
+        AletheRule::Implies => RuleView::Implies,
+        AletheRule::ImpliesPos => RuleView::ImpliesPos,
+        AletheRule::ImpliesNeg1 => RuleView::ImpliesNeg1,
+        AletheRule::ImpliesNeg2 => RuleView::ImpliesNeg2,
+        AletheRule::NotImplies1 => RuleView::NotImplies1,
+        AletheRule::NotImplies2 => RuleView::NotImplies2,
         _ => RuleView::Other,
     }
 }

@@ -1339,7 +1339,13 @@ fn elaborate_decl_and_register_inner_with_aux(
     }
 
     if let Some(ref mut file_ctx) = file_ctx {
-        ctx.set_macro_ctx(file_ctx.take_macro_ctx());
+        let active_variable_bindings: Vec<(String, u64)> = file_ctx
+            .active_variable_bindings()
+            .map(|(name, id)| (name.to_owned(), id))
+            .collect();
+        let mut macro_ctx = file_ctx.take_macro_ctx();
+        macro_ctx.set_active_variable_bindings(active_variable_bindings);
+        ctx.set_macro_ctx(macro_ctx);
         if let Some(tactic_registry) = file_ctx.take_tactic_registry() {
             ctx.set_tactic_registry(tactic_registry);
         }
